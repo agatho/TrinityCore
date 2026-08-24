@@ -193,6 +193,50 @@ struct ContributionLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 10, &ContributionMeta::Instance, HOTFIX_SEL_CONTRIBUTION };
+struct DelvesSeasonXSpellLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "DelvesSeasonID" },
+    };
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &DelvesSeasonXSpellMeta::Instance, HOTFIX_SEL_DELVES_SEASON_X_SPELL };
+};
+
+struct PlayerCompanionInfoLoadInfo
+{
+    // PlayerCompanionInfo.dbd LAYOUT F61B5AA1 (build 12.0.5.67186)
+    static constexpr DB2FieldMeta Fields[15] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "UnlockDescription" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DelvesSeasonID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitTreeID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitNodeID_DPS" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitNodeID_Heal" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitSubTreeID_DPS" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitSubTreeID_Heal" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitSubTreeID_Tank" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FactionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CreatureDisplayInfoID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiModelSceneID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_011" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_012" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ParentID" },
+    };
+    static constexpr DB2LoadInfo Instance{ Fields, 15, &PlayerCompanionInfoMeta::Instance, HOTFIX_SEL_PLAYER_COMPANION_INFO };
+};
+
+struct DelvesSeasonLoadInfo
+{
+    // DelvesSeason.dbd LAYOUT D8CA312 (build 12.0.5.67186)
+    static constexpr DB2FieldMeta Fields[2] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FactionID" },
+    };
+    static constexpr DB2LoadInfo Instance{ Fields, 2, &DelvesSeasonMeta::Instance, HOTFIX_SEL_DELVES_SEASON };
 };
 
 struct AchievementCategoryLoadInfo
@@ -4399,6 +4443,56 @@ struct MythicPlusSeasonLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 5, &MythicPlusSeasonMeta::Instance, HOTFIX_SEL_MYTHIC_PLUS_SEASON };
+};
+
+struct WeeklyRewardChestThresholdLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[4] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_BYTE, .Name = "Type" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Threshold" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Index" },
+    };
+    static constexpr DB2LoadInfo Instance{ Fields, 4, &WeeklyRewardChestThresholdMeta::Instance, HOTFIX_SEL_WEEKLY_REWARD_CHEST_THRESHOLD };
+};
+
+struct MythicPlusSeasonKeyFloorLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[4] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "KeyFloor" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "DisplaySeasonID" },
+    };
+    static constexpr DB2LoadInfo Instance{ Fields, 4, &MythicPlusSeasonKeyFloorMeta::Instance, HOTFIX_SEL_MYTHIC_PLUS_SEASON_KEY_FLOOR };
+};
+
+struct MythicPlusSeasonRewardLevelsLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[6] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "MythicPlusSeasonID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ActivityTierID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DifficultyLevel" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "WeeklyRewardLevel" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "EndOfRunRewardLevel" },
+    };
+    static constexpr DB2LoadInfo Instance{ Fields, 6, &MythicPlusSeasonRewardLevelsMeta::Instance, HOTFIX_SEL_MYTHIC_PLUS_SEASON_REWARD_LEVELS };
+};
+
+struct MythicPlusSeasonTrackedMapLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "MapChallengeModeID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "DisplaySeasonID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &MythicPlusSeasonTrackedMapMeta::Instance, HOTFIX_SEL_MYTHIC_PLUS_SEASON_TRACKED_MAP };
 };
 
 struct NameGenLoadInfo

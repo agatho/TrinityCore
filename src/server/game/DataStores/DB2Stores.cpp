@@ -47,6 +47,9 @@ DB2Storage<ManagedWorldStateInputEntry>         sManagedWorldStateInputStore("Ma
 DB2Storage<ManagedWorldStateBuffEntry>          sManagedWorldStateBuffStore("ManagedWorldStateBuff.db2", &ManagedWorldStateBuffLoadInfo::Instance);
 DB2Storage<CreatureXContributionEntry>          sCreatureXContributionStore("CreatureXContribution.db2", &CreatureXContributionLoadInfo::Instance);
 DB2Storage<ContributionEntry>                   sContributionStore("Contribution.db2", &ContributionLoadInfo::Instance);
+DB2Storage<DelvesSeasonXSpellEntry>             sDelvesSeasonXSpellStore("DelvesSeasonXSpell.db2", &DelvesSeasonXSpellLoadInfo::Instance);
+DB2Storage<PlayerCompanionInfoEntry>            sPlayerCompanionInfoStore("PlayerCompanionInfo.db2", &PlayerCompanionInfoLoadInfo::Instance);
+DB2Storage<DelvesSeasonEntry>                   sDelvesSeasonStore("DelvesSeason.db2", &DelvesSeasonLoadInfo::Instance);
 DB2Storage<Achievement_CategoryEntry>           sAchievementCategoryStore("Achievement_Category.db2", &AchievementCategoryLoadInfo::Instance);
 DB2Storage<AdventureJournalEntry>               sAdventureJournalStore("AdventureJournal.db2", &AdventureJournalLoadInfo::Instance);
 DB2Storage<AdventureMapPOIEntry>                sAdventureMapPOIStore("AdventureMapPOI.db2", &AdventureMapPoiLoadInfo::Instance);
@@ -262,6 +265,10 @@ DB2Storage<MountTypeXCapabilityEntry>           sMountTypeXCapabilityStore("Moun
 DB2Storage<MountXDisplayEntry>                  sMountXDisplayStore("MountXDisplay.db2", &MountXDisplayLoadInfo::Instance);
 DB2Storage<MovieEntry>                          sMovieStore("Movie.db2", &MovieLoadInfo::Instance);
 DB2Storage<MythicPlusSeasonEntry>               sMythicPlusSeasonStore("MythicPlusSeason.db2", &MythicPlusSeasonLoadInfo::Instance);
+DB2Storage<WeeklyRewardChestThresholdEntry>     sWeeklyRewardChestThresholdStore("WeeklyRewardChestThreshold.db2", &WeeklyRewardChestThresholdLoadInfo::Instance);
+DB2Storage<MythicPlusSeasonKeyFloorEntry>       sMythicPlusSeasonKeyFloorStore("MythicPlusSeasonKeyFloor.db2", &MythicPlusSeasonKeyFloorLoadInfo::Instance);
+DB2Storage<MythicPlusSeasonRewardLevelsEntry>   sMythicPlusSeasonRewardLevelsStore("MythicPlusSeasonRewardLevels.db2", &MythicPlusSeasonRewardLevelsLoadInfo::Instance);
+DB2Storage<MythicPlusSeasonTrackedMapEntry>     sMythicPlusSeasonTrackedMapStore("MythicPlusSeasonTrackedMap.db2", &MythicPlusSeasonTrackedMapLoadInfo::Instance);
 DB2Storage<NameGenEntry>                        sNameGenStore("NameGen.db2", &NameGenLoadInfo::Instance);
 DB2Storage<NamesProfanityEntry>                 sNamesProfanityStore("NamesProfanity.db2", &NamesProfanityLoadInfo::Instance);
 DB2Storage<NamesReservedEntry>                  sNamesReservedStore("NamesReserved.db2", &NamesReservedLoadInfo::Instance);
@@ -528,6 +535,7 @@ namespace
     std::unordered_map<uint32 /*creatureDifficultyId*/, std::vector<int32>> _creatureLabels;
     std::unordered_multimap<uint32, CurrencyContainerEntry const*> _currencyContainers;
     CurvePointsContainer _curvePoints;
+    std::unordered_map<uint32, DB2Manager::DelvesSeasonXSpellContainer> _delvesSeasonXSpellsBySeasonId;
     EmotesTextSoundContainer _emoteTextSounds;
     std::unordered_map<std::pair<uint32 /*level*/, int32 /*expansion*/>, ExpectedStatEntry const*> _expectedStatsByLevel;
     std::unordered_map<uint32 /*contentTuningId*/, std::vector<ContentTuningXExpectedEntry const*>> _expectedStatModsByContentTuning;
@@ -714,6 +722,9 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sManagedWorldStateBuffStore);
     LOAD_DB2(sCreatureXContributionStore);
     LOAD_DB2(sContributionStore);
+    LOAD_DB2(sDelvesSeasonXSpellStore);
+    LOAD_DB2(sPlayerCompanionInfoStore);
+    LOAD_DB2(sDelvesSeasonStore);
     LOAD_DB2(sAchievementCategoryStore);
     LOAD_DB2(sAdventureJournalStore);
     LOAD_DB2(sAdventureMapPOIStore);
@@ -928,6 +939,10 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sMountXDisplayStore);
     LOAD_DB2(sMovieStore);
     LOAD_DB2(sMythicPlusSeasonStore);
+    LOAD_DB2(sWeeklyRewardChestThresholdStore);
+    LOAD_DB2(sMythicPlusSeasonKeyFloorStore);
+    LOAD_DB2(sMythicPlusSeasonRewardLevelsStore);
+    LOAD_DB2(sMythicPlusSeasonTrackedMapStore);
     LOAD_DB2(sNameGenStore);
     LOAD_DB2(sNamesProfanityStore);
     LOAD_DB2(sNamesReservedStore);
@@ -1360,6 +1375,9 @@ void DB2Manager::IndexLoadedStores()
             std::ranges::transform(curvePoints, points.begin(), &CurvePointEntry::Pos);
         }
     }
+
+    for (DelvesSeasonXSpellEntry const* delvesSeasonXSpell : sDelvesSeasonXSpellStore)
+        _delvesSeasonXSpellsBySeasonId[delvesSeasonXSpell->DelvesSeasonID].push_back(delvesSeasonXSpell);
 
     for (EmotesTextSoundEntry const* emoteTextSound : sEmotesTextSoundStore)
         _emoteTextSounds[EmotesTextSoundContainer::key_type(emoteTextSound->EmotesTextID, emoteTextSound->RaceID, emoteTextSound->SexID, emoteTextSound->ClassID)] = emoteTextSound;
@@ -2515,6 +2533,11 @@ float DB2Manager::GetCurveValueAt(CurveInterpolationMode mode, std::span<DBCPosi
     }
 
     return 0.0f;
+}
+
+DB2Manager::DelvesSeasonXSpellContainer const* DB2Manager::GetDelvesSeasonSpells(uint32 delvesSeasonId) const
+{
+    return Trinity::Containers::MapGetValuePtr(_delvesSeasonXSpellsBySeasonId, delvesSeasonId);
 }
 
 std::string_view DB2Manager::GetDifficultyName(Difficulty difficulty)

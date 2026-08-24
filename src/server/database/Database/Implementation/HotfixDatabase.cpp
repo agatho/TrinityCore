@@ -83,6 +83,18 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_CONTRIBUTION, "SELECT MAX(ID) + 1 FROM contribution", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_CONTRIBUTION, "SELECT ID, Description_lang, Name_lang FROM contribution_locale"
         " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_DELVES_SEASON_X_SPELL, "SELECT ID, SpellID, DelvesSeasonID FROM delves_season_x_spell"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_DELVES_SEASON_X_SPELL, "SELECT MAX(ID) + 1 FROM delves_season_x_spell", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT UnlockDescription, ID, DelvesSeasonID, TraitTreeID, "
+        "TraitNodeID_DPS, TraitNodeID_Heal, TraitSubTreeID_DPS, TraitSubTreeID_Heal, TraitSubTreeID_Tank, "
+        "FactionID, CreatureDisplayInfoID, UiModelSceneID, "
+        "Field_12_0_0_64499_011, Field_12_0_0_64499_012, ParentID"
+        " FROM player_companion_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT MAX(ID) + 1 FROM player_companion_info", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_DELVES_SEASON, "SELECT ID, FactionID FROM delves_season"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_DELVES_SEASON, "SELECT MAX(ID) + 1 FROM delves_season", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_ACHIEVEMENT, "SELECT ID, Description_lang, Title_lang, Reward_lang FROM achievement_locale"
         " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 
@@ -1334,6 +1346,18 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PrepareStatement(HOTFIX_SEL_MYTHIC_PLUS_SEASON, "SELECT ID, MilestoneSeason, StartTimeEvent, ExpansionLevel, HeroicLFGDungeonMinGear"
         " FROM mythic_plus_season WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_MYTHIC_PLUS_SEASON, "SELECT MAX(ID) + 1 FROM mythic_plus_season", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_WEEKLY_REWARD_CHEST_THRESHOLD, "SELECT ID, Type, Threshold, `Index` FROM weekly_reward_chest_threshold"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_WEEKLY_REWARD_CHEST_THRESHOLD, "SELECT MAX(ID) + 1 FROM weekly_reward_chest_threshold", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_MYTHIC_PLUS_SEASON_KEY_FLOOR, "SELECT ID, KeyFloor, PlayerConditionID, DisplaySeasonID"
+        " FROM mythic_plus_season_key_floor WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_MYTHIC_PLUS_SEASON_KEY_FLOOR, "SELECT MAX(ID) + 1 FROM mythic_plus_season_key_floor", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_MYTHIC_PLUS_SEASON_REWARD_LEVELS, "SELECT ID, MythicPlusSeasonID, ActivityTierID, DifficultyLevel, WeeklyRewardLevel, "
+        "EndOfRunRewardLevel FROM mythic_plus_season_reward_levels WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_MYTHIC_PLUS_SEASON_REWARD_LEVELS, "SELECT MAX(ID) + 1 FROM mythic_plus_season_reward_levels", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_MYTHIC_PLUS_SEASON_TRACKED_MAP, "SELECT ID, MapChallengeModeID, DisplaySeasonID"
+        " FROM mythic_plus_season_tracked_map WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_MYTHIC_PLUS_SEASON_TRACKED_MAP, "SELECT MAX(ID) + 1 FROM mythic_plus_season_tracked_map", CONNECTION_SYNCH);
 
     // NameGen.db2
     PrepareStatement(HOTFIX_SEL_NAME_GEN, "SELECT ID, Name, RaceID, Sex FROM name_gen WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);

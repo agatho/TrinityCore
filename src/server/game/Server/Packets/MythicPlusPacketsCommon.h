@@ -27,6 +27,7 @@ namespace WorldPackets
     {
         struct DungeonScoreMapSummary
         {
+            bool operator==(DungeonScoreMapSummary const&) const = default;
             int32 ChallengeModeID = 0;
             float MapScore = 0.0f;
             int32 BestRunLevel = 0;
@@ -37,6 +38,7 @@ namespace WorldPackets
 
         struct DungeonScoreSummary
         {
+            bool operator==(DungeonScoreSummary const&) const = default;
             float OverallScoreCurrentSeason = 0.0f;
             float LadderScoreCurrentSeason = 0.0f;
             std::vector<DungeonScoreMapSummary> Runs;
@@ -44,6 +46,7 @@ namespace WorldPackets
 
         struct MythicPlusMember
         {
+            bool operator==(MythicPlusMember const&) const = default;
             ObjectGuid BnetAccountGUID;
             uint64 GuildClubMemberID = 0;
             ObjectGuid GUID;
@@ -59,6 +62,7 @@ namespace WorldPackets
 
         struct MythicPlusRun
         {
+            bool operator==(MythicPlusRun const&) const = default;
             int32 MapChallengeModeID = 0;
             bool Completed = false;
             uint32 Level = 0;
@@ -74,6 +78,7 @@ namespace WorldPackets
 
         struct DungeonScoreBestRunForAffix
         {
+            bool operator==(DungeonScoreBestRunForAffix const&) const = default;
             int32 KeystoneAffixID = 0;
             MythicPlusRun Run;
             float Score = 0.0f;
@@ -81,6 +86,7 @@ namespace WorldPackets
 
         struct DungeonScoreMapData
         {
+            bool operator==(DungeonScoreMapData const&) const = default;
             int32 MapChallengeModeID = 0;
             std::vector<DungeonScoreBestRunForAffix> BestRuns;
             float OverAllScore = 0.0f;
@@ -88,6 +94,7 @@ namespace WorldPackets
 
         struct DungeonScoreSeasonData
         {
+            bool operator==(DungeonScoreSeasonData const&) const = default;
             int32 Season = 0;
             std::vector<DungeonScoreMapData> SeasonMaps;
             std::vector<DungeonScoreMapData> LadderMaps;
@@ -97,6 +104,7 @@ namespace WorldPackets
 
         struct DungeonScoreData
         {
+            bool operator==(DungeonScoreData const&) const = default;
             std::vector<DungeonScoreSeasonData> Seasons;
             int32 TotalRuns = 0;
         };

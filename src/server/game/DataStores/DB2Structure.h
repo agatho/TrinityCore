@@ -146,6 +146,36 @@ struct ContributionEntry
     int32 OrderIndex;
     int32 ContributionStyleContainer;
     std::array<int32, 4> UiTextureAtlasMemberID;
+struct DelvesSeasonXSpellEntry
+{
+    uint32 ID;
+    int32 SpellID;
+    uint32 DelvesSeasonID;
+};
+
+struct PlayerCompanionInfoEntry
+{
+    LocalizedString UnlockDescription;
+    uint32 ID;
+    int32 DelvesSeasonID;
+    int32 TraitTreeID;
+    int32 TraitNodeID_DPS;
+    int32 TraitNodeID_Heal;
+    int32 TraitSubTreeID_DPS;
+    int32 TraitSubTreeID_Heal;
+    int32 TraitSubTreeID_Tank;
+    int32 FactionID;
+    int32 CreatureDisplayInfoID;
+    int32 UiModelSceneID;
+    int32 Field_12_0_0_64499_011;
+    int32 Field_12_0_0_64499_012;
+    int32 ParentID;                                                                   // Field_12_0_1_64889_014, parent relation
+};
+
+struct DelvesSeasonEntry
+{
+    uint32 ID;
+    int32 FactionID;                                                                  // Faction.ID FK
 };
 
 struct Achievement_CategoryEntry
@@ -3303,6 +3333,39 @@ struct MythicPlusSeasonEntry
     int32 StartTimeEvent;
     int32 ExpansionLevel;
     int32 HeroicLFGDungeonMinGear;
+};
+
+struct WeeklyRewardChestThresholdEntry
+{
+    uint32 ID;
+    int8 Type;
+    int32 Threshold;
+    int32 Index;
+};
+
+struct MythicPlusSeasonKeyFloorEntry
+{
+    uint32 ID;
+    int32 KeyFloor;
+    int32 PlayerConditionID;
+    uint32 DisplaySeasonID;
+};
+
+struct MythicPlusSeasonRewardLevelsEntry
+{
+    uint32 ID;
+    uint32 MythicPlusSeasonID;
+    int32 ActivityTierID;
+    int32 DifficultyLevel;
+    int32 WeeklyRewardLevel;
+    int32 EndOfRunRewardLevel;
+};
+
+struct MythicPlusSeasonTrackedMapEntry
+{
+    uint32 ID;
+    int32 MapChallengeModeID;
+    uint32 DisplaySeasonID;
 };
 
 struct NameGenEntry

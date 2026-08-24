@@ -55,6 +55,7 @@ class Group;
 class InstanceLock;
 class InstanceMap;
 class InstanceScript;
+class ChallengeMode;
 class InstanceScenario;
 class Object;
 class PhaseShift;
@@ -896,6 +897,8 @@ class TC_GAME_API InstanceMap : public Map
         InstanceScript const* GetInstanceScript() const { return i_data; }
         InstanceScenario* GetInstanceScenario() { return i_scenario.get(); }
         InstanceScenario const* GetInstanceScenario() const { return i_scenario.get(); }
+        ChallengeMode* GetChallengeMode() { return i_challengeMode.get(); }
+        ChallengeMode const* GetChallengeMode() const { return i_challengeMode.get(); }
         void SetInstanceScenario(InstanceScenario* scenario);
         InstanceLock const* GetInstanceLock() const { return i_instanceLock; }
         void UpdateInstanceLock(UpdateBossStateSaveDataEvent const& updateSaveDataEvent);
@@ -919,6 +922,7 @@ class TC_GAME_API InstanceMap : public Map
         InstanceScript* i_data;
         uint32 i_script_id;
         std::unique_ptr<InstanceScenario> i_scenario;
+        std::unique_ptr<ChallengeMode> i_challengeMode;
         InstanceLock* i_instanceLock;
         GroupInstanceReference i_owningGroupRef;
         Optional<uint32> i_lfgDungeonsId;
