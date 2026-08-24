@@ -1,0 +1,22 @@
+-- ============================================================================
+-- Arathi Catch-Up / RPE -- Go'shek Farm raider movement  (2026-08-22)
+-- ============================================================================
+-- Tester report: the Go'shek farmstead raiders "are not moving". Both captures were checked via the
+-- per-POI sniff-synthesis workflow: NO designed patrol exists for any farmstead raider -- every captured
+-- spline for 244674/244677/244676 is a short (11-26yd) single-leg combat chase toward the captured
+-- player, not a loop, and DB MovementType was 0 (idle). So a faithful patrol cannot be reconstructed.
+--
+-- As a behavioural polish for the "farm under raid" scene (explicitly BEYOND the capture, which only
+-- ever saw these mobs stationary-until-pulled), give the non-boss farmstead raiders a light ambient
+-- wander so they shift around the farm instead of standing frozen. Runk (244675, the miniboss) stays
+-- put. The battle-aftermath corpses (249254/249255) are untouched (they stay dead).
+--
+-- NOTE on count: the farmstead roster (14: Ogre Destroyer 244674 x6, Kobold Firetender 244677 x6,
+-- Kobold Pillager 244676 x1, Runk x1) is HORDE-single-sourced -- the Alliance capture ran the same farm
+-- quests (90885/86/87) but its objupdate decoded nothing at the farmstead (a coverage gap), so 14 cannot
+-- be cross-validated. The Alliance-recorded farm-questline waves (Armored Cleaver 244711 x36, Gnoll
+-- Charger 244691, etc.) are the SIEGE approach (despawn timing ties them to the 90888->90893 window) and
+-- correctly sit on phase 28, not the farmstead. Any farmstead count increase is a separate design call.
+-- ============================================================================
+UPDATE `creature` SET `MovementType`=1, `wander_distance`=4
+ WHERE `map`=2927 AND `PhaseId`=4 AND `id` IN (244674,244677,244676);

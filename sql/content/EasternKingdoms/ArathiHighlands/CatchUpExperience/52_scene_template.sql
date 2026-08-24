@@ -1,0 +1,72 @@
+-- ============================================================================
+-- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase G narrative layer (scene_template)
+-- ============================================================================
+-- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
+-- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/ (TCHarvest self-serve
+--   capture): scene_template.sql, scene_triggers_review.txt, sniff_scene_confidence.txt,
+--   addon_cinematic_capture.txt, addon_movie_capture.txt, addon_subtitle_capture.txt.
+--
+-- *** HEADER-ONLY FILE -- NO SQL STATEMENTS BELOW. This is deliberate. ***
+-- Per task-5-brief Requirement 5: 3 scenes fire during this content's playthrough, but
+-- their SceneIds are a capture GAP (withheld/"same"), and the intro cinematic's
+-- CinematicSequenceID is likewise unresolved. Do NOT invent SceneId, CinematicSequences,
+-- or Movie IDs to fill this gap -- none are fabricated anywhere in this file. This file
+-- exists solely to document the GAP and preserve the Phase-K resolution key (the intro
+-- cinematic's 10-line subtitle fingerprint) so a future capture/DB2-lookup pass can
+-- resolve the real IDs without re-deriving this evidence from scratch.
+--
+-- ---- GAP 1: 3 in-scope scenes, SceneIds withheld ----
+-- sniff_scene_confidence.txt: scene_opcode=0x4500DF (matches=6/6), scenes_observed=3,
+-- validated=3, divergent=0, new_candidates=0. "validated=3" means all 3 observed scenes
+-- matched EXISTING scene_template rows already known to the reference/DB2 (i.e. these
+-- are not custom net-new scenes needing a new SceneId allocated) -- but the confidence
+-- artifact records only the match COUNT, not the numeric SceneId values themselves.
+-- scene_template.sql (bundle) is correspondingly empty (new=0 changed=0 same=3): TCHarvest
+-- found 3 matches against the reference and therefore emitted no candidate INSERT rows
+-- (nothing new to add) -- so the actual SceneId integers are not present anywhere in this
+-- bundle for us to read out and re-author here. AUTHORING GUIDANCE for Phase K: obtain
+-- SceneId values via CASC-side DB2 SceneScript/SceneScriptPackage lookup keyed by
+-- questId in {90882, 90883, 90886, 90888, 90897, 90896} (the bind-quests documented in
+-- 50_conversation.sql), or via a fresh sniff capture on this build (68887) with the
+-- SceneId field unmasked, before any scene_template row is authored for this content.
+--
+-- ---- GAP 2: intro cinematic, CinematicSequenceID unresolved ----
+-- addon_cinematic_capture.txt: 1 row, cinematicID='?' (unresolved), nargs=2, map=2451
+-- (client uiMapID for Arathi Highlands -- matches this zone), no last_npc/context_quests
+-- captured. This is presumably the Catch-Up Experience's intro cutscene (the "Arathi
+-- Highlands, once bitterly contested..." narration -- see fingerprint below), but its
+-- numeric CinematicSequenceID was not captured. Per
+-- addon_movie_capture.txt / addon_cinematic_capture.txt banners: "cinematic/movie
+-- triggers have no world-DB table (WPP finding: MiscellaneousHandler's
+-- TRIGGER_CINEMATIC/TRIGGER_MOVIE have no Storage.*/builder call)" -- i.e. even once the
+-- ID is known, it is NOT a scene_template/world-DB row at all; it would be wired via a
+-- SmartAI action (SMART_ACTION_PLAY_CINEMATIC) on a quest-accept/quest-complete trigger,
+-- out of this file's scope entirely.
+--
+-- addon_movie_capture.txt's single captured row (movieID=470, map=85, last_npc=167032,
+-- context_quests=51443/62568) is EXPLICITLY NOT part of this content's narrative: map=85
+-- is the generic Eastern Kingdoms continent id (not our zone-specific map 2796/uiMap
+-- 2451), and quest ids 51443/62568 are outside the Catch-Up Experience's 90882-90911
+-- quest range. Excluded as unrelated capture bleed; not used to resolve GAP 2.
+--
+-- ---- Phase-K resolution key: intro cinematic 10-line subtitle fingerprint ----
+-- addon_subtitle_capture.txt (10 rows, SHOW_SUBTITLE ordered transcript, tagged
+-- "cinematic#1"). Reproduced here VERBATIM in seq order as the human/DB2-search anchor
+-- for identifying the correct CinematicSequenceID (search CinematicSequences.db2 /
+-- narration text for this exact 10-line monologue; no sender/speaker was captured,
+-- consistent with narrator-only VO):
+--   seq 1:  "The Arathi Highlands, once bitterly contested,"
+--   seq 2:  "have seen a tenuous ceasefire between the Horde and the Alliance."
+--   seq 3:  "But though the armistice brought a measure of peace,"
+--   seq 4:  "a new threat has thrown the region into chaos."
+--   seq 5:  "Stromgarde is under siege,"
+--   seq 6:  "and Hammerfall has suffered heavy losses."
+--   seq 7:  "You have answered the call for aid"
+--   seq 8:  "and stand ready to join the fight."
+--   seq 9:  "Band together with the Horde and the Alliance"
+--   seq 10: "to secure the Arathi Highlands!"
+--
+-- No SceneId, CinematicSequences, or Movie ID is authored below. This file intentionally
+-- contains zero INSERT/UPDATE statements.
+-- ============================================================================
