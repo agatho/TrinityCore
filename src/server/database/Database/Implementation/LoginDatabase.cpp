@@ -160,6 +160,11 @@ void LoginDatabaseConnection::DoPrepareStatements()
     // Account wide toys
     PrepareStatement(LOGIN_SEL_ACCOUNT_TOYS, "SELECT itemId, isFavourite, hasFanfare FROM battlenet_account_toys WHERE accountId = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_REP_ACCOUNT_TOYS, "REPLACE INTO battlenet_account_toys (accountId, itemId, isFavourite, hasFanfare) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_DEL_ACCOUNT_TOYS, "DELETE FROM battlenet_account_toys WHERE accountId = ? AND itemId = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_DEL_ACCOUNT_MOUNT, "DELETE FROM battlenet_account_mounts WHERE battlenetAccountId = ? AND mountSpellId = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_SEL_ACCOUNT_STORE_PURCHASES, "SELECT accountStoreItemId, purchaseTime FROM battlenet_account_store_purchases WHERE accountId = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_INS_ACCOUNT_STORE_PURCHASE, "INSERT IGNORE INTO battlenet_account_store_purchases (accountId, accountStoreItemId, purchaseTime) VALUES (?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_DEL_ACCOUNT_STORE_PURCHASE, "DELETE FROM battlenet_account_store_purchases WHERE accountId = ? AND accountStoreItemId = ?", CONNECTION_ASYNC);
 
     // Battle Pets
     PrepareStatement(LOGIN_SEL_BATTLE_PETS, "SELECT bp.guid, bp.species, bp.breed, bp.displayId, bp.level, bp.exp, bp.health, bp.quality, bp.flags, bp.name, bp.nameTimestamp, bp.owner, bp.ownerRealmId, dn.genitive, dn.dative, dn.accusative, dn.instrumental, dn.prepositional FROM battle_pets bp LEFT JOIN battle_pet_declinedname dn ON bp.guid = dn.guid WHERE bp.battlenetAccountId = ? AND (bp.ownerRealmId IS NULL OR bp.ownerRealmId = ?)", CONNECTION_ASYNC);

@@ -25128,6 +25128,9 @@ void Player::SendInitialPacketsAfterAddToMap()
     }
 
     GetSceneMgr().TriggerDelayedScenes();
+
+    // Push the account-wide store front (catalogue + per-item ownership) once the player is in the world.
+    GetSession()->SendAccountStoreFrontUpdate();
 }
 
 void Player::SendUpdateToOutOfRangeGroupMembers()
