@@ -20,6 +20,7 @@
 */
 
 #include "World.h"
+#include "WorldQuestMgr.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "ArchaeologyMgr.h"
@@ -1618,6 +1619,8 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Treasure Pickers...");
     sObjectMgr->LoadTreasurePickerTemplates();                   // must be after LoadItemTemplates()
+    TC_LOG_INFO("server.loading", "Loading World Quests...");
+    sWorldQuestMgr->LoadFromDB();
 
     TC_LOG_INFO("server.loading", "Checking Quest Disables");
     DisableMgr::CheckQuestDisables();                           // must be after loading quests
@@ -2422,6 +2425,7 @@ void World::Update(uint32 diff)
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update LFG"));
         sLFGMgr->Update(diff);
+    sWorldQuestMgr->Update(diff);
     }
 
     {
