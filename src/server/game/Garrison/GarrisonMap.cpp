@@ -16,9 +16,12 @@
  */
 
 #include "GarrisonMap.h"
+#include "Creature.h"
+#include "DB2Stores.h"
 #include "DBCEnums.h"
 #include "GameObject.h"
 #include "Garrison.h"
+#include "Group.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "ObjectGridLoader.h"
@@ -53,6 +56,63 @@ void GarrisonGridLoader::LoadN()
                 continue;
 
             ObjectGridLoaderBase::AddToMap(go, i_map, i_gameObjects);
+        }
+
+        // 12.1 single-pass grid load (Shauren d168aa55fa): no per-cell Visit; spawn all followers
+        // here directly. ObjectGridLoaderBase::AddToMap handles AddToGrid + SetObjectCell + AddToWorld.
+        GarrisonFactionIndex faction = i_garrison->GetFaction();
+        std::vector<Garrison::Plot*> plots = i_garrison->GetPlots();
+        if (!plots.empty())
+        {
+            uint32 plotCount = static_cast<uint32>(plots.size());
+            uint32 followerIndex = 0;
+            for (auto const& [dbId, follower] : i_garrison->GetFollowerMap())
+            {
+                if (follower.PacketInfo.CurrentMissionID != 0)
+                    continue;
+                if (follower.PacketInfo.FollowerStatus & FOLLOWER_STATUS_INACTIVE)
+                    continue;
+                GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(follower.PacketInfo.GarrFollowerID);
+                if (!followerEntry)
+                    continue;
+                if (followerEntry->GarrTypeID != static_cast<int8>(i_garrison->GetType()))
+                    continue;
+                uint32 creatureId = faction == GARRISON_FACTION_INDEX_HORDE ?
+                    followerEntry->HordeCreatureID : followerEntry->AllianceCreatureID;
+                if (!creatureId)
+                    continue;
+                Position spawnPos;
+                bool positionFound = false;
+                if (follower.PacketInfo.CurrentBuildingID != 0)
+                {
+                    for (Garrison::Plot* plot : plots)
+                    {
+                        if (plot->BuildingInfo.PacketInfo &&
+                            plot->BuildingInfo.PacketInfo->GarrBuildingID == follower.PacketInfo.CurrentBuildingID)
+                        {
+                            spawnPos = plot->PacketInfo.PlotPos.Pos;
+                            spawnPos.RelocateOffset({ 3.0f, 3.0f, 0.0f, 0.0f });
+                            positionFound = true;
+                            break;
+                        }
+                    }
+                }
+                if (!positionFound)
+                {
+                    Garrison::Plot* plot = plots[followerIndex % plotCount];
+                    spawnPos = plot->PacketInfo.PlotPos.Pos;
+                    float angle = static_cast<float>(followerIndex % 8) * (float(M_PI) / 4.0f);
+                    float dist = 5.0f + 2.0f * (followerIndex / 8);
+                    spawnPos.m_positionX += dist * std::cos(angle);
+                    spawnPos.m_positionY += dist * std::sin(angle);
+                }
+                ++followerIndex;
+                Creature* creature = Creature::CreateCreature(creatureId, i_map, spawnPos);
+                if (!creature)
+                    continue;
+                creature->SetHomePosition(spawnPos);
+                ObjectGridLoaderBase::AddToMap(creature, i_map, i_creatures);
+            }
         }
     }
 
@@ -95,6 +155,22 @@ bool GarrisonMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
 {
     if (player->GetGUID() == _owner)
         _loadingPlayer = player;
+    else
+    {
+        // Allow party members to enter if they are in the same group as the owner
+        // and the party garrison feature is enabled
+        Player* owner = ObjectAccessor::FindConnectedPlayer(_owner);
+        if (!owner)
+            return false;
+
+        Group* group = player->GetGroup();
+        if (!group || !group->IsMember(owner->GetGUID()))
+        {
+            TC_LOG_DEBUG("garrison", "Player {} denied entry to garrison map {} - not in owner's group",
+                player->GetGUID().ToString().c_str(), GetId());
+            return false;
+        }
+    }
 
     bool result = Map::AddPlayerToMap(player, initPlayer);
 
