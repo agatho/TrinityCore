@@ -940,6 +940,16 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_DESTRUCTIBLE_MODEL_DATA, "SELECT MAX(ID) + 1 FROM destructible_model_data", CONNECTION_SYNCH);
 
+    // DelvesSeason.db2
+    PrepareStatement(HOTFIX_SEL_DELVES_SEASON, "SELECT ID, FactionID FROM delves_season"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_DELVES_SEASON, "SELECT MAX(ID) + 1 FROM delves_season", CONNECTION_SYNCH);
+
+    // DelvesSeasonXSpell.db2
+    PrepareStatement(HOTFIX_SEL_DELVES_SEASON_X_SPELL, "SELECT ID, SpellID, DelvesSeasonID FROM delves_season_x_spell"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_DELVES_SEASON_X_SPELL, "SELECT MAX(ID) + 1 FROM delves_season_x_spell", CONNECTION_SYNCH);
+
     // Difficulty.db2
     PrepareStatement(HOTFIX_SEL_DIFFICULTY, "SELECT ID, Name, InstanceType, OrderIndex, OldEnumValue, FallbackDifficultyID, MinPlayers, MaxPlayers, "
         "Flags, ItemContext, ToggleDifficultyID, GroupSizeHealthCurveID, GroupSizeDmgCurveID, GroupSizeSpellPointsCurveID, Unknown1105 FROM difficulty"
@@ -1781,6 +1791,16 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_PLAYER_DATA_FLAG_CHARACTER, "SELECT MAX(ID) + 1 FROM player_data_flag_character", CONNECTION_SYNCH);
 
+    // PlayerCompanionInfo.db2
+    PrepareStatement(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT UnlockDescription, ID, DelvesSeasonID, TraitTreeID, "
+        "TraitNodeID_DPS, TraitNodeID_Heal, TraitSubTreeID_DPS, TraitSubTreeID_Heal, TraitSubTreeID_Tank, "
+        "FactionID, CreatureDisplayInfoID, UiModelSceneID, "
+        "Field_12_0_0_64499_011, Field_12_0_0_64499_012, ParentID"
+        " FROM player_companion_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT MAX(ID) + 1 FROM player_companion_info", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT ID, UnlockDescription_lang FROM player_companion_info_locale WHERE (`VerifiedBuild` > 0) = ?"
+        " AND locale = ?", CONNECTION_SYNCH);
+
     // PowerDisplay.db2
     PrepareStatement(HOTFIX_SEL_POWER_DISPLAY, "SELECT ID, GlobalStringBaseTag, ActualType, Red, Green, Blue FROM power_display"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
@@ -2597,6 +2617,53 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_WARBAND_SCENE, "SELECT MAX(ID) + 1 FROM warband_scene", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_WARBAND_SCENE, "SELECT ID, Name_lang, Description_lang FROM warband_scene_locale WHERE (`VerifiedBuild` > 0) = ?"
         " AND locale = ?", CONNECTION_SYNCH);
+
+    // WarbandScenePlacement.db2
+    PrepareStatement(HOTFIX_SEL_WARBAND_SCENE_PLACEMENT, "SELECT PositionX, PositionY, PositionZ, ID, WarbandSceneID, SlotType, Rotation, Scale, "
+        "Field_11_0_0_54210_004, Field_11_0_0_54210_005, SlotID, Field_11_1_0_58221_009, Field_12_0_0_63534_008 FROM warband_scene_placement"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_WARBAND_SCENE_PLACEMENT, "SELECT MAX(ID) + 1 FROM warband_scene_placement", CONNECTION_SYNCH);
+
+    // WarbandSceneAnimation.db2
+    PrepareStatement(HOTFIX_SEL_WARBAND_SCENE_ANIMATION, "SELECT ID, SpellVisualKitID, Event, AnimKitID, Field_11_0_0_54210_003, TimeIsh, "
+        "StandState, SheatheState, Field_11_1_0_58221_008, Field_11_0_0_54210_005_0, Field_11_0_0_54210_005_1"
+        " FROM warband_scene_animation WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_WARBAND_SCENE_ANIMATION, "SELECT MAX(ID) + 1 FROM warband_scene_animation", CONNECTION_SYNCH);
+
+    // WarbandSceneAnimChrSpec.db2
+    PrepareStatement(HOTFIX_SEL_WARBAND_SCENE_ANIM_CHR_SPEC, "SELECT ID, WarbandSceneAnimationID, ChrSpecializationID"
+        " FROM warband_scene_anim_chr_spec WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_WARBAND_SCENE_ANIM_CHR_SPEC, "SELECT MAX(ID) + 1 FROM warband_scene_anim_chr_spec", CONNECTION_SYNCH);
+
+    // WarbandScenePlacementFilterReq.db2
+    PrepareStatement(HOTFIX_SEL_WARBAND_SCENE_PLACEMENT_FILTER_REQ, "SELECT ID, Field_11_1_0_58221_002, "
+        "Field_11_1_0_58221_005, Field_11_1_0_58221_003_0, Field_11_1_0_58221_003_1"
+        " FROM warband_scene_placement_filter_req WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_WARBAND_SCENE_PLACEMENT_FILTER_REQ, "SELECT MAX(ID) + 1 FROM warband_scene_placement_filter_req", CONNECTION_SYNCH);
+
+    // WarbandScenePlacementOption.db2
+    PrepareStatement(HOTFIX_SEL_WARBAND_SCENE_PLACEMENT_OPTION, "SELECT PositionX, PositionY, PositionZ, ID, WarbandScenePlacementID, "
+        "Orientation, Scale, Field_11_1_0_58221_005, Field_11_1_0_58221_006"
+        " FROM warband_scene_placement_option WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_WARBAND_SCENE_PLACEMENT_OPTION, "SELECT MAX(ID) + 1 FROM warband_scene_placement_option", CONNECTION_SYNCH);
+
+    // WarbandScenePlcmntAnimOverride.db2
+    PrepareStatement(HOTFIX_SEL_WARBAND_SCENE_PLCMNT_ANIM_OVERRIDE, "SELECT ID, Field_11_0_0_54210_000, WarbandSceneAnimationID"
+        " FROM warband_scene_plcmnt_anim_override WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_WARBAND_SCENE_PLCMNT_ANIM_OVERRIDE, "SELECT MAX(ID) + 1 FROM warband_scene_plcmnt_anim_override", CONNECTION_SYNCH);
+
+    // WarbandPlacementDisplayInfo.db2
+    PrepareStatement(HOTFIX_SEL_WARBAND_PLACEMENT_DISPLAY_INFO, "SELECT ID, WarbandScenePlacementID, Field_11_2_0_61476_001, "
+        "Field_11_2_0_61476_002, Field_11_2_0_61476_003, Field_11_2_0_61476_004"
+        " FROM warband_placement_display_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_WARBAND_PLACEMENT_DISPLAY_INFO, "SELECT MAX(ID) + 1 FROM warband_placement_display_info", CONNECTION_SYNCH);
+
+    // WarbandSceneSourceInfo.db2
+    PrepareStatement(HOTFIX_SEL_WARBAND_SCENE_SOURCE_INFO, "SELECT SourceDescription, ID, WarbandSceneID, SourceType"
+        " FROM warband_scene_source_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_WARBAND_SCENE_SOURCE_INFO, "SELECT MAX(ID) + 1 FROM warband_scene_source_info", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_WARBAND_SCENE_SOURCE_INFO, "SELECT ID, SourceDescription_lang FROM warband_scene_source_info_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 
     // WmoAreaTable.db2
     PrepareStatement(HOTFIX_SEL_WMO_AREA_TABLE, "SELECT AreaName, ID, WmoID, NameSetID, WmoGroupID, SoundProviderPref, SoundProviderPrefUnderwater, "

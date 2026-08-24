@@ -36,6 +36,7 @@
 #include <map>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -784,6 +785,24 @@ class TC_GAME_API World
 
         bool IsBattlePetJournalLockAcquired(ObjectGuid battlenetAccountGuid);
 
+        // Account-wide (warband) bank exclusivity lock. The account bank is shared across
+        // every character of a Battle.net account, and on this realm several of those
+        // characters may be online at once. Mutation is therefore serialised through a
+        // single-holder, server-side reservation: exactly one session per Bnet account may
+        // hold it, the acquisition is atomic (test-and-set under a mutex), and every account
+        // bank mutation opcode is refused unless the caller holds it. This makes concurrent
+        // same-bnet mutation impossible and closes the item/coinage duplication vectors.
+        bool TryAcquireAccountInventoryLock(ObjectGuid battlenetAccountGuid, WorldSession* session);
+        void ReleaseAccountInventoryLock(ObjectGuid battlenetAccountGuid, WorldSession const* session);
+
+        // Serialises account currency transfers by SOURCE character GUID. A transfer reads the
+        // offline source balance asynchronously and then debits it, so two overlapping transfers
+        // from the same source (same session burst or two same-bnet sessions) would otherwise
+        // both act on the same stale balance and dupe the currency (CR-4). BeginCurrencyTransfer
+        // is an atomic test-and-set: only one transfer per source may be in flight at a time.
+        bool BeginCurrencyTransfer(ObjectGuid sourceCharacterGuid);
+        void EndCurrencyTransfer(ObjectGuid sourceCharacterGuid);
+
         uint32 GetCleaningFlags() const { return m_CleaningFlags; }
         void SetCleaningFlags(uint32 flags) { m_CleaningFlags = flags; }
         void ResetEventSeasonalQuests(uint16 event_id, time_t eventStartTime);
@@ -851,6 +870,14 @@ class TC_GAME_API World
 
         SessionMap m_sessions;
         std::unordered_multimap<ObjectGuid, WorldSession*> m_sessionsByBnetGuid;
+        // Owner of the account-wide bank lock, keyed by Battle.net account GUID. Guarded by
+        // m_accountInventoryLockMutex so the test-and-set on acquisition is atomic against
+        // two same-bnet sessions entering the world simultaneously.
+        std::unordered_map<ObjectGuid, WorldSession*> m_accountInventoryLockOwners;
+        std::mutex m_accountInventoryLockMutex;
+        // Source character GUIDs with an account currency transfer currently in flight.
+        std::unordered_set<ObjectGuid> m_currencyTransfersInProgress;
+        std::mutex m_currencyTransferMutex;
         typedef std::unordered_map<uint32, time_t> DisconnectMap;
         DisconnectMap m_disconnects;
         uint32 m_maxActiveSessionCount;

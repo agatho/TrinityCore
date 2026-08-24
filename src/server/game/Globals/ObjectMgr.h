@@ -1319,6 +1319,9 @@ class TC_GAME_API ObjectMgr
         void LoadReputationOnKill();
         void LoadReputationSpilloverTemplate();
 
+        void LoadWarbandReputationFactions();
+        bool IsWarbandReputationFaction(uint32 factionId) const;
+
         void LoadPointsOfInterest();
         void LoadQuestPOI();
 
@@ -1898,6 +1901,8 @@ class TC_GAME_API ObjectMgr
 
         std::set<uint32> _transportMaps; // Helper container storing map ids that are for transports only, loaded from gameobject_template
         VehicleSeatAddonContainer _vehicleSeatAddonStore;
+
+        std::unordered_set<uint32> _warbandReputationFactions;
 };
 
 #define sObjectMgr ObjectMgr::instance()

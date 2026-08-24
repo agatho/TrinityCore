@@ -2520,6 +2520,16 @@ struct CurrencyTypesEntry
     {
         return GetFlags().HasFlag(CurrencyTypesFlags::TrackQuantity);
     }
+
+    bool IsAccountWide() const
+    {
+        return GetFlags().HasFlag(CurrencyTypesFlags::AccountWide);
+    }
+
+    bool IsAccountTransferable() const
+    {
+        return AccountTransferPercentage > 0.0f;
+    }
 };
 
 struct CurveEntry
@@ -2563,6 +2573,19 @@ struct DestructibleModelDataEntry
     int8 State1NameSet;
     int8 State2NameSet;
     int8 State3NameSet;
+};
+
+struct DelvesSeasonEntry
+{
+    uint32 ID;
+    int32 FactionID;                                                                  // Faction.ID FK
+};
+
+struct DelvesSeasonXSpellEntry
+{
+    uint32 ID;
+    int32 SpellID;
+    uint32 DelvesSeasonID;
 };
 
 struct DifficultyEntry
@@ -4501,6 +4524,25 @@ struct PlayerDataFlagCharacterEntry
     int32 Unknown1125;
 };
 
+struct PlayerCompanionInfoEntry
+{
+    LocalizedString UnlockDescription;
+    uint32 ID;
+    int32 DelvesSeasonID;
+    int32 TraitTreeID;
+    int32 TraitNodeID_DPS;
+    int32 TraitNodeID_Heal;
+    int32 TraitSubTreeID_DPS;
+    int32 TraitSubTreeID_Heal;
+    int32 TraitSubTreeID_Tank;
+    int32 FactionID;
+    int32 CreatureDisplayInfoID;
+    int32 UiModelSceneID;
+    int32 Field_12_0_0_64499_011;
+    int32 Field_12_0_0_64499_012;
+    int32 ParentID;                                                                   // Field_12_0_1_64889_014, parent relation
+};
+
 struct PowerDisplayEntry
 {
     uint32 ID;
@@ -6277,6 +6319,86 @@ struct WarbandSceneEntry
     int32 DefaultScenePriority;
 
     EnumFlag<WarbandSceneFlags> GetFlags() const { return static_cast<WarbandSceneFlags>(Flags); }
+};
+
+struct WarbandScenePlacementEntry
+{
+    DBCPosition3D Position;
+    uint32 ID;
+    uint32 WarbandSceneID;
+    int32 SlotType;
+    float Rotation;
+    float Scale;
+    uint32 Field_11_0_0_54210_004;
+    uint32 Field_11_0_0_54210_005;
+    int32 SlotID;
+    int32 Field_11_1_0_58221_009;
+    int32 Field_12_0_0_63534_008;
+};
+
+struct WarbandSceneAnimationEntry
+{
+    uint32 ID;
+    int32 SpellVisualKitID;
+    int32 Event;
+    int32 AnimKitID;
+    int32 Field_11_0_0_54210_003;
+    float TimeIsh;
+    uint8 StandState;
+    uint8 SheatheState;
+    int8 Field_11_1_0_58221_008;
+    std::array<int32, 2> Field_11_0_0_54210_005;
+};
+
+struct WarbandSceneAnimChrSpecEntry
+{
+    uint32 ID;
+    int32 WarbandSceneAnimationID;
+    int32 ChrSpecializationID;
+};
+
+struct WarbandScenePlacementFilterReqEntry
+{
+    uint32 ID;
+    uint16 Field_11_1_0_58221_002;
+    int8 Field_11_1_0_58221_005;
+    std::array<int32, 2> Field_11_1_0_58221_003;
+};
+
+struct WarbandScenePlacementOptionEntry
+{
+    DBCPosition3D Position;
+    uint32 ID;
+    uint32 WarbandScenePlacementID;
+    float Orientation;
+    float Scale;
+    int32 Field_11_1_0_58221_005;
+    int32 Field_11_1_0_58221_006;
+};
+
+struct WarbandScenePlcmntAnimOverrideEntry
+{
+    uint32 ID;
+    int32 Field_11_0_0_54210_000;
+    int32 WarbandSceneAnimationID;
+};
+
+struct WarbandPlacementDisplayInfoEntry
+{
+    uint32 ID;
+    uint32 WarbandScenePlacementID;
+    int32 Field_11_2_0_61476_001;
+    int32 Field_11_2_0_61476_002;
+    int32 Field_11_2_0_61476_003;
+    int32 Field_11_2_0_61476_004;
+};
+
+struct WarbandSceneSourceInfoEntry
+{
+    LocalizedString SourceDescription;
+    uint32 ID;
+    uint32 WarbandSceneID;
+    int8 SourceType;
 };
 
 struct WMOAreaTableEntry

@@ -3241,6 +3241,29 @@ struct DestructibleModelDataLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 23, &DestructibleModelDataMeta::Instance, HOTFIX_SEL_DESTRUCTIBLE_MODEL_DATA };
 };
 
+struct DelvesSeasonLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[2] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FactionID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 2, &DelvesSeasonMeta::Instance, HOTFIX_SEL_DELVES_SEASON };
+};
+
+struct DelvesSeasonXSpellLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "DelvesSeasonID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &DelvesSeasonXSpellMeta::Instance, HOTFIX_SEL_DELVES_SEASON_X_SPELL };
+};
+
 struct DifficultyLoadInfo
 {
     static constexpr DB2FieldMeta Fields[15] =
@@ -6229,6 +6252,30 @@ struct PlayerDataFlagCharacterLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 4, &PlayerDataFlagCharacterMeta::Instance, HOTFIX_SEL_PLAYER_DATA_FLAG_CHARACTER };
 };
 
+struct PlayerCompanionInfoLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[15] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "UnlockDescription" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DelvesSeasonID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitTreeID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitNodeID_DPS" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitNodeID_Heal" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitSubTreeID_DPS" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitSubTreeID_Heal" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TraitSubTreeID_Tank" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FactionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CreatureDisplayInfoID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "UiModelSceneID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_011" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_012" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ParentID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 15, &PlayerCompanionInfoMeta::Instance, HOTFIX_SEL_PLAYER_COMPANION_INFO };
+};
+
 struct PowerDisplayLoadInfo
 {
     static constexpr DB2FieldMeta Fields[6] =
@@ -8869,6 +8916,132 @@ struct WarbandSceneLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 17, &WarbandSceneMeta::Instance, HOTFIX_SEL_WARBAND_SCENE };
+};
+
+struct WarbandScenePlacementLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[13] =
+    {
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionX" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionY" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionZ" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "WarbandSceneID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SlotType" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "Rotation" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "Scale" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "Field_11_0_0_54210_004" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "Field_11_0_0_54210_005" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SlotID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_1_0_58221_009" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_63534_008" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 13, &WarbandScenePlacementMeta::Instance, HOTFIX_SEL_WARBAND_SCENE_PLACEMENT };
+};
+
+struct WarbandSceneAnimationLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[11] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SpellVisualKitID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Event" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "AnimKitID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_0_54210_003" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "TimeIsh" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "StandState" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "SheatheState" },
+        { .IsSigned = true, .Type = FT_BYTE, .Name = "Field_11_1_0_58221_008" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_0_54210_005_0" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_0_54210_005_1" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 11, &WarbandSceneAnimationMeta::Instance, HOTFIX_SEL_WARBAND_SCENE_ANIMATION };
+};
+
+struct WarbandSceneAnimChrSpecLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "WarbandSceneAnimationID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ChrSpecializationID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &WarbandSceneAnimChrSpecMeta::Instance, HOTFIX_SEL_WARBAND_SCENE_ANIM_CHR_SPEC };
+};
+
+struct WarbandScenePlacementFilterReqLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[5] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "Field_11_1_0_58221_002" },
+        { .IsSigned = true, .Type = FT_BYTE, .Name = "Field_11_1_0_58221_005" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_1_0_58221_003_0" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_1_0_58221_003_1" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &WarbandScenePlacementFilterReqMeta::Instance, HOTFIX_SEL_WARBAND_SCENE_PLACEMENT_FILTER_REQ };
+};
+
+struct WarbandScenePlacementOptionLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[9] =
+    {
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionX" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionY" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionZ" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "WarbandScenePlacementID" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "Orientation" },
+        { .IsSigned = false, .Type = FT_FLOAT, .Name = "Scale" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_1_0_58221_005" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_1_0_58221_006" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 9, &WarbandScenePlacementOptionMeta::Instance, HOTFIX_SEL_WARBAND_SCENE_PLACEMENT_OPTION };
+};
+
+struct WarbandScenePlcmntAnimOverrideLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_0_0_54210_000" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "WarbandSceneAnimationID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &WarbandScenePlcmntAnimOverrideMeta::Instance, HOTFIX_SEL_WARBAND_SCENE_PLCMNT_ANIM_OVERRIDE };
+};
+
+struct WarbandPlacementDisplayInfoLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[6] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "WarbandScenePlacementID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_2_0_61476_001" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_2_0_61476_002" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_2_0_61476_003" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_11_2_0_61476_004" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 6, &WarbandPlacementDisplayInfoMeta::Instance, HOTFIX_SEL_WARBAND_PLACEMENT_DISPLAY_INFO };
+};
+
+struct WarbandSceneSourceInfoLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[4] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "SourceDescription" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "WarbandSceneID" },
+        { .IsSigned = true, .Type = FT_BYTE, .Name = "SourceType" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 4, &WarbandSceneSourceInfoMeta::Instance, HOTFIX_SEL_WARBAND_SCENE_SOURCE_INFO };
 };
 
 struct WmoAreaTableLoadInfo

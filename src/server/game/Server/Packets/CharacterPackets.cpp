@@ -911,5 +911,33 @@ WorldPacket const* NeutralPlayerFactionSelectResult::Write()
     _worldPacket << uint8(Faction);
 
     return &_worldPacket;
+void SetupWarbandGroups::Read()
+{
+    _worldPacket >> BitsSize<5>(Groups);
+    _worldPacket.ResetBitPos();
+
+    for (WarbandGroupSetup& group : Groups)
+    {
+        _worldPacket >> group.GroupID;
+        _worldPacket >> group.OrderIndex;
+        _worldPacket >> group.WarbandSceneID;
+        _worldPacket >> group.Flags;
+        _worldPacket >> group.ContentSetID;
+        _worldPacket >> Size<uint32>(group.Members);
+
+        for (WarbandGroupSetupMember& member : group.Members)
+        {
+            _worldPacket >> member.WarbandScenePlacementID;
+            _worldPacket >> member.Type;
+            _worldPacket >> member.ContentSetID;
+            if (member.Type == 0)
+                _worldPacket >> member.Guid;
+        }
+
+        _worldPacket >> SizedString::BitsSize<9>(group.Name);
+        _worldPacket.ResetBitPos();
+
+        _worldPacket >> SizedString::Data(group.Name);
+    }
 }
 }

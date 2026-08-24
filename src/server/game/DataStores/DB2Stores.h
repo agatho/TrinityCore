@@ -187,6 +187,8 @@ TC_GAME_API extern DB2Storage<CriteriaTreeEntry>                    sCriteriaTre
 TC_GAME_API extern DB2Storage<CurrencyTypesEntry>                   sCurrencyTypesStore;
 TC_GAME_API extern DB2Storage<CurveEntry>                           sCurveStore;
 TC_GAME_API extern DB2Storage<DestructibleModelDataEntry>           sDestructibleModelDataStore;
+TC_GAME_API extern DB2Storage<DelvesSeasonEntry>                    sDelvesSeasonStore;
+TC_GAME_API extern DB2Storage<DelvesSeasonXSpellEntry>              sDelvesSeasonXSpellStore;
 TC_GAME_API extern DB2Storage<DifficultyEntry>                      sDifficultyStore;
 TC_GAME_API extern DB2Storage<DriveCapabilityEntry>                 sDriveCapabilityStore;
 TC_GAME_API extern DB2Storage<DriveCapabilityTierEntry>             sDriveCapabilityTierStore;
@@ -309,6 +311,7 @@ TC_GAME_API extern DB2Storage<PlayerDataElementAccountEntry>        sPlayerDataE
 TC_GAME_API extern DB2Storage<PlayerDataElementCharacterEntry>      sPlayerDataElementCharacterStore;
 TC_GAME_API extern DB2Storage<PlayerDataFlagAccountEntry>           sPlayerDataFlagAccountStore;
 TC_GAME_API extern DB2Storage<PlayerDataFlagCharacterEntry>         sPlayerDataFlagCharacterStore;
+TC_GAME_API extern DB2Storage<PlayerCompanionInfoEntry>             sPlayerCompanionInfoStore;
 TC_GAME_API extern DB2Storage<PowerDisplayEntry>                    sPowerDisplayStore;
 TC_GAME_API extern DB2Storage<PowerTypeEntry>                       sPowerTypeStore;
 TC_GAME_API extern DB2Storage<PVPStatEntry>                         sPVPStatStore;
@@ -434,6 +437,14 @@ TC_GAME_API extern DB2Storage<VehicleEntry>                         sVehicleStor
 TC_GAME_API extern DB2Storage<VehicleSeatEntry>                     sVehicleSeatStore;
 TC_GAME_API extern DB2Storage<VignetteEntry>                        sVignetteStore;
 TC_GAME_API extern DB2Storage<WarbandSceneEntry>                    sWarbandSceneStore;
+TC_GAME_API extern DB2Storage<WarbandScenePlacementEntry>           sWarbandScenePlacementStore;
+TC_GAME_API extern DB2Storage<WarbandSceneAnimationEntry>           sWarbandSceneAnimationStore;
+TC_GAME_API extern DB2Storage<WarbandSceneAnimChrSpecEntry>         sWarbandSceneAnimChrSpecStore;
+TC_GAME_API extern DB2Storage<WarbandScenePlacementFilterReqEntry>  sWarbandScenePlacementFilterReqStore;
+TC_GAME_API extern DB2Storage<WarbandScenePlacementOptionEntry>     sWarbandScenePlacementOptionStore;
+TC_GAME_API extern DB2Storage<WarbandScenePlcmntAnimOverrideEntry>  sWarbandScenePlcmntAnimOverrideStore;
+TC_GAME_API extern DB2Storage<WarbandPlacementDisplayInfoEntry>     sWarbandPlacementDisplayInfoStore;
+TC_GAME_API extern DB2Storage<WarbandSceneSourceInfoEntry>          sWarbandSceneSourceInfoStore;
 TC_GAME_API extern DB2Storage<WorldEffectEntry>                     sWorldEffectStore;
 TC_GAME_API extern DB2Storage<WorldMapOverlayEntry>                 sWorldMapOverlayStore;
 TC_GAME_API extern DB2Storage<WorldStateExpressionEntry>            sWorldStateExpressionStore;
@@ -557,6 +568,7 @@ public:
     using FriendshipRepReactionSet = std::set<FriendshipRepReactionEntry const*, FriendshipRepReactionEntryComparator>;
     using MapDifficultyConditionsContainer = std::vector<std::pair<uint32, PlayerConditionEntry const*>>;
     using MountTypeXCapabilitySet = std::set<MountTypeXCapabilityEntry const*, MountTypeXCapabilityEntryComparator>;
+    using DelvesSeasonXSpellContainer = std::vector<DelvesSeasonXSpellEntry const*>;
     using MountXDisplayContainer = std::vector<MountXDisplayEntry const*>;
 
     static DB2Manager& Instance();
@@ -684,6 +696,7 @@ public:
     bool IsUiMapPhase(uint32 phaseId) const;
     static WMOAreaTableEntry const* GetWMOAreaTable(int32 rootId, int32 adtId, int32 groupId, bool allowGroupFallback);
     std::unordered_set<uint32> const* GetPVPStatIDsForMap(uint32 mapId) const;
+    std::vector<WarbandScenePlacementEntry const*> const* GetWarbandScenePlacements(uint32 warbandSceneId) const;
 
 private:
     friend class DB2HotfixGeneratorBase;
