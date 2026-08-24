@@ -48,6 +48,335 @@ struct AchievementEntry
     int32 LegacyAfterTimeEvent;                                     // category changes clientside to Legacy after this TimeEvent is passed
 };
 
+struct SoulbindConduitEntry
+{
+    uint32 ID;
+    uint8 ConduitType;
+    int32 CovenantID;
+    int32 SpecSetID;
+    int32 Flags;
+};
+
+struct TrophyEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    uint8 TrophyTypeID;
+    int32 GameObjectDisplayInfoID;
+    uint32 PlayerConditionID;
+};
+
+struct SoulbindEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    int32 CovenantID;
+    int32 GarrTalentTreeID;
+    int32 CreatureID;
+    int32 GarrFollowerID;
+    int32 PlayerConditionID;
+};
+
+struct CharShipmentEntry
+{
+    // Field order matches the 12.0.7 client db2 layout 0x91BEA68A (byte-decoded from the client
+    // CharShipment.db2). The tail is physically Flags, GarrFollowerID, MaxShipments - NOT
+    // MaxShipments/.../Flags. The previous order read the Flags bitmask (512/513) into MaxShipments and
+    // MaxShipments (0) into Flags, so the server saw Flags=0 for every shipment and could not tell the
+    // quest/tutorial row (Flags 0x1 set, Duration 0) from the regular row (Duration 14400).
+    uint32 ID;
+    uint16 ContainerID;
+    uint32 DummyItemID;
+    uint32 TreasureID;
+    int32 SpellID;
+    uint32 OnCompleteSpellID;
+    int32 Duration;
+    int32 Flags;
+    uint16 GarrFollowerID;
+    uint8 MaxShipments;
+};
+
+struct CharShipmentContainerEntry
+{
+    uint32 ID;
+    LocalizedString Description;
+    LocalizedString PendingText;
+    uint16 UiTextureKitID;
+    int8 GarrTypeID;
+    uint8 GarrBuildingType;
+    uint8 BaseCapacity;
+    uint16 SmallDisplayInfoID;
+    uint16 MediumDisplayInfoID;
+    uint16 LargeDisplayInfoID;
+    int32 WorkingSpellVisualID;
+    uint32 CompleteSpellVisualID;
+    uint32 WorkingDisplayInfoID;
+    uint8 MediumThreshold;
+    uint8 LargeThreshold;
+    int8 Faction;
+    uint16 CrossFactionID;
+};
+
+struct GarrItemLevelUpgradeDataEntry
+{
+    uint32 ID;
+    int32 Operation;
+    int32 MinItemLevel;
+    int32 MaxItemLevel;
+    int8 FollowerTypeID;
+};
+
+struct GarrTypeEntry
+{
+    int8 ID;
+    uint32 PrimaryCurrencyTypeID;
+    uint32 SecondaryCurrencyTypeID;
+    uint32 ExpansionID;
+    int32 Flags;
+    float AutoFollowerHealRate;
+    int32 MissionCostCurveID;
+    float AutoFollowerHealCostMult;
+    std::array<int32, 2> MapIDs;
+};
+
+struct GarrTalentEntry
+{
+    LocalizedString Name;
+    LocalizedString Description;
+    uint32 ID;
+    uint32 GarrTalentTreeID;
+    int8 Tier;
+    int8 UiOrder;
+    int32 IconFileDataID;
+    uint32 PlayerConditionID;
+    uint32 GarrAbilityID;
+    int32 Flags;
+    int32 TalentType;
+    int32 PrerequisiteTalentID;
+    int32 ResearchCostSource;
+    int32 ActiveDurationSecs;
+    int32 GarrTalentSocketPropertiesID;
+};
+
+struct GarrTalentResearchEntry
+{
+    uint32 ID;
+    int32 GoldCost;
+    int32 CurrencyTypesID;
+    int32 CurrencyTypesCost;
+    int32 DurationSecs;
+    int32 RespecGoldCost;
+    int32 RespecCurrencyTypesID;
+    int32 RespecCurrencyTypesCost;
+    int32 RespecDurationSecs;
+};
+
+struct GarrTalentRankEntry
+{
+    uint32 ID;
+    int32 Rank;
+    int32 PerkSpellID;
+    int32 PerkPlayerConditionID;
+    float Points;
+    int32 ResearchCost;
+    int32 ResearchCostCurrencyTypesID;
+    int32 ResearchGoldCost;
+    int32 ResearchDurationSecs;
+    int32 RespecCost;
+    int32 RespecCostCurrencyTypesID;
+    int32 RespecGoldCost;
+    int32 RespecDurationSecs;
+    int32 AlternateResearchCost;
+    int32 AlternateResearchCostCurrencyTypesID;
+    int32 AlternateResearchGoldCost;
+    int32 AlternateResearchDurationSecs;
+    uint32 GarrTalentID;
+};
+
+struct GarrTalTreeXGarrTalResearchEntry
+{
+    uint32 ID;
+    int32 GarrTalentTreeID;
+    int32 GarrTalentResearchID;
+    int32 OrderIndex;
+};
+
+struct GarrSpecializationEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    uint8 GarrTypeID;
+    int32 IconFileDataID;
+    uint8 GarrFollowerTypeID;
+    int32 Param;
+    std::array<float, 2> Bonus;
+};
+
+struct GarrMissionXFollowerEntry
+{
+    uint32 ID;
+    int32 GarrFollowerID;
+    int32 GarrFollowerTypeID;
+    int8 BoardIndex;
+    int32 GarrMissionID;
+};
+
+struct GarrMissionXEncounterEntry
+{
+    uint32 ID;
+    uint32 GarrEncounterID;
+    uint32 GarrEncounterSetID;
+    uint8 OrderIndex;
+    int8 BoardIndex;
+    int32 GarrMissionID;
+};
+
+struct GarrMechanicTypeEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    int32 GarrAbilityCategoryID;
+    uint8 Category;
+};
+
+struct GarrMechanicEntry
+{
+    uint32 ID;
+    int32 GarrMechanicTypeID;
+    float Factor;
+    int32 GarrAbilityID;
+};
+
+struct GarrFollowerTypeEntry
+{
+    uint32 ID;
+    int8 GarrTypeID;
+    uint8 MaxFollowers;
+    uint8 MaxFollowerBuildingType;
+    uint16 MaxItemLevel;
+    uint8 LevelRangeBias;
+    uint8 ItemLevelRangeBias;
+    int32 Flags;
+};
+
+struct GarrFollowerQualityEntry
+{
+    uint32 ID;
+    int32 XpThreshold;
+    uint32 QualityItemID;
+    int8 Quality;
+    uint8 AbilityCount;
+    uint8 TraitCount;
+    uint16 GarrFollowerTypeID;
+    uint32 ClassSpecID;
+};
+
+struct GarrFollowerLevelXPEntry
+{
+    uint32 ID;
+    // 68275 db2 layout (WoWDBDefs LAYOUT 83953EF8): GarrFollowerTypeID comes BEFORE FollowerLevel.
+    // These were previously declared in the reverse order, so every row loaded with the two bytes
+    // swapped (FollowerLevel held the type value, GarrFollowerTypeID held the level) — GetFollowerLevelXP
+    // then missed for every real (type, level) pair and follower mission XP was silently discarded.
+    int8 GarrFollowerTypeID;
+    uint8 FollowerLevel;
+    uint16 XpToNextLevel;
+    uint16 ShipmentXP;
+};
+
+struct GarrFollSupportSpellEntry
+{
+    uint32 ID;
+    int32 HordeSpellID;
+    int32 AllianceSpellID;
+    uint8 OrderIndex;
+    int32 GarrFollowerID;
+};
+
+struct GarrEncounterXMechanicEntry
+{
+    uint32 ID;
+    int32 GarrMechanicID;
+    uint8 GarrMechanicSetID;
+    int32 GarrEncounterID;
+};
+
+struct GarrEncounterEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    int32 CreatureID;
+    int32 PortraitFileDataID;
+    uint32 UiTextureKitID;
+    float UiAnimScale;
+    float UiAnimHeight;
+    int32 Flags;
+    int32 AutoCombatantID;
+};
+
+struct GarrEncounterSetXEncounterEntry
+{
+    uint32 ID;
+    uint32 GarrEncounterID;
+    int32 GarrEncounterSetID;
+};
+
+struct GarrAutoSpellEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    int32 Cooldown;
+    int32 Duration;
+    int32 Flags;
+    int32 SchoolMask;
+    int32 IconFileDataID;
+};
+
+struct GarrAutoSpellEffectEntry
+{
+    uint32 ID;
+    int32 GarrAutoSpellID;
+    uint8 EffectIndex;
+    uint8 Effect;
+    float Points;
+    uint8 TargetType;
+    int32 Flags;
+    int32 Period;
+};
+
+struct GarrAutoCombatantEntry
+{
+    uint32 ID;
+    int32 HealthBase;
+    int32 HealthGainPerLevel;
+    int32 AttackBase;
+    int32 AttackGainPerLevel;
+    int32 AttackSpellID;
+    int32 AbilitySpellID;
+    int32 AbilitySpellID2;
+    int32 PassiveSpellID;
+    int32 Role;
+};
+
+struct GarrAbilityEffectEntry
+{
+    uint32 ID;
+    uint16 GarrAbilityID;
+    uint8 EffectType;
+    uint8 TargetMask;
+    int32 Amount;
+    float CombatWeightBase;
+    float CombatWeightMax;
+    float ActionValueFlat;
+    uint8 AbilityAction;
+    uint8 MiscValueA;
+    int32 ActionHours;
+    int32 ActionRecordID;
+};
+
 struct Achievement_CategoryEntry
 {
     LocalizedString Name;

@@ -4392,9 +4392,9 @@ GameObject* Garrison::Plot::CreateGameObject(Map* map, GarrisonFactionIndex fact
 
     if (building->GetGoType() == GAMEOBJECT_TYPE_GARRISON_BUILDING && building->GetGOInfo()->garrisonBuilding.SpawnMap)
     {
-        if (CellObjectGuidsMap const* cells = sObjectMgr->GetMapObjectGuids(building->GetGOInfo()->garrisonBuilding.SpawnMap, map->GetDifficultyID()))
+        if (GridObjectGuidsMap const* grids = sObjectMgr->GetMapObjectGuids(building->GetGOInfo()->garrisonBuilding.SpawnMap, map->GetDifficultyID()))
         {
-            for (auto const& [cellId, guids] : *cells)
+            for (auto const& [gridId, guids] : *grids)
             {
                 for (ObjectGuid::LowType spawnId : guids.gameobjects)
                     if (GameObject* spawn = BuildingSpawnHelper<GameObject, &GameObject::RelocateStationaryPosition>(building, spawnId, map))
@@ -6099,14 +6099,8 @@ uint32 Garrison::ResearchTalent(uint32 garrTalentID)
     // Deduct gold cost
     if (rankEntry->ResearchGoldCost > 0)
     {
-        // TODO(garrison-merge): fork research gold-check dropped here (mis-tangled with 12.1 Cell->Grid spawn reorg); re-place in research fn
-        if (GridObjectGuidsMap const* grids = sObjectMgr->GetMapObjectGuids(building->GetGOInfo()->garrisonBuilding.SpawnMap, map->GetDifficultyID()))
-        {
-            for (auto const& [gridId, guids] : *grids)
-            {
-                for (ObjectGuid::LowType spawnId : guids.gameobjects)
-                    if (GameObject* spawn = BuildingSpawnHelper<GameObject, &GameObject::RelocateStationaryPosition>(building, spawnId, map))
-                        BuildingInfo.Spawns.insert(spawn->GetGUID());
+        if (!_owner->HasEnoughMoney(uint64(rankEntry->ResearchGoldCost) * GOLD))
+            return GARRISON_ERROR_NOT_ENOUGH_GOLD;
 
         _owner->ModifyMoney(-int64(uint64(rankEntry->ResearchGoldCost) * GOLD));
     }

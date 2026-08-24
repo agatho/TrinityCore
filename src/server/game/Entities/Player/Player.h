@@ -79,6 +79,7 @@ class CinematicMgr;
 class Creature;
 class DynamicObject;
 class Garrison;
+enum GarrisonType : int32;
 class Group;
 class Guild;
 class Item;
@@ -2880,8 +2881,20 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void UnlockReagentBank() { SetPlayerFlagEx(PLAYER_FLAGS_EX_REAGENT_BANK_UNLOCKED); }
 
         void CreateGarrison(uint32 garrSiteId);
-        void DeleteGarrison();
-        Garrison* GetGarrison() const { return _garrison.get(); }
+        void DeleteGarrison(GarrisonType type = GarrisonType(2) /*GARRISON_TYPE_GARRISON*/);
+        void SetProfessionSkillLine(uint32 pos, int32 skillLineId) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ProfessionSkillLine, pos), skillLineId); }
+        Garrison* GetGarrison() const { return GetGarrison(GarrisonType(2) /*GARRISON_TYPE_GARRISON*/); }
+        Garrison* GetGarrison(GarrisonType type) const;
+        Garrison* GetGarrisonWithMission(uint32 missionRecID) const;
+        Garrison* GetGarrisonWithFollower(uint64 followerDbID) const;
+        std::unordered_map<int32, std::unique_ptr<Garrison>> const& GetGarrisons() const { return _garrisons; }
+        uint32 GetActiveCovenant() const { return m_activeCovenantId; }
+        uint32 GetActiveSoulbind() const { return m_activeSoulbindId; }
+        bool HasConduit(uint32 conduitId) const { return m_soulbindConduits.find(conduitId) != m_soulbindConduits.end(); }
+        std::unordered_map<uint32, uint32> const& GetSoulbindConduits() const { return m_soulbindConduits; }
+        int32 GetConduitRank(uint32 conduitId) const;
+        int32 GetConduitSpell(uint32 conduitId) const;
+        bool SocketConduit(uint32 garrTalentTreeId, uint32 garrTalentId, uint32 conduitId);
 
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }
@@ -3401,7 +3414,11 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         uint32 _activeCheats;
 
-        std::unique_ptr<Garrison> _garrison;
+        std::unordered_map<int32 /*GarrisonType*/, std::unique_ptr<Garrison>> _garrisons;
+        uint32 m_activeCovenantId = 0;
+        uint32 m_activeSoulbindId = 0;
+        std::unordered_map<uint32 /*conduitId*/, uint32 /*rankIndex*/> m_soulbindConduits;
+        std::unordered_map<uint32 /*garrTalentId*/, std::pair<uint32 /*conduitId*/, uint32 /*treeId*/>> m_soulbindConduitSockets;
 
         bool _advancedCombatLoggingEnabled;
 

@@ -57,97 +57,66 @@ void GarrisonGridLoader::LoadN()
 
             ObjectGridLoaderBase::AddToMap(go, i_map, i_gameObjects);
         }
+
+        // 12.1 single-pass grid load (Shauren d168aa55fa): no per-cell Visit; spawn all followers
+        // here directly. ObjectGridLoaderBase::AddToMap handles AddToGrid + SetObjectCell + AddToWorld.
+        GarrisonFactionIndex faction = i_garrison->GetFaction();
+        std::vector<Garrison::Plot*> plots = i_garrison->GetPlots();
+        if (!plots.empty())
+        {
+            uint32 plotCount = static_cast<uint32>(plots.size());
+            uint32 followerIndex = 0;
+            for (auto const& [dbId, follower] : i_garrison->GetFollowerMap())
+            {
+                if (follower.PacketInfo.CurrentMissionID != 0)
+                    continue;
+                if (follower.PacketInfo.FollowerStatus & FOLLOWER_STATUS_INACTIVE)
+                    continue;
+                GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(follower.PacketInfo.GarrFollowerID);
+                if (!followerEntry)
+                    continue;
+                if (followerEntry->GarrTypeID != static_cast<int8>(i_garrison->GetType()))
+                    continue;
+                uint32 creatureId = faction == GARRISON_FACTION_INDEX_HORDE ?
+                    followerEntry->HordeCreatureID : followerEntry->AllianceCreatureID;
+                if (!creatureId)
+                    continue;
+                Position spawnPos;
+                bool positionFound = false;
+                if (follower.PacketInfo.CurrentBuildingID != 0)
+                {
+                    for (Garrison::Plot* plot : plots)
+                    {
+                        if (plot->BuildingInfo.PacketInfo &&
+                            plot->BuildingInfo.PacketInfo->GarrBuildingID == follower.PacketInfo.CurrentBuildingID)
+                        {
+                            spawnPos = plot->PacketInfo.PlotPos.Pos;
+                            spawnPos.RelocateOffset({ 3.0f, 3.0f, 0.0f, 0.0f });
+                            positionFound = true;
+                            break;
+                        }
+                    }
+                }
+                if (!positionFound)
+                {
+                    Garrison::Plot* plot = plots[followerIndex % plotCount];
+                    spawnPos = plot->PacketInfo.PlotPos.Pos;
+                    float angle = static_cast<float>(followerIndex % 8) * (float(M_PI) / 4.0f);
+                    float dist = 5.0f + 2.0f * (followerIndex / 8);
+                    spawnPos.m_positionX += dist * std::cos(angle);
+                    spawnPos.m_positionY += dist * std::sin(angle);
+                }
+                ++followerIndex;
+                Creature* creature = Creature::CreateCreature(creatureId, i_map, spawnPos);
+                if (!creature)
+                    continue;
+                creature->SetHomePosition(spawnPos);
+                ObjectGridLoaderBase::AddToMap(creature, i_map, i_creatures);
+            }
+        }
     }
 
     TC_LOG_DEBUG("maps", "{} GameObjects and {} Creatures loaded for grid {} on map {}", i_gameObjects, i_creatures, i_grid->GetGridId(), i_map->GetId());
-}
-
-void GarrisonGridLoader::Visit(CreatureMapType& m)
-{
-    if (!i_garrison)
-        return;
-
-    CellCoord cellCoord = i_cell.GetCellCoord();
-    GarrisonFactionIndex faction = i_garrison->GetFaction();
-    std::vector<Garrison::Plot*> plots = i_garrison->GetPlots();
-
-    if (plots.empty())
-        return;
-
-    uint32 plotCount = static_cast<uint32>(plots.size());
-    uint32 followerIndex = 0;
-
-    for (auto const& [dbId, follower] : i_garrison->GetFollowerMap())
-    {
-        // Skip followers currently on missions
-        if (follower.PacketInfo.CurrentMissionID != 0)
-            continue;
-
-        // Skip inactive followers
-        if (follower.PacketInfo.FollowerStatus & FOLLOWER_STATUS_INACTIVE)
-            continue;
-
-        GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(follower.PacketInfo.GarrFollowerID);
-        if (!followerEntry)
-            continue;
-
-        // Only spawn followers matching this garrison type
-        if (followerEntry->GarrTypeID != static_cast<int8>(i_garrison->GetType()))
-            continue;
-
-        uint32 creatureId = faction == GARRISON_FACTION_INDEX_HORDE ?
-            followerEntry->HordeCreatureID : followerEntry->AllianceCreatureID;
-        if (!creatureId)
-            continue;
-
-        // Determine spawn position
-        Position spawnPos;
-        bool positionFound = false;
-
-        if (follower.PacketInfo.CurrentBuildingID != 0)
-        {
-            // Follower is assigned to a building - spawn near that building's plot
-            for (Garrison::Plot* plot : plots)
-            {
-                if (plot->BuildingInfo.PacketInfo &&
-                    plot->BuildingInfo.PacketInfo->GarrBuildingID == follower.PacketInfo.CurrentBuildingID)
-                {
-                    spawnPos = plot->PacketInfo.PlotPos.Pos;
-                    spawnPos.RelocateOffset({ 3.0f, 3.0f, 0.0f, 0.0f });
-                    positionFound = true;
-                    break;
-                }
-            }
-        }
-
-        if (!positionFound)
-        {
-            // Unassigned follower - scatter around plots
-            Garrison::Plot* plot = plots[followerIndex % plotCount];
-            spawnPos = plot->PacketInfo.PlotPos.Pos;
-            // Distribute followers in a circle around the plot center
-            float angle = static_cast<float>(followerIndex % 8) * (float(M_PI) / 4.0f);
-            float dist = 5.0f + 2.0f * (followerIndex / 8);
-            spawnPos.m_positionX += dist * std::cos(angle);
-            spawnPos.m_positionY += dist * std::sin(angle);
-        }
-
-        ++followerIndex;
-
-        // Check if this position belongs to current cell
-        if (cellCoord != Trinity::ComputeCellCoord(spawnPos.GetPositionX(), spawnPos.GetPositionY()))
-            continue;
-
-        Creature* creature = Creature::CreateCreature(creatureId, i_map, spawnPos);
-        if (!creature)
-            continue;
-
-        creature->SetHomePosition(spawnPos);
-        creature->AddToGrid(m);
-        ObjectGridLoader::SetObjectCell(creature, cellCoord);
-        creature->AddToWorld();
-        ++i_creatures;
-    }
 }
 
 GarrisonMap::GarrisonMap(uint32 id, time_t expiry, uint32 instanceId, ObjectGuid const& owner)

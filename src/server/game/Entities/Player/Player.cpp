@@ -18814,13 +18814,34 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     _LoadPlayerData(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_DATA_ELEMENTS), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_DATA_FLAGS));
 
-    std::unique_ptr<Garrison> garrison = std::make_unique<Garrison>(this);
-    if (garrison->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_BLUEPRINTS),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_BUILDINGS),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWERS),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWER_ABILITIES)))
-        _garrison = std::move(garrison);
+    if (PreparedQueryResult garrisonResult = holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON))
+    {
+        ObjectGuid::LowType lowGuid = GetGUID().GetCounter();
+        do
+        {
+            uint8 garrType = static_cast<uint8>(garrisonResult->Fetch()[2].GetUInt32());
+            auto byType = [&](CharacterDatabaseStatements idx) -> PreparedQueryResult
+            {
+                CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(idx);
+                stmt->setUInt64(0, lowGuid);
+                stmt->setUInt8(1, garrType);
+                return CharacterDatabase.Query(stmt);
+            };
+            std::unique_ptr<Garrison> garrison = std::make_unique<Garrison>(this);
+            if (garrison->LoadFromDB(garrisonResult,
+                byType(CHAR_SEL_CHARACTER_GARRISON_BLUEPRINTS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_BUILDINGS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_FOLLOWERS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_FOLLOWER_ABILITIES_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_MISSIONS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_SPECIALIZATIONS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_SHIPMENTS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_TALENTS_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_TROPHIES_BY_TYPE),
+                byType(CHAR_SEL_CHARACTER_GARRISON_ARCHIVED_MISSIONS_BY_TYPE)))
+                _garrisons[garrison->GetType()] = std::move(garrison);
+        } while (garrisonResult->NextRow());
+    }
 
     _InitHonorLevelOnLoadFromDB(fields.honor, fields.honorLevel);
 
@@ -20763,8 +20784,8 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveCUFProfiles(trans);
     _SavePlayerData(trans);
     _SaveCharacterBankTabSettings(trans);
-    if (_garrison)
-        _garrison->SaveToDB(trans);
+    for (auto const& [garrType, garrison] : _garrisons)
+        garrison->SaveToDB(trans);
 
     // check if stats should only be saved on logout
     // save stats can be out of transaction
@@ -25114,8 +25135,8 @@ void Player::SendInitialPacketsAfterAddToMap()
 
     PhasingHandler::OnMapChange(this);
 
-    if (_garrison)
-        _garrison->SendRemoteInfo();
+    for (auto const& [garrType, garrison] : _garrisons)
+        garrison->SendRemoteInfo();
 
     UpdateItemLevelAreaBasedScaling();
 
@@ -25581,8 +25602,8 @@ void Player::DailyReset()
     m_DailyQuestChanged = false;
     m_lastDailyQuestTime = 0;
 
-    if (_garrison)
-        _garrison->ResetFollowerActivationLimit();
+    for (auto const& [garrType, garrison] : _garrisons)
+        garrison->ResetFollowerActivationLimit();
 
     FailCriteria(CriteriaFailEvent::DailyQuestsCleared, 0);
 }
@@ -30074,16 +30095,41 @@ void Player::CreateGarrison(uint32 garrSiteId)
 {
     std::unique_ptr<Garrison> garrison(new Garrison(this));
     if (garrison->Create(garrSiteId))
-        _garrison = std::move(garrison);
+        _garrisons[garrison->GetType()] = std::move(garrison);
 }
 
-void Player::DeleteGarrison()
+void Player::DeleteGarrison(GarrisonType type)
 {
-    if (_garrison)
+    auto itr = _garrisons.find(type);
+    if (itr != _garrisons.end())
     {
-        _garrison->Delete();
-        _garrison.reset();
+        itr->second->Delete();
+        _garrisons.erase(itr);
     }
+}
+
+Garrison* Player::GetGarrison(GarrisonType type) const
+{
+    auto itr = _garrisons.find(type);
+    if (itr != _garrisons.end())
+        return itr->second.get();
+    return nullptr;
+}
+
+Garrison* Player::GetGarrisonWithMission(uint32 missionRecID) const
+{
+    for (auto const& [type, garrison] : _garrisons)
+        if (garrison->GetMissionByRecID(missionRecID))
+            return garrison.get();
+    return nullptr;
+}
+
+Garrison* Player::GetGarrisonWithFollower(uint64 followerDbID) const
+{
+    for (auto const& [type, garrison] : _garrisons)
+        if (garrison->GetFollower(followerDbID))
+            return garrison.get();
+    return nullptr;
 }
 
 void Player::SendMovementSetCollisionHeight(float height, WorldPackets::Movement::UpdateCollisionHeightReason reason)
@@ -31767,4 +31813,57 @@ bool Player::CanExecutePendingSpellCastRequest()
         return false;
 
     return true;
+}
+
+bool Player::SocketConduit(uint32 garrTalentTreeId, uint32 garrTalentId, uint32 conduitId)
+{
+    SoulbindConduitEntry const* conduit = sSoulbindConduitStore.LookupEntry(conduitId);
+    if (!conduit)
+        return false;
+
+    // Must own the conduit and it must belong to the player's covenant (0 == covenant-agnostic).
+    if (!HasConduit(conduitId))
+        return false;
+    if (conduit->CovenantID != 0 && uint32(conduit->CovenantID) != m_activeCovenantId)
+        return false;
+
+    // If this node is currently applying a conduit for the active tree, strip it before replacing.
+    bool nodeActive = false;
+    if (SoulbindEntry const* soulbind = sSoulbindStore.LookupEntry(m_activeSoulbindId))
+        nodeActive = uint32(soulbind->GarrTalentTreeID) == garrTalentTreeId;
+
+    auto existing = m_soulbindConduitSockets.find(garrTalentId);
+    if (existing != m_soulbindConduitSockets.end() && nodeActive)
+        if (int32 spellId = GetConduitSpell(existing->second.first))
+            RemoveAurasDueToSpell(uint32(spellId));
+
+    m_soulbindConduitSockets[garrTalentId] = { conduitId, garrTalentTreeId };
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_SOULBIND_CONDUIT_SOCKET);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    stmt->setUInt32(1, garrTalentId);
+    stmt->setUInt32(2, conduitId);
+    stmt->setUInt32(3, garrTalentTreeId);
+    CharacterDatabase.Execute(stmt);
+
+    if (nodeActive)
+        if (int32 spellId = GetConduitSpell(conduitId))
+            CastSpell(this, uint32(spellId), true);
+    return true;
+}
+
+int32 Player::GetConduitSpell(uint32 conduitId) const
+{
+    int32 rank = GetConduitRank(conduitId);
+    if (rank < 0)
+        return 0;
+    if (SoulbindConduitRankEntry const* rankEntry = sDB2Manager.GetSoulbindConduitRank(int32(conduitId), rank))
+        return rankEntry->SpellID;
+    return 0;
+}
+
+int32 Player::GetConduitRank(uint32 conduitId) const
+{
+    auto itr = m_soulbindConduits.find(conduitId);
+    return itr != m_soulbindConduits.end() ? int32(itr->second) : -1;
 }
