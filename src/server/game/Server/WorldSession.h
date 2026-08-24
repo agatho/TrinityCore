@@ -1065,6 +1065,7 @@ namespace WorldPackets
         class UpdateMissileTrajectory;
         class UpdateAuraVisual;
         class TradeSkillSetFavorite;
+        class OpenTradeSkillNpc;
         class KeyboundOverride;
         class SetEmpowerMinHoldStagePercent;
         class SpellEmpowerRelease;
@@ -2198,6 +2199,7 @@ class TC_GAME_API WorldSession
         void HandleConfirmRespecWipeOpcode(WorldPackets::Talent::ConfirmRespecWipe& confirmRespecWipe);
         void HandleUnlearnSkillOpcode(WorldPackets::Spells::UnlearnSkill& packet);
         void HandleTradeSkillSetFavorite(WorldPackets::Spells::TradeSkillSetFavorite const& tradeSkillSetFavorite);
+        void HandleOpenTradeSkillNpc(WorldPackets::Spells::OpenTradeSkillNpc const& packet);
 
         void HandleTraitsCommitConfig(WorldPackets::Traits::TraitsCommitConfig const& traitsCommitConfig);
         void HandleClassTalentsRequestNewConfig(WorldPackets::Traits::ClassTalentsRequestNewConfig& classTalentsRequestNewConfig);
