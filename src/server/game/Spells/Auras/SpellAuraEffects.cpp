@@ -289,7 +289,7 @@ NonDefaultConstructible<pAuraEffectHandler> AuraEffectHandler[TOTAL_AURAS]=
     &AuraEffect::HandleModMeleeSpeedPct,                          //217 SPELL_AURA_MOD_MELEE_HASTE_2
     &AuraEffect::HandleNoImmediateEffect,                         //218 SPELL_AURA_ADD_PCT_MODIFIER_BY_SPELL_LABEL implemented in AuraEffect::CalculateSpellMod()
     &AuraEffect::HandleNoImmediateEffect,                         //219 SPELL_AURA_ADD_FLAT_MODIFIER_BY_SPELL_LABEL implemented in AuraEffect::CalculateSpellMod()
-    &AuraEffect::HandleNULL,                                      //220 SPELL_AURA_MOD_ABILITY_SCHOOL_MASK
+    &AuraEffect::HandleNoImmediateEffect,                         //220 SPELL_AURA_MOD_ABILITY_SCHOOL_MASK implemented in Unit::GetSchoolMaskForSpell, Spell ctor, periodic damage school
     &AuraEffect::HandleModDetaunt,                                //221 SPELL_AURA_MOD_DETAUNT
     &AuraEffect::HandleNoImmediateEffect,                         //222 SPELL_AURA_REMOVE_TRANSMOG_COST implemented in WorldSession::HandleTransmogrifyItems
     &AuraEffect::HandleNoImmediateEffect,                         //223 SPELL_AURA_REMOVE_BARBER_SHOP_COST implemented in Player::GetBarberShopCost
@@ -498,7 +498,7 @@ NonDefaultConstructible<pAuraEffectHandler> AuraEffectHandler[TOTAL_AURAS]=
     &AuraEffect::HandleNULL,                                      //426
     &AuraEffect::HandleNULL,                                      //427 SPELL_AURA_SCALE_PLAYER_LEVEL
     &AuraEffect::HandleLinkedSummon,                              //428 SPELL_AURA_LINKED_SUMMON
-    &AuraEffect::HandleNULL,                                      //429 SPELL_AURA_MOD_SUMMON_DAMAGE
+    &AuraEffect::HandleNoImmediateEffect,                         //429 SPELL_AURA_MOD_SUMMON_DAMAGE implemented in Unit::SpellDamagePctDone, Unit::MeleeDamageBonusDone
     &AuraEffect::HandlePlayScene,                                 //430 SPELL_AURA_PLAY_SCENE
     &AuraEffect::HandleModOverrideZonePVPType,                    //431 SPELL_AURA_MOD_OVERRIDE_ZONE_PVP_TYPE
     &AuraEffect::HandleNULL,                                      //432
@@ -512,7 +512,7 @@ NonDefaultConstructible<pAuraEffectHandler> AuraEffectHandler[TOTAL_AURAS]=
     &AuraEffect::HandleNULL,                                      //440 SPELL_AURA_MOD_MULTISTRIKE_DAMAGE
     &AuraEffect::HandleNULL,                                      //441 SPELL_AURA_MOD_MULTISTRIKE_CHANCE
     &AuraEffect::HandleNULL,                                      //442 SPELL_AURA_MOD_READINESS
-    &AuraEffect::HandleNULL,                                      //443 SPELL_AURA_MOD_LEECH
+    &AuraEffect::HandleAuraModLeech,                              //443 SPELL_AURA_MOD_LEECH implemented in Player::UpdateLeech / Unit::ContributeLeech
     &AuraEffect::HandleNULL,                                      //444
     &AuraEffect::HandleNULL,                                      //445
     &AuraEffect::HandleModAdvFlying,                              //446 SPELL_AURA_ADV_FLYING
@@ -609,7 +609,7 @@ NonDefaultConstructible<pAuraEffectHandler> AuraEffectHandler[TOTAL_AURAS]=
     &AuraEffect::HandleNoImmediateEffect,                         //537 SPELL_AURA_MOD_SPELL_DAMAGE_FROM_CASTER_BY_LABEL implemented in Unit::SpellDamageBonusTaken
     &AuraEffect::HandleUnused,                                    //538 SPELL_AURA_MOD_FAKE_INEBRIATION_MOVEMENT_ONLY handled clientside
     &AuraEffect::HandleNoImmediateEffect,                         //539 SPELL_AURA_ALLOW_MOUNT_IN_COMBAT implemented in SpellInfo::CanBeUsedInCombat
-    &AuraEffect::HandleNULL,                                      //540 SPELL_AURA_MOD_SUPPORT_STAT
+    &AuraEffect::HandleModSupportStat,                            //540 SPELL_AURA_MOD_SUPPORT_STAT
     &AuraEffect::HandleModRequiredMountCapabilityFlags,           //541 SPELL_AURA_MOD_REQUIRED_MOUNT_CAPABILITY_FLAGS
     &AuraEffect::HandleNULL,                                      //542 SPELL_AURA_TRIGGER_SPELL_ON_STACK_AMOUNT
     &AuraEffect::HandleNULL,                                      //543
@@ -4079,9 +4079,60 @@ void AuraEffect::HandleModVersatilityByPct(AuraApplication const* aurApp, uint8 
 
     if (Player* target = aurApp->GetTarget()->ToPlayer())
     {
-        target->SetVersatilityBonus(target->GetTotalAuraModifier(SPELL_AURA_MOD_VERSATILITY));
+        target->SetVersatilityBonus(target->GetTotalAuraModifier(SPELL_AURA_MOD_VERSATILITY)
+            + target->GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_SUPPORT_STAT, 6));
         target->UpdateHealingDonePercentMod();
         target->UpdateVersatilityDamageDone();
+    }
+}
+
+// Local DifficultyID=0 census (build 12.0.7.67808): only three spells use aura 540 —
+// 395152 Ebon Might misc 1 (primary), 410089 Prescience misc 5 (crit %), 413984 Shifting Sands misc 6 (versatility %).
+void AuraEffect::HandleModSupportStat(AuraApplication const* aurApp, uint8 mode, bool apply) const
+{
+    if (!(mode & (AURA_EFFECT_HANDLE_CHANGE_AMOUNT_MASK | AURA_EFFECT_HANDLE_STAT)))
+        return;
+
+    Unit* target = aurApp->GetTarget();
+    switch (GetMiscValue())
+    {
+        case 1: // primary stat (flat)
+        {
+            Player* player = target->ToPlayer();
+            if (!player)
+                return;
+
+            Stats primary = player->GetPrimaryStat();
+            player->HandleStatFlatModifier(UnitMods(UNIT_MOD_STAT_START + primary), TOTAL_VALUE, float(GetAmount()), apply);
+            player->UpdateStatBuffMod(primary);
+            break;
+        }
+        case 5: // critical strike chance (%)
+        {
+            if (Player* player = target->ToPlayer())
+            {
+                player->UpdateAllWeaponDependentCritAuras();
+                player->UpdateSpellCritChance();
+            }
+            else
+                target->m_baseSpellCritChance += apply ? GetAmount() : -GetAmount();
+            break;
+        }
+        case 6: // versatility (%)
+        {
+            if (Player* player = target->ToPlayer())
+            {
+                player->SetVersatilityBonus(player->GetTotalAuraModifier(SPELL_AURA_MOD_VERSATILITY)
+                    + player->GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_SUPPORT_STAT, 6));
+                player->UpdateHealingDonePercentMod();
+                player->UpdateVersatilityDamageDone();
+            }
+            break;
+        }
+        default:
+            TC_LOG_ERROR("spells.aura.effect", "Spell {} effect {} has unsupported misc value ({}) for SPELL_AURA_MOD_SUPPORT_STAT",
+                GetId(), GetEffIndex(), GetMiscValue());
+            break;
     }
 }
 
@@ -4295,6 +4346,15 @@ void AuraEffect::HandleModManaCostPct(AuraApplication const* aurApp, uint8 mode,
         return;
 
     aurApp->GetTarget()->ApplyModManaCostMultiplier(GetAmount() / 100.0f, apply);
+}
+
+void AuraEffect::HandleAuraModLeech(AuraApplication const* aurApp, uint8 mode, bool /*apply*/) const
+{
+    if (!(mode & (AURA_EFFECT_HANDLE_CHANGE_AMOUNT_MASK | AURA_EFFECT_HANDLE_STAT)))
+        return;
+
+    if (Player* player = aurApp->GetTarget()->ToPlayer())
+        player->UpdateLeech();
 }
 
 void AuraEffect::HandleAuraModPowerDisplay(AuraApplication const* aurApp, uint8 mode, bool apply) const
@@ -5673,6 +5733,7 @@ void AuraEffect::HandlePeriodicDamageAurasTick(Unit* target, Unit* caster) const
         return;
 
     CleanDamage cleanDamage = CleanDamage(0, 0, BASE_ATTACK, MELEE_HIT_NORMAL);
+    SpellSchoolMask const schoolMask = caster ? caster->GetSchoolMaskForSpell(GetSpellInfo()) : GetSpellInfo()->GetSchoolMask();
 
     uint32 stackAmountForBonuses = !GetSpellEffectInfo().EffectAttributes.HasFlag(SpellEffectAttributes::SuppressPointsStacking) ? GetBase()->GetStackAmount() : 1;
 
@@ -5714,7 +5775,7 @@ void AuraEffect::HandlePeriodicDamageAurasTick(Unit* target, Unit* caster) const
 
             // Add melee damage bonuses (also check for negative)
             if (caster)
-                damage = caster->MeleeDamageBonusDone(target, damage, attackType, DOT, GetSpellInfo(), &GetSpellEffectInfo(), GetSpellEffectInfo().Mechanic, GetSpellInfo()->GetSchoolMask(), nullptr, this);
+                damage = caster->MeleeDamageBonusDone(target, damage, attackType, DOT, GetSpellInfo(), &GetSpellEffectInfo(), GetSpellEffectInfo().Mechanic, schoolMask, nullptr, this);
 
             damage = target->MeleeDamageBonusTaken(caster, damage, attackType, DOT, GetSpellInfo());
             break;
@@ -5733,7 +5794,7 @@ void AuraEffect::HandlePeriodicDamageAurasTick(Unit* target, Unit* caster) const
         damage = Unit::SpellCriticalDamageBonus(caster, m_spellInfo, damage, target);
 
     // Calculate armor mitigation
-    if (Unit::IsDamageReducedByArmor(GetSpellInfo()->GetSchoolMask(), GetSpellInfo()))
+    if (Unit::IsDamageReducedByArmor(schoolMask, GetSpellInfo()))
     {
         uint32 damageReducedArmor = Unit::CalcArmorReducedDamage(caster, target, damage, GetSpellInfo(), GetSpellInfo()->GetAttackType(), GetBase()->GetCasterLevel());
         cleanDamage.mitigated_damage += damage - damageReducedArmor;
@@ -5743,7 +5804,7 @@ void AuraEffect::HandlePeriodicDamageAurasTick(Unit* target, Unit* caster) const
     if (!GetSpellInfo()->HasAttribute(SPELL_ATTR4_IGNORE_DAMAGE_TAKEN_MODIFIERS))
     {
         if (GetSpellEffectInfo().IsTargetingArea() || GetSpellEffectInfo().IsAreaAuraEffect() || GetSpellEffectInfo().IsEffect(SPELL_EFFECT_PERSISTENT_AREA_AURA) || GetSpellInfo()->HasAttribute(SPELL_ATTR5_TREAT_AS_AREA_EFFECT) || GetSpellInfo()->HasAttribute(SPELL_ATTR7_TREAT_AS_NPC_AOE))
-            damage = target->CalculateAOEAvoidance(damage, m_spellInfo->SchoolMask, (caster && !caster->IsControlledByPlayer()) || GetSpellInfo()->HasAttribute(SPELL_ATTR7_TREAT_AS_NPC_AOE));
+            damage = target->CalculateAOEAvoidance(damage, schoolMask, (caster && !caster->IsControlledByPlayer()) || GetSpellInfo()->HasAttribute(SPELL_ATTR7_TREAT_AS_NPC_AOE));
     }
 
     int32 dmg = damage;
@@ -5751,7 +5812,7 @@ void AuraEffect::HandlePeriodicDamageAurasTick(Unit* target, Unit* caster) const
         Unit::ApplyResilience(target, &dmg);
     damage = dmg;
 
-    DamageInfo damageInfo(caster, target, damage, GetSpellInfo(), GetSpellInfo()->GetSchoolMask(), DOT, BASE_ATTACK);
+    DamageInfo damageInfo(caster, target, damage, GetSpellInfo(), schoolMask, DOT, BASE_ATTACK);
     Unit::CalcAbsorbResist(damageInfo);
     damage = damageInfo.GetDamage();
 
@@ -5778,11 +5839,14 @@ void AuraEffect::HandlePeriodicDamageAurasTick(Unit* target, Unit* caster) const
 
     SpellPeriodicAuraLogInfo pInfo(this, damage, dmg, overkill, absorb, resist, 0.0f, crit);
 
-    Unit::DealDamage(caster, target, damage, &cleanDamage, DOT, GetSpellInfo()->GetSchoolMask(), GetSpellInfo(), true);
+    Unit::DealDamage(caster, target, damage, &cleanDamage, DOT, schoolMask, GetSpellInfo(), true);
 
     Unit::ProcSkillsAndAuras(caster, target, procAttacker, procVictim, PROC_SPELL_TYPE_DAMAGE, PROC_SPELL_PHASE_HIT, hitMask, nullptr, &damageInfo, nullptr);
 
     target->SendPeriodicAuraLog(&pInfo);
+
+    if (caster)
+        caster->ContributeLeech(damage, GetSpellInfo());
 }
 
 void AuraEffect::HandlePeriodicHealthLeechAuraTick(Unit* target, Unit* caster) const
@@ -5960,7 +6024,10 @@ void AuraEffect::HandlePeriodicHealAurasTick(Unit* target, Unit* caster) const
     target->SendPeriodicAuraLog(&pInfo);
 
     if (caster)
+    {
         target->GetThreatManager().ForwardThreatForAssistingMe(caster, healInfo.GetEffectiveHeal() * 0.5f, GetSpellInfo());
+        caster->ContributeLeech(heal, GetSpellInfo());
+    }
 
     // %-based heal - does not proc auras
     if (GetAuraType() == SPELL_AURA_OBS_MOD_HEALTH)
@@ -6144,6 +6211,7 @@ void AuraEffect::HandlePeriodicPowerBurnAuraTick(Unit* target, Unit* caster) con
     }
 
     caster->DealSpellDamage(&damageInfo, true);
+    caster->ContributeLeech(damageInfo.damage, spellProto);
 
     DamageInfo dotDamageInfo(damageInfo, DOT, BASE_ATTACK, hitMask);
     Unit::ProcSkillsAndAuras(caster, target, procAttacker, procVictim, spellTypeMask, PROC_SPELL_PHASE_HIT, hitMask, nullptr, &dotDamageInfo, nullptr);

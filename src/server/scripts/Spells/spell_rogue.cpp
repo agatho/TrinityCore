@@ -40,7 +40,7 @@ enum RogueSpells
     SPELL_ROGUE_AMPLIFYING_POISON_DEBUFF            = 383414,
     SPELL_ROGUE_ATROPHIC_POISON                     = 381637,
     SPELL_ROGUE_ATROPHIC_POISON_DEBUFF              = 392388,
-    SPELL_ROGUE_BETWEEN_THE_EYES                    = 199804,
+    SPELL_ROGUE_BETWEEN_THE_EYES                    = 315341,
     SPELL_ROGUE_BLACKJACK_TALENT                    = 379005,
     SPELL_ROGUE_BLACKJACK                           = 394119,
     SPELL_ROGUE_BLADE_FLURRY                        = 13877,

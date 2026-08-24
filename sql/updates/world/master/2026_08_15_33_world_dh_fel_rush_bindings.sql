@@ -1,0 +1,31 @@
+-- Demon Hunter Fel Rush: drop the two spell_script_names rows that have no script to bind to.
+--
+-- 2026_08_15_00_world_fel_rush_script_names.sql / _01_world_fel_rush_damage_script_name.sql /
+-- _02_world_fel_rush_end_script_name.sql (from feature/dracthyr-dh-intro) bound four ScriptNames in
+-- src/server/scripts/Spells/spell_dh.cpp, which is owned by this branch. Two of them are now
+-- implemented here (spell_dh_fel_rush on 195072, spell_dh_fel_rush_aura on 197922/197923). The other
+-- two are NOT, because TrinityCore already does the work natively and a script would be dead code:
+--
+--   192611 'spell_dh_fel_rush_damage' - EFFECT_0 targets TARGET_DEST_DEST (87) +
+--     TARGET_UNIT_LINE_CASTER_TO_DEST_ENEMY (134). 134 is TARGET_SELECT_CATEGORY_LINE, which
+--     Spell::SelectImplicitLineTargets already implements with WorldObjectSpellLineTargetCheck:
+--     it orients caster->dst, filters on Position::HasInLine using SpellInfo::Width (=10, from
+--     SpellTargetRestrictions) and bounds the search by the effect radius (EffectRadiusIndex_1=63
+--     => 23 yd). spell_dh_fel_rush supplies the destination when it casts 192611, so the line is
+--     resolved correctly without a script. A FilterTargets hook that cleared and rebuilt that list
+--     by hand would be a regression - it would lose the implicit-target conditions, the object-type
+--     mask and MaxAffectedTargets that the core check applies.
+--
+--   346123 'spell_dh_fel_rush_end' - a single SPELL_EFFECT_DUMMY on TARGET_DEST_CASTER (18).
+--     Spell::SelectImplicitCasterDestTargets initialises `SpellDestination dest(*m_caster)` and then
+--     falls straight through for TARGET_DEST_CASTER, so an OnDestinationTargetSelect hook doing
+--     dest.Relocate(*caster) is a definitional no-op (same object, same instant, and
+--     SpellDestination::Relocate computes a zero transport-offset delta). 346123 is also triggered
+--     by SPELL_EFFECT_TRIGGER_SPELL (197922 EFFECT_7 / 197923 EFFECT_10), i.e. it fires as the dash
+--     starts, not when it ends, so there is no later position to snap to either.
+--
+-- Evidence: DB2 12.0.7.68275 SpellEffect / SpellTargetRestrictions / SpellRadius, read against
+-- src/server/game/Spells/Spell.cpp in this worktree. Re-add either row together with a script that
+-- has real behaviour if a capture ever shows the client expecting something else.
+
+DELETE FROM `spell_script_names` WHERE `ScriptName` IN ('spell_dh_fel_rush_damage', 'spell_dh_fel_rush_end');

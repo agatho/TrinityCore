@@ -2258,11 +2258,18 @@ class spell_pri_heavens_wrath : public AuraScript
 
 // 120517 - Halo (Holy)
 // 120644 - Halo (Shadow)
+//
+// Midnight collapsed this from 6 effects (no-talent/Power Surge/Divine Halo x no-PR/PR) down to
+// just 2 CREATE_AREATRIGGER+AREA_TRIGGER pairs gated on Phantom Reach alone — see
+// docs/midnight-assessment/class-abilities/class-abilities-phase1c-tier-g-mismatch-handoff.md.
+// Power Surge's extra casts and Divine Halo's return-pulse duration are handled entirely by
+// spell_pri_power_surge/spell_pri_power_surge_periodic re-invoking this same spell, not by a
+// distinct areatrigger shape here.
 class spell_pri_halo_effect_selector : public SpellScript
 {
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        return ValidateSpellInfo({ SPELL_PRIEST_PHANTOM_REACH, SPELL_PRIEST_POWER_SURGE, SPELL_PRIEST_DIVINE_HALO });
+        return ValidateSpellInfo({ SPELL_PRIEST_PHANTOM_REACH });
     }
 
     static void PreventUnwantedAura(SpellScript const&, WorldObject*& target)
@@ -2274,32 +2281,19 @@ class spell_pri_halo_effect_selector : public SpellScript
     {
         Optional<SpellEffIndex> selectedEffect;
         if (Unit* caster = GetSpell() ? GetCaster() : nullptr)
-        {
-            if (caster->HasAura(SPELL_PRIEST_DIVINE_HALO))
-                selectedEffect = caster->HasAura(SPELL_PRIEST_PHANTOM_REACH) ? EFFECT_5 : EFFECT_2;
-            else if (caster->HasAura(SPELL_PRIEST_POWER_SURGE))
-                selectedEffect = caster->HasAura(SPELL_PRIEST_PHANTOM_REACH) ? EFFECT_4 : EFFECT_1;
-            else
-                selectedEffect = caster->HasAura(SPELL_PRIEST_PHANTOM_REACH) ? EFFECT_3 : EFFECT_0;
-        }
+            selectedEffect = caster->HasAura(SPELL_PRIEST_PHANTOM_REACH) ? EFFECT_2 : EFFECT_0;
 
         if (selectedEffect != EFFECT_0)
+        {
             OnEffectLaunch += SpellEffectFn(spell_pri_halo_effect_selector::PreventHitDefaultEffect, EFFECT_0, SPELL_EFFECT_CREATE_AREATRIGGER);
-
-        if (selectedEffect != EFFECT_1)
-            OnEffectLaunch += SpellEffectFn(spell_pri_halo_effect_selector::PreventHitDefaultEffect, EFFECT_1, SPELL_EFFECT_CREATE_AREATRIGGER);
+            OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_pri_halo_effect_selector::PreventUnwantedAura, EFFECT_1, TARGET_UNIT_CASTER);
+        }
 
         if (selectedEffect != EFFECT_2)
-            OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_pri_halo_effect_selector::PreventUnwantedAura, EFFECT_2, TARGET_UNIT_CASTER);
-
-        if (selectedEffect != EFFECT_3)
-            OnEffectLaunch += SpellEffectFn(spell_pri_halo_effect_selector::PreventHitDefaultEffect, EFFECT_3, SPELL_EFFECT_CREATE_AREATRIGGER);
-
-        if (selectedEffect != EFFECT_4)
-            OnEffectLaunch += SpellEffectFn(spell_pri_halo_effect_selector::PreventHitDefaultEffect, EFFECT_4, SPELL_EFFECT_CREATE_AREATRIGGER);
-
-        if (selectedEffect != EFFECT_5)
-            OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_pri_halo_effect_selector::PreventUnwantedAura, EFFECT_5, TARGET_UNIT_CASTER);
+        {
+            OnEffectLaunch += SpellEffectFn(spell_pri_halo_effect_selector::PreventHitDefaultEffect, EFFECT_2, SPELL_EFFECT_CREATE_AREATRIGGER);
+            OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_pri_halo_effect_selector::PreventUnwantedAura, EFFECT_3, TARGET_UNIT_CASTER);
+        }
     }
 };
 
@@ -2344,7 +2338,8 @@ class spell_pri_halo_shadow : public SpellScript
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_pri_halo_shadow::HandleHitTarget, EFFECT_6, SPELL_EFFECT_ENERGIZE);
+        // Was EFFECT_6 pre-Midnight; 120644 now has 5 effects (0-4), Insanity energize moved to EFFECT_4.
+        OnEffectHitTarget += SpellEffectFn(spell_pri_halo_shadow::HandleHitTarget, EFFECT_4, SPELL_EFFECT_ENERGIZE);
     }
 };
 
