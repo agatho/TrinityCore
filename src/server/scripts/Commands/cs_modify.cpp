@@ -59,6 +59,11 @@ public:
             { "fly",      rbac::RBAC_PERM_COMMAND_MODIFY_SPEED_FLY,      false, &HandleModifyFlyCommand,    "" },
             { "walk",     rbac::RBAC_PERM_COMMAND_MODIFY_SPEED_WALK,     false, &HandleModifySpeedCommand,  "" },
             { "swim",     rbac::RBAC_PERM_COMMAND_MODIFY_SPEED_SWIM,     false, &HandleModifySwimCommand,   "" },
+            // Turn rate is the one movement rate with no .modify subcommand, even though Unit::SetSpeedRate
+            // and the SMSG_MOVE_SET_TURN_RATE / CMSG_MOVE_FORCE_TURN_RATE_CHANGE_ACK round trip are both
+            // fully implemented. It reuses the parent RBAC permission and prints a literal message rather
+            // than introducing a new rbac_permissions row and trinity_string row, so it needs no SQL.
+            { "turnrate", rbac::RBAC_PERM_COMMAND_MODIFY_SPEED,          false, &HandleModifyTurnRateCommand, "" },
             { "",         rbac::RBAC_PERM_COMMAND_MODIFY_SPEED,          false, &HandleModifyASpeedCommand, "" },
         };
         static ChatCommandTable modifyCommandTable =
@@ -446,6 +451,23 @@ public:
             return true;
         }
         return false;
+    }
+
+    // Edit Player Turn Rate. Unlike the other movement rates this one is in radians per second and
+    // defaults to pi (Unit::Unit sets MOVE_TURN_RATE to 3.141594f), so a multiplier bound of 0.1-50
+    // matches the other subcommands while still allowing the useful "stand still and spin" test case.
+    static bool HandleModifyTurnRateCommand(ChatHandler* handler, char const* args)
+    {
+        float turnRate;
+        Player* target = handler->getSelectedPlayerOrSelf();
+        if (!CheckModifySpeed(handler, args, target, turnRate, 0.1f, 50.0f))
+            return false;
+
+        target->SetSpeedRate(MOVE_TURN_RATE, turnRate);
+        handler->PSendSysMessage("You change the turn rate of %s to %f.", handler->GetNameLink(target).c_str(), turnRate);
+        if (handler->needReportToTarget(target))
+            ChatHandler(target->GetSession()).PSendSysMessage("%s changed your turn rate to %f.", handler->GetNameLink().c_str(), turnRate);
+        return true;
     }
 
     //Edit Player Backwards Walk Speed

@@ -726,7 +726,7 @@ void WorldSession::HandleUpdateAccountData(WorldPackets::ClientConfig::UserClien
         return;
     }
 
-    if (packet.Size > 0xFFFF)
+    if (packet.Size > 0xFFFFFF)                         // MEDIUMBLOB cap (16 MB); modern addon/UI account data exceeds the old 0xFFFF BLOB limit
     {
         TC_LOG_ERROR("network", "UAD: Account data packet too big, size {}", packet.Size);
         return;
@@ -1275,6 +1275,21 @@ void WorldSession::HandleConversationLineStarted(WorldPackets::Misc::Conversatio
 {
     if (Conversation* conversation = ObjectAccessor::GetConversation(*_player, conversationLineStarted.ConversationGUID))
         conversation->AI()->OnLineStarted(conversationLineStarted.LineID, _player);
+}
+
+void WorldSession::HandleConversationCinematicReady(WorldPackets::Misc::ConversationCinematicReady& conversationCinematicReady)
+{
+    Conversation* conversation = ObjectAccessor::GetConversation(*_player, conversationCinematicReady.ConversationGUID);
+    if (!conversation)
+        return;
+
+    // Conversations are private objects owned by the player they play for, so only that owner can
+    // meaningfully report its cinematic ready - the same ownership rule HandleSetStopConversation
+    // applies. Without it one player could drive another player's conversation script.
+    if (conversation->GetPrivateObjectOwner() != _player->GetGUID())
+        return;
+
+    conversation->AI()->OnCinematicReady(_player);
 }
 
 void WorldSession::HandleRequestLatestSplashScreen(WorldPackets::Misc::RequestLatestSplashScreen& /*requestLatestSplashScreen*/)

@@ -26,7 +26,7 @@ CREATE TABLE `account_data` (
   `accountId` int unsigned NOT NULL DEFAULT '0' COMMENT 'Account Identifier',
   `type` tinyint unsigned NOT NULL DEFAULT '0',
   `time` bigint NOT NULL DEFAULT '0',
-  `data` blob NOT NULL,
+  `data` mediumblob NOT NULL,
   PRIMARY KEY (`accountId`,`type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -385,7 +385,7 @@ CREATE TABLE `character_account_data` (
   `guid` bigint unsigned NOT NULL DEFAULT '0',
   `type` tinyint unsigned NOT NULL DEFAULT '0',
   `time` bigint NOT NULL DEFAULT '0',
-  `data` blob NOT NULL,
+  `data` mediumblob NOT NULL,
   PRIMARY KEY (`guid`,`type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;

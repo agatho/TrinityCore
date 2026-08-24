@@ -1303,6 +1303,20 @@ namespace WorldPackets
             uint32 LineID = 0;
         };
 
+        // Sent once the client has the cinematic belonging to a conversation loaded and ready to play.
+        // Wire layout recovered offline from the client's own serializer (build 68275, serializer RVA
+        // 0x6B3C70): a single PackedGuid, the same shape as SetStopConversation. Corroborated by
+        // SMSG_TRIGGER_CINEMATIC already carrying a ConversationGuid - that is the guid echoed back here.
+        class ConversationCinematicReady final : public ClientPacket
+        {
+        public:
+            explicit ConversationCinematicReady(WorldPacket&& packet) : ClientPacket(CMSG_CONVERSATION_CINEMATIC_READY, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid ConversationGUID;
+        };
+
         class RequestLatestSplashScreen final : public ClientPacket
         {
         public:

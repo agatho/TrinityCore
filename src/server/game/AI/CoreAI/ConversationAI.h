@@ -51,6 +51,13 @@ class TC_GAME_API ConversationAI
         // Called when player sends CMSG_CONVERSATION_LINE_STARTED with valid conversation guid
         virtual void OnLineStarted([[maybe_unused]] uint32 lineId, [[maybe_unused]] Player* sender) { }
 
+        // Called when player sends CMSG_CONVERSATION_CINEMATIC_READY with valid conversation guid,
+        // i.e. the client has finished loading the cinematic this conversation plays under and is
+        // ready for it to begin. Deliberately does not start the conversation itself: every deferred
+        // Conversation::Start() in this tree is driven by server-side script code, so starting one
+        // from here would double-start conversations a script is already about to start.
+        virtual void OnCinematicReady([[maybe_unused]] Player* sender) { }
+
         // Called for each update tick
         virtual void OnUpdate([[maybe_unused]] uint32 diff) { }
 
