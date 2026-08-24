@@ -770,6 +770,19 @@ namespace WorldPackets
         // Retired 2026-05-12 (batch 2): 8 fake SVCS CMSG class forward decls deleted.
         // Retired 2026-05-12: group 0x35 system CMSG classes (HouseStatusQuery, GetHouseInfoAlt,
         // HouseSnapshot, ExportHouse, UpdateHouseInfo) â€” no client senders in build 67186.
+    namespace LFGList
+    {
+        class LFGListJoin;
+        class LFGListUpdateRequest;
+        class LFGListLeave;
+        class LFGListGetStatus;
+        class LFGListSearch;
+        class LFGListApplyToGroup;
+        class LFGListCancelApplication;
+        class LFGListDeclineApplicant;
+        class LFGListInviteApplicant;
+        class LFGListInviteResponse;
+        class RequestLFGListBlacklist;
     }
     namespace Movement
     {
@@ -1771,6 +1784,19 @@ class TC_GAME_API WorldSession
         void HandleQueryNeighborhoodInfo(WorldPackets::Housing::QueryNeighborhoodInfo const& queryNeighborhoodInfo);
         void HandleInvitePlayerToNeighborhood(WorldPackets::Housing::InvitePlayerToNeighborhood const& invitePlayerToNeighborhood);
         void HandleGuildGetOthersOwnedHouses(WorldPackets::Housing::GuildGetOthersOwnedHouses const& guildGetOthersOwnedHouses);
+        // LFGList
+        void HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet);
+        void HandleLFGListUpdateRequest(WorldPackets::LFGList::LFGListUpdateRequest& packet);
+        void HandleLFGListLeave(WorldPackets::LFGList::LFGListLeave& packet);
+        void HandleLFGListGetStatus(WorldPackets::LFGList::LFGListGetStatus& packet);
+        void HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& packet);
+        void HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApplyToGroup& packet);
+        void HandleLFGListCancelApplication(WorldPackets::LFGList::LFGListCancelApplication& packet);
+        void HandleLFGListDeclineApplicant(WorldPackets::LFGList::LFGListDeclineApplicant& packet);
+        void HandleLFGListInviteApplicant(WorldPackets::LFGList::LFGListInviteApplicant& packet);
+        void HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInviteResponse& packet);
+        void HandleRequestLFGListBlacklist(WorldPackets::LFGList::RequestLFGListBlacklist& packet);
+        void SendLFGListUpdateStatus(uint32 listingId, uint8 status = 0x38);
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);

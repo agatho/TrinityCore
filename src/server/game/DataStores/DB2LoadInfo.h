@@ -1274,6 +1274,36 @@ struct DecorCategoryLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 4, &DecorCategoryMeta::Instance, HOTFIX_SEL_DECOR_CATEGORY };
 };
 
+struct GroupFinderActivityLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[21] =
+    {
+        { .IsSigned = false, .Type = FT_INT,    .Name = "ID" },
+        { .IsSigned = false,  .Type = FT_STRING, .Name = "FullName" },
+        { .IsSigned = false,  .Type = FT_STRING, .Name = "ShortName" },
+        { .IsSigned = false, .Type = FT_BYTE,   .Name = "GroupFinderCategoryID" },
+        { .IsSigned = true,  .Type = FT_BYTE,   .Name = "OrderIndex" },
+        { .IsSigned = false, .Type = FT_SHORT,  .Name = "GroupFinderActivityGrpID" },
+        { .IsSigned = true,  .Type = FT_INT,    .Name = "Flags" },
+        { .IsSigned = false, .Type = FT_SHORT,  .Name = "MinGearLevelSuggestion" },
+        { .IsSigned = true,  .Type = FT_INT,    .Name = "PlayerConditionID" },
+        { .IsSigned = false, .Type = FT_SHORT,  .Name = "MapID" },
+        { .IsSigned = true,  .Type = FT_SHORT,  .Name = "DifficultyID" },
+        { .IsSigned = false, .Type = FT_SHORT,  .Name = "AreaID" },
+        { .IsSigned = true,  .Type = FT_INT,    .Name = "ExpansionID" },
+        { .IsSigned = false, .Type = FT_BYTE,   .Name = "MaxPlayers" },
+        { .IsSigned = false, .Type = FT_BYTE,   .Name = "DisplayType" },
+        { .IsSigned = true,  .Type = FT_INT,    .Name = "Field_11_0_7_57361_013" },
+        { .IsSigned = true,  .Type = FT_INT,    .Name = "Field_11_0_7_57361_014" },
+        { .IsSigned = true,  .Type = FT_INT,    .Name = "Field_11_0_7_57361_015" },
+        { .IsSigned = true,  .Type = FT_INT,    .Name = "Field_11_0_7_57361_016" },
+        { .IsSigned = true,  .Type = FT_INT,    .Name = "OverrideContentTuningID" },
+        { .IsSigned = true,  .Type = FT_INT,    .Name = "MapChallengeModeID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 21, &GroupFinderActivityMeta::Instance, HOTFIX_SEL_GROUP_FINDER_ACTIVITY };
+};
+
 struct AchievementCategoryLoadInfo
 {
     static constexpr DB2FieldMeta Fields[4] =

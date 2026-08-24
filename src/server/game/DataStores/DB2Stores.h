@@ -107,6 +107,7 @@ TC_GAME_API extern DB2Storage<DecorXDecorSubcategoryEntry>          sDecorXDecor
 TC_GAME_API extern DB2Storage<DecorSubcategoryEntry>                sDecorSubcategoryStore;
 TC_GAME_API extern DB2Storage<DecorDyeSlotEntry>                    sDecorDyeSlotStore;
 TC_GAME_API extern DB2Storage<DecorCategoryEntry>                   sDecorCategoryStore;
+TC_GAME_API extern DB2Storage<GroupFinderActivityEntry>             sGroupFinderActivityStore;
 TC_GAME_API extern DB2Storage<Achievement_CategoryEntry>            sAchievementCategoryStore;
 TC_GAME_API extern DB2Storage<AdventureJournalEntry>                sAdventureJournalStore;
 TC_GAME_API extern DB2Storage<AdventureMapPOIEntry>                 sAdventureMapPOIStore;
