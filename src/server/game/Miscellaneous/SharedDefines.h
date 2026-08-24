@@ -5531,7 +5531,11 @@ enum HolidayIds
     HOLIDAY_SHADOWLANDS_DUNGEON_EVENT_TW_CN             = 1219,
     HOLIDAY_SHADOWLANDS_DUNGEON_EVENT_KR                = 1220,
     HOLIDAY_PVP_BRAWL_WS_1984_2                         = 1221,
-    HOLIDAY_CASTLE_NATHRIA_32                           = 1222    // Enter Castle Nathria and confront Sire Denathrius in his citadel.
+    HOLIDAY_CASTLE_NATHRIA_32                           = 1222,    // Enter Castle Nathria and confront Sire Denathrius in his citadel.
+    HOLIDAY_TURBULENT_TIMEWAYS                          = 1425,    // [DB2 Holidays 1425 / HolidayNames 430] rotating Timewalking meta-event (region 961)
+    HOLIDAY_TURBULENT_TIMEWAYS_EU                       = 1458,    // [DB2 Holidays 1458] region 4
+    HOLIDAY_TURBULENT_TIMEWAYS_KR                       = 1459,    // [DB2 Holidays 1459] region 2
+    HOLIDAY_TURBULENT_TIMEWAYS_TW_CN                    = 1460     // [DB2 Holidays 1460] region 24
 };
 
 enum QuestType

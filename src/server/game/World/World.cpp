@@ -53,6 +53,7 @@
 #include "DetourMemoryFunctions.h"
 #include "DisableMgr.h"
 #include "GameEventMgr.h"
+#include "TurbulentTimewaysMgr.h"
 #include "GameObjectModel.h"
 #include "GameTables.h"
 #include "GameTime.h"
@@ -1658,6 +1659,8 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Loa Blessing options...");
     sLoaBlessingMgr->LoadFromDB();                              // Zul'Aman Altar of Blessings worship options (realm-safe if absent)
+    TC_LOG_INFO("server.loading", "Loading Turbulent Timeways rotation...");   // rotating Timewalking meta-event scheduler (extends chromie-time)
+    sTurbulentTimewaysMgr->LoadFromDB();
 
     TC_LOG_INFO("server.loading", "Loading creature summoned data...");
     sObjectMgr->LoadCreatureSummonedData();                     // must be after LoadCreatureTemplates() and LoadQuests()
@@ -2485,6 +2488,7 @@ void World::Update(uint32 diff)
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update Quel'Thalas zone events"));
         sZoneEventMgr->Update(diff);
     }
+    sTurbulentTimewaysMgr->Update(diff);
 
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Process cli commands"));
