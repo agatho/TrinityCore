@@ -37,6 +37,16 @@ namespace WorldPackets
             bool IsFavorite = false;
         };
 
+        class MakeConditionalAppearancePermanent final : public ClientPacket
+        {
+        public:
+            explicit MakeConditionalAppearancePermanent(WorldPacket&& packet) : ClientPacket(CMSG_MAKE_CONTITIONAL_APPEARANCE_PERMANENT, std::move(packet)) { }
+
+            void Read() override;
+
+            int32 ItemModifiedAppearanceID = 0;
+        };
+
         struct ItemCollectionItemData
         {
             int32 ID = 0;

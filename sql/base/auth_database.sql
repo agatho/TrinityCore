@@ -588,6 +588,21 @@ CREATE TABLE `battlenet_item_favorite_appearances` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `battlenet_item_favorite_transmog_sets`
+--
+
+DROP TABLE IF EXISTS `battlenet_item_favorite_transmog_sets`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `battlenet_item_favorite_transmog_sets` (
+  `battlenetAccountId` int unsigned NOT NULL,
+  `transmogSetId` int unsigned NOT NULL,
+  PRIMARY KEY (`battlenetAccountId`,`transmogSetId`),
+  CONSTRAINT `fk_battlenet_item_favorite_transmog_sets` FOREIGN KEY (`battlenetAccountId`) REFERENCES `battlenet_accounts` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Dumping data for table `battlenet_item_favorite_appearances`
 --
 

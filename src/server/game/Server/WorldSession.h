@@ -544,6 +544,7 @@ namespace WorldPackets
         class MountSpecial;
         class SetTaxiBenchmarkMode;
         class MountSetFavorite;
+        class MountClearFanfare;
         class CloseInteraction;
         class ConversationLineStarted;
         class RequestLatestSplashScreen;
@@ -743,6 +744,10 @@ namespace WorldPackets
         class AddIgnore;
         class DelFriend;
         class DelIgnore;
+        class MakeConditionalAppearancePermanent;
+        class RecentAllyRequestData;
+        class RecentAllySetNote;
+        class SetAllowRecentAlliesSeeLocation;
         class SendContactList;
         class SetContactNotes;
         class SocialContractRequest;
@@ -1397,6 +1402,9 @@ class TC_GAME_API WorldSession
         void HandleAddIgnoreOpcode(WorldPackets::Social::AddIgnore& packet);
         void HandleDelIgnoreOpcode(WorldPackets::Social::DelIgnore& packet);
         void HandleSetContactNotesOpcode(WorldPackets::Social::SetContactNotes& packet);
+        void HandleSetAllowRecentAlliesSeeLocation(WorldPackets::Social::SetAllowRecentAlliesSeeLocation& packet);
+        void HandleRecentAllyRequestData(WorldPackets::Social::RecentAllyRequestData& packet);
+        void HandleRecentAllySetNote(WorldPackets::Social::RecentAllySetNote& packet);
 
         void HandleAreaTriggerOpcode(WorldPackets::AreaTrigger::AreaTrigger& packet);
         void HandleUpdateAreaTriggerVisual(WorldPackets::AreaTrigger::UpdateAreaTriggerVisual const& updateAreaTriggerVisual);
@@ -1854,6 +1862,7 @@ class TC_GAME_API WorldSession
 
         // Collections
         void HandleCollectionItemSetFavorite(WorldPackets::Collections::CollectionItemSetFavorite& collectionItemSetFavorite);
+        void HandleMakeConditionalAppearancePermanent(WorldPackets::Collections::MakeConditionalAppearancePermanent& makeConditionalAppearancePermanent);
 
         // Transmogrification
         void HandleTransmogrifyItems(WorldPackets::Transmogrification::TransmogrifyItems& transmogrifyItems);
@@ -1895,6 +1904,7 @@ class TC_GAME_API WorldSession
         void HandleToyClearFanfare(WorldPackets::Toy::ToyClearFanfare& toyClearFanfare);
 
         void HandleMountSetFavorite(WorldPackets::Misc::MountSetFavorite& mountSetFavorite);
+        void HandleMountClearFanfare(WorldPackets::Misc::MountClearFanfare& mountClearFanfare);
 
         // Scenes
         void HandleSceneTriggerEvent(WorldPackets::Scenes::SceneTriggerEvent& sceneTriggerEvent);

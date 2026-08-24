@@ -569,6 +569,9 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::SellItemsToVendors:
         case CriteriaType::ReachMaxLevel:
         case CriteriaType::LearnTaxiNode:
+        // --- collections
+        case CriteriaType::LearnAnyToy:
+        case CriteriaType::LearnAnyTransmogIllusion:
             SetCriteriaProgress(criteria, 1, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         // std case: increment at miscValue1
@@ -700,6 +703,9 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::CollectTransmogSetFromGroup:
         case CriteriaType::EnterTopLevelArea:
         case CriteriaType::LeaveTopLevelArea:
+        // one-shot "did this specific thing" criteria - the asset already pins the exact subject
+        case CriteriaType::LearnToy:
+        case CriteriaType::LearnTransmog:
             SetCriteriaProgress(criteria, 1, referencePlayer);
             break;
         case CriteriaType::BankSlotsPurchased:
@@ -843,8 +849,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::CollectGarrisonShipment:
         case CriteriaType::ItemLevelChangedForGarrisonFollower:
         case CriteriaType::LevelChangedForGarrisonFollower:
-        case CriteriaType::LearnToy:
-        case CriteriaType::LearnAnyToy:
         case CriteriaType::FindResearchObject:
         case CriteriaType::ExhaustAnyResearchSite:
         case CriteriaType::CompleteInternalCriteria:
@@ -873,7 +877,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::SocketAnySoulbindConduit:
         case CriteriaType::ObtainAnyItemWithCurrencyValue:
         case CriteriaType::EarnExpansionLevel:
-        case CriteriaType::LearnTransmog:
         default:
             break;                          // Not implemented yet :(
     }
@@ -1548,6 +1551,7 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
         case CriteriaType::LootItem:
         case CriteriaType::EquipItem:
         case CriteriaType::LearnHeirloom:
+        case CriteriaType::LearnToy:
             if (!miscValue1 || uint32(criteria->Entry->Asset.ItemID )!= miscValue1)
                 return false;
             break;
@@ -1712,6 +1716,15 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
             break;
         case CriteriaType::LearnTaxiNode:
             if (miscValue1 != uint32(criteria->Entry->Asset.TaxiNodesID))
+                return false;
+            break;
+        case CriteriaType::LearnTransmog:
+            if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.ItemModifiedAppearanceID))
+                return false;
+            break;
+        case CriteriaType::LearnAnyToy:
+        case CriteriaType::LearnAnyTransmogIllusion:
+            if (!miscValue1)
                 return false;
             break;
         default:
@@ -4997,9 +5010,9 @@ std::span<CriteriaType const> CriteriaMgr::GetRetroactivelyUpdateableCriteriaTyp
         //CriteriaType::AcquireGarrison, /*NYI*/
         //CriteriaType::LearnGarrisonBlueprint, /*NYI*/
         //CriteriaType::LearnGarrisonSpecialization, /*NYI*/
-        //CriteriaType::LearnToy, /*NYI*/ // Learn Toy "{Item}"
-        //CriteriaType::LearnAnyToy, /*NYI*/ // Learn Any Toy
-        //CriteriaType::LearnTransmog, /*NYI*/
+        //CriteriaType::LearnToy, // implemented, but event-driven only (CollectionMgr::AddToy)
+        //CriteriaType::LearnAnyToy, // implemented, but event-driven only (CollectionMgr::AddToy)
+        //CriteriaType::LearnTransmog, // implemented, but event-driven only (CollectionMgr::AddItemAppearance)
         CriteriaType::HonorLevelIncrease,
         //CriteriaType::AccountHonorLevelReached, /*NYI*/
         CriteriaType::ReachMaxLevel,

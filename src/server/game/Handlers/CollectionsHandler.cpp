@@ -18,6 +18,7 @@
 #include "WorldSession.h"
 #include "CollectionMgr.h"
 #include "CollectionPackets.h"
+#include "DB2Stores.h"
 
 void WorldSession::HandleCollectionItemSetFavorite(WorldPackets::Collections::CollectionItemSetFavorite& collectionItemSetFavorite)
 {
@@ -36,6 +37,10 @@ void WorldSession::HandleCollectionItemSetFavorite(WorldPackets::Collections::Co
             break;
         }
         case ItemCollectionType::TransmogSetFavorite:
+            if (!sTransmogSetStore.HasRecord(collectionItemSetFavorite.ID))
+                return;
+
+            GetCollectionMgr()->SetTransmogSetIsFavorite(collectionItemSetFavorite.ID, collectionItemSetFavorite.IsFavorite);
             break;
         case ItemCollectionType::WarbandScene:
             GetCollectionMgr()->SetWarbandSceneIsFavorite(collectionItemSetFavorite.ID, collectionItemSetFavorite.IsFavorite);
@@ -43,4 +48,10 @@ void WorldSession::HandleCollectionItemSetFavorite(WorldPackets::Collections::Co
         default:
             break;
     }
+}
+
+void WorldSession::HandleMakeConditionalAppearancePermanent(WorldPackets::Collections::MakeConditionalAppearancePermanent& makeConditionalAppearancePermanent)
+{
+    // Promote a temporarily-held (conditional) transmog appearance into the permanent collection.
+    GetCollectionMgr()->MakeAppearancePermanent(uint32(makeConditionalAppearancePermanent.ItemModifiedAppearanceID));
 }
