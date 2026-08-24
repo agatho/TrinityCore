@@ -1193,6 +1193,13 @@ class TC_GAME_API WorldSession
 
         bool CanAccessAlliedRaces() const;
 
+        // Allied-race unlock gate seam (feature/haranir-allied-race).
+        // Returns whether this account has completed the account-wide allied-race unlock
+        // achievement `achievementId` (e.g. Haranir = 61506, heritage = 61942). Centralizes
+        // the single enforcement point that the char-enum and char-create paths consult.
+        // Currently a permissive stub - see WorldSession.cpp / HARANIR_ALLIED_RACE_BLUEPRINT.md.
+        bool HasRaceUnlockAchievement(uint32 achievementId) const;
+
         /// Session in auth.queue currently
         void SetInQueue(bool state) { m_inQueue = state; }
 
