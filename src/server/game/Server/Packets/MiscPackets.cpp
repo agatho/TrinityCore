@@ -849,4 +849,21 @@ WorldPacket const* AccountWarbandSceneUpdate::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* SetCtrOptions::Write()
+{
+    auto writeBlock = [&](CTROptionsBlock const& block)
+    {
+        _worldPacket << uint32(block.ConditionalFlags.size());
+        _worldPacket << uint8(block.FactionGroup);
+        _worldPacket << uint32(block.ChromieTimeExpansionMask);
+        for (uint32 flag : block.ConditionalFlags)
+            _worldPacket << uint32(flag);
+    };
+
+    writeBlock(Previous);
+    writeBlock(Current);
+
+    return &_worldPacket;
+}
 }

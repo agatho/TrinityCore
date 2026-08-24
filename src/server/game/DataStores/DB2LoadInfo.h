@@ -53,6 +53,29 @@ struct AchievementLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 19, &AchievementMeta::Instance, HOTFIX_SEL_ACHIEVEMENT };
 };
 
+struct UIChromieTimeExpansionInfoLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[14] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "AllianceOverrideDesc" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "HordeOverrideDesc" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "MapAtlasElement" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PreviewAtlasElement" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ShowPlayerConditionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ExpansionMask" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ContentTuningID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "CompletedPlayerConditionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SortPriority" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "RecommendPlayerConditionID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 14, &UIChromieTimeExpansionInfoMeta::Instance, HOTFIX_SEL_UI_CHROMIE_TIME_EXPANSION_INFO };
+};
+
 struct AchievementCategoryLoadInfo
 {
     static constexpr DB2FieldMeta Fields[4] =
