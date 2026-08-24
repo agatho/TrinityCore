@@ -34,6 +34,7 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "World.h"
+#include <unordered_map>
 
 bool WorldSession::CanOpenMailBox(ObjectGuid guid)
 {
@@ -672,4 +673,65 @@ void WorldSession::HandleQueryNextMailTime(WorldPackets::Mail::MailQueryNextMail
         result.NextMailTime = -DAY;
 
     SendPacket(result.Write());
+}
+
+void WorldSession::HandleGetRegionwideCharacterRestrictionAndMailData(WorldPackets::Mail::GetRegionwideCharacterRestrictionAndMailData& getRegionwideData)
+{
+    // Only report state for characters that actually belong to this account - never leak other accounts' mail.
+    std::vector<ObjectGuid> ownedCharacters;
+    ownedCharacters.reserve(getRegionwideData.Characters.size());
+    for (ObjectGuid const& character : getRegionwideData.Characters)
+        if (sCharacterCache->GetCharacterAccountIdByGuid(character) == GetAccountId())
+            ownedCharacters.push_back(character);
+
+    // TrinityCore enforces no region-wide character restrictions (trial/boost/lock), so the
+    // restrictions list is empty - the client reads a zero count and applies no restrictions.
+    SendPacket(WorldPackets::Mail::RegionwideCharacterRestrictionsData().Write());
+
+    if (ownedCharacters.empty())
+    {
+        SendPacket(WorldPackets::Mail::RegionwideCharacterMailData().Write());
+        return;
+    }
+
+    // Aggregate each character's inbox mail count + earliest delivery time in one async query.
+    std::string receivers;
+    for (ObjectGuid const& character : ownedCharacters)
+    {
+        if (!receivers.empty())
+            receivers += ',';
+        receivers += std::to_string(character.GetCounter());
+    }
+
+    std::string query = "SELECT receiver, COUNT(id), MIN(deliver_time) FROM mail WHERE receiver IN (" + receivers + ") GROUP BY receiver";
+
+    GetQueryProcessor().AddCallback(CharacterDatabase.AsyncQuery(query.c_str())
+        .WithCallback([this, characters = std::move(ownedCharacters)](QueryResult result)
+    {
+        std::unordered_map<ObjectGuid::LowType, std::pair<uint32, uint32>> summaries;
+        if (result)
+        {
+            do
+            {
+                Field* fields = result->Fetch();
+                summaries[fields[0].GetUInt64()] = { uint32(fields[1].GetUInt64()), fields[2].GetUInt32() };
+            } while (result->NextRow());
+        }
+
+        WorldPackets::Mail::RegionwideCharacterMailData mailData;
+        mailData.Characters.reserve(characters.size());
+        for (ObjectGuid const& character : characters)
+        {
+            WorldPackets::Mail::RegionwideCharacterMailData::MailDataEntry entry;
+            entry.Character = character;
+            if (auto itr = summaries.find(character.GetCounter()); itr != summaries.end())
+            {
+                entry.MailCount = itr->second.first;
+                entry.NextDeliveryTime = itr->second.second;
+            }
+            mailData.Characters.push_back(entry);
+        }
+
+        SendPacket(mailData.Write());
+    }));
 }
