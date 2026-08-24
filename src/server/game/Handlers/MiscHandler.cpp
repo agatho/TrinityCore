@@ -393,6 +393,14 @@ void WorldSession::HandleRequestCemeteryList(WorldPackets::Misc::RequestCemetery
     SendPacket(packet.Write());
 }
 
+void WorldSession::HandleGetAccountNotifications(WorldPackets::Misc::GetAccountNotifications& /*packet*/)
+{
+    // TrinityCore has no account-notification system; answer the client's request with an empty list so
+    // it does not sit waiting for a response it would otherwise never receive.
+    WorldPackets::Misc::AccountNotificationsResponse response;
+    SendPacket(response.Write());
+}
+
 void WorldSession::HandleSetSelectionOpcode(WorldPackets::Misc::SetSelection& packet)
 {
     _player->SetSelection(packet.Selection);
