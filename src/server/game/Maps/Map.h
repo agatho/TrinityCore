@@ -46,6 +46,9 @@
 #include <unordered_set>
 
 class BaseEntity;
+class MeshObject;
+class HousingRoomEntity;
+class HousingDecorEntity;
 class Battleground;
 class BattlegroundMap;
 class BattlegroundScript;
@@ -220,8 +223,8 @@ struct MapStoredObjectsUnorderedMap
     }
 };
 
-extern template struct TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation>;
-typedef TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation> MapStoredObjectTypesContainer;
+extern template struct TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation, MeshObject, HousingRoomEntity, HousingDecorEntity>;
+typedef TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation, MeshObject, HousingRoomEntity, HousingDecorEntity> MapStoredObjectTypesContainer;
 
 class TC_GAME_API Map : public GridRefManager<NGridType>
 {
@@ -461,6 +464,7 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         }
 
         MapStoredObjectTypesContainer& GetObjectsStore() { return _objectsStore; }
+        MeshObject* GetMeshObject(ObjectGuid const& guid);
 
         typedef std::unordered_multimap<ObjectGuid::LowType, Creature*> CreatureBySpawnIdContainer;
         CreatureBySpawnIdContainer& GetCreatureBySpawnIdStore() { return _creatureBySpawnIdStore; }
