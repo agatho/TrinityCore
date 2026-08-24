@@ -1671,6 +1671,7 @@ enum OpcodeServer : uint32
     SMSG_HOUSE_EXTERIOR_LOCK_RESPONSE                               = 0x530000,
     SMSG_HOUSE_EXTERIOR_SET_HOUSE_POSITION_RESPONSE                 = 0x530001,
     SMSG_HOUSING_BLUEPRINT_CHECK_RESPONSE                           = 0x540007,
+    SMSG_HOUSING_CATALOG_STATE_SYNC                                = UNKNOWN_OPCODE, // fork-speculative; no confirmed 12.1 client opcode
     SMSG_HOUSING_BLUEPRINT_DELETE_RESPONSE                          = 0x540003,
     SMSG_HOUSING_BLUEPRINT_EXPORT_RESPONSE                          = 0x540000,
     SMSG_HOUSING_BLUEPRINT_GET_RESPONSE                             = 0x540001,

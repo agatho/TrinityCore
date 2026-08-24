@@ -1495,37 +1495,6 @@ WorldPacket const* HousingGetCurrentHouseInfoResponse::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* HousingExportHouseResponse::Write()
-{
-    // 12.0.7 (build 68275), parser sub_7FF7291D7160. RE feedback 0x550003.
-    _worldPacket << HouseGuid;
-    _worldPacket << uint8(Status);
-    // Optional name string: presence byte (bit7 = present). Empty-name path is exact; the
-    // bit-packed length encoding of the present path is unconfirmed — flagged in the header.
-    if (ExportName)
-    {
-        // H-24: the length field carries 7 bits, so a name longer than 127 bytes used to
-        // write a masked-down length next to the full string - the client would then read
-        // the tail of the name as the start of BlobLen, desyncing every field after it.
-        // The encoding above 127 is not pinned by RE, so this does not invent a long form;
-        // it truncates the payload to match the length actually written, which keeps the
-        // stream parseable. If a capture ever shows the long form, encode it here.
-        std::string_view name = *ExportName;
-        name = name.substr(0, 0x7F);
-        _worldPacket << uint8(0x80 | static_cast<uint8>(name.size()));
-        _worldPacket.append(name.data(), name.size());
-    }
-    else
-        _worldPacket << uint8(0);
-    _worldPacket << uint32(ExportBlob.size());
-    if (!ExportBlob.empty())
-        _worldPacket.append(ExportBlob.data(), ExportBlob.size());
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_EXPORT_HOUSE_RESPONSE HouseGuid: {} Status: {} BlobLen: {}",
-        HouseGuid.ToString(), Status, ExportBlob.size());
-
-    return &_worldPacket;
-}
 
 // Retired 2026-05-11: HousingSystemHouseSnapshotResponse Write() deleted (no C_HouseSnapshot in retail).
 
@@ -2546,12 +2515,6 @@ void GetInitiativeActivityLogRequest::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
-void GetNeighborhoodInitiativeInfoRequest::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
-}
 
 void InitiativeUpdateActiveNeighborhood::Read()
 {
@@ -2564,90 +2527,14 @@ void InitiativeUpdateActiveNeighborhood::Read()
 // 0x38xxxx NeighborhoodInitiative — generic Op-XX read implementations
 // ============================================================================
 
-void NeighborhoodInitiativeOp01::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_01 NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
-}
 
-void NeighborhoodInitiativeOp05::Read()
-{
-    _worldPacket >> Field1;
-    _worldPacket >> NeighborhoodGuid;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_05 Field1: {} NeighborhoodGuid: {}", Field1, NeighborhoodGuid.ToString());
-}
 
-void NeighborhoodInitiativeOp07::Read()
-{
-    _worldPacket >> Value;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_07 Value: {}", Value);
-}
 
-void NeighborhoodInitiativeOp09::Read()
-{
-    _worldPacket >> Value;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_09 Value: {}", Value);
-}
 
-void NeighborhoodInitiativeOp0A::Read()
-{
-    _worldPacket >> Value;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0A Value: {}", Value);
-}
 
-void NeighborhoodInitiativeOp0B::Read()
-{
-    _worldPacket >> Value;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0B Value: {}", Value);
-}
 
-void NeighborhoodInitiativeOp0C::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0C NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
-}
 
-void NeighborhoodInitiativeOp0D::Read()
-{
-    _worldPacket >> Header;
-    uint32 count = 0;
-    _worldPacket >> count;
-    count = std::min<uint32>(count, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
-    Pairs.resize(count);
-    for (uint32 i = 0; i < count; ++i)
-    {
-        _worldPacket >> Pairs[i].First;
-        _worldPacket >> Pairs[i].Second;
-    }
-    _worldPacket >> Bits<1>(Flag);
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0D Header: {} Pairs: {} Flag: {}", Header, count, Flag);
-}
 
-void NeighborhoodInitiativeOp0E::Read()
-{
-    uint32 count = 0;
-    _worldPacket >> count;
-    count = std::min<uint32>(count, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
-    TaskIDs.resize(count);
-    for (uint32 i = 0; i < count; ++i)
-        _worldPacket >> TaskIDs[i];
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0E count: {}", count);
-}
 
-void NeighborhoodInitiativeOp0F::Read()
-{
-    uint32 count = 0;
-    _worldPacket >> count;
-    count = std::min<uint32>(count, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
-    Records.resize(count);
-    for (uint32 i = 0; i < count; ++i)
-    {
-        _worldPacket >> Records[i].A;
-        _worldPacket >> Records[i].B;
-        _worldPacket >> Records[i].C;
-        _worldPacket >> Records[i].D;
-    }
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0F count: {}", count);
-}
 
 } // namespace WorldPackets::Neighborhood
