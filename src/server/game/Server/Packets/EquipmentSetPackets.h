@@ -68,6 +68,17 @@ namespace WorldPackets
             uint64 ID = 0;
         };
 
+        class AssignEquipmentSetSpec final : public ClientPacket
+        {
+        public:
+            explicit AssignEquipmentSetSpec(WorldPacket&& packet) : ClientPacket(CMSG_ASSIGN_EQUIPMENT_SET_SPEC, std::move(packet)) { }
+
+            void Read() override;
+
+            uint64 Guid = 0;        ///< Set Identifier
+            int32 SpecIndex = 0;    ///< Specialization index to auto-equip this set for (-1 clears the assignment)
+        };
+
         class UseEquipmentSet final : public ClientPacket
         {
         public:
