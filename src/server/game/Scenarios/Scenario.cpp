@@ -24,6 +24,7 @@
 #include "ScenarioMgr.h"
 #include "ScenarioPackets.h"
 #include "WorldSession.h"
+#include "ZoneEventMgr.h"
 
 Scenario::Scenario(Map* map, ScenarioData const* scenarioData) : _map(map), _data(scenarioData),
     _guid(ObjectGuid::Create<HighGuid::Scenario>(map->GetId(), scenarioData->Entry->ID, map->GenerateLowGuid<HighGuid::Scenario>())),
@@ -61,6 +62,11 @@ void Scenario::CompleteStep(ScenarioStepEntry const* step)
         for (ObjectGuid guid : _players)
             if (Player* player = ObjectAccessor::GetPlayer(_map, guid))
                 player->RewardQuest(quest, LootItemType::Item, 0, nullptr, false);
+
+    // Quel'Thalas zone-event wave hook: if this scenario step's CriteriaTree is a
+    // registered zone-event wave (e.g. Stormarion Assault, Scenario 3021 waves),
+    // advance the zone assault meter (WS 29616). No-op for all other scenarios.
+    sZoneEventMgr->OnScenarioCriteriaCompleted(step->Criteriatreeid);
 
     if (step->IsBonusObjective())
         return;
