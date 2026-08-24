@@ -115,6 +115,9 @@ DB2Storage<DecorSubcategoryEntry>               sDecorSubcategoryStore("DecorSub
 DB2Storage<DecorDyeSlotEntry>                   sDecorDyeSlotStore("DecorDyeSlot.db2", &DecorDyeSlotLoadInfo::Instance);
 DB2Storage<DecorCategoryEntry>                  sDecorCategoryStore("DecorCategory.db2", &DecorCategoryLoadInfo::Instance);
 DB2Storage<GroupFinderActivityEntry>            sGroupFinderActivityStore("GroupFinderActivity.db2", &GroupFinderActivityLoadInfo::Instance);
+DB2Storage<UiTextureKitEntry>                   sUiTextureKitStore("UiTextureKit.db2", &UiTextureKitLoadInfo::Instance);
+DB2Storage<RenownRewardsEntry>                  sRenownRewardsStore("RenownRewards.db2", &RenownRewardsLoadInfo::Instance);
+DB2Storage<CovenantEntry>                       sCovenantStore("Covenant.db2", &CovenantLoadInfo::Instance);
 DB2Storage<Achievement_CategoryEntry>           sAchievementCategoryStore("Achievement_Category.db2", &AchievementCategoryLoadInfo::Instance);
 DB2Storage<AdventureJournalEntry>               sAdventureJournalStore("AdventureJournal.db2", &AdventureJournalLoadInfo::Instance);
 DB2Storage<AdventureMapPOIEntry>                sAdventureMapPOIStore("AdventureMapPOI.db2", &AdventureMapPoiLoadInfo::Instance);
@@ -855,6 +858,9 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sDecorDyeSlotStore);
     LOAD_DB2(sDecorCategoryStore);
     LOAD_DB2(sGroupFinderActivityStore);
+    LOAD_DB2(sUiTextureKitStore);
+    LOAD_DB2(sRenownRewardsStore);
+    LOAD_DB2(sCovenantStore);
     LOAD_DB2(sAchievementCategoryStore);
     LOAD_DB2(sAdventureJournalStore);
     LOAD_DB2(sAdventureMapPOIStore);

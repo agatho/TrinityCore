@@ -898,6 +898,51 @@ struct GroupFinderActivityEntry
     int32 MapChallengeModeID;
 };
 
+struct UiTextureKitEntry
+{
+    uint32 ID;
+    char const* KitPrefix;     // textureKit string (e.g. "MajorFaction-DragonscaleExpedition")
+};
+
+struct RenownRewardsEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    LocalizedString ToastDescription;
+    int32 CovenantID;
+    int32 Level;
+    int32 Icon;
+    int32 Flags;
+    int32 UiOrder;
+    int32 ItemID;
+    int32 SpellID;
+    int32 MountID;
+    int32 TransmogID;
+    int32 TransmogSetID;
+    int32 CharTitlesID;
+    int32 GarrFollowerID;
+    int32 TransmogIllusionID;
+    int32 RewardCategory;        // Field_12_0_0_63534_016 - reward category enum
+    int32 QuestID;
+    int32 PlayerConditionID;
+};
+
+struct CovenantEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    int32 BountySetID;
+    int32 SkillLineID;
+    int32 DeathTeleportSpellID;
+    int32 Field_9_0_2_36165_006;
+    int32 Field_9_0_2_36165_007;
+    int32 FactionID;
+    int32 CurrencyTypesID;
+    int32 RequiredPlayerConditionID;
+};
+
 struct Achievement_CategoryEntry
 {
     LocalizedString Name;

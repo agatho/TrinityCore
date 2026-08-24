@@ -784,6 +784,9 @@ namespace WorldPackets
         class LFGListInviteApplicant;
         class LFGListInviteResponse;
         class RequestLFGListBlacklist;
+    namespace MajorFactions
+    {
+        class RequestCatchupState;
     }
     namespace Movement
     {

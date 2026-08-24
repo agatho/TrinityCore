@@ -884,3 +884,36 @@ bool ReputationMgr::CanGainParagonReputationForFaction(FactionEntry const* facti
 
     return _player->GetLevel() >= _player->GetQuestMinLevel(quest);
 }
+
+bool ReputationMgr::IsRenownRewardGranted(uint32 renownRewardId, bool accountWide) const
+{
+    if (accountWide)
+        return _grantedRenownRewardsAccount.contains(renownRewardId);
+    return _grantedRenownRewardsChar.contains(renownRewardId);
+}
+
+void ReputationMgr::MarkRenownRewardGranted(uint32 renownRewardId, bool accountWide)
+{
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
+    if (accountWide)
+    {
+        _grantedRenownRewardsAccount.insert(renownRewardId);
+
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_WARBAND_RENOWN_REWARD_GRANTED);
+        stmt->setUInt32(0, _player->GetSession()->GetBattlenetAccountId());
+        stmt->setUInt32(1, renownRewardId);
+        trans->Append(stmt);
+    }
+    else
+    {
+        _grantedRenownRewardsChar.insert(renownRewardId);
+
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHAR_RENOWN_REWARD_GRANTED);
+        stmt->setUInt64(0, _player->GetGUID().GetCounter());
+        stmt->setUInt32(1, renownRewardId);
+        trans->Append(stmt);
+    }
+
+    CharacterDatabase.CommitTransaction(trans);
+}
