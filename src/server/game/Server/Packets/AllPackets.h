@@ -40,6 +40,7 @@
 #include "ClientConfigPackets.h"
 #include "CollectionPackets.h"
 #include "CombatLogPackets.h"
+#include "CommentatorPackets.h"
 #include "CombatPackets.h"
 #include "DuelPackets.h"
 #include "EquipmentSetPackets.h"

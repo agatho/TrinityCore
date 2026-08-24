@@ -2677,6 +2677,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         WorldLocation const& GetBattlegroundEntryPoint() const { return m_bgData.joinPos; }
         void SetBattlegroundEntryPoint();
 
+        void SetSpectateTarget(ObjectGuid guid);            // commentator: unit this spectator is following
+
         void SetBGTeam(Team team);
         Team GetBGTeam() const;
 
