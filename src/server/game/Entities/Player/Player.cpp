@@ -21,6 +21,7 @@
 #include "HousingNeighborhoodMirrorEntity.h"
 #include "HousingPlayerHouseEntity.h"
 #include "Housing.h"
+#include "Neighborhood.h"
 #include "HousingMap.h"
 #include "HousingRoomEntity.h"
 #include "HousingMgr.h"

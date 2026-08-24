@@ -1044,7 +1044,7 @@ namespace WorldPackets
             bool IsFullUpdate = false;
             WarbandSceneCollectionContainer const* WarbandScenes = nullptr;
         };
-    }
+
         class DisplayWorldText final : public ServerPacket
         {
         public:
@@ -1057,6 +1057,7 @@ namespace WorldPackets
             uint32 Arg2 = 0;
             std::string Text;
         };
+    }
 }
 
 #endif // TRINITYCORE_MISC_PACKETS_H

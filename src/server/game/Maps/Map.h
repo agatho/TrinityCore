@@ -115,6 +115,7 @@ enum TransferAbortReason : uint32
     TRANSFER_ABORT_XREALM_ZONE_DOWN              = 24,  // Transfer Aborted: cross-realm zone is down
     TRANSFER_ABORT_SOLO_PLAYER_SWITCH_DIFFICULTY = 26,  // This instance is already in progress. You may only switch difficulties from inside the instance.
     TRANSFER_ABORT_NOT_CROSS_FACTION_COMPATIBLE  = 33,  // This instance isn't available for cross-faction groups
+    TRANSFER_ABORT_HOUSING_MAX_PLAYERS_IN_HOUSE  = 36,  // Housing: house is full
 };
 
 struct TransferAbortParams

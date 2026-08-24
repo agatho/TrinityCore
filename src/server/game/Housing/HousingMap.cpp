@@ -185,7 +185,7 @@ void HousingMap::InitVisibilityDistance()
 
 void HousingMap::LoadGridObjects(NGridType* grid)
 {
-    Map::LoadGridObjects(grid, cell);
+    Map::LoadGridObjects(grid);
 }
 
 void HousingMap::SpawnPlotGameObjects()

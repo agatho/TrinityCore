@@ -89,7 +89,7 @@ void HouseInteriorMap::InitVisibilityDistance()
 
 void HouseInteriorMap::LoadGridObjects(NGridType* grid)
 {
-    Map::LoadGridObjects(grid, cell);
+    Map::LoadGridObjects(grid);
 
     // Room WMO geometry is spawned when the owner enters via AddPlayerToMap.
     // No static spawns exist on the interior map template.
