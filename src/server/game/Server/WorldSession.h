@@ -551,6 +551,19 @@ namespace WorldPackets
         class SetCurrencyFlags;
     }
 
+    namespace ClubFinder
+    {
+        class ClubFinderPost;
+        class ClubFinderRequestSubscribedClubPostingIds;
+        class ClubFinderRequestClubsData;
+        class ClubFinderRequestClubsList;
+        class ClubFinderRequestMembershipToClub;
+        class ClubFinderGetApplicantsList;
+        class ClubFinderRequestPendingClubsList;
+        class ClubFinderRespondToApplicant;
+        class ClubFinderApplicationResponse;
+        class ClubFinderWhisperApplicantRequest;
+    }
     namespace Movement
     {
         class ClientPlayerMovement;
@@ -1336,6 +1349,18 @@ class TC_GAME_API WorldSession
         void HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyInertiaAck& moveApplyInertiaAck);
         void HandleMoveRemoveInertiaAck(WorldPackets::Movement::MoveRemoveInertiaAck& moveRemoveInertiaAck);
         void HandleChromieTimeSelectExpansion(WorldPackets::Misc::ChromieTimeSelectExpansion& chromieTimeSelectExpansion);
+        // ClubFinder
+        void HandleClubFinderPost(WorldPackets::ClubFinder::ClubFinderPost& clubFinderPost);
+        void HandleClubFinderRequestSubscribedClubPostingIds(WorldPackets::ClubFinder::ClubFinderRequestSubscribedClubPostingIds& request);
+        void HandleClubFinderRequestClubsData(WorldPackets::ClubFinder::ClubFinderRequestClubsData& request);
+        void HandleClubFinderRequestClubsList(WorldPackets::ClubFinder::ClubFinderRequestClubsList& request);
+        void HandleClubFinderRequestMembershipToClub(WorldPackets::ClubFinder::ClubFinderRequestMembershipToClub& request);
+        void HandleClubFinderGetApplicantsList(WorldPackets::ClubFinder::ClubFinderGetApplicantsList& request);
+        void HandleClubFinderRequestPendingClubsList(WorldPackets::ClubFinder::ClubFinderRequestPendingClubsList& request);
+        void HandleClubFinderRespondToApplicant(WorldPackets::ClubFinder::ClubFinderRespondToApplicant& request);
+        void HandleClubFinderApplicationResponse(WorldPackets::ClubFinder::ClubFinderApplicationResponse& request);
+        void HandleClubFinderWhisperApplicantRequest(WorldPackets::ClubFinder::ClubFinderWhisperApplicantRequest& request);
+        void SendClubFinderPendingApplications(uint8 type);
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);
