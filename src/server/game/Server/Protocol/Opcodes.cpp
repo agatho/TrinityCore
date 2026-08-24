@@ -288,7 +288,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_CATALOG_SHOP_LICENSE_GAME_DATA_REQUEST,             STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_CHALLENGE_MODE_REQUEST_LEADERS,                     STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_CHANGE_BAG_SLOT_FLAG,                               STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleChangeBagSlotFlag);
-    DEFINE_HANDLER(CMSG_CHANGE_BANK_BAG_SLOT_FLAG,                          STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_CHANGE_BANK_BAG_SLOT_FLAG,                          STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleChangeBankBagSlotFlag);
     DEFINE_HANDLER(CMSG_CHANGE_MONUMENT_APPEARANCE,                         STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_CHANGE_REALM_TICKET,                                STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleBattlenetChangeRealmTicket);
     DEFINE_HANDLER(CMSG_CHANGE_SUB_GROUP,                                   STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleChangeSubGroupOpcode);
