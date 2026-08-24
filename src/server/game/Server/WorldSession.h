@@ -116,6 +116,7 @@ namespace WorldPackets
     {
         class AdventureJournalOpenQuest;
         class AdventureJournalUpdateSuggestions;
+        class EncounterJournalStartArathiRpe;
     }
 
     namespace AdventureMap
@@ -161,6 +162,7 @@ namespace WorldPackets
     {
         enum class ConnectToSerial : uint32;
         class QueuedMessagesEnd;
+        class SuspendCommsAck;
     }
 
     namespace Azerite
@@ -283,6 +285,7 @@ namespace WorldPackets
         class SetWatchedFaction;
         class SetPlayerDeclinedNames;
         class SavePersonalEmblem;
+        class NeutralPlayerSelectFaction;
 
         enum class LoginFailureReason : uint8;
     }
@@ -551,7 +554,10 @@ namespace WorldPackets
         class ChromieTimeSelectExpansion;
         class SetSelection;
         class ViolenceLevel;
+        class GetCharacterCurrencyTransferLog;
+        class RequestCurrencyDataForAccountCharacters;
         class TimeSyncResponse;
+        class DiscardedTimeSyncAcks;
         class TutorialSetFlag;
         class SetDungeonDifficulty;
         class SetRaidDifficulty;
@@ -584,6 +590,9 @@ namespace WorldPackets
         class ConversationLineStarted;
         class RequestLatestSplashScreen;
         class QueryCountdownTimer;
+        class DoCountdown;
+        class GetRemainingGameTime;
+        class SetStopConversation;
         class SetCurrencyFlags;
     }
 
@@ -857,6 +866,7 @@ namespace WorldPackets
     namespace Talent
     {
         class LearnTalents;
+        class UnlearnSpecialization;
         class LearnPvpTalents;
         class ConfirmRespecWipe;
     }
@@ -1331,6 +1341,7 @@ class TC_GAME_API WorldSession
 
         static constexpr uint32 SPECIAL_INIT_ACTIVE_MOVER_TIME_SYNC_COUNTER = 0xFFFFFFFF;
         static constexpr uint32 SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER      = 0xFFFFFFFE;
+        static constexpr uint32 SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER     = 0xFFFFFFFD;
 
         // Packets cooldown
         time_t GetCalendarEventCreationCooldown() const { return _calendarEventCreationCooldown; }
@@ -1381,10 +1392,15 @@ class TC_GAME_API WorldSession
         void HandleRandomizeCharNameOpcode(WorldPackets::Character::GenerateRandomCharacterName& packet);
         void HandleReorderCharacters(WorldPackets::Character::ReorderCharacters& reorderChars);
         void HandleOpeningCinematic(WorldPackets::Misc::OpeningCinematic& packet);
+        void HandleDoCountdown(WorldPackets::Misc::DoCountdown& doCountdown);
+        void HandleGetRemainingGameTime(WorldPackets::Misc::GetRemainingGameTime& getRemainingGameTime);
+        void HandleSetStopConversation(WorldPackets::Misc::SetStopConversation& setStopConversation);
+        void HandleUnlearnSpecialization(WorldPackets::Talent::UnlearnSpecialization& unlearnSpecialization);
         void HandleGetUndeleteCooldownStatus(WorldPackets::Character::GetUndeleteCharacterCooldownStatus& /*getCooldown*/);
         void HandleUndeleteCooldownStatusCallback(PreparedQueryResult result);
         void HandleCharUndeleteOpcode(WorldPackets::Character::UndeleteCharacter& undeleteInfo);
         void HandleSavePersonalEmblem(WorldPackets::Character::SavePersonalEmblem const& savePersonalEmblem);
+        void HandleNeutralPlayerSelectFaction(WorldPackets::Character::NeutralPlayerSelectFaction const& packet);
         bool MeetsChrCustomizationReq(ChrCustomizationReqEntry const* req, Races race, Classes playerClass,
             bool checkRequiredDependentChoices, Trinity::IteratorPair<UF::ChrCustomizationChoice const*> selectedChoices) const;
         bool ValidateAppearance(Races race, Classes playerClass, Gender gender,
@@ -1832,6 +1848,7 @@ class TC_GAME_API WorldSession
         void HandleChatMessageWhisperOpcode(WorldPackets::Chat::ChatMessageWhisper& chatMessageWhisper);
         void HandleChatMessageChannelOpcode(WorldPackets::Chat::ChatMessageChannel& chatMessageChannel);
         ChatMessageResult HandleChatMessage(ChatMsg type, Language lang, std::string msg, std::string target = "", Optional<ObjectGuid> targetGuid = {});
+        void SendChatNotInParty(ChatMsg type);
         void HandleChatAddonMessageOpcode(WorldPackets::Chat::ChatAddonMessage& chatAddonMessage);
         void HandleChatAddonMessageTargetedOpcode(WorldPackets::Chat::ChatAddonMessageTargeted& chatAddonMessageTargeted);
         void HandleChatAddonMessage(ChatMsg type, std::string prefix, std::string text, bool isLogged, std::string target = "", Optional<ObjectGuid> targetGuid = {});
@@ -1913,7 +1930,9 @@ class TC_GAME_API WorldSession
         void HandleSetTitleOpcode(WorldPackets::Character::SetTitle& packet);
         void HandleTimeSync(uint32 counter, int64 clientTime, TimePoint responseReceiveTime);
         void HandleTimeSyncResponse(WorldPackets::Misc::TimeSyncResponse const& timeSyncResponse);
+        void HandleDiscardedTimeSyncAcks(WorldPackets::Misc::DiscardedTimeSyncAcks const& discardedTimeSyncAcks);
         void HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd const& queuedMessagesEnd);
+        void HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck const& suspendCommsAck);
         void HandleWhoIsOpcode(WorldPackets::Who::WhoIsRequest& packet);
         void HandleResetInstancesOpcode(WorldPackets::Instance::ResetInstances& packet);
         void HandleInstanceLockResponse(WorldPackets::Instance::InstanceLockResponse& packet);
@@ -2042,6 +2061,8 @@ class TC_GAME_API WorldSession
         void HandleQueryQuestCompletionNPCs(WorldPackets::Query::QueryQuestCompletionNPCs& queryQuestCompletionNPCs);
         void HandleQuestPOIQuery(WorldPackets::Query::QuestPOIQuery& questPoiQuery);
         void HandleViolenceLevel(WorldPackets::Misc::ViolenceLevel& violenceLevel);
+        void HandleGetCharacterCurrencyTransferLog(WorldPackets::Misc::GetCharacterCurrencyTransferLog& packet);
+        void HandleRequestCurrencyDataForAccountCharacters(WorldPackets::Misc::RequestCurrencyDataForAccountCharacters& packet);
         void HandleObjectUpdateFailedOpcode(WorldPackets::Misc::ObjectUpdateFailed& objectUpdateFailed);
         void HandleObjectUpdateRescuedOpcode(WorldPackets::Misc::ObjectUpdateRescued& objectUpdateRescued);
         void HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& closeInteraction);
@@ -2065,6 +2086,7 @@ class TC_GAME_API WorldSession
         // Adventure Journal
         void HandleAdventureJournalOpenQuest(WorldPackets::AdventureJournal::AdventureJournalOpenQuest& openQuest);
         void HandleAdventureJournalUpdateSuggestions(WorldPackets::AdventureJournal::AdventureJournalUpdateSuggestions& updateSuggestions);
+        void HandleEncounterJournalStartArathiRpe(WorldPackets::AdventureJournal::EncounterJournalStartArathiRpe& startArathiRpe);
 
         // Covenant
         void HandleActivateSoulbind(WorldPackets::Covenant::ActivateSoulbind& packet);

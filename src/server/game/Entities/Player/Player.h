@@ -133,6 +133,11 @@ namespace WorldPackets
         enum class UpdateCollisionHeightReason : uint8;
     }
 
+    namespace Party
+    {
+        struct PartyMemberStatsSnapshot;
+    }
+
     namespace Traits
     {
         struct TraitConfig;
@@ -2895,6 +2900,10 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint32 GetGroupUpdateFlag() const { return m_groupUpdateMask; }
         void SetGroupUpdateFlag(uint32 flag) { m_groupUpdateMask |= flag; }
         void RemoveGroupUpdateFlag(uint32 flag) { m_groupUpdateMask &= ~flag; }
+        // state last broadcast to out of range party members, and who already holds it
+        WorldPackets::Party::PartyMemberStatsSnapshot& GetPartyMemberStateSnapshot();
+        GuidSet& GetPartyMemberStateRecipients() { return m_partyMemberStateRecipients; }
+        void ResetPartyMemberState();
         void SetPartyType(GroupCategory category, uint8 type);
         void ResetGroupUpdateSequenceIfNeeded(Group const* group);
         int32 NextGroupUpdateSequenceNumber(GroupCategory category);
@@ -3454,6 +3463,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         GroupReference m_originalGroup;
         Group* m_groupInvite;
         uint32 m_groupUpdateMask;
+        std::unique_ptr<WorldPackets::Party::PartyMemberStatsSnapshot> m_partyMemberState;
+        GuidSet m_partyMemberStateRecipients;
         bool m_bPassOnGroupLoot;
         std::array<GroupUpdateCounter, 2> m_groupUpdateSequences;
 

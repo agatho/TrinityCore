@@ -34,6 +34,7 @@
 #include "SpellDefines.h"
 #include "UniqueTrackablePtr.h"
 #include <list>
+#include <span>
 
 class AreaTrigger;
 class Conversation;
@@ -381,6 +382,9 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         virtual void SendMessageToSet(WorldPacket const* data, Player const* skipped_rcvr) const;
 
         void SendCombatLogMessage(WorldPackets::CombatLog::CombatLogServerPacket* combatLog) const;
+        // Same distribution as SendCombatLogMessage, for callers that have to deliver several combat log
+        // packets describing one event; keeps it at a single grid visit instead of one per packet.
+        void SendCombatLogMessages(std::span<WorldPackets::CombatLog::CombatLogServerPacket* const> combatLogs) const;
 
         virtual uint8 GetLevelForTarget(WorldObject const* /*target*/) const { return 1; }
 

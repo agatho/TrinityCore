@@ -25332,6 +25332,7 @@ void Player::SendInitialVisiblePackets(WorldObject* target) const
     if (Unit* targetUnit = target->ToUnit())
     {
         SendAurasForTarget(targetUnit);
+        targetUnit->SendResumeCastTo(this);
         if (targetUnit->IsAlive())
         {
             if (targetUnit->HasUnitState(UNIT_STATE_MELEE_ATTACKING) && targetUnit->GetVictim())
@@ -25523,7 +25524,24 @@ void Player::SetGroup(Group* group, int8 subgroup)
         m_group.setSubGroup((uint8)subgroup);
     }
 
+    // the incremental party state baseline only means anything to the group it was broadcast in
+    ResetPartyMemberState();
+
     UpdateObjectVisibility(false);
+}
+
+WorldPackets::Party::PartyMemberStatsSnapshot& Player::GetPartyMemberStateSnapshot()
+{
+    if (!m_partyMemberState)
+        m_partyMemberState = std::make_unique<WorldPackets::Party::PartyMemberStatsSnapshot>();
+
+    return *m_partyMemberState;
+}
+
+void Player::ResetPartyMemberState()
+{
+    m_partyMemberState.reset();
+    m_partyMemberStateRecipients.clear();
 }
 
 void Player::SendInitialPacketsBeforeAddToMap()
@@ -25582,6 +25600,8 @@ void Player::SendInitialPacketsBeforeAddToMap()
     m_reputationMgr->SendInitialReputations();
     /// SMSG_SETUP_CURRENCY
     SendCurrencies();
+    /// SMSG_REATTACH_RESURRECT - 12.x login sequence reattaches (or zeroes) pending resurrect state here
+    SendDirectMessage(WorldPackets::Misc::ReattachResurrect().Write());
     /// SMSG_EQUIPMENT_SET_LIST
     SendEquipmentSetList();
 

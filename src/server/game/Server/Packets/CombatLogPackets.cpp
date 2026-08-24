@@ -427,6 +427,79 @@ WorldPacket const* AttackerStateUpdate::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* AttackSwingLandedLog::Write()
+{
+    // Same attack round blob as AttackerStateUpdate, with three deliberate differences that every one of the
+    // 11548 captured 12.0.7 packets agrees on:
+    //  - HITINFO_RAGE_GAIN is never set (0 of 11548, against 4884 of 12827 SMSG_ATTACKER_STATE_UPDATE), so the
+    //    RageGained field is never present and the class does not carry it.
+    //  - the block roll is always 0.0f (0 of 5219 packets that carry the field had a non zero value, against
+    //    5181 of 5181 on SMSG_ATTACKER_STATE_UPDATE), so it is written as a literal instead of a member.
+    //  - HITINFO_MISS / HITINFO_UNK14 / HITINFO_UNK15 / HITINFO_NO_ANIMATION / HITINFO_FAKE_DAMAGE never
+    //    appear; Unit::SendAttackStateUpdate masks the ones TrinityCore can produce before filling Flags.
+    ByteBuffer attackRoundInfo;
+    attackRoundInfo << uint32(Flags);
+    attackRoundInfo << AttackerGUID;
+    attackRoundInfo << VictimGUID;
+    attackRoundInfo << int32(Damage);
+    attackRoundInfo << int32(OriginalDamage);
+    attackRoundInfo << int32(OverDamage);
+    attackRoundInfo << uint8(SubDmg.has_value());
+    if (SubDmg)
+    {
+        attackRoundInfo << int32(SubDmg->SchoolMask);
+        attackRoundInfo << float(SubDmg->FDamage);
+        attackRoundInfo << int32(SubDmg->Damage);
+        if (Flags & (HITINFO_FULL_ABSORB | HITINFO_PARTIAL_ABSORB))
+            attackRoundInfo << int32(SubDmg->Absorbed);
+        if (Flags & (HITINFO_FULL_RESIST | HITINFO_PARTIAL_RESIST))
+            attackRoundInfo << int32(SubDmg->Resisted);
+    }
+
+    attackRoundInfo << uint8(VictimState);
+    attackRoundInfo << uint32(AttackerState);
+    attackRoundInfo << uint32(MeleeSpellID);
+    if (Flags & HITINFO_BLOCK)
+        attackRoundInfo << int32(BlockAmount);
+
+    if (Flags & HITINFO_UNK1)
+    {
+        attackRoundInfo << uint32(HitInfo.ArmorReduction);
+        attackRoundInfo << float(HitInfo.CritRollNeeded);
+        attackRoundInfo << float(HitInfo.CombatRoll);
+        attackRoundInfo << float(HitInfo.MissChance);
+        attackRoundInfo << float(HitInfo.DodgeChance);
+        attackRoundInfo << float(HitInfo.ParryChance);
+        attackRoundInfo << float(HitInfo.BlockChance);
+        attackRoundInfo << float(HitInfo.GlanceChance);
+        attackRoundInfo << float(HitInfo.CrushChance);
+        attackRoundInfo << float(HitInfo.MinDamage);
+        attackRoundInfo << float(HitInfo.MaxDamage);
+        attackRoundInfo << uint32(HitInfo.SinceLastSwing);
+    }
+
+    if (Flags & (HITINFO_BLOCK | HITINFO_UNK12))
+        attackRoundInfo << float(0.0f); // block roll, always zero on this opcode
+
+    attackRoundInfo << ContentTuning;
+
+    // Supporters and their count precede the log data bit, matching the client reader at 0x7FF7290FB9C0:
+    // uint32 count, count * JamSpellSupportInfo, one bit for the log data, the log data, then the sized blob.
+    *this << Size<uint32>(Supporters);
+    for (Spells::SpellSupportInfo const& supportInfo : Supporters)
+        *this << supportInfo;
+
+    WriteLogDataBit();
+    FlushBits();
+    WriteLogData();
+
+    *this << Size<uint32>(attackRoundInfo);
+    _worldPacket.append(attackRoundInfo);
+    _fullLogPacket.append(attackRoundInfo);
+
+    return &_worldPacket;
+}
+
 ByteBuffer& operator<<(ByteBuffer& buffer, SpellDispellData const& dispellData)
 {
     buffer << int32(dispellData.SpellID);

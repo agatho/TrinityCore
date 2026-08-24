@@ -987,7 +987,14 @@ void WorldSession::HandleSetDungeonDifficultyOpcode(WorldPackets::Misc::SetDunge
             return;
 
         if (group->isLFGGroup())
+        {
+            // Refusing without a word leaves the difficulty button looking broken. The client has
+            // one error for exactly this condition - ERR_DIFFICULTY_DISABLED_IN_LFG, result 11 in
+            // its own game-error table - so say so instead of returning silently.
+            SendPacket(WorldPackets::Misc::ChangePlayerDifficultyResult(
+                WorldPackets::Misc::ChangePlayerDifficultyResultCode::DisabledInLFG).Write());
             return;
+        }
 
         // the difficulty is set even if the instances can't be reset
         group->ResetInstances(InstanceResetMethod::OnChangeDifficulty, _player);
@@ -1056,7 +1063,12 @@ void WorldSession::HandleSetRaidDifficultyOpcode(WorldPackets::Misc::SetRaidDiff
             return;
 
         if (group->isLFGGroup())
+        {
+            // Same refusal as the dungeon path, same client-side error.
+            SendPacket(WorldPackets::Misc::ChangePlayerDifficultyResult(
+                WorldPackets::Misc::ChangePlayerDifficultyResultCode::DisabledInLFG).Write());
             return;
+        }
 
         // the difficulty is set even if the instances can't be reset
         group->ResetInstances(InstanceResetMethod::OnChangeDifficulty, _player);
@@ -1121,6 +1133,25 @@ void WorldSession::HandleInstanceLockResponse(WorldPackets::Instance::InstanceLo
 void WorldSession::HandleViolenceLevel(WorldPackets::Misc::ViolenceLevel& /*violenceLevel*/)
 {
     // do something?
+}
+
+// CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG (empty): the client opened the account/warband currency transfer-history
+// panel. Answer with SMSG_CURRENCY_TRANSFER_LOG. TrinityCore does not implement account currency transfer, so there
+// is no history to report and the reply is an empty log — the truthful "no transfers" answer that clears the panel's
+// loading state (without a reply the client leaves it blank/spinning).
+void WorldSession::HandleGetCharacterCurrencyTransferLog(WorldPackets::Misc::GetCharacterCurrencyTransferLog& /*packet*/)
+{
+    WorldPackets::Misc::CurrencyTransferLog response;
+    SendPacket(response.Write());
+}
+
+// CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS (empty): the client wants every account character's currency
+// totals for the warband currency view. Core does not aggregate other characters' currencies for this panel, so the
+// reply is an empty list -- the truthful "no account-character currency data", clearing the panel's loading state.
+void WorldSession::HandleRequestCurrencyDataForAccountCharacters(WorldPackets::Misc::RequestCurrencyDataForAccountCharacters& /*packet*/)
+{
+    WorldPackets::Misc::AccountCharacterCurrencyLists response;
+    SendPacket(response.Write());
 }
 
 void WorldSession::HandleObjectUpdateFailedOpcode(WorldPackets::Misc::ObjectUpdateFailed& objectUpdateFailed)
@@ -1262,6 +1293,53 @@ void WorldSession::HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownT
     startTimer.TotalTime = info->GetTotalTime();
 
     _player->SendDirectMessage(startTimer.Write());
+}
+
+void WorldSession::HandleDoCountdown(WorldPackets::Misc::DoCountdown& doCountdown)
+{
+    // The native raid/party pull countdown: the leader starts it, the server runs it and pushes the
+    // ticking timer to every group member (SMSG_START_TIMER), mirroring HandleQueryCountdownTimer's reply.
+    Group* group = _player->GetGroup();
+    if (!group)
+        return;
+
+    if (!group->IsLeader(_player->GetGUID()))
+        return;
+
+    Seconds duration(doCountdown.TotalTime);
+    if (duration <= Seconds::zero() || duration > Seconds(600))
+        return;
+
+    // A player-initiated countdown is always the PlayerCountdown slot; Pvp/ChallengeMode are server-driven.
+    group->StartCountdown(CountdownTimerType::PlayerCountdown, duration);
+
+    WorldPackets::Misc::StartTimer startTimer;
+    startTimer.Type = CountdownTimerType::PlayerCountdown;
+    startTimer.TotalTime = duration;
+    startTimer.TimeLeft = duration;
+    group->BroadcastPacket(startTimer.Write(), false);
+}
+
+void WorldSession::HandleGetRemainingGameTime(WorldPackets::Misc::GetRemainingGameTime& /*getRemainingGameTime*/)
+{
+    // Trinity accounts are not subscription-time-billed; report unlimited so the client clears the
+    // remaining-game-time UI instead of nagging.
+    WorldPackets::Misc::GetRemainingGameTimeResponse response;
+    response.SecondsRemaining = 0;
+    response.GameTimeParam = 0;
+    response.Unlimited = true;
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleSetStopConversation(WorldPackets::Misc::SetStopConversation& setStopConversation)
+{
+    Conversation* conversation = ObjectAccessor::GetConversation(*_player, setStopConversation.ConversationGUID);
+    if (!conversation)
+        return;
+
+    // Conversations are private objects owned by the player they play for; only that owner may stop one.
+    if (conversation->GetPrivateObjectOwner() == _player->GetGUID())
+        conversation->Remove();
 }
 
 void WorldSession::HandleSetCurrencyFlags(WorldPackets::Misc::SetCurrencyFlags const& setCurrenctFlags)

@@ -91,6 +91,7 @@
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#include <array>
 #include <queue>
 #include <sstream>
 #include <cmath>
@@ -2574,6 +2575,71 @@ void Unit::SendMeleeAttackStart(Unit* victim)
     packet.Attacker = GetGUID();
     packet.Victim = victim->GetGUID();
     SendMessageToSet(packet.Write(), true);
+}
+
+void Unit::SendResumeCastTo(Player const* receiver) const
+{
+    // A client that has just been told about this unit never saw its SMSG_SPELL_START, so an
+    // in-progress cast would be invisible until it completes. Retail closes that hole with these
+    // two packets, sent in the same batch as the aura update for the newly visible unit.
+    Spell const* channeled = GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+    Spell const* generic = GetCurrentSpell(CURRENT_GENERIC_SPELL);
+
+    Spell const* spell = nullptr;
+    if (channeled && channeled->getState() == SPELL_STATE_CHANNELING)
+        spell = channeled;
+    else if (generic && generic->getState() == SPELL_STATE_PREPARING)
+        spell = generic;
+
+    if (!spell)
+        return;
+
+    if (!spell->IsNeedSendToClient())
+        return;
+
+    // An empowered cast sets the trailing bit of SMSG_RESUME_CAST_BAR and appends two int32 that a
+    // single capture cannot identify. Rather than guess them, leave empowered casts to resolve
+    // themselves when the cast finishes, exactly as they do today.
+    if (spell->IsEmpowerSpell())
+        return;
+
+    bool const isChannel = spell == channeled;
+
+    // Spell::m_channelDuration is only assigned for a channel with a real duration; an endless one
+    // leaves it at zero. The captures transmit -1 in both fields for that case.
+    int32 total = isChannel ? spell->GetChannelDuration() : spell->GetCastTime();
+    int32 elapsed;
+    if (total <= 0)
+    {
+        total = -1;
+        elapsed = -1;
+    }
+    else
+        elapsed = std::min(std::max(total - spell->GetTimer(), 0), total);
+
+    WorldPackets::Spells::ResumeCastBar resumeCastBar;
+    resumeCastBar.CasterUnit = GetGUID();
+    resumeCastBar.Target = spell->m_targets.GetUnitTargetGUID();
+    resumeCastBar.SpellID = spell->GetSpellInfo()->Id;
+    resumeCastBar.Visual = spell->m_SpellVisual;
+    resumeCastBar.TimeElapsed = elapsed;
+    resumeCastBar.TotalTime = total;
+
+    // SMSG_RESUME_CAST restarts the spell visual and is only sent for a cast, never for a channel:
+    // in the captures every one of the 305 occurrences pairs with a cast bar, while the 119 cast
+    // bars that come alone all carry channelled spells.
+    if (!isChannel)
+    {
+        WorldPackets::Spells::ResumeCast resumeCast;
+        resumeCast.CasterUnit = GetGUID();
+        resumeCast.Visual = spell->m_SpellVisual;
+        resumeCast.CastID = spell->m_castId;
+        resumeCast.Target = spell->m_targets.GetUnitTargetGUID();
+        resumeCast.SpellID = spell->GetSpellInfo()->Id;
+        receiver->SendDirectMessage(resumeCast.Write());
+    }
+
+    receiver->SendDirectMessage(resumeCastBar.Write());
 }
 
 void Unit::SendMeleeAttackStop(Unit const* victim) const
@@ -5750,7 +5816,37 @@ void Unit::SendAttackStateUpdate(CalcDamageInfo* damageInfo)
     if (contentTuningParams.GenerateDataForUnits(damageInfo->Attacker, damageInfo->Target))
         packet.ContentTuning = contentTuningParams;
 
-    SendCombatLogMessage(&packet);
+    // A swing that did not connect only produces SWING_MISSED on the client, and retail never sends the landed
+    // log for one: of 11548 captured 12.0.7 SMSG_ATTACK_SWING_LANDED_LOG none had HITINFO_MISS and all had
+    // VictimState == VICTIMSTATE_HIT, matching the 11544 SMSG_ATTACKER_STATE_UPDATE that reported a clean hit.
+    if (damageInfo->TargetState != VICTIMSTATE_HIT || (damageInfo->HitInfo & HITINFO_MISS))
+    {
+        SendCombatLogMessage(&packet);
+        return;
+    }
+
+    WorldPackets::CombatLog::AttackSwingLandedLog landedLog;
+    // HITINFO_NO_ANIMATION, HITINFO_RAGE_GAIN and HITINFO_FAKE_DAMAGE describe the attacker's swing, not the
+    // hit that landed, and never appear on this opcode in the captures (0 of 11548 each, while the paired
+    // SMSG_ATTACKER_STATE_UPDATE carried them 72, 4884 and 1024 times). Their packets are still sent, so the
+    // flags are masked rather than used as a send condition.
+    landedLog.Flags = damageInfo->HitInfo & ~(HITINFO_NO_ANIMATION | HITINFO_RAGE_GAIN | HITINFO_FAKE_DAMAGE);
+    landedLog.AttackerGUID = packet.AttackerGUID;
+    landedLog.VictimGUID = packet.VictimGUID;
+    landedLog.Damage = packet.Damage;
+    landedLog.OriginalDamage = packet.OriginalDamage;
+    landedLog.OverDamage = packet.OverDamage;
+    landedLog.SubDmg = packet.SubDmg;
+    landedLog.VictimState = packet.VictimState;
+    landedLog.BlockAmount = packet.BlockAmount;
+    landedLog.ContentTuning = packet.ContentTuning;
+
+    // The whole point of the opcode: the advanced combat logging block describes the unit that was hit. The
+    // client attaches it to the victim and uses the health it carries to correct the victim's health bar.
+    landedLog.LogData.Initialize(damageInfo->Target);
+
+    std::array<WorldPackets::CombatLog::CombatLogServerPacket*, 2> combatLogs = { &packet, &landedLog };
+    SendCombatLogMessages(combatLogs);
 }
 
 void Unit::SendAttackStateUpdate(uint32 HitInfo, Unit* target, uint8 /*SwingType*/, SpellSchoolMask damageSchoolMask, uint32 Damage, uint32 AbsorbDamage, uint32 Resist, VictimState TargetState, uint32 BlockedAmount, uint32 RageGained)
