@@ -969,7 +969,8 @@ enum Difficulty : int16
     DIFFICULTY_HEROIC_WARFRONT      = 149,
     DIFFICULTY_LFR_15TH_ANNIVERSARY = 151,
     DIFFICULTY_VISIONS_OF_NZOTH     = 152,
-    DIFFICULTY_TEEMING_ISLAND       = 153
+    DIFFICULTY_TEEMING_ISLAND       = 153,
+    DIFFICULTY_MYTHIC_RAID_FLEX     = 233  // [DB2 Difficulty @68887] "Mythic - Flexible Raiding", MinPlayers 15 / MaxPlayers 25 (Midnight S1 flex-Mythic; vs fixed-20 DIFFICULTY_MYTHIC_RAID 16)
 };
 
 enum DifficultyFlags
