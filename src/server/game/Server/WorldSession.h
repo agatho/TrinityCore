@@ -812,6 +812,20 @@ namespace WorldPackets
     namespace MajorFactions
     {
         class RequestCatchupState;
+    namespace Social
+    {
+        class AddFriend;
+        class AddIgnore;
+        class DelFriend;
+        class DelIgnore;
+        class MakeConditionalAppearancePermanent;
+        class RecentAllyRequestData;
+        class RecentAllySetNote;
+        class SendContactList;
+        class SetAllowRecentAlliesSeeLocation;
+        class SetContactNotes;
+        class SocialContractRequest;
+        class AcceptSocialContract;
     }
     namespace Movement
     {
@@ -1872,6 +1886,11 @@ class TC_GAME_API WorldSession
         void HandleRequestLFGListBlacklist(WorldPackets::LFGList::RequestLFGListBlacklist& packet);
         void SendLFGListUpdateStatus(uint32 listingId, uint8 status = 0x38);
         void HandleRequestScheduledPvpInfo(WorldPackets::Battleground::RequestScheduledPvpInfo& packet);
+        // Social
+        void HandleSetAllowRecentAlliesSeeLocation(WorldPackets::Social::SetAllowRecentAlliesSeeLocation& packet);
+        void HandleRecentAllyRequestData(WorldPackets::Social::RecentAllyRequestData& packet);
+        void HandleRecentAllySetNote(WorldPackets::Social::RecentAllySetNote& packet);
+        void HandleAcceptSocialContract(WorldPackets::Social::AcceptSocialContract& acceptSocialContract);
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);
