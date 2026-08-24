@@ -27,6 +27,9 @@
 #include "Util.h"
 #include "World.h"
 #include "WorldStatePackets.h"
+#include "AreaPoiMgr.h"
+#include "GameEventMgr.h"
+#include "Player.h"
 
 namespace
 {
@@ -314,4 +317,38 @@ void WorldStateMgr::FillInitialWorldStates(WorldPackets::WorldState::InitWorldSt
 
         initWorldStates.Worldstates.emplace_back(worldStateId, value);
     }
+}
+
+void WorldStateMgr::FillActiveScheduledWorldStates(WorldPackets::WorldState::ActiveScheduledWorldStateInfo& packet)
+{
+    // The two schedulers the realm runs: area POIs rotate their gating world state on the POI's duration, and
+    // repeating game events flip theirs on the event's recurrence. Both are one thing to the client: a world
+    // state with a cycle.
+    sAreaPoiMgr->FillScheduledWorldStates(packet.Schedules);
+    sGameEventMgr->FillScheduledWorldStates(packet.Schedules);
+
+    // The client keys these by VariableID into a map, so a duplicate would silently resolve to whichever entry
+    // was written last. Resolve it here. The stable sort makes a world state claimed by both schedulers resolve
+    // to the area POI (the more specific), and makes a no-op re-send produce identical bytes.
+    std::ranges::stable_sort(packet.Schedules, {}, &WorldPackets::WorldState::ScheduledWorldStateInfo::VariableID);
+
+    auto duplicates = std::ranges::unique(packet.Schedules, {}, &WorldPackets::WorldState::ScheduledWorldStateInfo::VariableID);
+    packet.Schedules.erase(duplicates.begin(), duplicates.end());
+}
+
+void WorldStateMgr::SendActiveScheduledWorldStateInfo(Player const* player /*= nullptr*/)
+{
+    WorldPackets::WorldState::ActiveScheduledWorldStateInfo packet;
+    FillActiveScheduledWorldStates(packet);
+
+    // An empty schedule set is legitimate for a realm that rotates nothing, and the client handler clears its
+    // map from the payload, so sending it is meaningful - but only to a player who asked. Broadcasting emptiness
+    // to the whole realm on every event flip is pure noise.
+    if (packet.Schedules.empty() && !player)
+        return;
+
+    if (player)
+        player->SendDirectMessage(packet.Write());
+    else
+        sWorld->SendGlobalMessage(packet.Write());
 }

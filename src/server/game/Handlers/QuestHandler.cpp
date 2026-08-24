@@ -39,6 +39,7 @@
 #include "PoolMgr.h"
 #include "QuestDef.h"
 #include "QuestMgr.h"
+#include "AreaPoiMgr.h"
 #include "QuestPackets.h"
 #include "QuestPools.h"
 #include "ReputationMgr.h"
@@ -828,6 +829,22 @@ void WorldSession::HandleRequestWorldQuestUpdate(WorldPackets::Quest::RequestWor
     SendPacket(response.Write());
 }
 
+void WorldSession::HandleRequestAreaPoiUpdate(WorldPackets::Quest::RequestAreaPoiUpdate& /*packet*/)
+{
+    WorldPackets::Quest::AreaPoiUpdateResponse response;
+    sAreaPoiMgr->FillActiveAreaPois(response.AreaPois);
+    SendPacket(response.Write());
+}
+
+// The client sends this variant on its own timer to refresh timed/scheduled area POIs (e.g. world-boss and
+// event countdowns). The response is identical to the on-demand request, so it mirrors the handler above.
+void WorldSession::HandleRequestScheduledAreaPoiUpdate(WorldPackets::Quest::RequestScheduledAreaPoiUpdate& /*packet*/)
+{
+    WorldPackets::Quest::AreaPoiUpdateResponse response;
+    sAreaPoiMgr->FillActiveAreaPois(response.AreaPois);
+    SendPacket(response.Write());
+}
+
 void WorldSession::HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceResponse const& choiceResponse)
 {
     PlayerChoiceData const* playerChoiceData = _player->PlayerTalkClass->GetInteractionData().GetPlayerChoice();
@@ -1028,9 +1045,6 @@ void WorldSession::HandleQueryQuestItemUsability(WorldPackets::Quest::QueryQuest
     SendPacket(response.Write());
 }
 
-void WorldSession::HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& /*closeQuestChoice*/)
-{
-    // Client notification that player closed quest choice UI - no server action needed
 void WorldSession::HandleQuestSessionRequestStart(WorldPackets::Quest::QuestSessionRequestStart& /*packet*/)
 {
     Group* group = _player->GetGroup();

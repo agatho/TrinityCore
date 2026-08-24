@@ -25,40 +25,6 @@
 
 #pragma pack(push, 1)
 
-struct AccountStoreCategoryEntry
-{
-    LocalizedString Name;
-    uint32 ID;
-    int32 StoreFrontID;
-    int32 OrderIndex;
-    int32 Icon;
-    uint8 Field_11_0_7_57361_005;
-};
-
-struct AccountStoreItemEntry
-{
-    LocalizedString Name;
-    LocalizedString Description;
-    uint32 ID;
-    int32 StoreFrontID;
-    int32 AccountStoreCategoryID;
-    int32 OrderIndex;
-    int32 Price;
-    int32 CurrencyTypesID;
-    int32 Field_11_0_7_57361_008;
-    int32 RefundDuration;
-    int32 Field_11_0_7_57361_010;
-    int32 Field_11_0_7_57361_011;
-    int32 SpellID;
-    int32 TransmogSetID;
-    int32 CreatureDisplayInfoID;
-    int32 UiModelSceneID;
-    int32 Icon;
-    int32 Field_12_0_0_63534_017;
-    int32 Field_12_0_0_63534_018;
-    int32 Field_12_0_0_63534_019;
-};
-
 struct AchievementEntry
 {
     LocalizedString Description;
@@ -80,877 +46,6 @@ struct AchievementEntry
     int32 CovenantID;
     int32 HiddenBeforeDisplaySeason;                                // hidden in UI before this DisplaySeason is active
     int32 LegacyAfterTimeEvent;                                     // category changes clientside to Legacy after this TimeEvent is passed
-};
-
-struct UIChromieTimeExpansionInfoEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
-    LocalizedString AllianceOverrideDesc;
-    LocalizedString HordeOverrideDesc;
-    int32 SpellID;
-    int32 MapAtlasElement;
-    int32 PreviewAtlasElement;
-    int32 ShowPlayerConditionID;
-    int32 ExpansionMask;
-    int32 ContentTuningID;
-    int32 CompletedPlayerConditionID;
-    int32 SortPriority;
-    int32 RecommendPlayerConditionID;
-};
-
-struct ManagedWorldStateEntry
-{
-    uint32 ID;
-    int32 CurrentStageWorldStateID;
-    int32 ProgressWorldStateID;
-    uint32 UpTimeSecs;
-    uint32 DownTimeSecs;
-    int32 AccumulationStateTargetValue;
-    int32 DepletionStateTargetValue;
-    int32 AccumulationAmountPerMinute;
-    int32 DepletionAmountPerMinute;
-    int8 Field_8_1_5_29418_009;
-    std::array<int32, 4> OccurrencesWorldStateID;
-};
-
-struct ManagedWorldStateInputEntry
-{
-    uint32 ID;
-    int32 ManagedWorldStateID;
-    int32 QuestID;
-    int32 ValidInputConditionID;
-};
-
-struct ManagedWorldStateBuffEntry
-{
-    uint32 ID;
-    int32 BuffSpellID;
-    uint32 PlayerConditionID;
-    uint32 OccurrenceValue;
-    int32 ManagedWorldStateID;
-};
-
-struct CreatureXContributionEntry
-{
-    uint32 ID;
-    int32 ContributionID;
-    int32 CreatureID;
-};
-
-struct ContributionEntry
-{
-    uint32 ID;
-    LocalizedString Description;
-    LocalizedString Name;
-    int32 ManagedWorldStateInputID;
-    int32 OrderIndex;
-    int32 ContributionStyleContainer;
-    std::array<int32, 4> UiTextureAtlasMemberID;
-};
-
-struct DelvesSeasonXSpellEntry
-{
-    uint32 ID;
-    int32 SpellID;
-    uint32 DelvesSeasonID;
-};
-
-struct PlayerCompanionInfoEntry
-{
-    LocalizedString UnlockDescription;
-    uint32 ID;
-    int32 DelvesSeasonID;
-    int32 TraitTreeID;
-    int32 TraitNodeID_DPS;
-    int32 TraitNodeID_Heal;
-    int32 TraitSubTreeID_DPS;
-    int32 TraitSubTreeID_Heal;
-    int32 TraitSubTreeID_Tank;
-    int32 FactionID;
-    int32 CreatureDisplayInfoID;
-    int32 UiModelSceneID;
-    int32 Field_12_0_0_64499_011;
-    int32 Field_12_0_0_64499_012;
-    int32 ParentID;                                                                   // Field_12_0_1_64889_014, parent relation
-};
-
-struct DelvesSeasonEntry
-{
-    uint32 ID;
-    int32 FactionID;                                                                  // Faction.ID FK
-};
-
-struct SoulbindConduitEntry
-{
-    uint32 ID;
-    uint8 ConduitType;
-    int32 CovenantID;
-    int32 SpecSetID;
-    int32 Flags;
-};
-
-struct TrophyEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    uint8 TrophyTypeID;
-    int32 GameObjectDisplayInfoID;
-    uint32 PlayerConditionID;
-};
-
-struct SoulbindEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    int32 CovenantID;
-    int32 GarrTalentTreeID;
-    int32 CreatureID;
-    int32 GarrFollowerID;
-    int32 PlayerConditionID;
-};
-
-struct CharShipmentEntry
-{
-    // Field order matches the 12.0.7 client db2 layout 0x91BEA68A (byte-decoded from the client
-    // CharShipment.db2). The tail is physically Flags, GarrFollowerID, MaxShipments - NOT
-    // MaxShipments/.../Flags. The previous order read the Flags bitmask (512/513) into MaxShipments and
-    // MaxShipments (0) into Flags, so the server saw Flags=0 for every shipment and could not tell the
-    // quest/tutorial row (Flags 0x1 set, Duration 0) from the regular row (Duration 14400).
-    uint32 ID;
-    uint16 ContainerID;
-    uint32 DummyItemID;
-    uint32 TreasureID;
-    int32 SpellID;
-    uint32 OnCompleteSpellID;
-    int32 Duration;
-    int32 Flags;
-    uint16 GarrFollowerID;
-    uint8 MaxShipments;
-};
-
-struct CharShipmentContainerEntry
-{
-    uint32 ID;
-    LocalizedString Description;
-    LocalizedString PendingText;
-    uint16 UiTextureKitID;
-    int8 GarrTypeID;
-    uint8 GarrBuildingType;
-    uint8 BaseCapacity;
-    uint16 SmallDisplayInfoID;
-    uint16 MediumDisplayInfoID;
-    uint16 LargeDisplayInfoID;
-    int32 WorkingSpellVisualID;
-    uint32 CompleteSpellVisualID;
-    uint32 WorkingDisplayInfoID;
-    uint8 MediumThreshold;
-    uint8 LargeThreshold;
-    int8 Faction;
-    uint16 CrossFactionID;
-};
-
-struct GarrItemLevelUpgradeDataEntry
-{
-    uint32 ID;
-    int32 Operation;
-    int32 MinItemLevel;
-    int32 MaxItemLevel;
-    int8 FollowerTypeID;
-};
-
-struct GarrTypeEntry
-{
-    int8 ID;
-    uint32 PrimaryCurrencyTypeID;
-    uint32 SecondaryCurrencyTypeID;
-    uint32 ExpansionID;
-    int32 Flags;
-    float AutoFollowerHealRate;
-    int32 MissionCostCurveID;
-    float AutoFollowerHealCostMult;
-    std::array<int32, 2> MapIDs;
-};
-
-struct GarrTalentEntry
-{
-    LocalizedString Name;
-    LocalizedString Description;
-    uint32 ID;
-    uint32 GarrTalentTreeID;
-    int8 Tier;
-    int8 UiOrder;
-    int32 IconFileDataID;
-    uint32 PlayerConditionID;
-    uint32 GarrAbilityID;
-    int32 Flags;
-    int32 TalentType;
-    int32 PrerequisiteTalentID;
-    int32 ResearchCostSource;
-    int32 ActiveDurationSecs;
-    int32 GarrTalentSocketPropertiesID;
-};
-
-struct GarrTalentResearchEntry
-{
-    uint32 ID;
-    int32 GoldCost;
-    int32 CurrencyTypesID;
-    int32 CurrencyTypesCost;
-    int32 DurationSecs;
-    int32 RespecGoldCost;
-    int32 RespecCurrencyTypesID;
-    int32 RespecCurrencyTypesCost;
-    int32 RespecDurationSecs;
-};
-
-struct GarrTalentRankEntry
-{
-    uint32 ID;
-    int32 Rank;
-    int32 PerkSpellID;
-    int32 PerkPlayerConditionID;
-    float Points;
-    int32 ResearchCost;
-    int32 ResearchCostCurrencyTypesID;
-    int32 ResearchGoldCost;
-    int32 ResearchDurationSecs;
-    int32 RespecCost;
-    int32 RespecCostCurrencyTypesID;
-    int32 RespecGoldCost;
-    int32 RespecDurationSecs;
-    int32 AlternateResearchCost;
-    int32 AlternateResearchCostCurrencyTypesID;
-    int32 AlternateResearchGoldCost;
-    int32 AlternateResearchDurationSecs;
-    uint32 GarrTalentID;
-};
-
-struct GarrTalTreeXGarrTalResearchEntry
-{
-    uint32 ID;
-    int32 GarrTalentTreeID;
-    int32 GarrTalentResearchID;
-    int32 OrderIndex;
-};
-
-struct GarrSpecializationEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
-    uint8 GarrTypeID;
-    int32 IconFileDataID;
-    uint8 GarrFollowerTypeID;
-    int32 Param;
-    std::array<float, 2> Bonus;
-};
-
-struct GarrMissionXFollowerEntry
-{
-    uint32 ID;
-    int32 GarrFollowerID;
-    int32 GarrFollowerTypeID;
-    int8 BoardIndex;
-    int32 GarrMissionID;
-};
-
-struct GarrMissionXEncounterEntry
-{
-    uint32 ID;
-    uint32 GarrEncounterID;
-    uint32 GarrEncounterSetID;
-    uint8 OrderIndex;
-    int8 BoardIndex;
-    int32 GarrMissionID;
-};
-
-struct GarrMechanicTypeEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
-    int32 GarrAbilityCategoryID;
-    uint8 Category;
-};
-
-struct GarrMechanicEntry
-{
-    uint32 ID;
-    int32 GarrMechanicTypeID;
-    float Factor;
-    int32 GarrAbilityID;
-};
-
-struct GarrFollowerTypeEntry
-{
-    uint32 ID;
-    int8 GarrTypeID;
-    uint8 MaxFollowers;
-    uint8 MaxFollowerBuildingType;
-    uint16 MaxItemLevel;
-    uint8 LevelRangeBias;
-    uint8 ItemLevelRangeBias;
-    int32 Flags;
-};
-
-struct GarrFollowerQualityEntry
-{
-    uint32 ID;
-    int32 XpThreshold;
-    uint32 QualityItemID;
-    int8 Quality;
-    uint8 AbilityCount;
-    uint8 TraitCount;
-    uint16 GarrFollowerTypeID;
-    uint32 ClassSpecID;
-};
-
-struct GarrFollowerLevelXPEntry
-{
-    uint32 ID;
-    // 68275 db2 layout (WoWDBDefs LAYOUT 83953EF8): GarrFollowerTypeID comes BEFORE FollowerLevel.
-    // These were previously declared in the reverse order, so every row loaded with the two bytes
-    // swapped (FollowerLevel held the type value, GarrFollowerTypeID held the level) — GetFollowerLevelXP
-    // then missed for every real (type, level) pair and follower mission XP was silently discarded.
-    int8 GarrFollowerTypeID;
-    uint8 FollowerLevel;
-    uint16 XpToNextLevel;
-    uint16 ShipmentXP;
-};
-
-struct GarrFollSupportSpellEntry
-{
-    uint32 ID;
-    int32 HordeSpellID;
-    int32 AllianceSpellID;
-    uint8 OrderIndex;
-    int32 GarrFollowerID;
-};
-
-struct GarrEncounterXMechanicEntry
-{
-    uint32 ID;
-    int32 GarrMechanicID;
-    uint8 GarrMechanicSetID;
-    int32 GarrEncounterID;
-};
-
-struct GarrEncounterEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    int32 CreatureID;
-    int32 PortraitFileDataID;
-    uint32 UiTextureKitID;
-    float UiAnimScale;
-    float UiAnimHeight;
-    int32 Flags;
-    int32 AutoCombatantID;
-};
-
-struct GarrEncounterSetXEncounterEntry
-{
-    uint32 ID;
-    uint32 GarrEncounterID;
-    int32 GarrEncounterSetID;
-};
-
-struct GarrAutoSpellEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
-    int32 Cooldown;
-    int32 Duration;
-    int32 Flags;
-    int32 SchoolMask;
-    int32 IconFileDataID;
-};
-
-struct GarrAutoSpellEffectEntry
-{
-    uint32 ID;
-    int32 GarrAutoSpellID;
-    uint8 EffectIndex;
-    uint8 Effect;
-    float Points;
-    uint8 TargetType;
-    int32 Flags;
-    int32 Period;
-};
-
-struct GarrAutoCombatantEntry
-{
-    uint32 ID;
-    int32 HealthBase;
-    int32 HealthGainPerLevel;
-    int32 AttackBase;
-    int32 AttackGainPerLevel;
-    int32 AttackSpellID;
-    int32 AbilitySpellID;
-    int32 AbilitySpellID2;
-    int32 PassiveSpellID;
-    int32 Role;
-};
-
-struct GarrAbilityEffectEntry
-{
-    uint32 ID;
-    uint16 GarrAbilityID;
-    uint8 EffectType;
-    uint8 TargetMask;
-    int32 Amount;
-    float CombatWeightBase;
-    float CombatWeightMax;
-    float ActionValueFlat;
-    uint8 AbilityAction;
-    uint8 MiscValueA;
-    int32 ActionHours;
-    int32 ActionRecordID;
-};
-
-struct RoomWmoDataEntry
-{
-    uint32 ID;
-    float BoundingBoxMinX;
-    float BoundingBoxMinY;
-    float BoundingBoxMinZ;
-    float BoundingBoxMaxX;
-    float BoundingBoxMaxY;
-    float BoundingBoxMaxZ;
-    float Height;
-};
-
-struct RoomComponentTextureEntry
-{
-    LocalizedString Name;
-    uint32 ID;
-    int32 Type;
-    int32 FileDataID;
-    int32 Flags;
-    int32 UiOrder;
-    uint32 RoomComponentID;                 // ParentIndexField
-};
-
-struct RoomComponentEntry
-{
-    DBCPosition3D OffsetPos;                 // Meta field 0: FT_FLOAT[3]
-    DBCPosition3D OffsetRot;                 // Meta field 1: FT_FLOAT[3]
-    uint32 ID;                               // Meta field 2: IndexField
-    int32 RoomWmoDataID;
-    int32 ModelFileDataID;
-    uint8 Type;
-    int32 MeshStyleFilterID;
-    uint8 ConnectionType;
-    int32 Flags;
-};
-
-struct RoomComponentOptionTextureEntry
-{
-    uint32 ID;
-    int32 RoomComponentOptionID;
-    int32 RoomComponentTextureID;
-    int32 Flags;
-};
-
-struct RoomComponentOptionEntry
-{
-    uint32 ID;
-    uint8 Type;
-    uint8 SubType;
-    int32 ModelFileDataID;
-    int32 RoomComponentID;
-    int32 MeshStyleFilterID;
-    int32 HouseThemeID;
-    int32 Flags;
-};
-
-struct NeighborhoodPlotEntry
-{
-    uint64 Cost;                             // Meta field 0: FT_LONG
-    char const* Name;                        // Meta field 1: FT_STRING_NOT_LOCALIZED
-    DBCPosition3D HousePosition;             // Meta field 2: FT_FLOAT[3]
-    DBCPosition3D HouseRotation;             // Meta field 3: FT_FLOAT[3]
-    DBCPosition3D CornerstonePosition;       // Meta field 4: FT_FLOAT[3]
-    DBCPosition3D CornerstoneRotation;       // Meta field 5: FT_FLOAT[3]
-    DBCPosition3D TeleportPosition;          // Meta field 6: FT_FLOAT[3]
-    uint32 ID;                               // Meta field 7: IndexField
-    uint32 NeighborhoodMapID;
-    int32 Field_010;
-    int32 CornerstoneGameObjectID;
-    int32 PlotIndex;
-    int32 WorldState;
-    int32 PlotGameObjectID;
-    float TeleportFacing;                    // Facing angle at TeleportPosition (mirrors NeighborhoodMap.EntryRotation pattern)
-    int32 Field_016;
-};
-
-struct NeighborhoodNameGenEntry
-{
-    uint32 ID;
-    LocalizedString Prefix;
-    LocalizedString Middle;                  // Meta[2] STRING: WoWDBDefs "Middle"
-    LocalizedString Suffix;                  // Meta[3] STRING: WoWDBDefs "Suffix"
-    uint32 NeighborhoodMapID;
-};
-
-struct NeighborhoodMapEntry
-{
-    DBCPosition3D Position;                  // Meta field 0: FT_FLOAT[3]
-    uint32 ID;                               // Meta field 1: IndexField
-    int32 MapID;
-    float EntryRotation;                     // Meta[3] FLOAT: WoWDBDefs "EntryRotation"
-    uint32 UiTextureKitID;                   // Meta[4] UINT: WoWDBDefs "UiTextureKitID"
-    int32 Flags;                             // Meta[5] INT: WoWDBDefs "Flags"
-};
-
-struct NeighborhoodInitiativeEntry
-{
-    LocalizedString Name;                    // Meta field 0: FT_STRING
-    LocalizedString Description;             // Meta field 1: FT_STRING
-    uint32 ID;                               // Meta field 2: IndexField
-    int32 InitiativeType;
-    int32 Duration;
-    int32 RequiredParticipants;
-    int32 RewardCurrencyID;
-};
-
-struct InitiativeXTaskEntry
-{
-    uint32 ID;
-    int32 InitiativeTaskID;
-    int32 SortOrder;
-    uint32 NeighborhoodInitiativeID;        // ParentIndexField
-};
-
-struct InitiativeTaskEntry
-{
-    LocalizedString TaskName;                // Meta[0] STRING: WoWDBDefs "TaskName"
-    LocalizedString Description;
-    uint32 ID;
-    int32 CriteriaTreeID;                   // Meta[3] INT: WoWDBDefs "CriteriaTreeID" FK->CriteriaTree
-    int32 QuestID;                           // Meta[4] INT: WoWDBDefs "QuestID" FK->QuestV2
-    int32 ProgressContributionAmount;        // Meta[5] INT: WoWDBDefs "ProgressContributionAmount"
-    int32 RepetitionContributionDampeningCurve; // Meta[6] INT: WoWDBDefs FK->Curve
-    int32 Supersedes;                        // Meta[7] INT: WoWDBDefs "Supersedes" FK->InitiativeTask
-    int32 Field_8;                           // Meta[8] INT: WoWDBDefs "Field_12_0_0_63534_008"
-};
-
-struct InitiativeRewardXMilestoneEntry
-{
-    uint32 ID;
-    int32 InitiativeRewardID;
-    uint32 InitiativeMilestoneID;           // ParentIndexField
-};
-
-struct InitiativeRewardEntry
-{
-    int64 Money;                             // Meta[0] LONG: WoWDBDefs "Money"
-    LocalizedString Title;                   // Meta[1] STRING: WoWDBDefs "Title"
-    LocalizedString Description;
-    uint32 ID;
-    int32 DecorID;                           // Meta[4] INT: WoWDBDefs "DecorID" FK->HouseDecor
-    int32 DecorQuantity;                     // Meta[5] INT: WoWDBDefs "DecorQuantity"
-    int32 Field_6;                           // Meta[6] INT: WoWDBDefs "Field_12_0_0_63534_006"
-    int32 Favor;                             // Meta[7] INT: WoWDBDefs "Favor"
-    int32 RewardQuestID;                     // Meta[8] INT: WoWDBDefs "RewardQuestID" FK->QuestV2
-};
-
-struct InitiativeMilestoneEntry
-{
-    uint32 ID;
-    int32 MilestoneOrderIndex;              // Meta[1] INT: WoWDBDefs "MilestoneOrderIndex"
-    float RequiredContributionAmount;       // Meta[2] FLOAT: WoWDBDefs "RequiredContributionAmount"
-    int32 Field_3;                          // Meta[3] INT: WoWDBDefs "Field_12_0_0_63534_003"
-    uint32 NeighborhoodInitiativeID;        // ParentIndexField: WoWDBDefs "NeighborhoodInitiativeID"
-};
-
-struct InitiativeCycleEntry
-{
-    uint32 ID;
-    int32 RewardGroupID;            // Unknown FK (values 600-2607), not NeighborhoodInitiative
-    int32 CycleIndex;
-    int32 StartDay;
-    int32 HouseXPCap;               // Meta[4] INT: WoWDBDefs "HouseXPCap"
-    int32 InitiativeID;             // Meta[5] INT: FK -> NeighborhoodInitiative.ID
-};
-
-struct InitiativeCyclePriorityEntry
-{
-    uint32 ID;
-    int32 Priority;
-    int32 Weight;
-    int32 Flags;
-    uint32 InitiativeCycleID;               // ParentIndexField
-};
-
-struct HouseThemeEntry
-{
-    LocalizedString Name;                    // Meta field 0: FT_STRING
-    uint32 ID;                               // Meta field 1: IndexField
-    int32 Flags;                             // Meta[2] INT: WoWDBDefs "Flags"
-    int32 ParentThemeID;                     // Meta[3] INT: WoWDBDefs "ParentThemeID" FK->HouseTheme
-};
-
-struct HouseRoomEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    int8 Size;
-    int32 Flags;
-    int32 Field_002;
-    int32 RoomWmoDataID;
-    int32 UiTextureAtlasElementID;
-    int32 WeightCost;
-    int32 Field_007;                         // NEW in 12.0.5.66330 (per WoWDBDefs layout 0xFC6C2118)
-};
-
-struct HouseLevelRewardInfoEntry
-{
-    LocalizedString Name;                    // Meta field 0: FT_STRING
-    LocalizedString Description;             // Meta field 1: FT_STRING
-    uint32 ID;                               // Meta field 2: IndexField
-    int32 HouseLevelDataID;                  // Meta[3] INT: WoWDBDefs "HouseLevelDataID" FK->HouseLevelData
-    int32 Field_4;                           // Meta[4] INT: WoWDBDefs "Field_12_0_0_63967_004"
-    int32 IconFileDataID;                    // Meta[5] INT: WoWDBDefs "IconFileDataID" FK->FileData
-};
-
-struct HouseLevelDataEntry
-{
-    uint32 ID;
-    int32 Level;
-    int32 QuestID;
-    int32 Field_12_0_7_67808_003;           // 12.0.7 (build 67808): new field, unnamed in all static sources (kept as-is per NO WRONG DATA)
-};
-
-struct HouseExteriorWmoDataEntry
-{
-    LocalizedString Name;                    // Meta field 0: FT_STRING
-    uint32 ID;                               // Meta field 1: IndexField
-    int32 Flags;
-    int32 Field_003;                         // Meta field 3: NEW in 12.0.5.66330 (per WoWDBDefs 0x95E7A088)
-    int32 Field_004;                         // Meta field 4: NEW in 12.0.5.66330
-};
-
-struct HouseDecorThemeSetEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    int32 ThemeID;
-    int32 IconFileDataID;
-};
-
-struct HouseDecorEntry
-{
-    LocalizedString Name;                    // Meta field 0: FT_STRING
-    DBCPosition3D InitialRotation;           // Meta field 1: FT_FLOAT[3]
-    uint32 ID;                               // Meta field 2: IndexField
-    int32 Field_003;
-    int32 GameObjectID;
-    int32 Flags;
-    uint8 Type;
-    uint8 ModelType;
-    int32 ModelFileDataID;
-    int32 ThumbnailFileDataID;
-    int32 WeightCost;
-    int32 ItemID;
-    float InitialScale;
-    int32 FirstAcquisitionBonus;             // House XP gained on first acquisition (from Lua API)
-    int32 OrderIndex;
-    int8 Size;                               // HousingCatalogEntrySize (inferred from Lua API)
-    int32 StartingQuantity;
-    int32 UiModelSceneID;
-};
-
-struct HouseDecorMaterialEntry
-{
-    uint32 ID;
-    uint64 WMOMaterialReference;             // Meta[1] LONG: WoWDBDefs "WMOMaterialReference"
-    int32 MaterialTextureIndex;              // Meta[2] INT: WoWDBDefs "MaterialTextureIndex"
-    int32 HouseThemeID;                      // Meta[3] INT: WoWDBDefs "HouseThemeID" FK->HouseTheme
-    int32 TextureAFileDataID;                // Meta[4] INT: WoWDBDefs "TextureAFileDataID" FK->FileData
-    int32 TextureBFileDataID;                // Meta[5] INT: WoWDBDefs "TextureBFileDataID" FK->FileData
-};
-
-struct ExteriorComponentXGroupEntry
-{
-    uint32 ID;
-    int32 ExteriorComponentGroupID;             // WoWDBDefs field 1: references ExteriorComponentGroup
-    int32 ExteriorComponentID;                  // WoWDBDefs field 2: references ExteriorComponent
-};
-
-struct ExteriorComponentTypeEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    int32 ParentComponentType;                  // WoWDBDefs: self-reference to ExteriorComponentType
-};
-
-struct ExteriorComponentEntry
-{
-    LocalizedString Name;
-    std::array<float, 3> Position;
-    uint32 ID;
-    uint8 Size;                             // Meta[3] BYTE: WoWDBDefs "Size"
-    int32 ParentComponentID;                // Meta[4] INT: references another ExteriorComponent (0 for defaults)
-    int32 ModelFileDataID;                  // Meta[5] INT: model FileDataID
-    int32 Flags;                            // Meta[6] INT: 0x1=IsDefaultFixture, 0x2=UnlockedByDefault
-    uint8 Field_7;                          // Meta[7] BYTE: unknown (always 1)
-    uint8 Type;                             // Meta[8] BYTE: references ExteriorComponentType
-    int32 Field_9;                          // Meta[9] INT: unknown
-    int32 GameObjectID;                     // Meta[10] INT: references GameObjects
-    int32 Field_11;                         // Meta[11] INT: unknown (WoWDBDefs name: Field_11_2_7_64044_011)
-    int32 ItemID;                           // Meta[12] INT: NEW in 12.0.5 â€” references Item.ID (allows the exterior component to be sold/earned as an item, like HouseDecor.ItemID)
-    uint32 HouseExteriorWmoDataID;          // ParentIndexField - must be unsigned
-};
-
-struct ExteriorComponentHookEntry
-{
-    // Field order must match LoadInfo: Position, Rotation, ID, TypeID, CompID
-    std::array<float, 3> Position;
-    std::array<float, 3> Rotation;
-    uint32 ID;
-    int32 ExteriorComponentTypeID;
-    uint32 ExteriorComponentID;             // ParentIndexField - must be unsigned
-};
-
-struct ExteriorComponentGroupXHookEntry
-{
-    uint32 ID;
-    uint32 ExteriorComponentGroupID;        // ParentIndexField - must be unsigned
-    int32 ExteriorComponentHookID;
-};
-
-struct ExteriorComponentGroupEntry
-{
-    std::array<float, 3> Position;
-    uint32 ID;
-    uint32 HouseExteriorWmoDataID;              // ParentIndexField - references HouseExteriorWmoData
-};
-
-struct ExteriorComponentExitPointEntry
-{
-    std::array<float, 3> Position;
-    std::array<float, 3> Rotation;
-    uint32 ID;
-    uint32 ExteriorComponentID;             // ParentIndexField - must be unsigned
-};
-
-struct DyeColorEntry
-{
-    LocalizedString Name;
-    uint32 ID;
-    int32 DyeColorCategoryID;                // Meta[2] INT: WoWDBDefs FK->DyeColorCategory ($relation$)
-    int32 GradientTextureIndex;              // Meta[3] INT: WoWDBDefs "GradientTextureIndex"
-    int32 ItemID;                            // Meta[4] INT: WoWDBDefs FK->Item
-    int32 SwatchColorStart;                  // Meta[5] INT: WoWDBDefs "SwatchColorStart"
-    int32 SwatchColorEnd;                    // Meta[6] INT: WoWDBDefs "SwatchColorEnd"
-    int32 SortOrder;                         // Meta[7] INT: WoWDBDefs "SortOrder"
-};
-
-struct DecorXDecorSubcategoryEntry
-{
-    uint32 ID;
-    uint32 HouseDecorID;                        // WoWDBDefs field 1: $relation$ to HouseDecor
-    int32 DecorSubcategoryID;                   // WoWDBDefs field 2: references DecorSubcategory
-};
-
-struct DecorSubcategoryEntry
-{
-    LocalizedString Name;
-    uint32 ID;
-    int32 UiTextureAtlasElementID;           // Meta[2] INT: WoWDBDefs FK->UiTextureAtlasElement
-    int32 DecorCategoryID;                   // Meta[3] INT: WoWDBDefs FK->DecorCategory
-    int32 OrderIndex;                        // Meta[4] INT: WoWDBDefs "OrderIndex"
-};
-
-struct DecorDyeSlotEntry
-{
-    uint32 ID;
-    int32 DyeColorCategoryID;               // Meta[1] INT: WoWDBDefs FK->DyeColorCategory
-    int32 HouseDecorID;                      // Meta[2] INT: WoWDBDefs FK->HouseDecor (nullable)
-    int32 OrderIndex;                        // Meta[3] INT: WoWDBDefs "OrderIndex"
-    int32 Channel;                           // Meta[4] INT: WoWDBDefs "Channel"
-};
-
-struct DecorCategoryEntry
-{
-    LocalizedString Name;
-    uint32 ID;
-    int32 UiTextureAtlasElementID;           // Meta[2] INT: WoWDBDefs FK->UiTextureAtlasElement
-    int32 OrderIndex;                        // Meta[3] INT: WoWDBDefs "OrderIndex"
-};
-
-struct GroupFinderActivityEntry
-{
-    uint32 ID;
-    LocalizedString FullName;
-    LocalizedString ShortName;
-    uint8 GroupFinderCategoryID;
-    int8 OrderIndex;
-    uint16 GroupFinderActivityGrpID;
-    int32 Flags;
-    uint16 MinGearLevelSuggestion;
-    int32 PlayerConditionID;
-    uint16 MapID;
-    int16 DifficultyID;
-    uint16 AreaID;
-    int32 ExpansionID;
-    uint8 MaxPlayers;
-    uint8 DisplayType;
-    int32 Field_11_0_7_57361_013;
-    int32 Field_11_0_7_57361_014;
-    int32 Field_11_0_7_57361_015;
-    int32 Field_11_0_7_57361_016;
-    int32 OverrideContentTuningID;
-    int32 MapChallengeModeID;
-};
-
-struct UiTextureKitEntry
-{
-    uint32 ID;
-    char const* KitPrefix;     // textureKit string (e.g. "MajorFaction-DragonscaleExpedition")
-};
-
-struct RenownRewardsEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
-    LocalizedString ToastDescription;
-    int32 CovenantID;
-    int32 Level;
-    int32 Icon;
-    int32 Flags;
-    int32 UiOrder;
-    int32 ItemID;
-    int32 SpellID;
-    int32 MountID;
-    int32 TransmogID;
-    int32 TransmogSetID;
-    int32 CharTitlesID;
-    int32 GarrFollowerID;
-    int32 TransmogIllusionID;
-    int32 RewardCategory;        // Field_12_0_0_63534_016 - reward category enum
-    int32 QuestID;
-    int32 PlayerConditionID;
-};
-
-struct CovenantEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
-    int32 BountySetID;
-    int32 SkillLineID;
-    int32 DeathTeleportSpellID;
-    int32 Field_9_0_2_36165_006;
-    int32 Field_9_0_2_36165_007;
-    int32 FactionID;
-    int32 CurrencyTypesID;
-    int32 RequiredPlayerConditionID;
 };
 
 struct Achievement_CategoryEntry
@@ -1025,13 +120,6 @@ struct AreaGroupMemberEntry
     uint32 ID;
     uint16 AreaID;
     uint32 AreaGroupID;
-};
-
-struct RafActivityEntry
-{
-    uint32 ID;
-    int32 CriteriaTreeID;
-    int32 RewardQuestID;
 };
 
 struct AreaTableEntry
@@ -1383,35 +471,6 @@ struct BattlePetAbilityEntry
     int32 Flags;
 };
 
-struct BattlePetAbilityEffectEntry
-{
-    uint32 ID;
-    uint16 BattlePetAbilityTurnID;
-    uint8 OrderIndex;
-    uint16 BattlePetEffectPropertiesID;     // WoWDBDefs field 3
-    uint16 AuraBattlePetAbilityID;          // WoWDBDefs field 4 (was incorrectly named "BattlePetEffectPropertiesID")
-    uint16 BattlePetVisualID;
-    std::array<int16, 6> Param;
-};
-
-struct BattlePetAbilityStateEntry
-{
-    int32 ID;
-    uint32 BattlePetStateID;
-    int32 Value;
-    uint32 BattlePetAbilityID;
-};
-
-struct BattlePetAbilityTurnEntry
-{
-    uint32 ID;
-    uint16 BattlePetAbilityID;
-    uint8 OrderIndex;
-    uint8 TurnTypeEnum;
-    uint8 EventTypeEnum;
-    uint16 BattlePetVisualID;
-};
-
 struct BattlePetBreedQualityEntry
 {
     uint32 ID;
@@ -1426,14 +485,6 @@ struct BattlePetBreedStateEntry
     int32 BattlePetStateID;
     uint16 Value;
     uint32 BattlePetBreedID;
-};
-
-struct BattlePetEffectPropertiesEntry
-{
-    uint32 ID;
-    std::array<char const*, 6> ParamLabel;
-    uint16 BattlePetVisualID;
-    std::array<uint8, 6> ParamTypeEnum;
 };
 
 struct BattlePetSpeciesEntry
@@ -1459,15 +510,6 @@ struct BattlePetSpeciesStateEntry
     uint32 ID;
     uint16 BattlePetStateID;
     int32 Value;
-    uint32 BattlePetSpeciesID;
-};
-
-struct BattlePetSpeciesXAbilityEntry
-{
-    uint32 ID;
-    uint16 BattlePetAbilityID;
-    uint8 RequiredLevel;
-    int8 SlotEnum;
     uint32 BattlePetSpeciesID;
 };
 
@@ -1501,23 +543,6 @@ struct BattlemasterListXMapEntry
     uint32 ID;
     int32 MapID;
     uint32 BattlemasterListID;
-};
-
-struct BountyEntry
-{
-    uint32 ID;
-    int32 QuestID;
-    uint16 FactionID;
-    uint32 IconFileDataID;
-    uint32 TurninPlayerConditionID;
-    int32 BountySetID;
-};
-
-struct BountySetEntry
-{
-    uint32 ID;
-    uint32 VisiblePlayerConditionID;
-    int32 LockedQuestID;
 };
 
 #define MAX_BROADCAST_TEXT_EMOTES 3
@@ -2491,12 +1516,6 @@ struct CurrencyTypesEntry
     {
         return GetFlags().HasFlag(CurrencyTypesFlags::TrackQuantity);
     }
-
-    bool IsAccountWide() const
-    {
-        return GetFlags().HasFlag(CurrencyTypesFlags::AccountWide);
-    }
-
     bool IsAccountTransferable() const
     {
         return AccountTransferPercentage > 0.0f;
@@ -2585,36 +1604,6 @@ struct DurabilityCostsEntry
     uint32 ID;
     std::array<uint16, 21> WeaponSubClassCost;
     std::array<uint16, 8> ArmorSubClassCost;
-};
-
-struct DriveCapabilityEntry
-{
-    uint32 ID;
-    float ForwardAcceleration;              // DB2 field 1 → v28[0]
-    float BackwardMaxSpeed;                 // DB2 field 2 → v28[10], used at offset 312 (backward max speed)
-    float IdleFriction;                     // DB2 field 3 → v28[12], used at offset 320 (friction when not driving)
-    float BackwardAcceleration;             // DB2 field 4 → v28[11], used at offset 316 (backward accel)
-    float Field_5;                          // DB2 field 5 → v28[13]
-    float Field_6;                          // DB2 field 6 → v28[16]
-    float Field_7;                          // DB2 field 7 → v28[14]
-    float Field_8;                          // DB2 field 8 → v28[17]
-    float Field_9;                          // DB2 field 9 → v28[18]
-    float Field_10;                         // DB2 field 10 → v28[19]
-    float Field_11;                         // DB2 field 11 → v28[1]
-    float Field_12;                         // DB2 field 12 → v28[2]
-    float Field_13;                         // DB2 field 13 → v28[3]
-    float Field_14;                         // DB2 field 14 → v28[4]
-    float Field_15;                         // DB2 field 15 → v28[5]
-    float Field_16;                         // DB2 field 16 → v28[6]
-};
-
-struct DriveCapabilityTierEntry
-{
-    uint32 ID;
-    float Acceleration;                     // Tier acceleration rate
-    float MaxSpeed;                         // Tier max speed threshold
-    int32 DriveCapabilityID;                // Parent DriveCapability
-    int32 OrderIndex;                       // Tier order
 };
 
 struct DurabilityQualityEntry
@@ -4000,7 +2989,7 @@ struct MapEntry
     EnumFlag<MapFlags> GetFlags() const { return static_cast<MapFlags>(Flags[0]); }
     EnumFlag<MapFlags2> GetFlags2() const { return static_cast<MapFlags2>(Flags[1]); }
     EnumFlag<MapFlags3> GetFlags3() const { return static_cast<MapFlags3>(Flags[2]); }
-    bool IsNeighborhood() const { return InstanceType == MAP_HOUSE_NEIGHBORHOOD; }
+        bool IsNeighborhood() const { return InstanceType == MAP_HOUSE_NEIGHBORHOOD; }
 };
 
 struct MapChallengeModeEntry
@@ -4165,39 +3154,6 @@ struct MythicPlusSeasonEntry
     int32 HeroicLFGDungeonMinGear;
 };
 
-struct WeeklyRewardChestThresholdEntry
-{
-    uint32 ID;
-    int8 Type;
-    int32 Threshold;
-    int32 Index;
-};
-
-struct MythicPlusSeasonKeyFloorEntry
-{
-    uint32 ID;
-    int32 KeyFloor;
-    int32 PlayerConditionID;
-    uint32 DisplaySeasonID;
-};
-
-struct MythicPlusSeasonRewardLevelsEntry
-{
-    uint32 ID;
-    uint32 MythicPlusSeasonID;
-    int32 ActivityTierID;
-    int32 DifficultyLevel;
-    int32 WeeklyRewardLevel;
-    int32 EndOfRunRewardLevel;
-};
-
-struct MythicPlusSeasonTrackedMapEntry
-{
-    uint32 ID;
-    int32 MapChallengeModeID;
-    uint32 DisplaySeasonID;
-};
-
 struct NameGenEntry
 {
     uint32 ID;
@@ -4292,50 +3248,6 @@ struct PerksActivityEntry
     int32 ThresholdContributionAmount;
     int32 Supersedes;
     int32 Priority;
-};
-
-struct PerksActivityThresholdEntry
-{
-    uint32 ID;
-    int32 BonusTendies;
-    int32 OrderIndex;
-    int32 Threshold;
-    int32 PerksActivityThresholdGroupID;
-};
-
-struct PerksActivityThresholdGroupEntry
-{
-    LocalizedString Name;
-    uint32 ID;
-    int32 PerksMonth;
-};
-
-struct PerksVendorCategoryEntry
-{
-    LocalizedString DisplayName;
-    uint32 ID;
-    int32 PerksVendorType;
-    int32 DefaultUIModelSceneID;
-};
-
-struct PerksVendorItemEntry
-{
-    uint32 ID;
-    int8 PerksVendorCategoryID;
-    int32 Field_10_0_5_47118_002;
-    int32 ItemID;
-    int32 Field_10_0_5_47118_004;
-    int32 CreatureDisplayInfoID;
-    int32 Cost;
-    int32 UiModelSceneID;
-    int32 UiGroupInfo;
-};
-
-struct PerksVendorItemXIntervalEntry
-{
-    uint32 ID;
-    int32 PerksVendorItemID;
-    int32 PerksActivityThresholdID;
 };
 
 struct PhaseEntry
@@ -4670,46 +3582,6 @@ struct RandPropPointsEntry
     std::array<uint32, 5> Good;
 };
 
-struct ResearchBranchEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    uint8 ResearchFieldID;
-    uint16 CurrencyID;
-    int32 TextureFileID;
-    int32 BigTextureFileID;
-    int32 ItemID;
-};
-
-struct ResearchFieldEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    uint8 Slot;
-};
-
-struct ResearchProjectEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
-    uint8 Rarity;
-    int32 SpellID;
-    uint16 ResearchBranchID;
-    uint8 NumSockets;
-    int32 TextureFileID;
-    uint32 RequiredWeight;
-};
-
-struct ResearchSiteEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    int16 MapID;
-    int32 QuestPOIBlobID;
-    uint32 AreaPOIIconEnum;
-};
-
 struct RewardPackEntry
 {
     uint32 ID;
@@ -4871,13 +3743,6 @@ struct SkillRaceClassInfoEntry
     Trinity::RaceMask<int32, 2> RaceMask;
 };
 
-struct SoulbindConduitItemEntry
-{
-    uint32 ID;
-    int32 ItemID;
-    int32 ConduitID;
-};
-
 struct SoulbindConduitRankEntry
 {
     uint32 ID;
@@ -4885,14 +3750,6 @@ struct SoulbindConduitRankEntry
     int32 SpellID;
     float AuraPointsOverride;
     uint32 SoulbindConduitID;
-};
-
-struct SoulbindConduitRankPropertiesEntry
-{
-    uint32 ID;
-    int32 Rank;
-    int32 ItemLevel;
-    int8 QualityID;
 };
 
 struct SoundKitEntry
@@ -6240,86 +5097,6 @@ struct WarbandSceneEntry
     EnumFlag<WarbandSceneFlags> GetFlags() const { return static_cast<WarbandSceneFlags>(Flags); }
 };
 
-struct WarbandScenePlacementEntry
-{
-    DBCPosition3D Position;
-    uint32 ID;
-    uint32 WarbandSceneID;
-    int32 SlotType;
-    float Rotation;
-    float Scale;
-    uint32 Field_11_0_0_54210_004;
-    uint32 Field_11_0_0_54210_005;
-    int32 SlotID;
-    int32 Field_11_1_0_58221_009;
-    int32 Field_12_0_0_63534_008;
-};
-
-struct WarbandSceneAnimationEntry
-{
-    uint32 ID;
-    int32 SpellVisualKitID;
-    int32 Event;
-    int32 AnimKitID;
-    int32 Field_11_0_0_54210_003;
-    float TimeIsh;
-    uint8 StandState;
-    uint8 SheatheState;
-    int8 Field_11_1_0_58221_008;
-    std::array<int32, 2> Field_11_0_0_54210_005;
-};
-
-struct WarbandSceneAnimChrSpecEntry
-{
-    uint32 ID;
-    int32 WarbandSceneAnimationID;
-    int32 ChrSpecializationID;
-};
-
-struct WarbandScenePlacementFilterReqEntry
-{
-    uint32 ID;
-    uint16 Field_11_1_0_58221_002;
-    int8 Field_11_1_0_58221_005;
-    std::array<int32, 2> Field_11_1_0_58221_003;
-};
-
-struct WarbandScenePlacementOptionEntry
-{
-    DBCPosition3D Position;
-    uint32 ID;
-    uint32 WarbandScenePlacementID;
-    float Orientation;
-    float Scale;
-    int32 Field_11_1_0_58221_005;
-    int32 Field_11_1_0_58221_006;
-};
-
-struct WarbandScenePlcmntAnimOverrideEntry
-{
-    uint32 ID;
-    int32 Field_11_0_0_54210_000;
-    int32 WarbandSceneAnimationID;
-};
-
-struct WarbandPlacementDisplayInfoEntry
-{
-    uint32 ID;
-    uint32 WarbandScenePlacementID;
-    int32 Field_11_2_0_61476_001;
-    int32 Field_11_2_0_61476_002;
-    int32 Field_11_2_0_61476_003;
-    int32 Field_11_2_0_61476_004;
-};
-
-struct WarbandSceneSourceInfoEntry
-{
-    LocalizedString SourceDescription;
-    uint32 ID;
-    uint32 WarbandSceneID;
-    int8 SourceType;
-};
-
 struct WMOAreaTableEntry
 {
     LocalizedString AreaName;
@@ -6375,6 +5152,1524 @@ struct WorldStateExpressionEntry
 {
     uint32 ID;
     char const* Expression;
+};
+
+
+struct AccountStoreCategoryEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+    int32 StoreFrontID;
+    int32 OrderIndex;
+    int32 Icon;
+    uint8 Field_11_0_7_57361_005;
+};
+
+struct AccountStoreItemEntry
+{
+    LocalizedString Name;
+    LocalizedString Description;
+    uint32 ID;
+    int32 StoreFrontID;
+    int32 AccountStoreCategoryID;
+    int32 OrderIndex;
+    int32 Price;
+    int32 CurrencyTypesID;
+    int32 Field_11_0_7_57361_008;
+    int32 RefundDuration;
+    int32 Field_11_0_7_57361_010;
+    int32 Field_11_0_7_57361_011;
+    int32 SpellID;
+    int32 TransmogSetID;
+    int32 CreatureDisplayInfoID;
+    int32 UiModelSceneID;
+    int32 Icon;
+    int32 Field_12_0_0_63534_017;
+    int32 Field_12_0_0_63534_018;
+    int32 Field_12_0_0_63534_019;
+};
+
+struct BattlePetAbilityEffectEntry
+{
+    uint32 ID;
+    uint16 BattlePetAbilityTurnID;
+    uint8 OrderIndex;
+    uint16 BattlePetEffectPropertiesID;     // WoWDBDefs field 3
+    uint16 AuraBattlePetAbilityID;          // WoWDBDefs field 4 (was incorrectly named "BattlePetEffectPropertiesID")
+    uint16 BattlePetVisualID;
+    std::array<int16, 6> Param;
+};
+
+struct BattlePetAbilityStateEntry
+{
+    int32 ID;
+    uint32 BattlePetStateID;
+    int32 Value;
+    uint32 BattlePetAbilityID;
+};
+
+struct BattlePetAbilityTurnEntry
+{
+    uint32 ID;
+    uint16 BattlePetAbilityID;
+    uint8 OrderIndex;
+    uint8 TurnTypeEnum;
+    uint8 EventTypeEnum;
+    uint16 BattlePetVisualID;
+};
+
+struct BattlePetEffectPropertiesEntry
+{
+    uint32 ID;
+    std::array<char const*, 6> ParamLabel;
+    uint16 BattlePetVisualID;
+    std::array<uint8, 6> ParamTypeEnum;
+};
+
+struct BattlePetSpeciesXAbilityEntry
+{
+    uint32 ID;
+    uint16 BattlePetAbilityID;
+    uint8 RequiredLevel;
+    int8 SlotEnum;
+    uint32 BattlePetSpeciesID;
+};
+
+struct BountyEntry
+{
+    uint32 ID;
+    int32 QuestID;
+    uint16 FactionID;
+    uint32 IconFileDataID;
+    uint32 TurninPlayerConditionID;
+    int32 BountySetID;
+};
+
+struct BountySetEntry
+{
+    uint32 ID;
+    uint32 VisiblePlayerConditionID;
+    int32 LockedQuestID;
+};
+
+struct CampaignXConditionEntry
+{
+    uint32 ID;
+    LocalizedString FailureReason;
+    int32 PlayerConditionID;
+    int32 OrderIndex;
+    int32 Flags;
+    uint32 CampaignID;
+};
+
+struct CharShipmentContainerEntry
+{
+    uint32 ID;
+    LocalizedString Description;
+    LocalizedString PendingText;
+    uint16 UiTextureKitID;
+    int8 GarrTypeID;
+    uint8 GarrBuildingType;
+    uint8 BaseCapacity;
+    uint16 SmallDisplayInfoID;
+    uint16 MediumDisplayInfoID;
+    uint16 LargeDisplayInfoID;
+    int32 WorkingSpellVisualID;
+    uint32 CompleteSpellVisualID;
+    uint32 WorkingDisplayInfoID;
+    uint8 MediumThreshold;
+    uint8 LargeThreshold;
+    int8 Faction;
+    uint16 CrossFactionID;
+};
+
+struct CharShipmentEntry
+{
+    // Field order matches the 12.0.7 client db2 layout 0x91BEA68A (byte-decoded from the client
+    // CharShipment.db2). The tail is physically Flags, GarrFollowerID, MaxShipments - NOT
+    // MaxShipments/.../Flags. The previous order read the Flags bitmask (512/513) into MaxShipments and
+    // MaxShipments (0) into Flags, so the server saw Flags=0 for every shipment and could not tell the
+    // quest/tutorial row (Flags 0x1 set, Duration 0) from the regular row (Duration 14400).
+    uint32 ID;
+    uint16 ContainerID;
+    uint32 DummyItemID;
+    uint32 TreasureID;
+    int32 SpellID;
+    uint32 OnCompleteSpellID;
+    int32 Duration;
+    int32 Flags;
+    uint16 GarrFollowerID;
+    uint8 MaxShipments;
+};
+
+struct ContributionEntry
+{
+    uint32 ID;
+    LocalizedString Description;
+    LocalizedString Name;
+    int32 ManagedWorldStateInputID;
+    int32 OrderIndex;
+    int32 ContributionStyleContainer;
+    std::array<int32, 4> UiTextureAtlasMemberID;
+};
+
+struct CovenantEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    int32 BountySetID;
+    int32 SkillLineID;
+    int32 DeathTeleportSpellID;
+    int32 Field_9_0_2_36165_006;
+    int32 Field_9_0_2_36165_007;
+    int32 FactionID;
+    int32 CurrencyTypesID;
+    int32 RequiredPlayerConditionID;
+};
+
+struct CreatureXContributionEntry
+{
+    uint32 ID;
+    int32 ContributionID;
+    int32 CreatureID;
+};
+
+struct CurrencyCategoryEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    int32 Flags;
+    uint8 ExpansionID;
+    int32 ParentCategoryID;
+};
+
+struct DataTagXHouseDecorRecordEntry
+{
+    uint32 ID;
+    int32 DataTagID;
+    int32 HouseDecorID;
+};
+
+struct DecorCategoryEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+    int32 UiTextureAtlasElementID;           // Meta[2] INT: WoWDBDefs FK->UiTextureAtlasElement
+    int32 OrderIndex;                        // Meta[3] INT: WoWDBDefs "OrderIndex"
+};
+
+struct DecorDyeSlotEntry
+{
+    uint32 ID;
+    int32 DyeColorCategoryID;               // Meta[1] INT: WoWDBDefs FK->DyeColorCategory
+    int32 HouseDecorID;                      // Meta[2] INT: WoWDBDefs FK->HouseDecor (nullable)
+    int32 OrderIndex;                        // Meta[3] INT: WoWDBDefs "OrderIndex"
+    int32 Channel;                           // Meta[4] INT: WoWDBDefs "Channel"
+};
+
+struct DecorSubcategoryEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+    int32 UiTextureAtlasElementID;           // Meta[2] INT: WoWDBDefs FK->UiTextureAtlasElement
+    int32 DecorCategoryID;                   // Meta[3] INT: WoWDBDefs FK->DecorCategory
+    int32 OrderIndex;                        // Meta[4] INT: WoWDBDefs "OrderIndex"
+};
+
+struct DecorXDecorSubcategoryEntry
+{
+    uint32 ID;
+    uint32 HouseDecorID;                        // WoWDBDefs field 1: $relation$ to HouseDecor
+    int32 DecorSubcategoryID;                   // WoWDBDefs field 2: references DecorSubcategory
+};
+
+struct DelvesSeasonEntry
+{
+    uint32 ID;
+    int32 FactionID;                                                                  // Faction.ID FK
+};
+
+struct DelvesSeasonXSpellEntry
+{
+    uint32 ID;
+    int32 SpellID;
+    uint32 DelvesSeasonID;
+};
+
+struct DriveCapabilityEntry
+{
+    uint32 ID;
+    float ForwardAcceleration;              // DB2 field 1 → v28[0]
+    float BackwardMaxSpeed;                 // DB2 field 2 → v28[10], offset 312 in client drive struct
+    float IdleFriction;                     // DB2 field 3 → v28[12], offset 320 (friction when not driving)
+    float BackwardAcceleration;             // DB2 field 4 → v28[11], offset 316 (backward accel)
+    float Field_5;                          // DB2 field 5 → v28[13]
+    float Field_6;                          // DB2 field 6 → v28[16]
+    float Field_7;                          // DB2 field 7 → v28[14]
+    float Field_8;                          // DB2 field 8 → v28[17]
+    float Field_9;                          // DB2 field 9 → v28[18]
+    float Field_10;                         // DB2 field 10 → v28[19]
+    float Field_11;                         // DB2 field 11 → v28[1]
+    float Field_12;                         // DB2 field 12 → v28[2]
+    float Field_13;                         // DB2 field 13 → v28[3]
+    float Field_14;                         // DB2 field 14 → v28[4]
+    float Field_15;                         // DB2 field 15 → v28[5]
+    float Field_16;                         // DB2 field 16 → v28[6]
+};
+
+struct DriveCapabilityTierEntry
+{
+    uint32 ID;
+    float Acceleration;                     // Tier acceleration rate
+    float MaxSpeed;                         // Tier max speed threshold
+    int32 DriveCapabilityID;                // Parent DriveCapability
+    int32 OrderIndex;                       // Tier order
+};
+
+struct DyeColorCategoryEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+};
+
+struct DyeColorEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+    int32 DyeColorCategoryID;                // Meta[2] INT: WoWDBDefs FK->DyeColorCategory ($relation$)
+    int32 GradientTextureIndex;              // Meta[3] INT: WoWDBDefs "GradientTextureIndex"
+    int32 ItemID;                            // Meta[4] INT: WoWDBDefs FK->Item
+    int32 SwatchColorStart;                  // Meta[5] INT: WoWDBDefs "SwatchColorStart"
+    int32 SwatchColorEnd;                    // Meta[6] INT: WoWDBDefs "SwatchColorEnd"
+    int32 SortOrder;                         // Meta[7] INT: WoWDBDefs "SortOrder"
+};
+
+struct ExteriorComponentEntry
+{
+    LocalizedString Name;
+    std::array<float, 3> Position;
+    uint32 ID;
+    uint8 Size;                             // Meta[3] BYTE: WoWDBDefs "Size"
+    int32 ParentComponentID;                // Meta[4] INT: references another ExteriorComponent (0 for defaults)
+    int32 ModelFileDataID;                  // Meta[5] INT: model FileDataID
+    int32 Flags;                            // Meta[6] INT: 0x1=IsDefaultFixture, 0x2=UnlockedByDefault
+    uint8 Field_7;                          // Meta[7] BYTE: unknown (always 1)
+    uint8 Type;                             // Meta[8] BYTE: references ExteriorComponentType
+    int32 Field_9;                          // Meta[9] INT: unknown
+    int32 GameObjectID;                     // Meta[10] INT: references GameObjects
+    int32 Field_11;                         // Meta[11] INT: unknown (WoWDBDefs name: Field_11_2_7_64044_011)
+    int32 ItemID;                           // Meta[12] INT: NEW in 12.0.5 â€” references Item.ID (allows the exterior component to be sold/earned as an item, like HouseDecor.ItemID)
+    uint32 HouseExteriorWmoDataID;          // ParentIndexField - must be unsigned
+};
+
+struct ExteriorComponentExitPointEntry
+{
+    std::array<float, 3> Position;
+    std::array<float, 3> Rotation;
+    uint32 ID;
+    uint32 ExteriorComponentID;             // ParentIndexField - must be unsigned
+};
+
+struct ExteriorComponentGroupEntry
+{
+    std::array<float, 3> Position;
+    uint32 ID;
+    uint32 HouseExteriorWmoDataID;              // ParentIndexField - references HouseExteriorWmoData
+};
+
+struct ExteriorComponentGroupXHookEntry
+{
+    uint32 ID;
+    uint32 ExteriorComponentGroupID;        // ParentIndexField - must be unsigned
+    int32 ExteriorComponentHookID;
+};
+
+struct ExteriorComponentHookEntry
+{
+    // Field order must match LoadInfo: Position, Rotation, ID, TypeID, CompID
+    std::array<float, 3> Position;
+    std::array<float, 3> Rotation;
+    uint32 ID;
+    int32 ExteriorComponentTypeID;
+    uint32 ExteriorComponentID;             // ParentIndexField - must be unsigned
+};
+
+struct ExteriorComponentTypeEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    int32 ParentComponentType;                  // WoWDBDefs: self-reference to ExteriorComponentType
+};
+
+struct ExteriorComponentXGroupEntry
+{
+    uint32 ID;
+    int32 ExteriorComponentGroupID;             // WoWDBDefs field 1: references ExteriorComponentGroup
+    int32 ExteriorComponentID;                  // WoWDBDefs field 2: references ExteriorComponent
+};
+
+struct FactionGroupEntry
+{
+    uint32 ID;
+    char const* InternalName;
+    LocalizedString Name;
+    uint8 MaskID;
+    int32 HonorCurrencyTextureFileID;
+    int32 ConquestCurrencyTextureFileID;
+};
+
+struct GarrAbilityCategoryEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+};
+
+struct GarrAbilityEffectEntry
+{
+    uint32 ID;
+    uint16 GarrAbilityID;
+    uint8 EffectType;
+    uint8 TargetMask;
+    int32 Amount;
+    float CombatWeightBase;
+    float CombatWeightMax;
+    float ActionValueFlat;
+    uint8 AbilityAction;
+    uint8 MiscValueA;
+    int32 ActionHours;
+    int32 ActionRecordID;
+};
+
+struct GarrAutoCombatantEntry
+{
+    uint32 ID;
+    int32 HealthBase;
+    int32 HealthGainPerLevel;
+    int32 AttackBase;
+    int32 AttackGainPerLevel;
+    int32 AttackSpellID;
+    int32 AbilitySpellID;
+    int32 AbilitySpellID2;
+    int32 PassiveSpellID;
+    int32 Role;
+};
+
+struct GarrAutoSpellEffectEntry
+{
+    uint32 ID;
+    int32 GarrAutoSpellID;
+    uint8 EffectIndex;
+    uint8 Effect;
+    float Points;
+    uint8 TargetType;
+    int32 Flags;
+    int32 Period;
+};
+
+struct GarrAutoSpellEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    int32 Cooldown;
+    int32 Duration;
+    int32 Flags;
+    int32 SchoolMask;
+    int32 IconFileDataID;
+};
+
+struct GarrBuildingDoodadSetEntry
+{
+    uint32 ID;
+    uint8 GarrBuildingID;
+    uint8 HordeDoodadSetID;
+    uint8 AllianceDoodadSetID;
+    uint8 HordeAltDoodadSetID;
+    uint8 AllianceAltDoodadSetID;
+};
+
+struct GarrClassSpecPlayerCondEntry
+{
+    uint32 ID;
+    LocalizedString ClassSpec;
+    uint32 OrderIndex;
+    uint32 GarrClassSpecID;
+    int32 PlayerConditionID;
+    int32 GarrStringID;
+    uint8 Flags;
+};
+
+struct GarrEncounterEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    int32 CreatureID;
+    int32 PortraitFileDataID;
+    uint32 UiTextureKitID;
+    float UiAnimScale;
+    float UiAnimHeight;
+    int32 Flags;
+    int32 AutoCombatantID;
+};
+
+struct GarrEncounterSetXEncounterEntry
+{
+    uint32 ID;
+    uint32 GarrEncounterID;
+    int32 GarrEncounterSetID;
+};
+
+struct GarrEncounterXMechanicEntry
+{
+    uint32 ID;
+    int32 GarrMechanicID;
+    uint8 GarrMechanicSetID;
+    int32 GarrEncounterID;
+};
+
+struct GarrFollItemSetMemberEntry
+{
+    uint32 ID;
+    int32 GarrFollItemSetID;
+    uint8 ItemSlot;
+    uint16 ItemModifiedAppearanceID;
+    int32 GarrFollowerID;
+};
+
+struct GarrFollSupportSpellEntry
+{
+    uint32 ID;
+    int32 HordeSpellID;
+    int32 AllianceSpellID;
+    uint8 OrderIndex;
+    int32 GarrFollowerID;
+};
+
+struct GarrFollowerLevelXPEntry
+{
+    uint32 ID;
+    // 68275 db2 layout (WoWDBDefs LAYOUT 83953EF8): GarrFollowerTypeID comes BEFORE FollowerLevel.
+    // These were previously declared in the reverse order, so every row loaded with the two bytes
+    // swapped (FollowerLevel held the type value, GarrFollowerTypeID held the level) — GetFollowerLevelXP
+    // then missed for every real (type, level) pair and follower mission XP was silently discarded.
+    int8 GarrFollowerTypeID;
+    uint8 FollowerLevel;
+    uint16 XpToNextLevel;
+    uint16 ShipmentXP;
+};
+
+struct GarrFollowerQualityEntry
+{
+    uint32 ID;
+    int32 XpThreshold;
+    uint32 QualityItemID;
+    int8 Quality;
+    uint8 AbilityCount;
+    uint8 TraitCount;
+    uint16 GarrFollowerTypeID;
+    uint32 ClassSpecID;
+};
+
+struct GarrFollowerSetXFollowerEntry
+{
+    uint32 ID;
+    int32 GarrFollowerID;
+    int32 GarrFollowerSetID;
+};
+
+struct GarrFollowerTypeEntry
+{
+    uint32 ID;
+    int8 GarrTypeID;
+    uint8 MaxFollowers;
+    uint8 MaxFollowerBuildingType;
+    uint16 MaxItemLevel;
+    uint8 LevelRangeBias;
+    uint8 ItemLevelRangeBias;
+    int32 Flags;
+};
+
+struct GarrFollowerUICreatureEntry
+{
+    uint32 ID;
+    uint8 Race;
+    int8 Gender;
+    int32 CreatureID;
+    float Scale;
+    int32 FileDataID;
+    int32 GarrFollowerID;
+};
+
+struct GarrItemLevelUpgradeDataEntry
+{
+    uint32 ID;
+    int32 Operation;
+    int32 MinItemLevel;
+    int32 MaxItemLevel;
+    int8 FollowerTypeID;
+};
+
+struct GarrMechanicEntry
+{
+    uint32 ID;
+    int32 GarrMechanicTypeID;
+    float Factor;
+    int32 GarrAbilityID;
+};
+
+struct GarrMechanicSetXMechanicEntry
+{
+    uint32 ID;
+    int32 GarrMechanicID;
+    int32 GarrMechanicSetID;
+};
+
+struct GarrMechanicTypeEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    int32 GarrAbilityCategoryID;
+    uint8 Category;
+};
+
+struct GarrMissionSetEntry
+{
+    uint32 ID;
+    int8 GarrTypeID;
+    int32 MissionCostCurrencyTypesID;
+    int32 ContentTuningID;
+    int32 MapID;
+    int32 Flags;
+    int32 Priority;
+};
+
+struct GarrMissionTextureEntry
+{
+    uint32 ID;
+    std::array<float, 2> Pos;
+    uint16 UiTextureAtlasMemberID;
+};
+
+struct GarrMissionTypeEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    uint16 UiTextureAtlasMemberID;
+    uint16 UiTextureKitID;
+};
+
+struct GarrMissionXEncounterEntry
+{
+    uint32 ID;
+    uint32 GarrEncounterID;
+    uint32 GarrEncounterSetID;
+    uint8 OrderIndex;
+    int8 BoardIndex;
+    int32 GarrMissionID;
+};
+
+struct GarrMissionXFollowerEntry
+{
+    uint32 ID;
+    int32 GarrFollowerID;
+    int32 GarrFollowerTypeID;
+    int8 BoardIndex;
+    int32 GarrMissionID;
+};
+
+struct GarrMssnBonusAbilityEntry
+{
+    uint32 ID;
+    uint8 GarrMssnBonusAbilityType;
+    uint8 MssnSort;
+    uint16 GarrAbilityID;
+    float Modifier;
+    int32 MissionSetID;
+};
+
+struct GarrPlotUICategoryEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    uint8 PlotType;
+};
+
+struct GarrSpecializationEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    uint8 GarrTypeID;
+    int32 IconFileDataID;
+    uint8 GarrFollowerTypeID;
+    int32 Param;
+    std::array<float, 2> Bonus;
+};
+
+struct GarrStringEntry
+{
+    uint32 ID;
+    LocalizedString Text;
+};
+
+struct GarrTalTreeXGarrTalResearchEntry
+{
+    uint32 ID;
+    int32 GarrTalentTreeID;
+    int32 GarrTalentResearchID;
+    int32 OrderIndex;
+};
+
+struct GarrTalentCostEntry
+{
+    uint64 MoneyQuantity;
+    uint32 ID;
+    uint32 GarrTalentTreeID;
+    int32 GarrTalentID;
+    int32 RankIndex;
+    int32 GarrTalentRankID;
+    int32 CostType;
+    int32 CurrencyTypesID;
+    int32 CurrencyQuantity;
+};
+
+struct GarrTalentEntry
+{
+    LocalizedString Name;
+    LocalizedString Description;
+    uint32 ID;
+    uint32 GarrTalentTreeID;
+    int8 Tier;
+    int8 UiOrder;
+    int32 IconFileDataID;
+    uint32 PlayerConditionID;
+    uint32 GarrAbilityID;
+    int32 Flags;
+    int32 TalentType;
+    int32 PrerequisiteTalentID;
+    int32 ResearchCostSource;
+    int32 ActiveDurationSecs;
+    int32 GarrTalentSocketPropertiesID;
+};
+
+struct GarrTalentMapPOIEntry
+{
+    uint32 ID;
+    std::array<float, 2> Position;
+    int32 GarrTalentID;
+};
+
+struct GarrTalentRankEntry
+{
+    uint32 ID;
+    int32 Rank;
+    int32 PerkSpellID;
+    int32 PerkPlayerConditionID;
+    float Points;
+    int32 ResearchCost;
+    int32 ResearchCostCurrencyTypesID;
+    int32 ResearchGoldCost;
+    int32 ResearchDurationSecs;
+    int32 RespecCost;
+    int32 RespecCostCurrencyTypesID;
+    int32 RespecGoldCost;
+    int32 RespecDurationSecs;
+    int32 AlternateResearchCost;
+    int32 AlternateResearchCostCurrencyTypesID;
+    int32 AlternateResearchGoldCost;
+    int32 AlternateResearchDurationSecs;
+    uint32 GarrTalentID;
+};
+
+struct GarrTalentRankGroupEntryEntry
+{
+    uint32 ID;
+    int32 GarrTalentRankGroupID;
+    uint32 GarrTalentRankID;
+};
+
+struct GarrTalentRankGroupResearchModEntry
+{
+    uint32 ID;
+    int32 ModifierType;
+    int32 PlayerConditionID;
+    float ModifierValue;
+    uint32 GarrTalentRankGroupID;
+};
+
+struct GarrTalentResearchEntry
+{
+    uint32 ID;
+    int32 GoldCost;
+    int32 CurrencyTypesID;
+    int32 CurrencyTypesCost;
+    int32 DurationSecs;
+    int32 RespecGoldCost;
+    int32 RespecCurrencyTypesID;
+    int32 RespecCurrencyTypesCost;
+    int32 RespecDurationSecs;
+};
+
+struct GarrTalentSocketPropertiesEntry
+{
+    uint32 ID;
+    int32 GarrTalentSocketType;
+    int32 GarrTalentSocketSubtype;
+};
+
+struct GarrTypeEntry
+{
+    int8 ID;
+    uint32 PrimaryCurrencyTypeID;
+    uint32 SecondaryCurrencyTypeID;
+    uint32 ExpansionID;
+    int32 Flags;
+    float AutoFollowerHealRate;
+    int32 MissionCostCurveID;
+    float AutoFollowerHealCostMult;
+    std::array<int32, 2> MapIDs;
+};
+
+struct GarrUiAnimClassInfoEntry
+{
+    uint32 ID;
+    int32 ClassID;
+    uint8 IsFemale;
+    float WalkSpeed;
+    uint32 RunAnimID;
+    uint32 WalkAnimID;
+    uint32 IdleAnimID;
+};
+
+struct GarrUiAnimRaceInfoEntry
+{
+    uint32 ID;
+    uint8 RaceID;
+    float RunSpeedModifier;
+    float RunAnimSpeedModifier;
+    float WalkAnimSpeedModifier;
+    float IdleAnimSpeedModifier;
+    float PortraitScale;
+    float PortraitHeight;
+    float PortraitFieldOfView;
+    float PortraitCameraPositionX;
+    float PortraitCameraPositionY;
+    float PortraitCameraPositionZ;
+    float PortraitCameraTargetX;
+    float PortraitCameraTargetY;
+};
+
+struct GossipXGarrTalentTreesEntry
+{
+    uint32 ID;
+    int32 GarrTalentTreeID;
+    int32 GossipID;
+};
+
+struct GroupFinderActivityEntry
+{
+    uint32 ID;
+    LocalizedString FullName;
+    LocalizedString ShortName;
+    uint8 GroupFinderCategoryID;
+    int8 OrderIndex;
+    uint16 GroupFinderActivityGrpID;
+    int32 Flags;
+    uint16 MinGearLevelSuggestion;
+    int32 PlayerConditionID;
+    uint16 MapID;
+    int16 DifficultyID;
+    uint16 AreaID;
+    int32 ExpansionID;
+    uint8 MaxPlayers;
+    uint8 DisplayType;
+    int32 Field_11_0_7_57361_013;
+    int32 Field_11_0_7_57361_014;
+    int32 Field_11_0_7_57361_015;
+    int32 Field_11_0_7_57361_016;
+    int32 OverrideContentTuningID;
+    int32 MapChallengeModeID;
+};
+
+struct HouseDecorEntry
+{
+    LocalizedString Name;                    // Meta field 0: FT_STRING
+    DBCPosition3D InitialRotation;           // Meta field 1: FT_FLOAT[3]
+    uint32 ID;                               // Meta field 2: IndexField
+    int32 Field_003;
+    int32 GameObjectID;
+    int32 Flags;
+    uint8 Type;
+    uint8 ModelType;
+    int32 ModelFileDataID;
+    int32 ThumbnailFileDataID;
+    int32 WeightCost;
+    int32 ItemID;
+    float InitialScale;
+    int32 FirstAcquisitionBonus;             // House XP gained on first acquisition (from Lua API)
+    int32 OrderIndex;
+    int8 Size;                               // HousingCatalogEntrySize (inferred from Lua API)
+    int32 StartingQuantity;
+    int32 UiModelSceneID;
+};
+
+struct HouseDecorMaterialEntry
+{
+    uint32 ID;
+    uint64 WMOMaterialReference;             // Meta[1] LONG: WoWDBDefs "WMOMaterialReference"
+    int32 MaterialTextureIndex;              // Meta[2] INT: WoWDBDefs "MaterialTextureIndex"
+    int32 HouseThemeID;                      // Meta[3] INT: WoWDBDefs "HouseThemeID" FK->HouseTheme
+    int32 TextureAFileDataID;                // Meta[4] INT: WoWDBDefs "TextureAFileDataID" FK->FileData
+    int32 TextureBFileDataID;                // Meta[5] INT: WoWDBDefs "TextureBFileDataID" FK->FileData
+};
+
+struct HouseDecorThemeSetEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    int32 ThemeID;
+    int32 IconFileDataID;
+};
+
+struct HouseEntry
+{
+    uint32 ID;
+    char const* InternalName;
+    int32 HouseTypeID;
+    int32 MapID;
+    int32 Flags;
+};
+
+struct HouseExteriorWmoDataEntry
+{
+    LocalizedString Name;                    // Meta field 0: FT_STRING
+    uint32 ID;                               // Meta field 1: IndexField
+    int32 Flags;
+    int32 Field_003;                         // Meta field 3: NEW in 12.0.5.66330 (per WoWDBDefs 0x95E7A088)
+    int32 Field_004;                         // Meta field 4: NEW in 12.0.5.66330
+};
+
+struct HouseLevelDataEntry
+{
+    uint32 ID;
+    int32 Level;
+    int32 QuestID;
+    int32 Field_12_0_7_67808_003;           // 12.0.7 (build 67808): new field, unnamed in all static sources (kept as-is per NO WRONG DATA)
+};
+
+struct HouseLevelRewardInfoEntry
+{
+    LocalizedString Name;                    // Meta field 0: FT_STRING
+    LocalizedString Description;             // Meta field 1: FT_STRING
+    uint32 ID;                               // Meta field 2: IndexField
+    int32 HouseLevelDataID;                  // Meta[3] INT: WoWDBDefs "HouseLevelDataID" FK->HouseLevelData
+    int32 Field_4;                           // Meta[4] INT: WoWDBDefs "Field_12_0_0_63967_004"
+    int32 IconFileDataID;                    // Meta[5] INT: WoWDBDefs "IconFileDataID" FK->FileData
+};
+
+struct HouseRoomEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    int8 Size;
+    int32 Flags;
+    int32 Field_002;
+    int32 RoomWmoDataID;
+    int32 UiTextureAtlasElementID;
+    int32 WeightCost;
+    int32 Field_007;                         // NEW in 12.0.5.66330 (per WoWDBDefs layout 0xFC6C2118)
+};
+
+struct HouseThemeEntry
+{
+    LocalizedString Name;                    // Meta field 0: FT_STRING
+    uint32 ID;                               // Meta field 1: IndexField
+    int32 Flags;                             // Meta[2] INT: WoWDBDefs "Flags"
+    int32 ParentThemeID;                     // Meta[3] INT: WoWDBDefs "ParentThemeID" FK->HouseTheme
+};
+
+struct InitiativeCycleEntry
+{
+    uint32 ID;
+    int32 RewardGroupID;            // Unknown FK (values 600-2607), not NeighborhoodInitiative
+    int32 CycleIndex;
+    int32 StartDay;
+    int32 HouseXPCap;               // Meta[4] INT: WoWDBDefs "HouseXPCap"
+    int32 InitiativeID;             // Meta[5] INT: FK -> NeighborhoodInitiative.ID
+};
+
+struct InitiativeCyclePriorityEntry
+{
+    uint32 ID;
+    int32 Priority;
+    int32 Weight;
+    int32 Flags;
+    uint32 InitiativeCycleID;               // ParentIndexField
+};
+
+struct InitiativeMilestoneEntry
+{
+    uint32 ID;
+    int32 MilestoneOrderIndex;              // Meta[1] INT: WoWDBDefs "MilestoneOrderIndex"
+    float RequiredContributionAmount;       // Meta[2] FLOAT: WoWDBDefs "RequiredContributionAmount"
+    int32 Field_3;                          // Meta[3] INT: WoWDBDefs "Field_12_0_0_63534_003"
+    uint32 NeighborhoodInitiativeID;        // ParentIndexField: WoWDBDefs "NeighborhoodInitiativeID"
+};
+
+struct InitiativeRewardEntry
+{
+    int64 Money;                             // Meta[0] LONG: WoWDBDefs "Money"
+    LocalizedString Title;                   // Meta[1] STRING: WoWDBDefs "Title"
+    LocalizedString Description;
+    uint32 ID;
+    int32 DecorID;                           // Meta[4] INT: WoWDBDefs "DecorID" FK->HouseDecor
+    int32 DecorQuantity;                     // Meta[5] INT: WoWDBDefs "DecorQuantity"
+    int32 Field_6;                           // Meta[6] INT: WoWDBDefs "Field_12_0_0_63534_006"
+    int32 Favor;                             // Meta[7] INT: WoWDBDefs "Favor"
+    int32 RewardQuestID;                     // Meta[8] INT: WoWDBDefs "RewardQuestID" FK->QuestV2
+};
+
+struct InitiativeRewardXMilestoneEntry
+{
+    uint32 ID;
+    int32 InitiativeRewardID;
+    uint32 InitiativeMilestoneID;           // ParentIndexField
+};
+
+struct InitiativeTaskEntry
+{
+    LocalizedString TaskName;                // Meta[0] STRING: WoWDBDefs "TaskName"
+    LocalizedString Description;
+    uint32 ID;
+    int32 CriteriaTreeID;                   // Meta[3] INT: WoWDBDefs "CriteriaTreeID" FK->CriteriaTree
+    int32 QuestID;                           // Meta[4] INT: WoWDBDefs "QuestID" FK->QuestV2
+    int32 ProgressContributionAmount;        // Meta[5] INT: WoWDBDefs "ProgressContributionAmount"
+    int32 RepetitionContributionDampeningCurve; // Meta[6] INT: WoWDBDefs FK->Curve
+    int32 Supersedes;                        // Meta[7] INT: WoWDBDefs "Supersedes" FK->InitiativeTask
+    int32 Field_8;                           // Meta[8] INT: WoWDBDefs "Field_12_0_0_63534_008"
+};
+
+struct InitiativeXTaskEntry
+{
+    uint32 ID;
+    int32 InitiativeTaskID;
+    int32 SortOrder;
+    uint32 NeighborhoodInitiativeID;        // ParentIndexField
+};
+
+struct ItemConversionEntry
+{
+    uint32 ID;
+    int32 Unknown920;
+    int32 ItemBonusTreeID;
+    int32 ItemLogicalCostGroupID;
+    int32 AlternateItemLogicalCostGroupID;
+    int32 PlayerConditionID;
+};
+
+struct ItemConversionEntryEntry
+{
+    uint32 ID;
+    int32 ItemID;
+    uint32 ItemConversionID;
+};
+
+struct ItemLogicalCostEntry
+{
+    uint32 ID;
+    int32 InventoryTypeSlotMask;
+    int32 Flags;
+    int32 ItemExtendedCostID;
+    uint32 ItemLogicalCostGroupID;
+};
+
+struct ManagedWorldStateBuffEntry
+{
+    uint32 ID;
+    int32 BuffSpellID;
+    uint32 PlayerConditionID;
+    uint32 OccurrenceValue;
+    int32 ManagedWorldStateID;
+};
+
+struct ManagedWorldStateEntry
+{
+    uint32 ID;
+    int32 CurrentStageWorldStateID;
+    int32 ProgressWorldStateID;
+    uint32 UpTimeSecs;
+    uint32 DownTimeSecs;
+    int32 AccumulationStateTargetValue;
+    int32 DepletionStateTargetValue;
+    int32 AccumulationAmountPerMinute;
+    int32 DepletionAmountPerMinute;
+    int8 Field_8_1_5_29418_009;
+    std::array<int32, 4> OccurrencesWorldStateID;
+};
+
+struct ManagedWorldStateInputEntry
+{
+    uint32 ID;
+    int32 ManagedWorldStateID;
+    int32 QuestID;
+    int32 ValidInputConditionID;
+};
+
+struct MythicPlusSeasonKeyFloorEntry
+{
+    uint32 ID;
+    int32 KeyFloor;
+    int32 PlayerConditionID;
+    uint32 DisplaySeasonID;
+};
+
+struct MythicPlusSeasonRewardLevelsEntry
+{
+    uint32 ID;
+    uint32 MythicPlusSeasonID;
+    int32 ActivityTierID;
+    int32 DifficultyLevel;
+    int32 WeeklyRewardLevel;
+    int32 EndOfRunRewardLevel;
+};
+
+struct MythicPlusSeasonTrackedAffixEntry
+{
+    uint32 ID;
+    int32 KeystoneAffixID;
+    int32 BonusRating;
+    int32 Field_9_1_0_38511_004;
+    uint32 DisplaySeasonID;
+};
+
+struct MythicPlusSeasonTrackedMapEntry
+{
+    uint32 ID;
+    int32 MapChallengeModeID;
+    uint32 DisplaySeasonID;
+};
+
+struct NeighborhoodInitiativeEntry
+{
+    LocalizedString Name;                    // Meta field 0: FT_STRING
+    LocalizedString Description;             // Meta field 1: FT_STRING
+    uint32 ID;                               // Meta field 2: IndexField
+    int32 InitiativeType;
+    int32 Duration;
+    int32 RequiredParticipants;
+    int32 RewardCurrencyID;
+};
+
+struct NeighborhoodMapEntry
+{
+    DBCPosition3D Position;                  // Meta field 0: FT_FLOAT[3]
+    uint32 ID;                               // Meta field 1: IndexField
+    int32 MapID;
+    float EntryRotation;                     // Meta[3] FLOAT: WoWDBDefs "EntryRotation"
+    uint32 UiTextureKitID;                   // Meta[4] UINT: WoWDBDefs "UiTextureKitID"
+    int32 Flags;                             // Meta[5] INT: WoWDBDefs "Flags"
+};
+
+struct NeighborhoodNameGenEntry
+{
+    uint32 ID;
+    LocalizedString Prefix;
+    LocalizedString Middle;                  // Meta[2] STRING: WoWDBDefs "Middle"
+    LocalizedString Suffix;                  // Meta[3] STRING: WoWDBDefs "Suffix"
+    uint32 NeighborhoodMapID;
+};
+
+struct NeighborhoodPlotEntry
+{
+    uint64 Cost;                             // Meta field 0: FT_LONG
+    char const* Name;                        // Meta field 1: FT_STRING_NOT_LOCALIZED
+    DBCPosition3D HousePosition;             // Meta field 2: FT_FLOAT[3]
+    DBCPosition3D HouseRotation;             // Meta field 3: FT_FLOAT[3]
+    DBCPosition3D CornerstonePosition;       // Meta field 4: FT_FLOAT[3]
+    DBCPosition3D CornerstoneRotation;       // Meta field 5: FT_FLOAT[3]
+    DBCPosition3D TeleportPosition;          // Meta field 6: FT_FLOAT[3]
+    uint32 ID;                               // Meta field 7: IndexField
+    uint32 NeighborhoodMapID;
+    int32 Field_010;
+    int32 CornerstoneGameObjectID;
+    int32 PlotIndex;
+    int32 WorldState;
+    int32 PlotGameObjectID;
+    float TeleportFacing;                    // Facing angle at TeleportPosition (mirrors NeighborhoodMap.EntryRotation pattern)
+    int32 Field_016;
+};
+
+struct PerksActivityThresholdEntry
+{
+    uint32 ID;
+    int32 BonusTendies;
+    int32 OrderIndex;
+    int32 Threshold;
+    int32 PerksActivityThresholdGroupID;
+};
+
+struct PerksActivityThresholdGroupEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+    int32 PerksMonth;
+};
+
+struct PerksVendorCategoryEntry
+{
+    LocalizedString DisplayName;
+    uint32 ID;
+    int32 PerksVendorType;
+    int32 DefaultUIModelSceneID;
+};
+
+struct PerksVendorItemEntry
+{
+    uint32 ID;
+    int8 PerksVendorCategoryID;
+    int32 Field_10_0_5_47118_002;
+    int32 ItemID;
+    int32 Field_10_0_5_47118_004;
+    int32 CreatureDisplayInfoID;
+    int32 Cost;
+    int32 UiModelSceneID;
+    int32 UiGroupInfo;
+};
+
+struct PerksVendorItemXIntervalEntry
+{
+    uint32 ID;
+    int32 PerksVendorItemID;
+    int32 PerksActivityThresholdID;
+};
+
+struct PlayerCompanionInfoEntry
+{
+    LocalizedString UnlockDescription;
+    uint32 ID;
+    int32 DelvesSeasonID;
+    int32 TraitTreeID;
+    int32 TraitNodeID_DPS;
+    int32 TraitNodeID_Heal;
+    int32 TraitSubTreeID_DPS;
+    int32 TraitSubTreeID_Heal;
+    int32 TraitSubTreeID_Tank;
+    int32 FactionID;
+    int32 CreatureDisplayInfoID;
+    int32 UiModelSceneID;
+    int32 Field_12_0_0_64499_011;
+    int32 Field_12_0_0_64499_012;
+    int32 ParentID;                                                                   // Field_12_0_1_64889_014, parent relation
+};
+
+struct QuestLineEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    int32 CompletionPlayerConditionID;
+    int32 Flags;
+    uint32 QuestID;
+    int32 PlayerConditionID;
+    int32 Unknown1027_5;
+};
+
+struct RafActivityEntry
+{
+    uint32 ID;
+    int32 CriteriaTreeID;
+    int32 RewardQuestID;
+};
+
+struct RenownRewardsEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    LocalizedString ToastDescription;
+    int32 CovenantID;
+    int32 Level;
+    int32 Icon;
+    int32 Flags;
+    int32 UiOrder;
+    int32 ItemID;
+    int32 SpellID;
+    int32 MountID;
+    int32 TransmogID;
+    int32 TransmogSetID;
+    int32 CharTitlesID;
+    int32 GarrFollowerID;
+    int32 TransmogIllusionID;
+    int32 RewardCategory;        // Field_12_0_0_63534_016 - reward category enum
+    int32 QuestID;
+    int32 PlayerConditionID;
+};
+
+struct RenownRewardsPlunderstormEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    int32 CovenantID;
+    int32 Level;
+    int32 Icon;
+    int32 RewardCategory;        // Field_10_2_6_53840_005
+    int32 UiOrder;
+    int32 SpellID;
+};
+
+struct ResearchBranchEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    uint8 ResearchFieldID;
+    uint16 CurrencyID;
+    int32 TextureFileID;
+    int32 BigTextureFileID;
+    int32 ItemID;
+};
+
+struct ResearchFieldEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    uint8 Slot;
+};
+
+struct ResearchProjectEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    uint8 Rarity;
+    int32 SpellID;
+    uint16 ResearchBranchID;
+    uint8 NumSockets;
+    int32 TextureFileID;
+    uint32 RequiredWeight;
+};
+
+struct ResearchSiteEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    int16 MapID;
+    int32 QuestPOIBlobID;
+    uint32 AreaPOIIconEnum;
+};
+
+struct RoomComponentEntry
+{
+    DBCPosition3D OffsetPos;                 // Meta field 0: FT_FLOAT[3]
+    DBCPosition3D OffsetRot;                 // Meta field 1: FT_FLOAT[3]
+    uint32 ID;                               // Meta field 2: IndexField
+    int32 RoomWmoDataID;
+    int32 ModelFileDataID;
+    uint8 Type;
+    int32 MeshStyleFilterID;
+    uint8 ConnectionType;
+    int32 Flags;
+};
+
+struct RoomComponentOptionEntry
+{
+    uint32 ID;
+    uint8 Type;
+    uint8 SubType;
+    int32 ModelFileDataID;
+    int32 RoomComponentID;
+    int32 MeshStyleFilterID;
+    int32 HouseThemeID;
+    int32 Flags;
+};
+
+struct RoomComponentOptionTextureEntry
+{
+    uint32 ID;
+    int32 RoomComponentOptionID;
+    int32 RoomComponentTextureID;
+    int32 Flags;
+};
+
+struct RoomComponentTextureEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+    int32 Type;
+    int32 FileDataID;
+    int32 Flags;
+    int32 UiOrder;
+    uint32 RoomComponentID;                 // ParentIndexField
+};
+
+struct RoomWmoDataEntry
+{
+    uint32 ID;
+    float BoundingBoxMinX;
+    float BoundingBoxMinY;
+    float BoundingBoxMinZ;
+    float BoundingBoxMaxX;
+    float BoundingBoxMaxY;
+    float BoundingBoxMaxZ;
+    float Height;
+};
+
+struct SoulbindConduitEntry
+{
+    uint32 ID;
+    uint8 ConduitType;
+    int32 CovenantID;
+    int32 SpecSetID;
+    int32 Flags;
+};
+
+struct SoulbindConduitItemEntry
+{
+    uint32 ID;
+    int32 ItemID;
+    int32 ConduitID;
+};
+
+struct SoulbindConduitRankPropertiesEntry
+{
+    uint32 ID;
+    int32 Rank;
+    int32 ItemLevel;
+    int8 QualityID;
+};
+
+struct SoulbindEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    int32 CovenantID;
+    int32 GarrTalentTreeID;
+    int32 CreatureID;
+    int32 GarrFollowerID;
+    int32 PlayerConditionID;
+};
+
+struct TrophyEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    uint8 TrophyTypeID;
+    int32 GameObjectDisplayInfoID;
+    uint32 PlayerConditionID;
+};
+
+struct UIChromieTimeExpansionInfoEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    LocalizedString AllianceOverrideDesc;
+    LocalizedString HordeOverrideDesc;
+    int32 SpellID;
+    int32 MapAtlasElement;
+    int32 PreviewAtlasElement;
+    int32 ShowPlayerConditionID;
+    int32 ExpansionMask;
+    int32 ContentTuningID;
+    int32 CompletedPlayerConditionID;
+    int32 SortPriority;
+    int32 RecommendPlayerConditionID;
+};
+
+struct UiTextureKitEntry
+{
+    uint32 ID;
+    char const* KitPrefix;     // textureKit string (e.g. "MajorFaction-DragonscaleExpedition")
+};
+
+struct WarbandPlacementDisplayInfoEntry
+{
+    uint32 ID;
+    uint32 WarbandScenePlacementID;
+    int32 Field_11_2_0_61476_001;
+    int32 Field_11_2_0_61476_002;
+    int32 Field_11_2_0_61476_003;
+    int32 Field_11_2_0_61476_004;
+};
+
+struct WarbandSceneAnimChrSpecEntry
+{
+    uint32 ID;
+    int32 WarbandSceneAnimationID;
+    int32 ChrSpecializationID;
+};
+
+struct WarbandSceneAnimationEntry
+{
+    uint32 ID;
+    int32 SpellVisualKitID;
+    int32 Event;
+    int32 AnimKitID;
+    int32 Field_11_0_0_54210_003;
+    float TimeIsh;
+    uint8 StandState;
+    uint8 SheatheState;
+    int8 Field_11_1_0_58221_008;
+    std::array<int32, 2> Field_11_0_0_54210_005;
+};
+
+struct WarbandScenePlacementEntry
+{
+    DBCPosition3D Position;
+    uint32 ID;
+    uint32 WarbandSceneID;                  // ParentIndexField - must be unsigned
+    int32 SlotType;
+    float Rotation;
+    float Scale;
+    uint32 Field_11_0_0_54210_004;
+    uint32 Field_11_0_0_54210_005;
+    int32 Field_12_0_0_63534_008;
+    int32 SlotID;
+    int32 Field_12_0_0_63534_010;
+};
+
+struct WarbandScenePlacementFilterReqEntry
+{
+    uint32 ID;
+    uint16 Field_11_1_0_58221_002;
+    int8 Field_11_1_0_58221_005;
+    std::array<int32, 2> Field_11_1_0_58221_003;
+};
+
+struct WarbandScenePlacementOptionEntry
+{
+    DBCPosition3D Position;
+    uint32 ID;
+    uint32 WarbandScenePlacementID;
+    float Orientation;
+    float Scale;
+    int32 Field_11_1_0_58221_005;
+    int32 Field_11_1_0_58221_006;
+};
+
+struct WarbandScenePlcmntAnimOverrideEntry
+{
+    uint32 ID;
+    int32 Field_11_0_0_54210_000;
+    int32 WarbandSceneAnimationID;
+};
+
+struct WarbandSceneSourceInfoEntry
+{
+    LocalizedString SourceDescription;
+    uint32 ID;
+    uint32 WarbandSceneID;
+    int8 SourceType;
+};
+
+struct WeeklyRewardChestThresholdEntry
+{
+    uint32 ID;
+    int8 Type;              // WeeklyRewardChestThresholdType: 1=MythicPlus, 2=RankedPVP, 3=Raid, 4=AlsoReceive, 5=Concession
+    int32 Threshold;        // count required to unlock this slot (M+: 1/4/8)
+    int32 Index;            // slot index 0/1/2 (rows are not unique per index; the highest ID per (Type,Index) is the live one)
 };
 
 #pragma pack(pop)

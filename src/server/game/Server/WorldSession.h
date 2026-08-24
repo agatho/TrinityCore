@@ -358,7 +358,14 @@ namespace WorldPackets
     namespace Collections
     {
         class CollectionItemSetFavorite;
+        class MakeConditionalAppearancePermanent;
     }
+
+        namespace ContentTracking
+        {
+            class StartTracking;
+            class StopTracking;
+        }
 
     namespace CraftingOrders
     {
@@ -392,6 +399,7 @@ namespace WorldPackets
         class CommentatorGetPlayerInfo;
         class CommentatorGetPlayerCooldowns;
         class CommentatorStartWargame;
+}
     namespace Covenant
     {
         class ActivateSoulbind;
@@ -536,6 +544,48 @@ namespace WorldPackets
     {
         class DeclineNeighborhoodInvites;
     }
+
+        namespace Neighborhood
+        {
+            class NeighborhoodCharterOpenConfirmationUI;
+            class NeighborhoodCharterCreate;
+            class NeighborhoodCharterEdit;
+            class NeighborhoodCharterFinalize;
+            class NeighborhoodCharterAddSignature;
+            class NeighborhoodCharterSendSignatureRequest;
+            class NeighborhoodUpdateName;
+            class NeighborhoodSetPublicFlag;
+            class NeighborhoodAddSecondaryOwner;
+            class NeighborhoodRemoveSecondaryOwner;
+            class NeighborhoodInviteResident;
+            class NeighborhoodCancelInvitation;
+            class NeighborhoodPlayerDeclineInvite;
+            class NeighborhoodPlayerGetInvite;
+            class NeighborhoodGetInvites;
+            class NeighborhoodBuyHouse;
+            class NeighborhoodMoveHouse;
+            class NeighborhoodOpenCornerstoneUI;
+            class NeighborhoodOfferOwnership;
+            class NeighborhoodGetRoster;
+            class NeighborhoodEvictPlot;
+            class NeighborhoodInitiativeServiceStatusCheck;
+            class GetAvailableInitiativeRequest;
+            class GetInitiativeActivityLogRequest;
+            class GetNeighborhoodInitiativeInfoRequest;
+            class InitiativeUpdateActiveNeighborhood;
+            class NeighborhoodInitiativeOp01;
+            class NeighborhoodInitiativeOp05;
+            class NeighborhoodInitiativeOp06;
+            class NeighborhoodInitiativeOp07;
+            class NeighborhoodInitiativeOp08;
+            class NeighborhoodInitiativeOp09;
+            class NeighborhoodInitiativeOp0A;
+            class NeighborhoodInitiativeOp0B;
+            class NeighborhoodInitiativeOp0C;
+            class NeighborhoodInitiativeOp0D;
+            class NeighborhoodInitiativeOp0E;
+            class NeighborhoodInitiativeOp0F;
+        }
 
     namespace Inspect
     {
@@ -687,6 +737,7 @@ namespace WorldPackets
         class ClubFinderRespondToApplicant;
         class ClubFinderApplicationResponse;
         class ClubFinderWhisperApplicantRequest;
+}
     namespace BattlePay
     {
         class UpdateVasPurchaseStates;
@@ -699,10 +750,12 @@ namespace WorldPackets
         class ConfirmPurchaseResponse;
         class DistributionAssignToTarget;
         class CharacterUpgradeStart;
+}
     namespace Contribution
     {
         class ContributionContribute;
         class ContributionLastUpdateRequest;
+}
     namespace ChallengeMode
     {
         class RequestMythicPlusSeasonData;
@@ -723,6 +776,7 @@ namespace WorldPackets
         class RequestPartyEligibilityForDelveTiers;
         class SelectDelveEntranceTier;
         class TieredEntranceOpen;
+}
     namespace Housing
     {
         // Patch 12.1.0 (build 69299) blueprint packets (HousingBlueprintPackets.h)
@@ -803,6 +857,7 @@ namespace WorldPackets
         // Retired 2026-05-12 (batch 2): 8 fake SVCS CMSG class forward decls deleted.
         // Retired 2026-05-12: group 0x35 system CMSG classes (HouseStatusQuery, GetHouseInfoAlt,
         // HouseSnapshot, ExportHouse, UpdateHouseInfo) â€” no client senders in build 67186.
+}
     namespace LFGList
     {
         class LFGListJoin;
@@ -816,9 +871,11 @@ namespace WorldPackets
         class LFGListInviteApplicant;
         class LFGListInviteResponse;
         class RequestLFGListBlacklist;
+}
     namespace MajorFactions
     {
         class RequestCatchupState;
+}
     namespace Social
     {
         class AddFriend;
@@ -988,6 +1045,8 @@ namespace WorldPackets
         class QuestPushResult;
         class PushQuestToParty;
         class RequestWorldQuestUpdate;
+        class RequestAreaPoiUpdate;
+        class RequestScheduledAreaPoiUpdate;
         class ChoiceResponse;
         class CloseQuestChoice;
         class UiMapQuestLinesRequest;
@@ -1822,6 +1881,49 @@ class TC_GAME_API WorldSession
         void HandleHouseExteriorLock(WorldPackets::Housing::HouseExteriorLock const& houseExteriorLock);
         void HandleHouseInteriorLeaveHouse(WorldPackets::Housing::HouseInteriorLeaveHouse const& houseInteriorLeaveHouse);
         void HandleHousingDecorSetEditMode(WorldPackets::Housing::HousingDecorSetEditMode const& housingDecorSetEditMode);
+        void HandleNeighborhoodCharterOpenConfirmationUI(WorldPackets::Neighborhood::NeighborhoodCharterOpenConfirmationUI const& neighborhoodCharterOpenConfirmationUI);
+        void HandleNeighborhoodCharterCreate(WorldPackets::Neighborhood::NeighborhoodCharterCreate const& neighborhoodCharterCreate);
+        void HandleNeighborhoodCharterEdit(WorldPackets::Neighborhood::NeighborhoodCharterEdit const& neighborhoodCharterEdit);
+        void HandleNeighborhoodCharterFinalize(WorldPackets::Neighborhood::NeighborhoodCharterFinalize const& neighborhoodCharterFinalize);
+        void HandleNeighborhoodCharterAddSignature(WorldPackets::Neighborhood::NeighborhoodCharterAddSignature const& neighborhoodCharterAddSignature);
+        void HandleNeighborhoodCharterSendSignatureRequest(WorldPackets::Neighborhood::NeighborhoodCharterSendSignatureRequest const& neighborhoodCharterSendSignatureRequest);
+        void HandleNeighborhoodUpdateName(WorldPackets::Neighborhood::NeighborhoodUpdateName const& neighborhoodUpdateName);
+        void HandleNeighborhoodSetPublicFlag(WorldPackets::Neighborhood::NeighborhoodSetPublicFlag const& neighborhoodSetPublicFlag);
+        void HandleNeighborhoodAddSecondaryOwner(WorldPackets::Neighborhood::NeighborhoodAddSecondaryOwner const& neighborhoodAddSecondaryOwner);
+        void HandleNeighborhoodRemoveSecondaryOwner(WorldPackets::Neighborhood::NeighborhoodRemoveSecondaryOwner const& neighborhoodRemoveSecondaryOwner);
+        void HandleNeighborhoodInviteResident(WorldPackets::Neighborhood::NeighborhoodInviteResident const& neighborhoodInviteResident);
+        void HandleNeighborhoodCancelInvitation(WorldPackets::Neighborhood::NeighborhoodCancelInvitation const& neighborhoodCancelInvitation);
+        void HandleNeighborhoodPlayerDeclineInvite(WorldPackets::Neighborhood::NeighborhoodPlayerDeclineInvite const& neighborhoodPlayerDeclineInvite);
+        void HandleNeighborhoodPlayerGetInvite(WorldPackets::Neighborhood::NeighborhoodPlayerGetInvite const& neighborhoodPlayerGetInvite);
+        void HandleNeighborhoodGetInvites(WorldPackets::Neighborhood::NeighborhoodGetInvites const& neighborhoodGetInvites);
+        void HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::NeighborhoodBuyHouse const& neighborhoodBuyHouse);
+        void HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::NeighborhoodMoveHouse const& neighborhoodMoveHouse);
+        void HandleNeighborhoodOpenCornerstoneUI(WorldPackets::Neighborhood::NeighborhoodOpenCornerstoneUI const& neighborhoodOpenCornerstoneUI);
+        void HandleNeighborhoodOfferOwnership(WorldPackets::Neighborhood::NeighborhoodOfferOwnership const& neighborhoodOfferOwnership);
+        void HandleNeighborhoodGetRoster(WorldPackets::Neighborhood::NeighborhoodGetRoster const& neighborhoodGetRoster);
+        void HandleContentTrackingStartTracking(WorldPackets::ContentTracking::StartTracking& packet);
+        void HandleContentTrackingStopTracking(WorldPackets::ContentTracking::StopTracking& packet);
+        void AddPendingCharterSignatureRequest(uint64 charterId) { _pendingCharterSignatureRequests.insert(charterId); }
+        bool HasPendingCharterSignatureRequest(uint64 charterId) const { return _pendingCharterSignatureRequests.contains(charterId); }
+        void ClearPendingCharterSignatureRequest(uint64 charterId) { _pendingCharterSignatureRequests.erase(charterId); }
+        void HandleNeighborhoodInitiativeOp01(WorldPackets::Neighborhood::NeighborhoodInitiativeOp01 const& packet);
+        void HandleNeighborhoodInitiativeOp05(WorldPackets::Neighborhood::NeighborhoodInitiativeOp05 const& packet);
+        void HandleNeighborhoodInitiativeOp06(WorldPackets::Neighborhood::NeighborhoodInitiativeOp06 const& packet);
+        void HandleNeighborhoodInitiativeOp07(WorldPackets::Neighborhood::NeighborhoodInitiativeOp07 const& packet);
+        void HandleNeighborhoodInitiativeOp08(WorldPackets::Neighborhood::NeighborhoodInitiativeOp08 const& packet);
+        void HandleNeighborhoodInitiativeOp09(WorldPackets::Neighborhood::NeighborhoodInitiativeOp09 const& packet);
+        void HandleNeighborhoodInitiativeOp0A(WorldPackets::Neighborhood::NeighborhoodInitiativeOp0A const& packet);
+        void HandleNeighborhoodInitiativeOp0B(WorldPackets::Neighborhood::NeighborhoodInitiativeOp0B const& packet);
+        void HandleNeighborhoodInitiativeOp0C(WorldPackets::Neighborhood::NeighborhoodInitiativeOp0C const& packet);
+        void HandleNeighborhoodInitiativeOp0D(WorldPackets::Neighborhood::NeighborhoodInitiativeOp0D const& packet);
+        void HandleNeighborhoodInitiativeOp0E(WorldPackets::Neighborhood::NeighborhoodInitiativeOp0E const& packet);
+        void HandleNeighborhoodInitiativeOp0F(WorldPackets::Neighborhood::NeighborhoodInitiativeOp0F const& packet);
+        void HandleNeighborhoodEvictPlot(WorldPackets::Neighborhood::NeighborhoodEvictPlot const& neighborhoodEvictPlot);
+        void HandleNeighborhoodInitiativeServiceStatusCheck(WorldPackets::Neighborhood::NeighborhoodInitiativeServiceStatusCheck const& packet);
+        void HandleGetAvailableInitiativeRequest(WorldPackets::Neighborhood::GetAvailableInitiativeRequest const& getAvailableInitiativeRequest);
+        void HandleGetInitiativeActivityLogRequest(WorldPackets::Neighborhood::GetInitiativeActivityLogRequest const& getInitiativeActivityLogRequest);
+        void HandleGetNeighborhoodInitiativeInfoRequest(WorldPackets::Neighborhood::GetNeighborhoodInitiativeInfoRequest const& getNeighborhoodInitiativeInfoRequest);
+        void HandleInitiativeUpdateActiveNeighborhood(WorldPackets::Neighborhood::InitiativeUpdateActiveNeighborhood const& initiativeUpdateActiveNeighborhood);
         void HandleHousingDecorPlace(WorldPackets::Housing::HousingDecorPlace const& housingDecorPlace);
         void HandleHousingDecorMove(WorldPackets::Housing::HousingDecorMove const& housingDecorMove);
         void HandleHousingDecorRemove(WorldPackets::Housing::HousingDecorRemove const& housingDecorRemove);
@@ -1936,9 +2038,6 @@ class TC_GAME_API WorldSession
         void HandleAddIgnoreOpcode(WorldPackets::Social::AddIgnore& packet);
         void HandleDelIgnoreOpcode(WorldPackets::Social::DelIgnore& packet);
         void HandleSetContactNotesOpcode(WorldPackets::Social::SetContactNotes& packet);
-        void HandleSetAllowRecentAlliesSeeLocation(WorldPackets::Social::SetAllowRecentAlliesSeeLocation& packet);
-        void HandleRecentAllyRequestData(WorldPackets::Social::RecentAllyRequestData& packet);
-        void HandleRecentAllySetNote(WorldPackets::Social::RecentAllySetNote& packet);
 
         void HandleAreaTriggerOpcode(WorldPackets::AreaTrigger::AreaTrigger& packet);
         void HandleUpdateAreaTriggerVisual(WorldPackets::AreaTrigger::UpdateAreaTriggerVisual const& updateAreaTriggerVisual);
@@ -2140,9 +2239,6 @@ class TC_GAME_API WorldSession
         void HandleAccountBankDepositMoney(WorldPackets::Bank::AccountBankDepositMoney const& accountBankDepositMoney);
         void HandleAccountBankWithdrawMoney(WorldPackets::Bank::AccountBankWithdrawMoney const& accountBankWithdrawMoney);
         void HandleAutoDepositAccountBank(WorldPackets::Bank::AutoDepositAccountBank const& autoDepositAccountBank);
-        void HandleAutoDepositAccountBank(WorldPackets::Bank::AutoDepositAccountBank const& autoDepositAccountBank);
-        void HandleAccountBankDepositMoney(WorldPackets::Bank::AccountBankDepositMoney const& accountBankDepositMoney);
-        void HandleAccountBankWithdrawMoney(WorldPackets::Bank::AccountBankWithdrawMoney const& accountBankWithdrawMoney);
 
         // Black Market
         void HandleBlackMarketOpen(WorldPackets::BlackMarket::BlackMarketOpen& blackMarketOpen);
@@ -2234,13 +2330,14 @@ class TC_GAME_API WorldSession
         void HandlePushQuestToParty(WorldPackets::Quest::PushQuestToParty& packet);
         void HandleQuestPushResult(WorldPackets::Quest::QuestPushResult& packet);
         void HandleRequestWorldQuestUpdate(WorldPackets::Quest::RequestWorldQuestUpdate& packet);
+        void HandleRequestAreaPoiUpdate(WorldPackets::Quest::RequestAreaPoiUpdate& packet);
+        void HandleRequestScheduledAreaPoiUpdate(WorldPackets::Quest::RequestScheduledAreaPoiUpdate& packet);
         void HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceResponse const& choiceResponse);
         void HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& closeQuestChoice);
         void HandleUiMapQuestLinesRequest(WorldPackets::Quest::UiMapQuestLinesRequest& uiMapQuestLinesRequest);
         void HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasurePicker const& queryTreasurePicker);
         void HandleSpawnTrackingUpdate(WorldPackets::Quest::SpawnTrackingUpdate& spawnTrackingUpdate);
         void HandleQueryQuestItemUsability(WorldPackets::Quest::QueryQuestItemUsability& queryQuestItemUsability);
-        void HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& closeQuestChoice);
         void HandleQuestSessionRequestStart(WorldPackets::Quest::QuestSessionRequestStart& packet);
         void HandleQuestSessionRequestStop(WorldPackets::Quest::QuestSessionRequestStop& packet);
         void HandleQuestSessionBeginResponse(WorldPackets::Quest::QuestSessionBeginResponse& packet);
@@ -2498,7 +2595,6 @@ class TC_GAME_API WorldSession
         // Adventure Journal
         void HandleAdventureJournalOpenQuest(WorldPackets::AdventureJournal::AdventureJournalOpenQuest& openQuest);
         void HandleAdventureJournalUpdateSuggestions(WorldPackets::AdventureJournal::AdventureJournalUpdateSuggestions& updateSuggestions);
-        void HandleEncounterJournalStartArathiRpe(WorldPackets::AdventureJournal::EncounterJournalStartArathiRpe& startArathiRpe);
 
         // Covenant
         void HandleActivateSoulbind(WorldPackets::Covenant::ActivateSoulbind& packet);
@@ -2536,7 +2632,6 @@ class TC_GAME_API WorldSession
         void HandleGarrisonCancelConstruction(WorldPackets::Garrison::GarrisonCancelConstruction& garrisonCancelConstruction);
         void HandleGarrisonRequestBlueprintAndSpecializationData(WorldPackets::Garrison::GarrisonRequestBlueprintAndSpecializationData& garrisonRequestBlueprintAndSpecializationData);
         void HandleGarrisonGetMapData(WorldPackets::Garrison::GarrisonGetMapData& garrisonGetMapData);
-        void HandleGarrisonSocketTalent(WorldPackets::Garrison::GarrisonSocketTalent& garrisonSocketTalent);
 
         // Battle Pets
         void HandleBattlePetRequestJournal(WorldPackets::BattlePet::BattlePetRequestJournal& battlePetRequestJournal);
@@ -2601,9 +2696,7 @@ class TC_GAME_API WorldSession
 
         void HandleSocialContractRequest(WorldPackets::Social::SocialContractRequest& socialContractRequest);
 
-        void HandleRequestCurrencyDataForAccountCharacters(WorldPackets::Misc::RequestCurrencyDataForAccountCharacters& packet);
         void HandleTransferCurrencyFromAccountCharacter(WorldPackets::Misc::TransferCurrencyFromAccountCharacter& packet);
-        void HandleGetCharacterCurrencyTransferLog(WorldPackets::Misc::GetCharacterCurrencyTransferLog& packet);
 
         union ConnectToKey
         {
@@ -2760,6 +2853,9 @@ class TC_GAME_API WorldSession
 
         WorldSession(WorldSession const& right) = delete;
         WorldSession& operator=(WorldSession const& right) = delete;
+        uint32 _lastClientPlotIndex = 0;
+        ObjectGuid _lastCornerstoneGuid;
+        std::unordered_set<uint64> _pendingCharterSignatureRequests;
 };
 
 #endif

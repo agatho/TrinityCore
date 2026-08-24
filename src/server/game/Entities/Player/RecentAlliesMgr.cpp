@@ -91,10 +91,6 @@ void RecordGroupJoin(Player const* joiner, std::span<Player const* const> existi
 
 void RecordGrouping(Player const* a, Player const* b)
 {
-    Player const* single[] = { b };
-    RecordGroupJoin(a, single);
-void RecordGrouping(Player const* a, Player const* b)
-{
     if (!a || !b || a == b || a->GetGUID() == b->GetGUID())
         return;
 

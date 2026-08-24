@@ -242,6 +242,7 @@ class TC_GAME_API Item : public Object
         std::vector<int32> const& GetBonusListIDs() const { return m_itemData->ItemBonusKey->BonusListIDs; }
         void SetBonuses(std::vector<int32> bonusListIDs);
         void ClearBonuses();
+        void ReplaceBonuses(std::vector<int32> bonusListIDs);
 
         static void DeleteFromDB(CharacterDatabaseTransaction trans, ObjectGuid::LowType itemGuid);
         virtual void DeleteFromDB(CharacterDatabaseTransaction trans);

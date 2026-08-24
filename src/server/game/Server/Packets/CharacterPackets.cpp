@@ -921,6 +921,8 @@ WorldPacket const* NeutralPlayerFactionSelectResult::Write()
     _worldPacket << uint8(Faction);
 
     return &_worldPacket;
+}
+
 void SetupWarbandGroups::Read()
 {
     _worldPacket >> BitsSize<5>(Groups);

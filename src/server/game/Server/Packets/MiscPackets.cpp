@@ -177,14 +177,15 @@ WorldPacket const* CurrencyTransferLog::Write()
 {
     _worldPacket << Size<uint32>(Entries);
 
-    for (Entry const& entry : Entries)
+    for (CurrencyTransferLogEntry const& entry : Entries)
     {
-        _worldPacket << entry.Source;              // PackedGuid (source character)
-        _worldPacket << entry.Dest;                // PackedGuid (destination character)
-        _worldPacket << int32(entry.CurrencyID);
-        _worldPacket << int32(entry.Quantity);
-        _worldPacket << int32(entry.Field3);
-        _worldPacket << uint64(entry.TransferTime);
+        _worldPacket << entry.SourceCharacterGUID;
+        _worldPacket << entry.DestCharacterGUID;
+        _worldPacket << int32(entry.CurrencyTypeID);
+        _worldPacket << int32(entry.QuantityReceived);
+        _worldPacket << int32(entry.QuantitySent);
+        _worldPacket << uint32(entry.Timestamp);
+        _worldPacket << int32(0);
     }
 
     return &_worldPacket;
@@ -192,21 +193,28 @@ WorldPacket const* CurrencyTransferLog::Write()
 
 WorldPacket const* AccountCharacterCurrencyLists::Write()
 {
-    _worldPacket << Size<uint32>(Currencies);
+    _worldPacket << Size<uint32>(Characters);
+    _worldPacket << Size<uint32>(CurrencyData);
 
-    for (CharacterCurrency const& currency : Currencies)
+    for (CharacterCurrencyData const& character : Characters)
     {
-        _worldPacket << int32(currency.CurrencyID);
-        _worldPacket << currency.Character;        // PackedGuid
-        _worldPacket << uint32(currency.Quantity);
-        _worldPacket << uint32(currency.WeeklyQuantity);
-        _worldPacket << uint32(currency.MaxQuantity);
-        _worldPacket << Bits<1>(currency.Flag);
-        _worldPacket.FlushBits();
+        _worldPacket << character.CharacterGUID;
+        _worldPacket << uint8(character.ClassID);
+        _worldPacket << int32(character.Level);
+        _worldPacket << SizedString::BitsSize<6>(character.CharacterName);
     }
 
-    _worldPacket << Bits<1>(TrailingFlag);
     _worldPacket.FlushBits();
+
+    for (CharacterCurrencyData const& character : Characters)
+        _worldPacket << SizedString::Data(character.CharacterName);
+
+    for (CurrencyQuantityData const& currency : CurrencyData)
+    {
+        _worldPacket << currency.CharacterGUID;
+        _worldPacket << int32(currency.CurrencyTypeID);
+        _worldPacket << int32(currency.Quantity);
+    }
 
     return &_worldPacket;
 }
@@ -1035,6 +1043,10 @@ WorldPacket const* SetCtrOptions::Write()
 
     writeBlock(Previous);
     writeBlock(Current);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* DisplayWorldText::Write()
 {
     _worldPacket << Guid;
@@ -1044,43 +1056,23 @@ WorldPacket const* DisplayWorldText::Write()
     _worldPacket.FlushBits();
 
     _worldPacket << SizedString::Data(Text);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* MultiFloorNewFloor::Write()
 {
     _worldPacket << int32(MapID);
     _worldPacket << int32(FloorIndex);
+
+    return &_worldPacket;
+}
+
 void TransferCurrencyFromAccountCharacter::Read()
 {
     _worldPacket >> SourceCharacterGUID;
     _worldPacket >> CurrencyID;
     _worldPacket >> Quantity;
-}
-
-WorldPacket const* AccountCharacterCurrencyLists::Write()
-{
-    _worldPacket << Size<uint32>(Characters);
-    _worldPacket << Size<uint32>(CurrencyData);
-
-    for (CharacterCurrencyData const& character : Characters)
-    {
-        _worldPacket << character.CharacterGUID;
-        _worldPacket << uint8(character.ClassID);
-        _worldPacket << int32(character.Level);
-        _worldPacket << SizedString::BitsSize<6>(character.CharacterName);
-    }
-
-    _worldPacket.FlushBits();
-
-    for (CharacterCurrencyData const& character : Characters)
-        _worldPacket << SizedString::Data(character.CharacterName);
-
-    for (CurrencyQuantityData const& currency : CurrencyData)
-    {
-        _worldPacket << currency.CharacterGUID;
-        _worldPacket << int32(currency.CurrencyTypeID);
-        _worldPacket << int32(currency.Quantity);
-    }
-
-    return &_worldPacket;
 }
 
 WorldPacket const* CurrencyTransferResult::Write()
@@ -1097,23 +1089,8 @@ WorldPacket const* MultiFloorLeaveFloor::Write()
 {
     _worldPacket << int32(MapID);
     _worldPacket << int32(FloorIndex);
-WorldPacket const* CurrencyTransferLog::Write()
-{
-    _worldPacket << Size<uint32>(Entries);
-
-    // Retail 12.0.7 entry layout (verified against sniff SMSG_CURRENCY_TRANSFER_LOG):
-    // Source, Dest, CurrencyTypeID, QuantityReceived, QuantitySent, Timestamp, trailing int32(0).
-    for (CurrencyTransferLogEntry const& entry : Entries)
-    {
-        _worldPacket << entry.SourceCharacterGUID;
-        _worldPacket << entry.DestCharacterGUID;
-        _worldPacket << int32(entry.CurrencyTypeID);
-        _worldPacket << int32(entry.QuantityReceived);
-        _worldPacket << int32(entry.QuantitySent);
-        _worldPacket << uint32(entry.Timestamp);
-        _worldPacket << int32(0);
-    }
 
     return &_worldPacket;
 }
+
 }

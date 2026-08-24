@@ -9830,6 +9830,8 @@ void Unit::SendDiminishingReturnStart(DiminishingGroup group, bool showCountdown
     diminishingReturnStart.ShowCountdown = showCountdown;
     diminishingReturnStart.IsImmune = isImmune;
     SendMessageToSet(diminishingReturnStart.Write(), true);
+}
+
 void Unit::SendAddLossOfControl(ObjectGuid caster, uint32 spellId, SpellSchoolMask lockoutSchoolMask, int32 durationMs)
 {
     // Only players track a loss-of-control UI; the packet is unicast to the affected player,

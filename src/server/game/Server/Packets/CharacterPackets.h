@@ -961,6 +961,8 @@ namespace WorldPackets
 
             bool Success = false;
             uint8 Faction = 0; // echoes the chosen FactionIndex so the client can update its faction-group state
+        };
+
         class SetupWarbandGroups final : public ClientPacket
         {
         public:

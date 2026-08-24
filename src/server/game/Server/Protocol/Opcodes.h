@@ -1065,6 +1065,20 @@ enum OpcodeClient : uint32
 
     // Deleted opcodes, here only to allow compile
     CMSG_TRANSMOGRIFY_ITEMS                                         = CMSG_REQUEST_SCHEDULED_PVP_INFO + 1,
+    CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST                   = 0x380003, // 12.0.5 â€” Lua C_NeighborhoodInitiative.RequestNeighborhoodInitiativeInfo
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_01                          = 0x380001, // PackedGUID
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_05                          = 0x380005, // uint32 + PackedGUID
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_06                          = 0x380006, // empty
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_07                          = 0x380007, // uint32
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_08                          = 0x380008, // empty
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_09                          = 0x380009, // float
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0A                          = 0x38000A, // uint32
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0B                          = 0x38000B, // uint32
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0C                          = 0x38000C, // PackedGUID
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0D                          = 0x38000D, // uint32 + uint32 + (uint32,uint32)[N] + Bits<1>
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0E                          = 0x38000E, // uint32 + uint32[N]
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0F                          = 0x38000F, // uint32 + (uint32Ã—4)[N]
+    CMSG_HOUSING_BLUEPRINT_EXPORT_ROOM                             = 0x310008, // wire: bits<24> bits<1> u8 pguid Blob
 };
 
 inline constexpr std::size_t NUM_CMSG_OPCODES = 1977;
@@ -1670,13 +1684,7 @@ enum OpcodeServer : uint32
     SMSG_HOTFIX_MESSAGE                                             = 0x490002,
     SMSG_HOUSE_EXTERIOR_LOCK_RESPONSE                               = 0x530000,
     SMSG_HOUSE_EXTERIOR_SET_HOUSE_POSITION_RESPONSE                 = 0x530001,
-    SMSG_HOUSING_BLUEPRINT_CHECK_RESPONSE                           = 0x540007,
     SMSG_HOUSING_CATALOG_STATE_SYNC                                = UNKNOWN_OPCODE, // fork-speculative; no confirmed 12.1 client opcode
-    SMSG_HOUSING_BLUEPRINT_DELETE_RESPONSE                          = 0x540003,
-    SMSG_HOUSING_BLUEPRINT_EXPORT_RESPONSE                          = 0x540000,
-    SMSG_HOUSING_BLUEPRINT_GET_RESPONSE                             = 0x540001,
-    SMSG_HOUSING_BLUEPRINT_IMPORT_RESPONSE                          = 0x540004,
-    SMSG_HOUSING_BLUEPRINT_RENAME_RESPONSE                          = 0x540002,
     SMSG_HOUSING_DECOR_ADD_TO_HOUSE_CHEST_RESPONSE                  = 0x550008,
     SMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_RESPONSE                 = 0x550006,
     SMSG_HOUSING_DECOR_DRAW_SERVER_LIGHTING_DEBUG_SPHERES_RESPONSE  = 0x550001,
@@ -2514,6 +2522,20 @@ enum OpcodeServer : uint32
 
     // Deleted opcodes, here only to allow compile
     SMSG_ARENA_TEAM_STATS                                           = UNKNOWN_OPCODE,
+    SMSG_HOUSING_BLUEPRINT_CHECK_RESPONSE                           = 0x540007,
+    SMSG_HOUSING_BLUEPRINT_DELETE_RESPONSE                          = 0x540003,
+    SMSG_HOUSING_BLUEPRINT_EXPORT_RESPONSE                          = 0x540000,
+    SMSG_HOUSING_BLUEPRINT_GET_RESPONSE                             = 0x540001,
+    SMSG_HOUSING_BLUEPRINT_IMPORT_RESPONSE                          = 0x540004,
+    SMSG_HOUSING_BLUEPRINT_RENAME_RESPONSE                          = 0x540002,
+    SMSG_HOUSING_BLUEPRINT_COLLECTION                               = 0x540000, // u32 result + vector<JamHousingBlueprint>
+    SMSG_HOUSING_BLUEPRINT_CONTENTS                                 = 0x540001, // JamHousingBlueprint + JamBlueprintItemList + vector<JamBlueprintMissingItem>
+    SMSG_HOUSING_BLUEPRINT_EXPORT_RESULT                            = 0x540002, // u32 result + JamHousingBlueprint
+    SMSG_HOUSING_BLUEPRINT_IMPORT_RESULT                            = 0x540003, // u32 result + houseGUID + JamBlueprintItemList
+    SMSG_HOUSING_BLUEPRINT_DELETE_RESULT                            = 0x540004, // u32 result + blueprintID
+    SMSG_HOUSING_BLUEPRINT_RENAME_RESULT                            = 0x540005, // u32 result + blueprintID + name
+    SMSG_HOUSING_BLUEPRINTS_AVAILABILITY_CHANGED                    = 0x540007, // bits<1> available + u32 maxPerBnet + u32 maxBackups
+    SMSG_HOUSING_HOUSE_BUDGETS_UPDATE                               = 0x620000, // JamHouseBudgets
 };
 
 inline constexpr std::size_t NUM_SMSG_OPCODES = 1671;

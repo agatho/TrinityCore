@@ -754,6 +754,8 @@ enum RBACPermissions
     RBAC_PERM_COMMAND_BG_START                               = 884,
     RBAC_PERM_COMMAND_BG_STOP                                = 885,
     RBAC_PERM_USE_COMMENTATOR_MODE                           = 886,
+    RBAC_PERM_COMMAND_CLUB_FINDER            = 887,
+    RBAC_PERM_COMMAND_SHOP                   = 888,
     //
     // IF YOU ADD NEW PERMISSIONS, ADD THEM IN 3.3.5 BRANCH AS WELL!
     //

@@ -164,7 +164,7 @@ void WorldSession::HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::Account
     if (item->TransmogSetID)
         collectionMgr->AddTransmogSet(uint32(item->TransmogSetID));
 
-    collectionMgr->AddAccountStorePurchase(item->ID);
+    collectionMgr->AddAccountStorePurchase(item->ID, 0, false);
 
     sendResult(AccountStoreTransactionResult::Success, AccountStoreItemStatus::Owned);
 }

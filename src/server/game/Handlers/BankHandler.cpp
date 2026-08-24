@@ -420,11 +420,6 @@ void WorldSession::HandleAccountBankDepositMoney(WorldPackets::Bank::AccountBank
 {
     if (!CanUseBank(accountBankDepositMoney.Banker))
     {
-        TC_LOG_ERROR("network", "WORLD: HandleAccountBankDepositMoney - Unit ({}) not found or you can't interact with him.", accountBankDepositMoney.Banker);
-        return;
-    }
-
-    if (accountBankDepositMoney.Money == 0)
         TC_LOG_DEBUG("network", "WORLD: HandleAccountBankDepositMoney - {} not found or you can't interact with him.", accountBankDepositMoney.Banker.ToString());
         return;
     }
@@ -438,11 +433,6 @@ void WorldSession::HandleAccountBankDepositMoney(WorldPackets::Bank::AccountBank
     if (!_player->HasEnoughMoney(accountBankDepositMoney.Money))
         return;
 
-    _player->ModifyMoney(-int64(accountBankDepositMoney.Money));
-
-    uint64 accountBankMoney = _player->m_activePlayerData->AccountBankCoinage;
-    accountBankMoney += accountBankDepositMoney.Money;
-    _player->SetUpdateFieldValue(_player->m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::AccountBankCoinage), accountBankMoney);
     if (_player->GetAccountBankCoinage() > MAX_MONEY_AMOUNT - accountBankDepositMoney.Money)
         return;
 
@@ -468,39 +458,6 @@ void WorldSession::HandleAccountBankWithdrawMoney(WorldPackets::Bank::AccountBan
     accountBankMoney -= accountBankWithdrawMoney.Money;
     _player->SetUpdateFieldValue(_player->m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::AccountBankCoinage), accountBankMoney);
 
-    _player->ModifyMoney(int64(accountBankWithdrawMoney.Money));
-}
-
-void WorldSession::HandleAutoDepositAccountBank(WorldPackets::Bank::AutoDepositAccountBank const& autoDepositAccountBank)
-{
-    if (!CanUseBank(autoDepositAccountBank.Banker))
-    {
-        TC_LOG_DEBUG("network", "WORLD: HandleAutoDepositAccountBank - {} not found or you can't interact with him.", autoDepositAccountBank.Banker);
-        return;
-    }
-
-    // TODO: implement auto-deposit of warbound items to account bank tabs
-    // Requires ItemSearchLocation::AccountBank support (currently NYI)
-        TC_LOG_DEBUG("network", "WORLD: HandleAccountBankWithdrawMoney - {} not found or you can't interact with him.", accountBankWithdrawMoney.Banker.ToString());
-        return;
-    }
-
-    if (!CanMutateAccountBank())
-        return;
-
-    if (!accountBankWithdrawMoney.Money)
-        return;
-
-    if (_player->GetAccountBankCoinage() < accountBankWithdrawMoney.Money)
-        return;
-
-    if (_player->GetMoney() > MAX_MONEY_AMOUNT - accountBankWithdrawMoney.Money)
-    {
-        _player->SendEquipError(EQUIP_ERR_TOO_MUCH_GOLD, nullptr, nullptr);
-        return;
-    }
-
-    _player->ModifyAccountBankCoinage(-int64(accountBankWithdrawMoney.Money));
     _player->ModifyMoney(int64(accountBankWithdrawMoney.Money));
 }
 

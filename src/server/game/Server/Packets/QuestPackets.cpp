@@ -967,6 +967,10 @@ WorldPacket const* QuestItemUsabilityResponse::Write()
     _worldPacket << Size<uint32>(Usabilities);
     for (uint8 usability : Usabilities)
         _worldPacket << uint8(usability);
+
+    return &_worldPacket;
+}
+
 void QuestSessionBeginResponse::Read()
 {
     _worldPacket >> Bits<1>(Accept);
@@ -979,9 +983,29 @@ WorldPacket const* QuestSessionResult::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* AreaPoiUpdateResponse::Write()
+{
+    _worldPacket << Size<uint32>(AreaPois);
+
+    for (AreaPoiUpdateInfo const& areaPoi : AreaPois)
+    {
+        _worldPacket << areaPoi.LastUpdate;
+        _worldPacket << uint32(areaPoi.AreaPoiID);
+        _worldPacket << uint32(areaPoi.Timer);
+        _worldPacket << int32(areaPoi.VariableID);
+        _worldPacket << int32(areaPoi.Value);
+    }
+
+    return &_worldPacket;
+}
+
 WorldPacket const* DisplayQuestPopup::Write()
 {
     _worldPacket << int32(QuestID);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* QuestSessionReadyCheckResponse::Write()
 {
     _worldPacket << Player;
@@ -1008,6 +1032,10 @@ WorldPacket const* GossipQuestUpdate::Write()
     _worldPacket << QuestGiverGUID;
     _worldPacket << int32(QuestID);
     _worldPacket << int32(QuestFlags);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* QuestSessionInfoResponse::Write()
 {
     _worldPacket << SessionOwner;

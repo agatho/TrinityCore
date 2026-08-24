@@ -6928,7 +6928,7 @@ struct DelvesSeasonXSpellMeta
     static constexpr DB2MetaField Fields[2] =
     {
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
-        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },
+        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
     };
 
     static constexpr DB2Meta Instance =
@@ -27228,5 +27228,6 @@ struct ZoneStoryMeta
         .Fields             = Fields
     };
 };
+
 
 #endif // TRINITYCORE_DB2_METADATA_H

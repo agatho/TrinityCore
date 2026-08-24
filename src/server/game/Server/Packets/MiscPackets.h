@@ -190,21 +190,21 @@ namespace WorldPackets
         class CurrencyTransferLog final : public ServerPacket
         {
         public:
-            struct Entry
+            struct CurrencyTransferLogEntry
             {
-                ObjectGuid Source;
-                ObjectGuid Dest;
-                int32 CurrencyID = 0;
-                int32 Quantity = 0;
-                int32 Field3 = 0;
-                uint64 TransferTime = 0;
+                ObjectGuid SourceCharacterGUID;
+                ObjectGuid DestCharacterGUID;
+                int32 CurrencyTypeID = 0;
+                int32 QuantityReceived = 0;
+                int32 QuantitySent = 0;
+                uint32 Timestamp = 0;
             };
 
-            explicit CurrencyTransferLog() : ServerPacket(SMSG_CURRENCY_TRANSFER_LOG, 4) { }
+            explicit CurrencyTransferLog() : ServerPacket(SMSG_CURRENCY_TRANSFER_LOG) { }
 
             WorldPacket const* Write() override;
 
-            std::vector<Entry> Entries;
+            std::vector<CurrencyTransferLogEntry> Entries;
         };
 
         // CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS (0x29001F... 0x29001E): empty body; the client asks for
@@ -226,22 +226,27 @@ namespace WorldPackets
         class AccountCharacterCurrencyLists final : public ServerPacket
         {
         public:
-            struct CharacterCurrency
+            struct CharacterCurrencyData
             {
-                int32 CurrencyID = 0;
-                ObjectGuid Character;
-                uint32 Quantity = 0;
-                uint32 WeeklyQuantity = 0;
-                uint32 MaxQuantity = 0;
-                bool Flag = false;
+                ObjectGuid CharacterGUID;
+                std::string CharacterName;
+                uint8 ClassID = 0;
+                int32 Level = 0;
             };
 
-            explicit AccountCharacterCurrencyLists() : ServerPacket(SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS, 4 + 1) { }
+            struct CurrencyQuantityData
+            {
+                ObjectGuid CharacterGUID;
+                int32 CurrencyTypeID = 0;
+                int32 Quantity = 0;
+            };
+
+            explicit AccountCharacterCurrencyLists() : ServerPacket(SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS) { }
 
             WorldPacket const* Write() override;
 
-            std::vector<CharacterCurrency> Currencies;
-            bool TrailingFlag = false;
+            std::vector<CharacterCurrencyData> Characters;
+            std::vector<CurrencyQuantityData> CurrencyData;
         };
 
         // SMSG_REATTACH_RESURRECT (0x4201F3): login-sequence resurrect-state reattach (sniff 68275:
@@ -1418,6 +1423,8 @@ namespace WorldPackets
 
             CTROptionsBlock Previous;
             CTROptionsBlock Current;
+        };
+
         class DisplayWorldText final : public ServerPacket
         {
         public:
@@ -1429,6 +1436,8 @@ namespace WorldPackets
             uint32 Arg1 = 0;
             uint32 Arg2 = 0;
             std::string Text;
+        };
+
         class MultiFloorNewFloor final : public ServerPacket
         {
         public:
@@ -1449,13 +1458,6 @@ namespace WorldPackets
 
             int32 MapID = -1;
             int32 FloorIndex = 0;
-        class RequestCurrencyDataForAccountCharacters final : public ClientPacket
-        {
-        public:
-            explicit RequestCurrencyDataForAccountCharacters(WorldPacket&& packet)
-                : ClientPacket(CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS, std::move(packet)) { }
-
-            void Read() override { }
         };
 
         class TransferCurrencyFromAccountCharacter final : public ClientPacket
@@ -1471,41 +1473,6 @@ namespace WorldPackets
             int32 Quantity = 0;
         };
 
-        class GetCharacterCurrencyTransferLog final : public ClientPacket
-        {
-        public:
-            explicit GetCharacterCurrencyTransferLog(WorldPacket&& packet)
-                : ClientPacket(CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG, std::move(packet)) { }
-
-            void Read() override { }
-        };
-
-        class AccountCharacterCurrencyLists final : public ServerPacket
-        {
-        public:
-            struct CharacterCurrencyData
-            {
-                ObjectGuid CharacterGUID;
-                std::string CharacterName;
-                uint8 ClassID = 0;
-                int32 Level = 0;
-            };
-
-            struct CurrencyQuantityData
-            {
-                ObjectGuid CharacterGUID;
-                int32 CurrencyTypeID = 0;
-                int32 Quantity = 0;
-            };
-
-            explicit AccountCharacterCurrencyLists() : ServerPacket(SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS) { }
-
-            WorldPacket const* Write() override;
-
-            std::vector<CharacterCurrencyData> Characters;
-            std::vector<CurrencyQuantityData> CurrencyData;
-        };
-
         class CurrencyTransferResult final : public ServerPacket
         {
         public:
@@ -1519,25 +1486,6 @@ namespace WorldPackets
             AccountCurrencyTransferResult Result = AccountCurrencyTransferResult::Ok;
         };
 
-        class CurrencyTransferLog final : public ServerPacket
-        {
-        public:
-            struct CurrencyTransferLogEntry
-            {
-                ObjectGuid SourceCharacterGUID;
-                ObjectGuid DestCharacterGUID;
-                int32 CurrencyTypeID = 0;
-                int32 QuantityReceived = 0;
-                int32 QuantitySent = 0;
-                uint32 Timestamp = 0;
-            };
-
-            explicit CurrencyTransferLog() : ServerPacket(SMSG_CURRENCY_TRANSFER_LOG) { }
-
-            WorldPacket const* Write() override;
-
-            std::vector<CurrencyTransferLogEntry> Entries;
-        };
     }
 }
 

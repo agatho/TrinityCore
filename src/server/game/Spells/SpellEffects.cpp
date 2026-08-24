@@ -87,6 +87,14 @@
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#include "Housing.h"
+#include "HousingMgr.h"
+#include "HousingPackets.h"
+#include "RealmList.h"
+#include "NeighborhoodMgr.h"
+#include "Neighborhood.h"
+#include "BattlenetAccountMgr.h"
+#include "Account.h"
 
 NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EFFECTS] =
 {

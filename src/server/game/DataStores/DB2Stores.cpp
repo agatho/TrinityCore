@@ -204,8 +204,6 @@ DB2Storage<ContentTuningXExpectedEntry>         sContentTuningXExpectedStore("Co
 DB2Storage<ContentTuningXLabelEntry>            sContentTuningXLabelStore("ContentTuningXLabel.db2", &ContentTuningXLabelLoadInfo::Instance);
 DB2Storage<ConversationLineEntry>               sConversationLineStore("ConversationLine.db2", &ConversationLineLoadInfo::Instance);
 DB2Storage<CorruptionEffectsEntry>              sCorruptionEffectsStore("CorruptionEffects.db2", &CorruptionEffectsLoadInfo::Instance);
-DB2Storage<CovenantEntry>                       sCovenantStore("Covenant.db2", &CovenantLoadInfo::Instance);
-DB2Storage<RenownRewardsEntry>                  sRenownRewardsStore("RenownRewards.db2", &RenownRewardsLoadInfo::Instance);
 DB2Storage<CraftingQualityEntry>                sCraftingQualityStore("CraftingQuality.db2", &CraftingQualityLoadInfo::Instance);
 DB2Storage<CreatureDisplayInfoEntry>            sCreatureDisplayInfoStore("CreatureDisplayInfo.db2", &CreatureDisplayInfoLoadInfo::Instance);
 DB2Storage<CreatureDisplayInfoExtraEntry>       sCreatureDisplayInfoExtraStore("CreatureDisplayInfoExtra.db2", &CreatureDisplayInfoExtraLoadInfo::Instance);
@@ -220,8 +218,6 @@ DB2Storage<CurrencyTypesEntry>                  sCurrencyTypesStore("CurrencyTyp
 DB2Storage<CurveEntry>                          sCurveStore("Curve.db2", &CurveLoadInfo::Instance);
 DB2Storage<CurvePointEntry>                     sCurvePointStore("CurvePoint.db2", &CurvePointLoadInfo::Instance);
 DB2Storage<DestructibleModelDataEntry>          sDestructibleModelDataStore("DestructibleModelData.db2", &DestructibleModelDataLoadInfo::Instance);
-DB2Storage<DelvesSeasonEntry>                   sDelvesSeasonStore("DelvesSeason.db2", &DelvesSeasonLoadInfo::Instance);
-DB2Storage<DelvesSeasonXSpellEntry>             sDelvesSeasonXSpellStore("DelvesSeasonXSpell.db2", &DelvesSeasonXSpellLoadInfo::Instance);
 DB2Storage<DifficultyEntry>                     sDifficultyStore("Difficulty.db2", &DifficultyLoadInfo::Instance);
 DB2Storage<DriveCapabilityEntry>                sDriveCapabilityStore("DriveCapability.db2", &DriveCapabilityLoadInfo::Instance);
 DB2Storage<DriveCapabilityTierEntry>            sDriveCapabilityTierStore("DriveCapabilityTier.db2", &DriveCapabilityTierLoadInfo::Instance);
@@ -293,6 +289,9 @@ DB2Storage<ItemDamageTwoHandEntry>              sItemDamageTwoHandStore("ItemDam
 DB2Storage<ItemDamageTwoHandCasterEntry>        sItemDamageTwoHandCasterStore("ItemDamageTwoHandCaster.db2", &ItemDamageTwoHandCasterLoadInfo::Instance);
 DB2Storage<ItemDisenchantLootEntry>             sItemDisenchantLootStore("ItemDisenchantLoot.db2", &ItemDisenchantLootLoadInfo::Instance);
 DB2Storage<ItemEffectEntry>                     sItemEffectStore("ItemEffect.db2", &ItemEffectLoadInfo::Instance);
+DB2Storage<ItemConversionEntry>                 sItemConversionStore("ItemConversion.db2", &ItemConversionLoadInfo::Instance);
+DB2Storage<ItemConversionEntryEntry>            sItemConversionEntryStore("ItemConversionEntry.db2", &ItemConversionEntryLoadInfo::Instance);
+DB2Storage<ItemLogicalCostEntry>                sItemLogicalCostStore("ItemLogicalCost.db2", &ItemLogicalCostLoadInfo::Instance);
 DB2Storage<ItemEntry>                           sItemStore("Item.db2", &ItemLoadInfo::Instance);
 DB2Storage<ItemExtendedCostEntry>               sItemExtendedCostStore("ItemExtendedCost.db2", &ItemExtendedCostLoadInfo::Instance);
 DB2Storage<ItemLevelSelectorEntry>              sItemLevelSelectorStore("ItemLevelSelector.db2", &ItemLevelSelectorLoadInfo::Instance);
@@ -370,7 +369,6 @@ DB2Storage<PlayerDataElementAccountEntry>       sPlayerDataElementAccountStore("
 DB2Storage<PlayerDataElementCharacterEntry>     sPlayerDataElementCharacterStore("PlayerDataElementCharacter.db2", &PlayerDataElementCharacterLoadInfo::Instance);
 DB2Storage<PlayerDataFlagAccountEntry>          sPlayerDataFlagAccountStore("PlayerDataFlagAccount.db2", &PlayerDataFlagAccountLoadInfo::Instance);
 DB2Storage<PlayerDataFlagCharacterEntry>        sPlayerDataFlagCharacterStore("PlayerDataFlagCharacter.db2", &PlayerDataFlagCharacterLoadInfo::Instance);
-DB2Storage<PlayerCompanionInfoEntry>            sPlayerCompanionInfoStore("PlayerCompanionInfo.db2", &PlayerCompanionInfoLoadInfo::Instance);
 DB2Storage<PowerDisplayEntry>                   sPowerDisplayStore("PowerDisplay.db2", &PowerDisplayLoadInfo::Instance);
 DB2Storage<PowerTypeEntry>                      sPowerTypeStore("PowerType.db2", &PowerTypeLoadInfo::Instance);
 DB2Storage<PrestigeLevelInfoEntry>              sPrestigeLevelInfoStore("PrestigeLevelInfo.db2", &PrestigeLevelInfoLoadInfo::Instance);
@@ -408,10 +406,7 @@ DB2Storage<SkillLineEntry>                      sSkillLineStore("SkillLine.db2",
 DB2Storage<SkillLineAbilityEntry>               sSkillLineAbilityStore("SkillLineAbility.db2", &SkillLineAbilityLoadInfo::Instance);
 DB2Storage<SkillLineXTraitTreeEntry>            sSkillLineXTraitTreeStore("SkillLineXTraitTree.db2", &SkillLineXTraitTreeLoadInfo::Instance);
 DB2Storage<SkillRaceClassInfoEntry>             sSkillRaceClassInfoStore("SkillRaceClassInfo.db2", &SkillRaceClassInfoLoadInfo::Instance);
-DB2Storage<SoulbindEntry>                       sSoulbindStore("Soulbind.db2", &SoulbindLoadInfo::Instance);
-DB2Storage<SoulbindConduitEntry>                sSoulbindConduitStore("SoulbindConduit.db2", &SoulbindConduitLoadInfo::Instance);
 DB2Storage<SoulbindConduitItemEntry>            sSoulbindConduitItemStore("SoulbindConduitItem.db2", &SoulbindConduitItemLoadInfo::Instance);
-DB2Storage<SoulbindConduitRankEntry>            sSoulbindConduitRankStore("SoulbindConduitRank.db2", &SoulbindConduitRankLoadInfo::Instance);
 DB2Storage<SoulbindConduitRankPropertiesEntry>  sSoulbindConduitRankPropertiesStore("SoulbindConduitRankProperties.db2", &SoulbindConduitRankPropertiesLoadInfo::Instance);
 DB2Storage<SoundKitEntry>                       sSoundKitStore("SoundKit.db2", &SoundKitLoadInfo::Instance);
 DB2Storage<SpecializationSpellsEntry>           sSpecializationSpellsStore("SpecializationSpells.db2", &SpecializationSpellsLoadInfo::Instance);
@@ -1060,6 +1055,9 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sItemDamageTwoHandCasterStore);
     LOAD_DB2(sItemDisenchantLootStore);
     LOAD_DB2(sItemEffectStore);
+    LOAD_DB2(sItemConversionStore);
+    LOAD_DB2(sItemConversionEntryStore);
+    LOAD_DB2(sItemLogicalCostStore);
     LOAD_DB2(sItemStore);
     LOAD_DB2(sItemExtendedCostStore);
     LOAD_DB2(sItemLevelSelectorStore);

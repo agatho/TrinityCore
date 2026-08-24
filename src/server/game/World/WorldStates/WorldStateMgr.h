@@ -26,6 +26,7 @@ class Map;
 namespace WorldPackets::WorldState
 {
     class InitWorldStates;
+    class ActiveScheduledWorldStateInfo;
 }
 
 namespace WorldStateMgr
@@ -44,6 +45,8 @@ namespace WorldStateMgr
     WorldStateValueContainer GetInitialWorldStatesForMap(Map const* map);
 
     void FillInitialWorldStates(WorldPackets::WorldState::InitWorldStates& initWorldStates, Map const* map, uint32 playerAreaId);
+    TC_GAME_API void FillActiveScheduledWorldStates(WorldPackets::WorldState::ActiveScheduledWorldStateInfo& packet);
+    TC_GAME_API void SendActiveScheduledWorldStateInfo(Player const* player = nullptr);
 };
 
 #endif

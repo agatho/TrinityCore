@@ -726,6 +726,44 @@ namespace WorldPackets
             std::vector<WorldQuestUpdateInfo> WorldQuestUpdates;
         };
 
+        class RequestAreaPoiUpdate final : public ClientPacket
+        {
+        public:
+            explicit RequestAreaPoiUpdate(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_AREA_POI_UPDATE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class RequestScheduledAreaPoiUpdate final : public ClientPacket
+        {
+        public:
+            explicit RequestScheduledAreaPoiUpdate(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_SCHEDULED_AREA_POI_UPDATE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        struct AreaPoiUpdateInfo
+        {
+            AreaPoiUpdateInfo(time_t lastUpdate, uint32 areaPoiID, uint32 timer, int32 variableID, int32 value) :
+                LastUpdate(lastUpdate), AreaPoiID(areaPoiID), Timer(timer), VariableID(variableID), Value(value) { }
+            Timestamp<> LastUpdate;
+            uint32 AreaPoiID;
+            uint32 Timer;
+            // WorldState
+            int32 VariableID;
+            int32 Value;
+        };
+
+        class AreaPoiUpdateResponse final : public ServerPacket
+        {
+        public:
+            explicit AreaPoiUpdateResponse() : ServerPacket(SMSG_AREA_POI_UPDATE_RESPONSE, 100) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<AreaPoiUpdateInfo> AreaPois;
+        };
+
         struct PlayerChoiceResponseRewardEntry
         {
             WorldPackets::Item::ItemInstance Item;
@@ -925,14 +963,6 @@ namespace WorldPackets
             std::vector<uint8> Usabilities;
         };
 
-        class CloseQuestChoice final : public ClientPacket
-        {
-        public:
-            explicit CloseQuestChoice(WorldPacket&& packet) : ClientPacket(CMSG_CLOSE_QUEST_CHOICE, std::move(packet)) { }
-
-            void Read() override { }
-        };
-
         class DisplayQuestPopup final : public ServerPacket
         {
         public:
@@ -973,6 +1003,8 @@ namespace WorldPackets
             int32 QuestFlags = 0;
         // Quest Session packets
         // ============================================================
+
+        };
 
         class QuestSessionRequestStart final : public ClientPacket
         {

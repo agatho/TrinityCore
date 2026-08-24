@@ -279,6 +279,13 @@ class TC_GAME_API Spell
     public:
 
         void EffectNULL();
+        void EffectGiveHouseLevel();
+        void EffectCollectHousingDecor();
+        void EffectSetNeighborhoodInitiative();
+        void EffectLearnHouseRoom();
+        void EffectLearnHouseExteriorComponent();
+        void EffectLearnHouseTheme();
+        void EffectLearnHouseRoomComponentTexture();
         void EffectUnused();
         void EffectDistract();
         void EffectSchoolDMG();

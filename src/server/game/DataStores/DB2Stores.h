@@ -174,8 +174,6 @@ TC_GAME_API extern DB2Storage<ConditionalChrModelEntry>             sConditional
 TC_GAME_API extern DB2Storage<ContentTuningEntry>                   sContentTuningStore;
 TC_GAME_API extern DB2Storage<ConversationLineEntry>                sConversationLineStore;
 TC_GAME_API extern DB2Storage<CorruptionEffectsEntry>               sCorruptionEffectsStore;
-TC_GAME_API extern DB2Storage<CovenantEntry>                        sCovenantStore;
-TC_GAME_API extern DB2Storage<RenownRewardsEntry>                   sRenownRewardsStore;
 TC_GAME_API extern DB2Storage<CraftingQualityEntry>                 sCraftingQualityStore;
 TC_GAME_API extern DB2Storage<CreatureDisplayInfoEntry>             sCreatureDisplayInfoStore;
 TC_GAME_API extern DB2Storage<CreatureDisplayInfoExtraEntry>        sCreatureDisplayInfoExtraStore;
@@ -187,8 +185,6 @@ TC_GAME_API extern DB2Storage<CriteriaTreeEntry>                    sCriteriaTre
 TC_GAME_API extern DB2Storage<CurrencyTypesEntry>                   sCurrencyTypesStore;
 TC_GAME_API extern DB2Storage<CurveEntry>                           sCurveStore;
 TC_GAME_API extern DB2Storage<DestructibleModelDataEntry>           sDestructibleModelDataStore;
-TC_GAME_API extern DB2Storage<DelvesSeasonEntry>                    sDelvesSeasonStore;
-TC_GAME_API extern DB2Storage<DelvesSeasonXSpellEntry>              sDelvesSeasonXSpellStore;
 TC_GAME_API extern DB2Storage<DifficultyEntry>                      sDifficultyStore;
 TC_GAME_API extern DB2Storage<DriveCapabilityEntry>                 sDriveCapabilityStore;
 TC_GAME_API extern DB2Storage<DriveCapabilityTierEntry>             sDriveCapabilityTierStore;
@@ -249,6 +245,9 @@ TC_GAME_API extern DB2Storage<ItemDamageTwoHandEntry>               sItemDamageT
 TC_GAME_API extern DB2Storage<ItemDamageTwoHandCasterEntry>         sItemDamageTwoHandCasterStore;
 TC_GAME_API extern DB2Storage<ItemDisenchantLootEntry>              sItemDisenchantLootStore;
 TC_GAME_API extern DB2Storage<ItemEffectEntry>                      sItemEffectStore;
+TC_GAME_API extern DB2Storage<ItemConversionEntry>                  sItemConversionStore;
+TC_GAME_API extern DB2Storage<ItemConversionEntryEntry>             sItemConversionEntryStore;
+TC_GAME_API extern DB2Storage<ItemLogicalCostEntry>                 sItemLogicalCostStore;
 TC_GAME_API extern DB2Storage<ItemEntry>                            sItemStore;
 TC_GAME_API extern DB2Storage<ItemExtendedCostEntry>                sItemExtendedCostStore;
 TC_GAME_API extern DB2Storage<ItemLevelSelectorEntry>               sItemLevelSelectorStore;
@@ -311,7 +310,6 @@ TC_GAME_API extern DB2Storage<PlayerDataElementAccountEntry>        sPlayerDataE
 TC_GAME_API extern DB2Storage<PlayerDataElementCharacterEntry>      sPlayerDataElementCharacterStore;
 TC_GAME_API extern DB2Storage<PlayerDataFlagAccountEntry>           sPlayerDataFlagAccountStore;
 TC_GAME_API extern DB2Storage<PlayerDataFlagCharacterEntry>         sPlayerDataFlagCharacterStore;
-TC_GAME_API extern DB2Storage<PlayerCompanionInfoEntry>             sPlayerCompanionInfoStore;
 TC_GAME_API extern DB2Storage<PowerDisplayEntry>                    sPowerDisplayStore;
 TC_GAME_API extern DB2Storage<PowerTypeEntry>                       sPowerTypeStore;
 TC_GAME_API extern DB2Storage<PVPStatEntry>                         sPVPStatStore;
@@ -340,10 +338,7 @@ TC_GAME_API extern DB2Storage<ServerMessagesEntry>                  sServerMessa
 TC_GAME_API extern DB2Storage<SkillLineAbilityEntry>                sSkillLineAbilityStore;
 TC_GAME_API extern DB2Storage<SkillLineXTraitTreeEntry>             sSkillLineXTraitTreeStore;
 TC_GAME_API extern DB2Storage<SkillRaceClassInfoEntry>              sSkillRaceClassInfoStore;
-TC_GAME_API extern DB2Storage<SoulbindEntry>                        sSoulbindStore;
-TC_GAME_API extern DB2Storage<SoulbindConduitEntry>                 sSoulbindConduitStore;
 TC_GAME_API extern DB2Storage<SoulbindConduitItemEntry>             sSoulbindConduitItemStore;
-TC_GAME_API extern DB2Storage<SoulbindConduitRankEntry>             sSoulbindConduitRankStore;
 TC_GAME_API extern DB2Storage<SoulbindConduitRankPropertiesEntry>   sSoulbindConduitRankPropertiesStore;
 TC_GAME_API extern DB2Storage<SoundKitEntry>                        sSoundKitStore;
 TC_GAME_API extern DB2Storage<SpellAuraOptionsEntry>                sSpellAuraOptionsStore;
