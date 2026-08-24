@@ -106,6 +106,38 @@ namespace WorldPackets
             uint8 Tab = 0;
             BankTabSettings Settings;
         };
+
+        class AccountBankDepositMoney final : public ClientPacket
+        {
+        public:
+            explicit AccountBankDepositMoney(WorldPacket&& packet) : ClientPacket(CMSG_ACCOUNT_BANK_DEPOSIT_MONEY, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid Banker;
+            uint64 Money = 0;
+        };
+
+        class AccountBankWithdrawMoney final : public ClientPacket
+        {
+        public:
+            explicit AccountBankWithdrawMoney(WorldPacket&& packet) : ClientPacket(CMSG_ACCOUNT_BANK_WITHDRAW_MONEY, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid Banker;
+            uint64 Money = 0;
+        };
+
+        class AutoDepositAccountBank final : public ClientPacket
+        {
+        public:
+            explicit AutoDepositAccountBank(WorldPacket&& packet) : ClientPacket(CMSG_AUTO_DEPOSIT_ACCOUNT_BANK, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid Banker;
+        };
     }
 }
 
