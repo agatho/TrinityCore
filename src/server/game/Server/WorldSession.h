@@ -1014,7 +1014,10 @@ namespace WorldPackets
         class RecentAllyRequestData;
         class RecentAllySetNote;
         class SetAllowRecentAlliesSeeLocation;
+        class RecentAllyRequestData;
+        class RecentAllySetNote;
         class SendContactList;
+        class SetAllowRecentAlliesSeeLocation;
         class SetContactNotes;
         class SocialContractRequest;
     }

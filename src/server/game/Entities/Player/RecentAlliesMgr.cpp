@@ -21,6 +21,8 @@
 #include "GameTime.h"
 #include "Player.h"
 #include "RecentAllyPackets.h"
+#include "GameTime.h"
+#include "Player.h"
 #include "WorldSession.h"
 
 namespace RecentAllies
@@ -91,6 +93,13 @@ void RecordGrouping(Player const* a, Player const* b)
 {
     Player const* single[] = { b };
     RecordGroupJoin(a, single);
+void RecordGrouping(Player const* a, Player const* b)
+{
+    if (!a || !b || a == b || a->GetGUID() == b->GetGUID())
+        return;
+
+    RecordOne(a->GetGUID(), b->GetGUID(), b->GetSession()->GetAccountId());
+    RecordOne(b->GetGUID(), a->GetGUID(), a->GetSession()->GetAccountId());
 }
 
 std::vector<AllyRecord> GetAllies(ObjectGuid owner)

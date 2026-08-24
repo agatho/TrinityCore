@@ -49,6 +49,9 @@ namespace RecentAllies
     // 19 GUIDs when a player joins a 20-man raid, not 19 packets.
     void RecordGroupJoin(Player const* joiner, std::span<Player const* const> existing);
 
+    // Record that two players were grouped together (writes both directions). No-op for the same player.
+    void RecordGrouping(Player const* a, Player const* b);
+
     // Read a character's recent allies (most-recent first, capped). Synchronous query — used only when the client
     // opens the recent-allies UI.
     std::vector<AllyRecord> GetAllies(ObjectGuid owner);
