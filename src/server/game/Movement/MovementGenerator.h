@@ -69,6 +69,31 @@ class TC_GAME_API MovementGenerator
         virtual void Finalize(Unit* owner, bool active, bool movementInform) = 0;
         virtual MovementGeneratorType GetMovementGeneratorType() const = 0;
 
+        // Notified (top generator only) from Unit::SetSpeedRate for ANY UnitMoveType. An in-flight
+        // spline is timed against the speed it was launched with, so a generator whose spline
+        // velocity derives from the owner's speed must rebuild it here - the client was already
+        // told the old duration in SMSG_MONSTER_MOVE and does not recompute it on its own.
+        //
+        // Overridden by: Chase, Follow, Confused, Fleeing, Point, Random, Waypoint, Home.
+        //
+        // Deliberately NOT overridden by the remaining generators. These are known exclusions,
+        // not oversights:
+        //  - Formation:  init.SetVelocity() is always fed the *leader's* spline velocity, never the
+        //                owner's, so the owner's speed is irrelevant. When the leader changes speed
+        //                it resplines and the follower relaunches off the new leader spline id.
+        //  - FlightPath: init.SetVelocity(_speed.value_or(PLAYER_FLIGHT_SPEED)) - taxi speed is a
+        //                fixed constant or a caller override and is intentionally divorced from the
+        //                player's movement speed. Resplining would only re-run DoReset's side
+        //                effects on every speed-touching aura tick.
+        //  - SplineChain: _msToNext is an independent countdown seeded from the launched spline's
+        //                duration; a naive respline desynchronises link sequencing. A correct fix
+        //                needs partial-link relaunch plus remaining-time rescaling and must skip
+        //                links carrying a non-zero DB velocity. Not attempted.
+        //  - Generic:    the initializer is an opaque std::function whose captured paths are
+        //                absolute (knockback/circle replay from the original start) and whose
+        //                parabolic parameters were derived from the original distance. The file
+        //                itself states "Resume spline is not supported". Jumps and knockbacks run
+        //                at MOTION_PRIORITY_HIGHEST with PERSIST_ON_DEATH. Not attempted.
         virtual void UnitSpeedChanged() { }
         // timer in ms
         virtual void Pause(uint32/* timer*/) { }

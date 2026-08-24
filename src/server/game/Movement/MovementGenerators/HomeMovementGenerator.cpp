@@ -114,6 +114,31 @@ bool HomeMovementGenerator<T>::DoUpdate(T*, uint32)
 template<>
 bool HomeMovementGenerator<Creature>::DoUpdate(Creature* owner, uint32 /*diff*/)
 {
+    // The owner's speed changed while it was still travelling home. The in-flight spline was
+    // timed against the old speed, so rebuild it from the current position; Launch() emits a
+    // fresh SMSG_MONSTER_MOVE carrying the new duration, keeping the client in agreement.
+    //
+    // Deliberately done inline instead of calling SetTargetLocation(): that helper clears
+    // UNIT_STATE_ALL_ERASABLE and, when the creature is rooted/stunned/distracted, raises
+    // MOVEMENTGENERATOR_FLAG_INTERRUPTED - which the check below treats as "arrived home" and
+    // would reset health/auras/AI at whatever spot the creature happened to be standing on.
+    // The flag is kept (not cleared) while the creature cannot be moved, so the respline still
+    // happens once a root/stun/cast ends rather than leaving the stale duration in place forever.
+    if (HasFlag(MOVEMENTGENERATOR_FLAG_SPEED_UPDATE_PENDING) && !owner->movespline->Finalized()
+        && !owner->HasUnitState(UNIT_STATE_NOT_MOVE) && !owner->IsMovementPreventedByCasting())
+    {
+        RemoveFlag(MOVEMENTGENERATOR_FLAG_SPEED_UPDATE_PENDING);
+
+        Position destination = owner->GetHomePosition();
+        owner->UpdateAllowedPositionZ(destination.m_positionX, destination.m_positionY, destination.m_positionZ);
+
+        Movement::MoveSplineInit init(owner);
+        init.MoveTo(PositionToVector3(destination), true, true);
+        init.SetFacing(destination.GetOrientation());
+        init.SetWalk(false);
+        init.Launch();
+    }
+
     if (HasFlag(MOVEMENTGENERATOR_FLAG_INTERRUPTED) || owner->movespline->Finalized())
     {
         AddFlag(MOVEMENTGENERATOR_FLAG_INFORM_ENABLED);
