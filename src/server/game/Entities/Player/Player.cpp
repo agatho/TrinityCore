@@ -1771,7 +1771,7 @@ void Player::UpdateVigor(uint32 elapsedMs /*= 0*/)
     if (!elapsedMs || vigor >= maxVigor)
         return;
 
-    if (!m_movementInfo.HasExtraMovementFlag2(MOVEMENTFLAG3_ADV_FLYING) || !m_movementInfo.advFlying)
+    if (!m_movementInfo.advFlying)
         return;
 
     FlightCapabilityEntry const* flightCapability = sFlightCapabilityStore.LookupEntry(GetFlightCapabilityID());

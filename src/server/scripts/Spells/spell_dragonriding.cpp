@@ -67,8 +67,9 @@ static SpellCastResult CheckSkyriding(SpellScript* script)
     if (!caster->GetFlightCapabilityID())
         return SPELL_FAILED_DRAGONRIDING_RIDING_REQUIREMENT;
 
-    if (!caster->HasExtraUnitMovementFlag2(MOVEMENTFLAG3_CAN_ADV_FLY))
-        return SPELL_FAILED_DRAGONRIDING_RIDING_REQUIREMENT;
+    // 12.1 carries no MOVEMENTFLAG3_CAN_ADV_FLY on the wire; GetFlightCapabilityID() above is the
+    // server-authoritative "can advanced fly" gate (set only by UpdateMountCapability), so the
+    // former client-echoed flag check is redundant and dropped.
 
     return SPELL_CAST_OK;
 }
@@ -190,7 +191,7 @@ class spell_dragonriding_lift_off : public SpellScript
         // launch only transitions INTO advanced flight - while already adv-flying the client uses
         // Skyward Ascent instead, and since the keybound-override cast is triggered (no cooldown)
         // this also stops a client from stacking launch impulses midair
-        if (GetCaster()->m_movementInfo.HasExtraMovementFlag2(MOVEMENTFLAG3_ADV_FLYING))
+        if (GetCaster()->m_movementInfo.advFlying)
             return SPELL_FAILED_DONT_REPORT;
 
         return CheckSkyriding(this);
@@ -235,7 +236,8 @@ class spell_dragonriding_launch_boost_aura : public AuraScript
     {
         if (Unit* target = GetTarget())
         {
-            if (!target->HasExtraUnitMovementFlag2(MOVEMENTFLAG3_CAN_ADV_FLY))
+            // Server-authoritative "still skyriding-capable" gate (12.1 has no MOVEMENTFLAG3 on the wire).
+            if (!target->GetFlightCapabilityID())
                 return;
 
             SendFacingImpulse(target, 5.0f);

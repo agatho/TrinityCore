@@ -9139,10 +9139,9 @@ void Unit::SetDriveCapabilityID(int32 driveCapabilityId, bool clientUpdate)
 
     SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::DriveCapabilityID), driveCapabilityId);
 
-    if (driveCapabilityId)
-        AddExtraUnitMovementFlag2(MOVEMENTFLAG3_CAN_DRIVE);
-    else
-        RemoveExtraUnitMovementFlag2(MOVEMENTFLAG3_CAN_DRIVE | MOVEMENTFLAG3_DRIVING_FORWARD);
+    // 12.1 has no MovementFlags3 drive flag on the wire; the DriveCapabilityID UpdateField plus the
+    // SMSG_MOVE_(UN)SET_CAN_DRIVE packets below drive the client. (Fork MOVEMENTFLAG3_CAN_DRIVE dropped —
+    // adding it would change MovementInfo wire serialization for every player.)
 
     if (!clientUpdate)
         return;
@@ -12724,9 +12723,10 @@ void Unit::SendApplyInertia(int32 movementInertiaID, Position const& force, uint
         WorldPackets::Movement::MoveApplyInertia applyInertia;
         applyInertia.MoverGUID = GetGUID();
         applyInertia.SequenceIndex = m_movementCounter++;
-        applyInertia.MovementInertiaID = movementInertiaID;
-        applyInertia.Force = force;
-        applyInertia.LifetimeMs = lifetimeMs;
+        applyInertia.InertiaID = movementInertiaID;
+        applyInertia.LifetimeMs = Milliseconds(lifetimeMs);
+        // 12.1 dropped the inertia Force vector from the wire; the client derives it from the InertiaID record.
+        (void)force;
         playerMover->SendDirectMessage(applyInertia.Write());
     }
 }
@@ -12738,7 +12738,7 @@ void Unit::SendRemoveInertia(int32 movementInertiaID)
         WorldPackets::Movement::MoveRemoveInertia removeInertia;
         removeInertia.MoverGUID = GetGUID();
         removeInertia.SequenceIndex = m_movementCounter++;
-        removeInertia.MovementInertiaID = movementInertiaID;
+        removeInertia.InertiaID = movementInertiaID;
         playerMover->SendDirectMessage(removeInertia.Write());
     }
 }
