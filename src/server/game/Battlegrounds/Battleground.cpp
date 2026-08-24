@@ -41,6 +41,7 @@
 #include "MiscPackets.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
+#include "Optional.h"
 #include "Player.h"
 #include "ReputationMgr.h"
 #include "SpellAuras.h"
@@ -48,7 +49,45 @@
 #include "Transport.h"
 #include "Util.h"
 #include "WorldStateMgr.h"
+#include <algorithm>
 #include <cstdarg>
+#include <limits>
+
+namespace
+{
+// Maps the queue a player actually came in through onto the client's own match-kind table (see
+// WorldPackets::Battleground::PVPMatchBracket). Returns nothing when this core's queue has no counterpart in
+// that table - unrated random battlegrounds, wargames and cheat queues have no label there - and
+// SMSG_PVP_MATCH_START is then simply not sent rather than sent with a made-up bracket.
+Optional<WorldPackets::Battleground::PVPMatchBracket> GetPVPMatchBracket(BattlegroundQueueTypeId queueId)
+{
+    switch (BattlegroundQueueIdType(queueId.Type))
+    {
+        case BattlegroundQueueIdType::Arena:
+            switch (queueId.TeamSize)
+            {
+                case ARENA_TYPE_2v2: return WorldPackets::Battleground::PVPMatchBracket::Arena2v2;
+                case ARENA_TYPE_3v3: return WorldPackets::Battleground::PVPMatchBracket::Arena3v3;
+                case ARENA_TYPE_5v5: return WorldPackets::Battleground::PVPMatchBracket::Arena5v5;
+                default: break;
+            }
+            break;
+        case BattlegroundQueueIdType::ArenaSkirmish:
+            return WorldPackets::Battleground::PVPMatchBracket::Skirmish;
+        case BattlegroundQueueIdType::Battleground:
+            // Only the rated 10v10 premade queue has a label; plain random battlegrounds do not.
+            if (queueId.Rated)
+                return WorldPackets::Battleground::PVPMatchBracket::RatedBattleground;
+            break;
+        case BattlegroundQueueIdType::RatedBattlegroundBlitz:
+            return WorldPackets::Battleground::PVPMatchBracket::RatedSoloRBG;
+        default:
+            break;
+    }
+
+    return {};
+}
+}
 
 template<class Do>
 void Battleground::BroadcastWorker(Do& _do)
@@ -96,6 +135,7 @@ Battleground::Battleground(BattlegroundTemplate const* battlegroundTemplate) : _
     m_PrematureCountDown = false;
 
     m_LastPlayerPositionBroadcast = 0;
+    _maxTeamScore = 0;
 
     StartDelayTimes[BG_STARTING_EVENT_FIRST]  = BG_START_DELAY_2M;
     StartDelayTimes[BG_STARTING_EVENT_SECOND] = BG_START_DELAY_1M;
@@ -393,12 +433,25 @@ inline void Battleground::_ProcessJoin(uint32 diff)
 
         SendPacketToAll(WorldPackets::Battleground::PVPMatchSetState(WorldPackets::Battleground::PVPMatchState::Engaged).Write());
 
-        for (auto const& [guid, _] : GetPlayers())
+        for (auto const& [guid, battlegroundPlayer] : GetPlayers())
         {
             if (Player* player = ObjectAccessor::GetPlayer(GetBgMap(), guid))
             {
                 player->StartCriteria(CriteriaStartEvent::StartBattleground, GetBgMap()->GetId());
                 player->AtStartOfEncounter(EncounterType::Battleground);
+
+                // Retail sends SMSG_PVP_MATCH_START 29 ms after SMSG_PVP_MATCH_SET_STATE(Engaged), i.e. right
+                // here. It is per-connection (instance) and its bracket comes from the queue the player
+                // arrived through, which is why it is built inside this loop rather than broadcast.
+                if (Optional<WorldPackets::Battleground::PVPMatchBracket> bracket = GetPVPMatchBracket(battlegroundPlayer.queueTypeId))
+                {
+                    WorldPackets::Battleground::PVPMatchStart pvpMatchStart;
+                    pvpMatchStart.MapID = GetMapId();
+                    pvpMatchStart.ArenaSeason = sWorld->getIntConfig(CONFIG_ARENA_SEASON_ID);
+                    pvpMatchStart.Bracket = *bracket;
+                    pvpMatchStart.StartTime = GameTime::GetSystemTime();
+                    player->SendDirectMessage(pvpMatchStart.Write());
+                }
             }
         }
 
@@ -1053,6 +1106,8 @@ void Battleground::AddPlayer(Player* player, BattlegroundQueueTypeId queueId)
 
     player->SendDirectMessage(pvpMatchInitialize.Write());
 
+    SendMatchScoreState(player);
+
     player->RemoveAurasByType(SPELL_AURA_MOUNTED);
 
     // add arena specific auras
@@ -1493,6 +1548,63 @@ void Battleground::RewardXPAtKill(Player* killer, Player* victim)
     {
         Player* killers[] = { killer };
         KillRewarder(Trinity::IteratorPair(std::begin(killers), std::end(killers)), victim, true).Reward();
+    }
+}
+
+void Battleground::SetTeamScore(TeamId teamId, int32 score)
+{
+    // Retail only puts SMSG_BATTLEGROUND_POINTS on the wire when a score actually moves - across the 322
+    // captured packets of one full match no team ever repeats a value - and callers like the Deephaul Ravine
+    // ticker do run every two seconds with nothing to add, so the early-out here is load bearing.
+    if (m_TeamScores[teamId] == score)
+        return;
+
+    m_TeamScores[teamId] = score;
+
+    WorldPackets::Battleground::BattlegroundPoints battlegroundPoints;
+    // The field is a uint16 on the wire; scores are never negative in practice but RemovePoint can in
+    // principle underflow, so clamp rather than wrap.
+    battlegroundPoints.BgPoints = uint16(std::clamp<int32>(score, 0, std::numeric_limits<uint16>::max()));
+    // m_TeamScores is indexed by TeamId (alliance 0), the packet by PvPTeamId (horde 0). They are inverted.
+    battlegroundPoints.Team = teamId == TEAM_ALLIANCE;
+    SendPacketToAll(battlegroundPoints.Write());
+}
+
+void Battleground::SetMaxTeamScore(uint16 maxTeamScore)
+{
+    if (_maxTeamScore == maxTeamScore)
+        return;
+
+    _maxTeamScore = maxTeamScore;
+
+    if (!_maxTeamScore)
+        return;
+
+    // Scripts set this from OnInit, before anyone has joined, so this normally reaches nobody and the real
+    // delivery happens from AddPlayer. It matters only if a script ever revises the cap mid-match.
+    for (auto const& [guid, _] : m_Players)
+        if (Player* player = ObjectAccessor::FindPlayer(guid))
+            SendMatchScoreState(player);
+}
+
+void Battleground::SendMatchScoreState(Player* player) const
+{
+    if (!_maxTeamScore)
+        return;
+
+    // Capture order at battleground entry (C:\sniff\rated BG 12.0.7.pkt, tick 915464, instance connection):
+    // SMSG_BATTLEGROUND_INIT first, then SMSG_BATTLEGROUND_POINTS for horde and then for alliance.
+    WorldPackets::Battleground::BattlegroundInit battlegroundInit;
+    battlegroundInit.ServerTime = GameTime::GetGameTimeMS();
+    battlegroundInit.MaxPoints = _maxTeamScore;
+    player->SendDirectMessage(battlegroundInit.Write());
+
+    for (TeamId teamId : { TEAM_HORDE, TEAM_ALLIANCE })
+    {
+        WorldPackets::Battleground::BattlegroundPoints battlegroundPoints;
+        battlegroundPoints.BgPoints = uint16(std::clamp<int32>(m_TeamScores[teamId], 0, std::numeric_limits<uint16>::max()));
+        battlegroundPoints.Team = teamId == TEAM_ALLIANCE;
+        player->SendDirectMessage(battlegroundPoints.Write());
     }
 }
 

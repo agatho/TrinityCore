@@ -134,6 +134,11 @@ enum BattlegroundTimeIntervals
     //REMIND_INTERVAL                 = 10000,                // ms
     INVITATION_REMIND_TIME          = 20000,                // ms
     INVITE_ACCEPT_WAIT_TIME         = 90000,                // ms
+    // Deadline of an all-or-nothing group proposal (solo-queue modes). Shorter than INVITE_ACCEPT_WAIT_TIME
+    // because it is not a per-player invite the rest of the lobby can outlive - the whole proposal collapses
+    // when it expires. 30000 is what SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS advertises in every captured
+    // body of C:\sniff\rated BG 12.0.7.pkt, and all three captured proposal runs fit inside it.
+    PROPOSAL_ACCEPT_WAIT_TIME       = 30000,                // ms
     TIME_AUTOCLOSE_BATTLEGROUND     = 120000,               // ms
     MAX_OFFLINE_TIME                = 300,                  // secs
     RESPAWN_ONE_DAY                 = 86400,                // secs
@@ -236,7 +241,13 @@ enum class BattlegroundQueueIdType : uint8
     Arena           = 1,
     Wargame         = 2,
     Cheat           = 3,
-    ArenaSkirmish   = 4
+    ArenaSkirmish   = 4,
+    // Value 9 is not guessed: a live 12.0.7.68275 capture shows retail answering
+    // CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ with SMSG_BATTLEFIELD_STATUS_QUEUED carrying
+    // QueueID 0x1F1000000019044D, which BattlegroundQueueTypeId::FromPacked decodes as
+    // { BattlemasterListId = 1101, Type = 9, Rated = true, TeamSize = 0 }.
+    // (C:\sniff\rated BG 12.0.7.pkt, the SMSG 366 ms after the join at tick 135643.)
+    RatedBattlegroundBlitz = 9
 };
 
 enum class BattlegroundPointCaptureStatus
@@ -456,9 +467,17 @@ class TC_GAME_API Battleground
             return &itr->second;
         }
 
-        void AddPoint(Team team, uint32 points = 1) { m_TeamScores[GetTeamIndexByTeamId(team)] += points; }
-        void SetTeamPoint(Team team, uint32 points = 0) { m_TeamScores[GetTeamIndexByTeamId(team)] = points; }
-        void RemovePoint(Team team, uint32 points = 1) { m_TeamScores[GetTeamIndexByTeamId(team)] -= points; }
+        // All three funnel through SetTeamScore so that every score movement, wherever it originates, reaches
+        // the client as SMSG_BATTLEGROUND_POINTS.
+        void AddPoint(Team team, uint32 points = 1) { SetTeamScore(GetTeamIndexByTeamId(team), m_TeamScores[GetTeamIndexByTeamId(team)] + int32(points)); }
+        void SetTeamPoint(Team team, uint32 points = 0) { SetTeamScore(GetTeamIndexByTeamId(team), int32(points)); }
+        void RemovePoint(Team team, uint32 points = 1) { SetTeamScore(GetTeamIndexByTeamId(team), m_TeamScores[GetTeamIndexByTeamId(team)] - int32(points)); }
+
+        // Resource-race battlegrounds publish their score cap here. Battlegrounds that have no cap leave it
+        // at zero, and then no SMSG_BATTLEGROUND_INIT is sent at all - which is what the client wants, since
+        // its handler discards a zero cap anyway.
+        void SetMaxTeamScore(uint16 maxTeamScore);
+        uint16 GetMaxTeamScore() const { return _maxTeamScore; }
 
         Trinity::unique_weak_ptr<Battleground> GetWeakPtr() const { return m_weakRef; }
         void SetWeakPtr(Trinity::unique_weak_ptr<Battleground> weakRef) { m_weakRef = std::move(weakRef); }
@@ -528,6 +547,9 @@ class TC_GAME_API Battleground
         int32 m_TeamScores[PVP_TEAMS_COUNT];
 
     private:
+        void SetTeamScore(TeamId teamId, int32 score);
+        void SendMatchScoreState(Player* player) const;
+
         // Battleground
         uint32 m_InstanceID;                                // Battleground Instance's GUID!
         BattlegroundStatus m_Status;
@@ -545,6 +567,7 @@ class TC_GAME_API Battleground
         bool   m_IsRated;                                   // is this battle rated?
         bool   m_PrematureCountDown;
         uint32 m_LastPlayerPositionBroadcast;
+        uint16 _maxTeamScore;                               // 0 = this battleground has no resource cap
 
         // Player lists
         std::deque<ObjectGuid> m_OfflineQueue;              // Player GUID

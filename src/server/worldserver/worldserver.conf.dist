@@ -2825,6 +2825,88 @@ Battleground.StoreStatistics.Enable = 0
 Battleground.InvitationType = 0
 
 #
+#    BattlegroundBlitz.TanksPerTeam
+#        Description: Tanks required per team before a Battleground Blitz match pops.
+#                     Together with BattlegroundBlitz.HealersPerTeam this fully specifies a
+#                     team, because the remaining slots are damagers. Roles are resolved per
+#                     player from the character's specialization (ChrSpecialization.db2 Role),
+#                     narrowed by the role mask the queuer sent.
+#                     0 together with HealersPerTeam 0 disables role balancing entirely.
+#                     Ignored while arena/bg testing mode is enabled.
+#        Default:     0 - the composition the client was actually told in the 12.0.7 rated
+#                         Blitz capture was 0 tanks / 4 healers / 12 damagers over 8v8.
+
+BattlegroundBlitz.TanksPerTeam = 0
+
+#
+#    BattlegroundBlitz.HealersPerTeam
+#        Description: Healers required per team before a Battleground Blitz match pops.
+#                     Blitz is 8v8 (BattlemasterList 1101). The client tells the server which
+#                     role a player queued as, but nothing in the client states how retail
+#                     balances the two teams, so this quota is configuration rather than a
+#                     value derived from the client.
+#                     0 disables the healer quota; see BattlegroundBlitz.TanksPerTeam.
+#                     Ignored while arena/bg testing mode is enabled.
+#        Default:     2
+
+BattlegroundBlitz.HealersPerTeam = 2
+
+#
+#    Brawl.Enabled
+#        Description: Advertise a PvP Brawl to clients and accept CMSG_BATTLEMASTER_JOIN_BRAWL.
+#                     Which brawl is running is necessarily a server decision: PvpBrawl.db2 has no
+#                     holiday, date or flag column, and the client learns the running brawl only
+#                     from SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE - i.e. from us. With this off
+#                     the server reports "no brawl scheduled" and the client's Brawl button stays
+#                     unqueueable, which is also what happens automatically if the configured brawl
+#                     below fails its validity checks.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+Brawl.Enabled = 1
+
+#
+#    Brawl.PvpBrawlID
+#    Brawl.BattlemasterListID
+#        Description: The brawl to run. The two ids must be the ID and BattlemasterListID of the same
+#                     PvpBrawl.db2 row: the first is what the client is told (it names and describes
+#                     the brawl from that row), the second is what the server actually queues.
+#
+#                     The brawl is only advertised if its BattlemasterList exists, carries the IsBrawl
+#                     flag, is not disabled, and has a battleground_template whose maps resolve - so a
+#                     mismatched or unimplemented pair disables the Brawl button rather than producing
+#                     a queue that never pops.
+#
+#                     Only 879 ships with a template (see the Deep Six world migration). Every other
+#                     brawl below needs its own battleground_template row, and most of them point at
+#                     maps this core has no implementation for.
+#
+#                     PvpBrawl.db2 rows that have a BattlemasterList (ID / BattlemasterListID / name):
+#                       2 / 789  Brawl: Southshore vs. Tarren Mill    3 / 858  Brawl: Temple of Hotmogu
+#                       4 / 859  Brawl: Gravity Lapse                 5 / 847  Brawl: Arathi Blizzard
+#                       6 / 860  Brawl: Deepwind Dunk                 7 / 862  Brawl: Eye of the Horn
+#                       8 / 866  Brawl: Packed House                  9 / 861  Brawl: Warsong Scramble
+#                      10 / 853  Brawl: Shado-Pan Showdown           11 / 879  Brawl: Deep Six
+#                      12 / 885  Deep Six - The Battle for Gilneas   13 / 886  Deep Six - Warsong Gulch
+#                      14 / 883  Deep Six - Silvershard Mines        15 / 884  Deep Six - Temple of Kotmogu
+#                      16 / 882  Deep Six - Eye of the Storm         17 / 887  Brawl: Cooking: Impossible
+#                      19 / 894  Seething Shore                     120 / 1021 Brawl: Classic Ashran
+#                     122 / 1030 Wintergrasp                        124 / 1033 Korrak's Revenge
+#                     125 / 1039 Deepwind Gorge                     126 / 1033 Brawl: Korrak's Revenge
+#                     130 / 1065 Solo Shuffle                       133 / 1075 Brawl: Deepwind Detonation
+#                     136 / 1101 Brawl: Battleground Blitz          145 / 1111 Brawl: The Heat of Battle
+#                     148 / 1110 Deephaul Ravine                    151 / 1144 Training Grounds
+#
+#                     The single-map Deep Six rows (12-16) and the per-map Blitz rows are deliberately
+#                     omitted from the ones worth using: a single-map brawl template would register
+#                     itself over that map's own template and hijack normal queues for it.
+#        Default:     11  (Brawl: Deep Six)
+#                     879 (BattlemasterList "Deep Six")
+
+Brawl.PvpBrawlID = 11
+Brawl.BattlemasterListID = 879
+
+#
 #    Battleground.PrematureFinishTimer
 #        Description: Time (in milliseconds) before battleground will end prematurely if there are
 #                     not enough players on one team. (Values defined in battleground template)
