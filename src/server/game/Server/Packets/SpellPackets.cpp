@@ -168,6 +168,32 @@ WorldPacket const* DiminishingReturnStart::Write()
     _worldPacket << Bits<1>(ShowCountdown);
     _worldPacket << Bits<1>(IsImmune);
     _worldPacket.FlushBits();
+WorldPacket const* AddLossOfControl::Write()
+{
+    _worldPacket << Target;
+    _worldPacket << int32(SpellID);
+    _worldPacket << Caster;
+    _worldPacket << int32(Duration);
+    _worldPacket << int32(DurationLeft);
+    _worldPacket << uint32(LockoutSchoolMask);
+    _worldPacket << uint8(Type);
+    _worldPacket << uint8(DisplayType);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LossOfControlAuraUpdate::Write()
+{
+    _worldPacket << Unit;
+    _worldPacket << uint32(Infos.size());
+    for (LossOfControlInfo const& info : Infos)
+    {
+        _worldPacket << uint32(info.TimeRemaining);
+        _worldPacket << uint16(info.AuraSlot);
+        _worldPacket << uint8(info.EffectIndex);
+        _worldPacket << uint8(info.Mechanic);
+        _worldPacket << uint8(info.Mechanic2);
+    }
 
     return &_worldPacket;
 }
