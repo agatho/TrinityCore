@@ -127,6 +127,8 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
 
         void Update(uint32 diff) override;
         void Remove();
+        static AreaTrigger* CreateStaticAreaTrigger(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration = -1, bool addToMap = true);
+        void InitHousingPlotVisuals();
         bool IsRemoved() const { return _isRemoved; }
         uint32 GetSpellId() const { return m_areaTriggerData->SpellID; }
         AuraEffect const* GetAuraEffect() const { return _aurEff; }

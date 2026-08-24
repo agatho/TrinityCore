@@ -85,6 +85,7 @@ class MythicPlusData;
 enum GarrisonType : int32;
 class Group;
 class Guild;
+class Housing;
 class Item;
 class LootRoll;
 class LootStore;
@@ -2661,6 +2662,13 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint32 m_delveSelectedMapId = 0;
         uint8 m_delveSelectedTier = 0;
         void SendDirectMessage(WorldPacket const* data) const;
+        std::vector<Housing const*> GetAllHousings() const;
+        Housing* GetHousing() const;
+        Housing* GetHousingForNeighborhood(ObjectGuid neighborhoodGuid) const;
+        void SetCurrentHouse(ObjectGuid houseGuid);
+        void SetHousingEditorModeUpdateField(uint8 mode);
+        void UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId);
+        void UpdateInitiativeFavor(uint32 favor);
 
         void SendAurasForTarget(Unit* target) const;
 
@@ -3211,6 +3219,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         UF::UpdateField<UF::PlayerData, int32(WowCS::EntityFragment::CGObject), TYPEID_PLAYER> m_playerData;
         UF::UpdateField<UF::ActivePlayerData, int32(WowCS::EntityFragment::CGObject), TYPEID_ACTIVE_PLAYER> m_activePlayerData;
+        UF::OptionalUpdateField<UF::PlayerHouseInfoComponentData, int32(WowCS::EntityFragment::PlayerHouseInfoComponent_C), 0> m_playerHouseInfoComponentData;
+        std::vector<std::unique_ptr<Housing>> _housings;
 
         void SetAreaSpiritHealer(Creature* creature);
         ObjectGuid const& GetSpiritHealerGUID() const { return _areaSpiritHealerGUID; }
