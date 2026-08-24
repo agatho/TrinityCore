@@ -1029,4 +1029,51 @@ void WorldSession::HandleQueryQuestItemUsability(WorldPackets::Quest::QueryQuest
 void WorldSession::HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& /*closeQuestChoice*/)
 {
     // Client notification that player closed quest choice UI - no server action needed
+void WorldSession::HandleQuestSessionRequestStart(WorldPackets::Quest::QuestSessionRequestStart& /*packet*/)
+{
+    Group* group = _player->GetGroup();
+    if (!group || group->GetLeaderGUID() != _player->GetGUID())
+    {
+        WorldPackets::Quest::QuestSessionResult result;
+        result.Result = 2; // Not group leader
+        SendPacket(result.Write());
+        return;
+    }
+
+    // Send ready check to all group members
+    WorldPackets::Quest::QuestSessionReadyCheck readyCheck;
+    group->BroadcastPacket(readyCheck.Write(), false);
+}
+
+void WorldSession::HandleQuestSessionRequestStop(WorldPackets::Quest::QuestSessionRequestStop& /*packet*/)
+{
+    Group* group = _player->GetGroup();
+    if (!group)
+        return;
+
+    // Notify all group members that quest session has ended
+    WorldPackets::Quest::QuestSessionResult result;
+    result.Result = 1; // Stopped
+    group->BroadcastPacket(result.Write(), false);
+}
+
+void WorldSession::HandleQuestSessionBeginResponse(WorldPackets::Quest::QuestSessionBeginResponse& packet)
+{
+    Group* group = _player->GetGroup();
+    if (!group)
+        return;
+
+    // Broadcast the player's response to the group
+    WorldPackets::Quest::QuestSessionReadyCheckResponse response;
+    response.Player = _player->GetGUID();
+    response.Accept = packet.Accept;
+    group->BroadcastPacket(response.Write(), false);
+
+    if (packet.Accept)
+    {
+        // If accepted, send session result success to the starter
+        WorldPackets::Quest::QuestSessionResult sessionResult;
+        sessionResult.Result = 0; // Started
+        SendPacket(sessionResult.Write());
+    }
 }
