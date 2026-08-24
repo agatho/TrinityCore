@@ -784,8 +784,8 @@ enum class CriteriaType : int16
 
     ReputationAmountGained                         = 243, /*NYI*/ // Gain reputation amount with {FactionID}; accumulate, not highest
 
-    FulfillAnyCraftingOrder                        = 245, /*NYI*/
-    FulfillCraftingOrderType                       = 246, /*NYI*/ // {CraftingOrderType}
+    FulfillAnyCraftingOrder                        = 245,
+    FulfillCraftingOrderType                       = 246, // {CraftingOrderType}
 
     PerksProgramMonthComplete                      = 249, /*NYI*/
     CompleteTrackingQuest                          = 250, /*NYI*/
