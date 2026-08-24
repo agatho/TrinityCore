@@ -629,6 +629,8 @@ namespace WorldPackets
         class MountSetFavorite;
         class MountClearFanfare;
         class CloseInteraction;
+        class CloseTraitSystemInteraction;
+        class CloseRuneforgeInteraction;
         class ConversationLineStarted;
         class RequestLatestSplashScreen;
         class QueryCountdownTimer;
@@ -2318,6 +2320,8 @@ class TC_GAME_API WorldSession
         void HandleCommentatorStartWargame(WorldPackets::Commentator::CommentatorStartWargame& startWargame);
         bool IsCommentator() const { return _isCommentator; }
         void SetCommentator(bool on) { _isCommentator = on; }
+        void HandleCloseTraitSystemInteraction(WorldPackets::Misc::CloseTraitSystemInteraction& closeTraitSystemInteraction);
+        void HandleCloseRuneforgeInteraction(WorldPackets::Misc::CloseRuneforgeInteraction& closeRuneforgeInteraction);
         void HandleConversationLineStarted(WorldPackets::Misc::ConversationLineStarted& conversationLineStarted);
         void HandleKeyboundOverride(WorldPackets::Spells::KeyboundOverride& keyboundOverride);
         void HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownTimer& queryCountdownTimer);
