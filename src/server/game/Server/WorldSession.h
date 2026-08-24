@@ -344,6 +344,11 @@ namespace WorldPackets
         class CommentatorGetPlayerInfo;
         class CommentatorGetPlayerCooldowns;
         class CommentatorStartWargame;
+    namespace Covenant
+    {
+        class ActivateSoulbind;
+        class RequestCovenantCallings;
+        class CovenantRenownRequestCatchupState;
     }
 
     namespace Duel
@@ -372,6 +377,7 @@ namespace WorldPackets
         class GarrisonCancelConstruction;
         class GarrisonRequestBlueprintAndSpecializationData;
         class GarrisonGetMapData;
+        class GarrisonSocketTalent;
     }
 
     namespace Guild
@@ -1996,6 +2002,11 @@ class TC_GAME_API WorldSession
         void HandleAdventureJournalOpenQuest(WorldPackets::AdventureJournal::AdventureJournalOpenQuest& openQuest);
         void HandleAdventureJournalUpdateSuggestions(WorldPackets::AdventureJournal::AdventureJournalUpdateSuggestions& updateSuggestions);
 
+        // Covenant
+        void HandleActivateSoulbind(WorldPackets::Covenant::ActivateSoulbind& packet);
+        void HandleRequestCovenantCallings(WorldPackets::Covenant::RequestCovenantCallings& packet);
+        void HandleCovenantRenownRequestCatchupState(WorldPackets::Covenant::CovenantRenownRequestCatchupState& packet);
+
         // Adventure Map
         void HandleCheckIsAdventureMapPoiValid(WorldPackets::AdventureMap::CheckIsAdventureMapPoiValid& CheckIsAdventureMapPoiValid);
         void HandleAdventureMapStartQuest(WorldPackets::AdventureMap::AdventureMapStartQuest& startQuest);
@@ -2027,6 +2038,7 @@ class TC_GAME_API WorldSession
         void HandleGarrisonCancelConstruction(WorldPackets::Garrison::GarrisonCancelConstruction& garrisonCancelConstruction);
         void HandleGarrisonRequestBlueprintAndSpecializationData(WorldPackets::Garrison::GarrisonRequestBlueprintAndSpecializationData& garrisonRequestBlueprintAndSpecializationData);
         void HandleGarrisonGetMapData(WorldPackets::Garrison::GarrisonGetMapData& garrisonGetMapData);
+        void HandleGarrisonSocketTalent(WorldPackets::Garrison::GarrisonSocketTalent& garrisonSocketTalent);
 
         // Battle Pets
         void HandleBattlePetRequestJournal(WorldPackets::BattlePet::BattlePetRequestJournal& battlePetRequestJournal);
