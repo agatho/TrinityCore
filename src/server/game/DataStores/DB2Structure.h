@@ -98,6 +98,8 @@ struct UIChromieTimeExpansionInfoEntry
     int32 CompletedPlayerConditionID;
     int32 SortPriority;
     int32 RecommendPlayerConditionID;
+};
+
 struct ManagedWorldStateEntry
 {
     uint32 ID;
@@ -146,6 +148,8 @@ struct ContributionEntry
     int32 OrderIndex;
     int32 ContributionStyleContainer;
     std::array<int32, 4> UiTextureAtlasMemberID;
+};
+
 struct DelvesSeasonXSpellEntry
 {
     uint32 ID;
@@ -176,6 +180,8 @@ struct DelvesSeasonEntry
 {
     uint32 ID;
     int32 FactionID;                                                                  // Faction.ID FK
+};
+
 struct SoulbindConduitEntry
 {
     uint32 ID;
@@ -503,6 +509,8 @@ struct GarrAbilityEffectEntry
     uint8 MiscValueA;
     int32 ActionHours;
     int32 ActionRecordID;
+};
+
 struct RoomWmoDataEntry
 {
     uint32 ID;
@@ -873,6 +881,8 @@ struct DecorCategoryEntry
     uint32 ID;
     int32 UiTextureAtlasElementID;           // Meta[2] INT: WoWDBDefs FK->UiTextureAtlasElement
     int32 OrderIndex;                        // Meta[3] INT: WoWDBDefs "OrderIndex"
+};
+
 struct GroupFinderActivityEntry
 {
     uint32 ID;
@@ -2022,45 +2032,6 @@ struct CorruptionEffectsEntry
     int32 Flags;
 };
 
-struct RenownRewardsEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
-    LocalizedString ToastDescription;
-    int32 CovenantID;
-    int32 Level;
-    int32 Icon;
-    int32 Flags;
-    int32 UiOrder;
-    int32 ItemID;
-    int32 SpellID;
-    int32 MountID;
-    int32 TransmogID;
-    int32 TransmogSetID;
-    int32 CharTitlesID;
-    int32 GarrFollowerID;
-    int32 TransmogIllusionID;
-    int32 Field_12_0_0_63534_016;
-    int32 QuestID;
-    int32 PlayerConditionID;
-};
-
-struct CovenantEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
-    int32 BountySetID;
-    int32 SkillLineID;
-    int32 DeathTeleportSpellID;
-    int32 Field_9_0_2_36165_006;
-    int32 Field_9_0_2_36165_007;
-    int32 FactionID;
-    int32 CurrencyTypesID;
-    int32 RequiredPlayerConditionID;
-};
-
 struct CraftingQualityEntry
 {
     uint32 ID;
@@ -2573,19 +2544,6 @@ struct DestructibleModelDataEntry
     int8 State1NameSet;
     int8 State2NameSet;
     int8 State3NameSet;
-};
-
-struct DelvesSeasonEntry
-{
-    uint32 ID;
-    int32 FactionID;                                                                  // Faction.ID FK
-};
-
-struct DelvesSeasonXSpellEntry
-{
-    uint32 ID;
-    int32 SpellID;
-    uint32 DelvesSeasonID;
 };
 
 struct DifficultyEntry
@@ -4524,25 +4482,6 @@ struct PlayerDataFlagCharacterEntry
     int32 Unknown1125;
 };
 
-struct PlayerCompanionInfoEntry
-{
-    LocalizedString UnlockDescription;
-    uint32 ID;
-    int32 DelvesSeasonID;
-    int32 TraitTreeID;
-    int32 TraitNodeID_DPS;
-    int32 TraitNodeID_Heal;
-    int32 TraitSubTreeID_DPS;
-    int32 TraitSubTreeID_Heal;
-    int32 TraitSubTreeID_Tank;
-    int32 FactionID;
-    int32 CreatureDisplayInfoID;
-    int32 UiModelSceneID;
-    int32 Field_12_0_0_64499_011;
-    int32 Field_12_0_0_64499_012;
-    int32 ParentID;                                                                   // Field_12_0_1_64889_014, parent relation
-};
-
 struct PowerDisplayEntry
 {
     uint32 ID;
@@ -4930,26 +4869,6 @@ struct SkillRaceClassInfoEntry
     int8 MinLevel;
     int16 SkillTierID;
     Trinity::RaceMask<int32, 2> RaceMask;
-};
-
-struct SoulbindEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    int32 CovenantID;
-    int32 GarrTalentTreeID;
-    int32 CreatureID;
-    int32 GarrFollowerID;
-    int32 PlayerConditionID;
-};
-
-struct SoulbindConduitEntry
-{
-    uint32 ID;
-    uint8 ConduitType;
-    int32 CovenantID;
-    int32 SpecSetID;
-    int32 Flags;
 };
 
 struct SoulbindConduitItemEntry

@@ -2880,55 +2880,6 @@ struct CorruptionEffectsLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 5, &CorruptionEffectsMeta::Instance, HOTFIX_SEL_CORRUPTION_EFFECTS };
 };
 
-struct RenownRewardsLoadInfo
-{
-    static constexpr DB2FieldMeta Fields[20] =
-    {
-        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
-        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
-        { .IsSigned = false, .Type = FT_STRING, .Name = "ToastDescription" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "CovenantID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Level" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Icon" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "UiOrder" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "MountID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "TransmogID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "TransmogSetID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "CharTitlesID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "GarrFollowerID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "TransmogIllusionID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_63534_016" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "QuestID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
-    };
-
-    static constexpr DB2LoadInfo Instance{ Fields, 20, &RenownRewardsMeta::Instance, HOTFIX_SEL_RENOWN_REWARDS };
-};
-
-struct CovenantLoadInfo
-{
-    static constexpr DB2FieldMeta Fields[11] =
-    {
-        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
-        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "BountySetID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "SkillLineID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "DeathTeleportSpellID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_9_0_2_36165_006" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_9_0_2_36165_007" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "FactionID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "CurrencyTypesID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "RequiredPlayerConditionID" },
-    };
-
-    static constexpr DB2LoadInfo Instance{ Fields, 11, &CovenantMeta::Instance, HOTFIX_SEL_COVENANT };
-};
-
 struct CraftingQualityLoadInfo
 {
     static constexpr DB2FieldMeta Fields[3] =
@@ -3239,17 +3190,6 @@ struct DestructibleModelDataLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 23, &DestructibleModelDataMeta::Instance, HOTFIX_SEL_DESTRUCTIBLE_MODEL_DATA };
-};
-
-struct DelvesSeasonLoadInfo
-{
-    static constexpr DB2FieldMeta Fields[2] =
-    {
-        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "FactionID" },
-    };
-
-    static constexpr DB2LoadInfo Instance{ Fields, 2, &DelvesSeasonMeta::Instance, HOTFIX_SEL_DELVES_SEASON };
 };
 
 struct DelvesSeasonXSpellLoadInfo
@@ -6252,30 +6192,6 @@ struct PlayerDataFlagCharacterLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 4, &PlayerDataFlagCharacterMeta::Instance, HOTFIX_SEL_PLAYER_DATA_FLAG_CHARACTER };
 };
 
-struct PlayerCompanionInfoLoadInfo
-{
-    static constexpr DB2FieldMeta Fields[15] =
-    {
-        { .IsSigned = false, .Type = FT_STRING, .Name = "UnlockDescription" },
-        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "DelvesSeasonID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "TraitTreeID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "TraitNodeID_DPS" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "TraitNodeID_Heal" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "TraitSubTreeID_DPS" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "TraitSubTreeID_Heal" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "TraitSubTreeID_Tank" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "FactionID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "CreatureDisplayInfoID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "UiModelSceneID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_011" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_012" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "ParentID" },
-    };
-
-    static constexpr DB2LoadInfo Instance{ Fields, 15, &PlayerCompanionInfoMeta::Instance, HOTFIX_SEL_PLAYER_COMPANION_INFO };
-};
-
 struct PowerDisplayLoadInfo
 {
     static constexpr DB2FieldMeta Fields[6] =
@@ -6881,22 +6797,6 @@ struct SkillRaceClassInfoLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 9, &SkillRaceClassInfoMeta::Instance, HOTFIX_SEL_SKILL_RACE_CLASS_INFO };
-};
-
-struct SoulbindLoadInfo
-{
-    static constexpr DB2FieldMeta Fields[7] =
-    {
-        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "CovenantID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "GarrTalentTreeID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "CreatureID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "GarrFollowerID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
-    };
-
-    static constexpr DB2LoadInfo Instance{ Fields, 7, &SoulbindMeta::Instance, HOTFIX_SEL_SOULBIND };
 };
 
 struct SoulbindConduitLoadInfo

@@ -332,6 +332,7 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         "OverrideContentTuningID, MapChallengeModeID FROM group_finder_activity WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_GROUP_FINDER_ACTIVITY, "SELECT MAX(ID) + 1 FROM group_finder_activity", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_GROUP_FINDER_ACTIVITY, "SELECT ID, FullName_lang, ShortName_lang FROM group_finder_activity_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
     PrepareStatement(HOTFIX_SEL_UI_TEXTURE_KIT, "SELECT ID, KitPrefix FROM ui_texture_kit"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_UI_TEXTURE_KIT, "SELECT MAX(ID) + 1 FROM ui_texture_kit", CONNECTION_SYNCH);
