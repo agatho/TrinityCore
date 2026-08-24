@@ -19,6 +19,7 @@
 void AddSC_archaeology_spell_scripts();
 void AddSC_deathknight_spell_scripts();
 void AddSC_demon_hunter_spell_scripts();
+void AddSC_demon_hunter_devourer_spell_scripts();
 void AddSC_druid_spell_scripts();
 void AddSC_evoker_spell_scripts();
 void AddSC_generic_spell_scripts();
@@ -42,6 +43,7 @@ void AddSpellsScripts()
     AddSC_archaeology_spell_scripts();
     AddSC_deathknight_spell_scripts();
     AddSC_demon_hunter_spell_scripts();
+    AddSC_demon_hunter_devourer_spell_scripts();
     AddSC_druid_spell_scripts();
     AddSC_evoker_spell_scripts();
     AddSC_generic_spell_scripts();
