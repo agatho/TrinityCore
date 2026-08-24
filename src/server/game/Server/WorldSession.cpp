@@ -321,6 +321,14 @@ void WorldSession::AddInstanceConnection(WorldSession* session, std::weak_ptr<Wo
 
     socket->SetWorldSession(session);
     session->m_Socket[CONNECTION_TYPE_INSTANCE] = std::move(socket);
+
+    // DISABLED (2026-08-18): sending SMSG_SUSPEND_COMMS here BREAKS enter-world. The 12.0.7 client
+    // receives SUSPEND_COMMS -> RESUME_COMMS and immediately disconnects (CMSG_LOG_DISCONNECT) before
+    // world entry - "login works, enter-world fails". It was added untested in 88bcee58de (its own
+    // message: "Nothing here has been compiled"). The pre-existing unpaired SMSG_RESUME_COMMS sent by
+    // HandleContinuePlayerLogin already works because a fresh instance connection behaves as suspended,
+    // so this "open bracket" is not needed. Re-enable ONLY after verifying the exact packet against a
+    // running client.
     session->HandleContinuePlayerLogin();
 }
 

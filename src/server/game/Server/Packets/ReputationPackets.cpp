@@ -53,6 +53,16 @@ WorldPacket const* WorldPackets::Reputation::InitializeFactions::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* WorldPackets::Reputation::FactionBonusInfo::Write()
+{
+    _worldPacket << Size<uint32>(Bonuses);
+
+    for (FactionBonusData const& bonus : Bonuses)
+        _worldPacket << bonus;
+
+    return &_worldPacket;
+}
+
 ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Reputation::FactionStandingData const& factionStanding)
 {
     data << int32(factionStanding.Index);

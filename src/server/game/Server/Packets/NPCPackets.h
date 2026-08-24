@@ -126,6 +126,20 @@ namespace WorldPackets
             int32 LfgDungeonsID = 0;
         };
 
+        // Wire verified against all 5 captured occurrences (12.0.7 builds 68453/68974), zero
+        // leftover bytes on each: a PackedGuid naming the gossip source followed by exactly one
+        // ClientGossipText, i.e. the same per-quest block SMSG_GOSSIP_MESSAGE carries in a list.
+        class GossipQuestUpdate final : public ServerPacket
+        {
+        public:
+            explicit GossipQuestUpdate() : ServerPacket(SMSG_GOSSIP_QUEST_UPDATE, 18 + 32 + 2 + 32) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid GossipGUID;
+            ClientGossipText TextData;
+        };
+
         class GossipSelectOption final : public ClientPacket
         {
         public:

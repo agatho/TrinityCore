@@ -165,6 +165,52 @@ WorldPacket const* SetupCurrency::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* ReattachResurrect::Write()
+{
+    _worldPacket << uint8(Unknown1);
+    _worldPacket << uint8(Unknown2);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CurrencyTransferLog::Write()
+{
+    _worldPacket << Size<uint32>(Entries);
+
+    for (Entry const& entry : Entries)
+    {
+        _worldPacket << entry.Source;              // PackedGuid (source character)
+        _worldPacket << entry.Dest;                // PackedGuid (destination character)
+        _worldPacket << int32(entry.CurrencyID);
+        _worldPacket << int32(entry.Quantity);
+        _worldPacket << int32(entry.Field3);
+        _worldPacket << uint64(entry.TransferTime);
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* AccountCharacterCurrencyLists::Write()
+{
+    _worldPacket << Size<uint32>(Currencies);
+
+    for (CharacterCurrency const& currency : Currencies)
+    {
+        _worldPacket << int32(currency.CurrencyID);
+        _worldPacket << currency.Character;        // PackedGuid
+        _worldPacket << uint32(currency.Quantity);
+        _worldPacket << uint32(currency.WeeklyQuantity);
+        _worldPacket << uint32(currency.MaxQuantity);
+        _worldPacket << Bits<1>(currency.Flag);
+        _worldPacket.FlushBits();
+    }
+
+    _worldPacket << Bits<1>(TrailingFlag);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
 void ViolenceLevel::Read()
 {
     _worldPacket >> ViolenceLvl;
@@ -181,6 +227,11 @@ void TimeSyncResponse::Read()
 {
     _worldPacket >> SequenceIndex;
     _worldPacket >> ClientTime;
+}
+
+void DiscardedTimeSyncAcks::Read()
+{
+    _worldPacket >> MaxSequenceIndex;
 }
 
 WorldPacket const* TriggerCinematic::Write()
@@ -256,6 +307,40 @@ void SetRaidDifficulty::Read()
 {
     _worldPacket >> Legacy;
     _worldPacket >> DifficultyID;
+}
+
+WorldPacket const* ChangePlayerDifficultyResult::Write()
+{
+    // The client reads one byte and splits it Result = b >> 4, InCombat = (b >> 3) & 1, which is
+    // what these two bit writes plus the flush produce. Both captured bodies open with exactly
+    // this: 0xC0 = Result 12 / InCombat 0, and 0x60 = Result 6 / InCombat 0.
+    _worldPacket << Bits<4>(Result);
+    _worldPacket << Bits<1>(InCombat);
+    _worldPacket.FlushBits();
+
+    // Which trailing fields exist is decided by Result in the client's own reader; everything
+    // not listed here is the leading byte and nothing else.
+    switch (Result)
+    {
+        case ChangePlayerDifficultyResultCode::Cooldown:
+        case ChangePlayerDifficultyResultCode::Pending:
+            _worldPacket << int64(Cooldown);
+            break;
+        case ChangePlayerDifficultyResultCode::MapDifficultyMessage:
+            _worldPacket << int32(MapDifficultyID);
+            break;
+        case ChangePlayerDifficultyResultCode::OtherHeroic:
+            _worldPacket << PlayerGUID;
+            break;
+        case ChangePlayerDifficultyResultCode::Success:
+            _worldPacket << int32(MapID);
+            _worldPacket << uint16(DifficultyID);
+            break;
+        default:
+            break;
+    }
+
+    return &_worldPacket;
 }
 
 WorldPacket const* DungeonDifficultySet::Write()
@@ -783,6 +868,35 @@ WorldPacket const* StartTimer::Write()
 void QueryCountdownTimer::Read()
 {
     _worldPacket >> As<int32>(TimerType);
+}
+
+void DoCountdown::Read()
+{
+    // Wire (client serializer 0x5DDE90): bit HasType, bit Flag, FlushBits, uint32 TotalTime, [uint8 Type if HasType]
+    bool hasType = _worldPacket.ReadBit();
+    Flag = _worldPacket.ReadBit();
+    _worldPacket >> TotalTime;
+    if (hasType)
+    {
+        uint8 type;
+        _worldPacket >> type;
+        Type = type;
+    }
+}
+
+WorldPacket const* GetRemainingGameTimeResponse::Write()
+{
+    _worldPacket << uint32(SecondsRemaining);
+    _worldPacket << uint32(GameTimeParam);
+    _worldPacket.WriteBit(Unlimited);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+void SetStopConversation::Read()
+{
+    _worldPacket >> ConversationGUID;
 }
 
 void ConversationLineStarted::Read()
