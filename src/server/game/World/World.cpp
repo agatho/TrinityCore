@@ -111,6 +111,8 @@
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
 #include "NemesisMgr.h"
+#include "RitualSiteMgr.h"
+#include "AbyssAnglersMgr.h"
 #include <zlib.h>
 
 TC_GAME_API std::atomic<bool> World::m_stopEvent(false);
@@ -1627,6 +1629,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Delve Nemesis layer...");           // Midnight Tier 4+ delve escalation (Pactsworn/Strongbox/Nullaeus)
     sNemesisMgr->LoadFromDB();
+    TC_LOG_INFO("server.loading", "Loading Midnight small activities...");     // Ritual Sites + Abyss Anglers — realm-safe no-op if tables absent
+    sRitualSiteMgr->LoadFromDB();
+    sAbyssAnglersMgr->LoadFromDB();
 
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();
