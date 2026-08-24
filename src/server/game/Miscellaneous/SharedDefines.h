@@ -6953,6 +6953,7 @@ enum BattlegroundTypeId : uint32
     BATTLEGROUND_DS             = 10,       // Dalaran Sewers
     BATTLEGROUND_RV             = 11,       // The Ring of Valor
     BATTLEGROUND_IC             = 30,       // Isle of Conquest
+    BATTLEGROUND_SLAYERS_RISE   = 1141,     // Slayer's Rise (Midnight S1, 40v40) [DB2 BattlemasterList 1141]
     BATTLEGROUND_RB             = 32,       // Random Battleground
     BATTLEGROUND_RATED_10_VS_10 = 100,      // Rated Battleground 10 vs 10
     BATTLEGROUND_RATED_15_VS_15 = 101,      // Rated Battleground 15 vs 15
