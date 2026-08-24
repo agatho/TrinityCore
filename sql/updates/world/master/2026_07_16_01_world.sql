@@ -1,5 +1,40 @@
 --
-SET @CGUID := 147490; -- 8
+-- LOCAL DIVERGENCE FROM UPSTREAM - @CGUID re-based, deliberately. Same situation as
+-- 2026_07_17_00_world.sql; read that header too.
+--
+-- Upstream ships `SET @CGUID := 147490;`. On this realm 147490-147497 are eight live map-1
+-- Ashenvale spawns (ids 39254, 3819, 1412, 3944, 3944, 3713, 48182, 3812) sitting in the middle of
+-- a dense map-1 run - 147489 and 147498 either side are map 1 too. The eight Soaring Eagles could
+-- therefore never be created: a multi-row INSERT fails as a unit on the first duplicate key, and
+-- `SELECT COUNT(*) FROM creature WHERE id=24858 AND map=568` returned 0.
+--
+-- Every OTHER guid-keyed statement in the file did land, so those eight Ashenvale creatures were
+-- left wearing the eagles' data:
+--   * `creature_addon` 147490/147492/147494/147496 pointed at PathId 1474900/1474920/1474940/
+--     1474960 - Zul'Aman flight paths - so map-1 creatures were patrolling Zul'Aman coordinates.
+--   * `creature_formations` had them paired up as leader/member with dist 5, groupAI 512.
+--   * `spawn_group` 381-384 held them, and those groups carry groupFlags 4 (MANUAL_SPAWN), which
+--     suppressed their normal spawning entirely.
+-- The "upstream-valued cleanup" block below undoes all three. Those statements are the file's own,
+-- just left at the upstream constants; they must stay until this migration is retired.
+--
+-- Collateral this file already caused, repaired below: its
+-- `DELETE FROM creature_addon WHERE guid BETWEEN @CGUID+00 AND @CGUID+07` destroyed the original
+-- addon row for guid 147494 (PathId 0, emote 375). It is restored from the wc_world reference DB,
+-- which carries the identical creature ids at 147490-147497.
+--
+-- Verified empty before choosing 2000400-2000407: `creature`, `creature_addon`, `spawn_group`
+-- (spawnType 0), `creature_formations`, `game_event_creature`, `pool_members` (type 0). The derived
+-- `waypoint_path` ids ((@CGUID+n)*10 = 20004000/20/40/60) were verified free in `waypoint_path` and
+-- `waypoint_path_node`. The block does not overlap 2000000-2000023 (2026_07_17_00_world.sql) or
+-- 2000200-2000330 (2026_07_15_00_world.sql). Nearest occupant above the neighbourhood: guid
+-- 3000098.
+--
+-- @SPAWN_GROUP_ID (381-384) is NOT re-based - separate id space, no collision.
+--
+-- Do not revert this on the next merge. If a future upstream file reuses 2000400+, re-base again
+-- rather than reverting - the Ashenvale spawns are real content here.
+SET @CGUID := 2000400; -- 8 (upstream: 147490 - occupied on this realm, see above)
 SET @SPAWN_GROUP_ID := 381; -- 4
 
 -- Akil'zon
@@ -50,6 +85,12 @@ INSERT INTO `spawn_group` (`groupId`, `spawnType`, `spawnId`) VALUES
 (@SPAWN_GROUP_ID+2,0,@CGUID+5),
 (@SPAWN_GROUP_ID+3,0,@CGUID+6),
 (@SPAWN_GROUP_ID+3,0,@CGUID+7);
+
+-- Upstream-valued cleanup (see header): the four eagle paths an earlier run of this file created
+-- under the old @CGUID. They are this file's own rows - absent from the wc_world and wowc_world
+-- reference DBs - and are now orphans, since the addons that pointed at them are gone.
+DELETE FROM `waypoint_path_node` WHERE `PathId` IN (1474900,1474920,1474940,1474960);
+DELETE FROM `waypoint_path` WHERE `PathId` IN (1474900,1474920,1474940,1474960);
 
 DELETE FROM `waypoint_path` WHERE `PathId` IN ((@CGUID+0)*10,(@CGUID+2)*10,(@CGUID+4)*10,(@CGUID+6)*10);
 INSERT INTO `waypoint_path` (`PathId`, `MoveType`, `Flags`, `Velocity`, `Comment`) VALUES
@@ -190,12 +231,27 @@ INSERT INTO `waypoint_path_node` (`PathId`,`NodeId`,`PositionX`,`PositionY`,`Pos
 ((@CGUID+6)*10,39,364.2945,1429.2323,99.35547,NULL,0),
 ((@CGUID+6)*10,40,385.5457,1429.0762,97.52219,NULL,0);
 
+-- Upstream-valued cleanup (see header): strips the eagle addon rows an earlier run of this file
+-- attached to the eight live map-1 Ashenvale creatures, then restores the one pre-existing row it
+-- had destroyed (147494, emote 375), sourced from the wc_world reference DB.
+DELETE FROM `creature_addon` WHERE `guid` BETWEEN 147490 AND 147497;
+INSERT INTO `creature_addon` (`guid`, `PathId`, `mount`, `MountCreatureID`, `StandState`, `AnimTier`, `VisFlags`, `SheathState`, `PvPFlags`, `emote`, `visibilityDistanceType`, `auras`) VALUES
+(147494,0,0,0,0,0,0,1,0,375,0,NULL);
+
 DELETE FROM `creature_addon` WHERE `guid` BETWEEN @CGUID+0 AND @CGUID+7;
 INSERT INTO `creature_addon` (`guid`, `PathId`, `mount`, `MountCreatureID`, `StandState`, `AnimTier`, `VisFlags`, `SheathState`, `PvPFlags`, `emote`, `visibilityDistanceType`, `auras`) VALUES
 (@CGUID+0,(@CGUID+0)*10,0,0,0,0,0,1,0,0,0,''),
 (@CGUID+2,(@CGUID+2)*10,0,0,0,0,0,1,0,0,0,''),
 (@CGUID+4,(@CGUID+4)*10,0,0,0,0,0,1,0,0,0,''),
 (@CGUID+6,(@CGUID+6)*10,0,0,0,0,0,1,0,0,0,'');
+
+-- Upstream-valued cleanup (see header): un-pairs the eight live map-1 Ashenvale creatures that an
+-- earlier run of this file formed up as the eagles, and releases them from spawn groups 381-384.
+-- Those groups are MANUAL_SPAWN, so while the creatures sat in them they did not spawn at all.
+-- The re-based eagles are filed into 381-384 in their place further up the file; these two
+-- statements only touch the upstream 147490-147497 keys.
+DELETE FROM `creature_formations` WHERE `leaderGUID` BETWEEN 147490 AND 147497;
+DELETE FROM `spawn_group` WHERE `spawnId` BETWEEN 147490 AND 147497 AND `spawnType` = 0;
 
 DELETE FROM `creature_formations` WHERE `leaderGUID` BETWEEN @CGUID+0 AND @CGUID+7;
 INSERT INTO `creature_formations` (`leaderGUID`, `memberGUID`, `dist`, `angle`, `groupAI`, `point_1`, `point_2`) VALUES
