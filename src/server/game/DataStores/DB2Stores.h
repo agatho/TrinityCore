@@ -34,6 +34,7 @@ class DB2HotfixGeneratorBase;
 TC_GAME_API extern DB2Storage<AccountStoreCategoryEntry>            sAccountStoreCategoryStore;
 TC_GAME_API extern DB2Storage<AccountStoreItemEntry>                sAccountStoreItemStore;
 TC_GAME_API extern DB2Storage<AchievementEntry>                     sAchievementStore;
+TC_GAME_API extern DB2Storage<UIChromieTimeExpansionInfoEntry>      sUIChromieTimeExpansionInfoStore;
 TC_GAME_API extern DB2Storage<Achievement_CategoryEntry>            sAchievementCategoryStore;
 TC_GAME_API extern DB2Storage<AdventureJournalEntry>                sAdventureJournalStore;
 TC_GAME_API extern DB2Storage<AdventureMapPOIEntry>                 sAdventureMapPOIStore;

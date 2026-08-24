@@ -82,6 +82,24 @@ struct AchievementEntry
     int32 LegacyAfterTimeEvent;                                     // category changes clientside to Legacy after this TimeEvent is passed
 };
 
+struct UIChromieTimeExpansionInfoEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    LocalizedString AllianceOverrideDesc;
+    LocalizedString HordeOverrideDesc;
+    int32 SpellID;
+    int32 MapAtlasElement;
+    int32 PreviewAtlasElement;
+    int32 ShowPlayerConditionID;
+    int32 ExpansionMask;
+    int32 ContentTuningID;
+    int32 CompletedPlayerConditionID;
+    int32 SortPriority;
+    int32 RecommendPlayerConditionID;
+};
+
 struct Achievement_CategoryEntry
 {
     LocalizedString Name;
