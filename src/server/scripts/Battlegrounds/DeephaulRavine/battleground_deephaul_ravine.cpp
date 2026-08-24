@@ -31,6 +31,7 @@
 #include "TaskScheduler.h"
 #include "TemporarySummon.h"
 #include "Vehicle.h"
+#include <algorithm>
 #include <queue>
 
 namespace DeephaulRavine
@@ -251,6 +252,11 @@ struct battleground_deephaul_ravine : BattlegroundScript
 
         for (Position const& pos : DeephaulRavine::Positions::EarthenMineCartsAlliance)
             battlegroundMap->SummonCreature(DeephaulRavine::Creatures::EarthenMineCartAlliance, pos);
+
+        // The cap for SMSG_BATTLEGROUND_INIT. Unlike the other resource races this one does not hardcode it:
+        // the value lives in the MaxTeamScore world state, which is also what the scoring tick and the win
+        // check below read, so the packet cannot drift away from the rules the match is actually run by.
+        battleground->SetMaxTeamScore(uint16(std::max<int32>(0, battlegroundMap->GetWorldStateValue(DeephaulRavine::WorldStates::MaxTeamScore))));
     }
 
     void OnStart() override

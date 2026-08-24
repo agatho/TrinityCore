@@ -192,7 +192,12 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPackets::Battleground::Batt
             return;
 
         BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
-        GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, nullptr, getQueueTeam(), bracketEntry, false, isPremade, 0);
+        // The parameter order is (…, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating, uint8 roles).
+        // This call used to read (…, false, isPremade, 0): isPremade was landing in ArenaRating while the real
+        // isPremade parameter was hardcoded false. Because AddGroup buckets with
+        // `if (!m_queueId.Rated && !isPremade) index += PVP_TEAMS_COUNT`, every unrated group was filed under
+        // BG_QUEUE_NORMAL_* and CheckPremadeMatch could never fire.
+        GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, nullptr, getQueueTeam(), bracketEntry, isPremade, 0, 0, battlemasterJoin.Roles);
         uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
         uint32 queueSlot = _player->AddBattlegroundQueueId(bgQueueTypeId);
 
@@ -220,7 +225,8 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPackets::Battleground::Batt
         if (!err)
         {
             TC_LOG_DEBUG("bg.battleground", "Battleground: the following players are joining as group:");
-            ginfo = bgQueue.AddGroup(_player, grp, getQueueTeam(), bracketEntry, false, isPremade, 0);
+            // Same argument-order fix as the solo path above.
+            ginfo = bgQueue.AddGroup(_player, grp, getQueueTeam(), bracketEntry, isPremade, 0, 0, battlemasterJoin.Roles);
             avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
         }
 
@@ -247,6 +253,558 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPackets::Battleground::Batt
         }
         TC_LOG_DEBUG("bg.battleground", "Battleground: group end");
     }
+
+    sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
+}
+
+// CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ (0x3B00BE) - rated 8v8 solo/duo queue.
+//
+// Unlike CMSG_BATTLEMASTER_JOIN, this packet carries NO queue identity: the client sends a single role-mask
+// byte and the mode is implied entirely by the opcode. The server therefore builds the queue id itself. The
+// value used here is not invented - a live 12.0.7.68275 capture shows retail replying to this exact opcode
+// with SMSG_BATTLEFIELD_STATUS_QUEUED carrying packed QueueID 0x1F1000000019044D, which decodes to
+// { BattlemasterListId = 1101, Type = 9, Rated = true, TeamSize = 0 }.
+void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground::BattlemasterJoinRatedBGBlitz& packet)
+{
+    BattlegroundQueueTypeId bgQueueTypeId =
+        BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_BLITZ, BattlegroundQueueIdType::RatedBattlegroundBlitz, true, 0);
+
+    if (!BattlegroundMgr::IsValidQueueId(bgQueueTypeId))
+    {
+        TC_LOG_ERROR("network", "Battleground Blitz: queue id rejected by IsValidQueueId - BattlemasterList {} is missing from the client DB2 the server loaded.",
+            uint32(BATTLEGROUND_BLITZ));
+        return;
+    }
+
+    BattlemasterListEntry const* battlemasterListEntry = sBattlemasterListStore.AssertEntry(bgQueueTypeId.BattlemasterListId);
+
+    if (DisableMgr::IsDisabledFor(DISABLE_TYPE_BATTLEGROUND, bgQueueTypeId.BattlemasterListId, nullptr) || battlemasterListEntry->GetFlags().HasFlag(BattlemasterListFlags::InternalOnly))
+    {
+        ChatHandler(this).PSendSysMessage(LANG_BG_DISABLED);
+        return;
+    }
+
+    if (_player->InBattleground())
+        return;
+
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BATTLEGROUND_BLITZ);
+    if (!bgTemplate)
+    {
+        TC_LOG_ERROR("bg.battleground", "Battleground Blitz: no battleground_template row for {} - apply the Blitz world migration.", uint32(BATTLEGROUND_BLITZ));
+        return;
+    }
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
+
+    auto sendFailed = [&](GroupJoinBattlegroundResult result)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result);
+        SendPacket(battlefieldStatus.Write());
+    };
+
+    // The retail client refuses to send this opcode with no role selected, so a zero mask means either a
+    // modified client or a UI state we do not model. Either way the matchmaker cannot place the player.
+    if (!packet.Roles)
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    Group const* grp = _player->GetGroup();
+    if (grp)
+    {
+        if (grp->GetLeaderGUID() != _player->GetGUID())
+            return;
+
+        // BattlemasterList 1101 caps the queueing party at MaxGroupSize (2 on retail - solo or duo).
+        if (grp->GetMembersCount() > battlemasterListEntry->MaxGroupSize)
+        {
+            sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+            return;
+        }
+    }
+
+    if (GetPlayer()->isUsingLfg())
+    {
+        sendFailed(ERR_LFG_CANT_USE_BATTLEGROUND);
+        return;
+    }
+
+    if (!_player->CanJoinToBattleground(bgTemplate))
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_TIMED_OUT);
+        return;
+    }
+
+    if (_player->IsDeserter())
+    {
+        sendFailed(ERR_GROUP_JOIN_BATTLEGROUND_DESERTERS);
+        return;
+    }
+
+    // already queued for Blitz
+    if (_player->GetBattlegroundQueueIndex(bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
+        return;
+
+    if (!_player->HasFreeBattlegroundQueueId())
+    {
+        sendFailed(ERR_BATTLEGROUND_TOO_MANY_QUEUES);
+        return;
+    }
+
+    // check Freeze debuff
+    if (_player->HasAura(9454))
+        return;
+
+    BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
+    GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, false, 0, 0, packet.Roles);
+    uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
+
+    if (grp)
+    {
+        for (GroupReference const& itr : grp->GetMembers())
+        {
+            Player* member = itr.GetSource();
+            uint32 memberSlot = member->AddBattlegroundQueueId(bgQueueTypeId);
+
+            WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+            BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, member, memberSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, true);
+            member->SendDirectMessage(battlefieldStatus.Write());
+        }
+    }
+    else
+    {
+        uint32 queueSlot = _player->AddBattlegroundQueueId(bgQueueTypeId);
+
+        WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, _player, queueSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, false);
+        SendPacket(battlefieldStatus.Write());
+    }
+
+    TC_LOG_DEBUG("bg.battleground", "Battleground Blitz: {} ({}) queued with roles {:#x}",
+        _player->GetName(), _player->GetGUID().ToString(), packet.Roles);
+
+    sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
+}
+
+// CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3B00BF) - unrated 3v3 arena, solo or small group.
+//
+// Like the Blitz join this packet carries no queue identity; the mode is implied by the opcode. It queues
+// against BattlemasterList 6 ("All Arenas"), which already has a battleground_template row and whose 15
+// arena maps all have templates - so this phase needs no SQL.
+//
+// Matchmaking needs no new code either: the queue is unrated, so entries land in BG_QUEUE_NORMAL_* and the
+// existing `!m_queueId.Rated` branch of BattlegroundQueueUpdate already runs
+// CheckNormalMatch(...) || (IsArena && CheckSkirmishForSameFaction(...)).
+void WorldSession::HandleBattlemasterJoinSkirmish(WorldPackets::Battleground::BattlemasterJoinSkirmish& packet)
+{
+    // JoinSkirmish only ever sends Bracket 4 and hard-rejects anything else client-side; RequeueSkirmish
+    // sends 255 with the Requeue bit set. Accept exactly those two shapes. The value is NOT mapped onto a
+    // BattlegroundBracketId - its enum identity is unknown (see BattlemasterJoinSkirmish's comment).
+    bool const validBracket = (packet.Bracket == 4) || (packet.Bracket == 255 && packet.Requeue);
+
+    BattlegroundQueueTypeId bgQueueTypeId =
+        BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_AA, BattlegroundQueueIdType::ArenaSkirmish, false, ARENA_TYPE_3v3);
+
+    if (!BattlegroundMgr::IsValidQueueId(bgQueueTypeId))
+        return;
+
+    auto sendFailed = [&](GroupJoinBattlegroundResult result)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result);
+        SendPacket(battlefieldStatus.Write());
+    };
+
+    if (!validBracket)
+    {
+        TC_LOG_DEBUG("bg.battleground", "Skirmish: {} sent an unexpected Bracket {} (Requeue {})",
+            _player->GetName(), uint32(packet.Bracket), packet.Requeue ? "true" : "false");
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    BattlemasterListEntry const* battlemasterListEntry = sBattlemasterListStore.AssertEntry(bgQueueTypeId.BattlemasterListId);
+
+    if (DisableMgr::IsDisabledFor(DISABLE_TYPE_BATTLEGROUND, bgQueueTypeId.BattlemasterListId, nullptr) || battlemasterListEntry->GetFlags().HasFlag(BattlemasterListFlags::InternalOnly))
+    {
+        ChatHandler(this).PSendSysMessage(LANG_ARENA_DISABLED);
+        return;
+    }
+
+    if (_player->InBattleground())
+        return;
+
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BATTLEGROUND_AA);
+    if (!bgTemplate)
+    {
+        TC_LOG_ERROR("bg.battleground", "Skirmish: template bg (all arenas) not found");
+        return;
+    }
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
+
+    Group* grp = _player->GetGroup();
+    if (grp && grp->GetLeaderGUID() != _player->GetGUID())
+        return;
+
+    if (GetPlayer()->isUsingLfg())
+    {
+        sendFailed(ERR_LFG_CANT_USE_BATTLEGROUND);
+        return;
+    }
+
+    if (!_player->CanJoinToBattleground(bgTemplate))
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_TIMED_OUT);
+        return;
+    }
+
+    if (_player->IsDeserter())
+    {
+        sendFailed(ERR_GROUP_JOIN_BATTLEGROUND_DESERTERS);
+        return;
+    }
+
+    if (_player->GetBattlegroundQueueIndex(bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
+        return;
+
+    if (!_player->HasFreeBattlegroundQueueId())
+    {
+        sendFailed(ERR_BATTLEGROUND_TOO_MANY_QUEUES);
+        return;
+    }
+
+    if (_player->HasAura(9454))
+        return;
+
+    ObjectGuid errorGuid;
+    GroupJoinBattlegroundResult err = ERR_BATTLEGROUND_NONE;
+    if (grp && !sBattlegroundMgr->isArenaTesting())
+        err = grp->CanJoinBattlegroundQueue(bgTemplate, bgQueueTypeId, ARENA_TYPE_3v3, ARENA_TYPE_3v3, false, 0, errorGuid);
+
+    if (err)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, err, &errorGuid);
+        SendPacket(battlefieldStatus.Write());
+        return;
+    }
+
+    BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
+    // Unrated, so no rating is carried. Roles are stored but no skirmish matchmaker consults them - the wire
+    // only ever tells us the queuer's own mask, never the other party members'.
+    GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, false, 0, 0, packet.Roles);
+    uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
+
+    if (grp)
+    {
+        for (GroupReference const& itr : grp->GetMembers())
+        {
+            Player* member = itr.GetSource();
+            uint32 memberSlot = member->AddBattlegroundQueueId(bgQueueTypeId);
+
+            WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+            BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, member, memberSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, true);
+            member->SendDirectMessage(battlefieldStatus.Write());
+        }
+    }
+    else
+    {
+        uint32 queueSlot = _player->AddBattlegroundQueueId(bgQueueTypeId);
+
+        WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, _player, queueSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, false);
+        SendPacket(battlefieldStatus.Write());
+    }
+
+    TC_LOG_DEBUG("bg.battleground", "Skirmish: {} ({}) queued with roles {:#x} (bracket {}, requeue {})",
+        _player->GetName(), _player->GetGUID().ToString(), packet.Roles, uint32(packet.Bracket), packet.Requeue ? "true" : "false");
+
+    sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
+}
+
+// CMSG_JOIN_RATED_BATTLEGROUND (0x3A0025) - the classic 10v10 rated battleground, premade-group only.
+//
+// Like the Blitz and Skirmish joins this carries no queue identity, only the role mask; the mode is implied
+// by the opcode. The queue id is { BattlemasterListId = 100, Type = 0 (BATTLEGROUND), Rated = true,
+// TeamSize = 0 }.
+//
+// Type 0 rather than a dedicated "rated bg" nibble is not a guess. The client decodes the nibble through a
+// pure switch (VA 0x7FF72AAB59E0) whose cases are 0 BATTLEGROUND, 1 ARENA, 2 WARGAME, 3 CHEAT,
+// 4 ARENASKIRMISH, 6 BRAWLSHUFFLE, 7 RATEDSHUFFLE, 8 BRAWLSOLORBG, 9 RATEDSOLORBG - there is no
+// RATEDBATTLEGROUND value, because rated-ness lives in bit 20, not in the nibble. The client's own
+// SMSG_BATTLEFIELD_STATUS_FAILED handler (VA 0x7FF72AABA380) tests exactly
+// "QueueID != 0 && bit20 && nibble == 0" as its notion of a rated battleground.
+//
+// The client only sends this from a full 10-man group with the leader pressing the button, so the same
+// constraint is enforced here rather than trusted.
+void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinRatedBattleground& packet)
+{
+    BattlegroundQueueTypeId bgQueueTypeId =
+        BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_RATED_BG, BattlegroundQueueIdType::Battleground, true, 0);
+
+    if (!BattlegroundMgr::IsValidQueueId(bgQueueTypeId))
+    {
+        TC_LOG_ERROR("network", "Rated Battleground: queue id rejected by IsValidQueueId - BattlemasterList {} missing from the client DB2.",
+            uint32(BATTLEGROUND_RATED_BG));
+        return;
+    }
+
+    BattlemasterListEntry const* battlemasterListEntry = sBattlemasterListStore.AssertEntry(bgQueueTypeId.BattlemasterListId);
+
+    if (DisableMgr::IsDisabledFor(DISABLE_TYPE_BATTLEGROUND, bgQueueTypeId.BattlemasterListId, nullptr) || battlemasterListEntry->GetFlags().HasFlag(BattlemasterListFlags::InternalOnly))
+    {
+        ChatHandler(this).PSendSysMessage(LANG_BG_DISABLED);
+        return;
+    }
+
+    if (_player->InBattleground())
+        return;
+
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BATTLEGROUND_RATED_BG);
+    if (!bgTemplate)
+    {
+        TC_LOG_ERROR("bg.battleground", "Rated Battleground: no battleground_template row for {} - apply the rated-BG world migration.", uint32(BATTLEGROUND_RATED_BG));
+        return;
+    }
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
+
+    auto sendFailed = [&](GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid = nullptr)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result, errorGuid);
+        SendPacket(battlefieldStatus.Write());
+    };
+
+    if (!packet.Roles)
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    Group* grp = _player->GetGroup();
+    if (!grp)
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    if (grp->GetLeaderGUID() != _player->GetGUID())
+        return;
+
+    // Rated battlegrounds are a full-roster mode: BattlemasterList 100 is 10v10 and the client's own UI
+    // refuses to send unless the group is full.
+    if (grp->GetMembersCount() != bgTemplate->GetMaxPlayersPerTeam())
+    {
+        sendFailed(ERR_ARENA_TEAM_PARTY_SIZE);
+        return;
+    }
+
+    if (GetPlayer()->isUsingLfg())
+    {
+        sendFailed(ERR_LFG_CANT_USE_BATTLEGROUND);
+        return;
+    }
+
+    if (_player->GetBattlegroundQueueIndex(bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
+        return;
+
+    if (!_player->HasFreeBattlegroundQueueId())
+    {
+        sendFailed(ERR_BATTLEGROUND_TOO_MANY_QUEUES);
+        return;
+    }
+
+    ObjectGuid errorGuid;
+    GroupJoinBattlegroundResult err = grp->CanJoinBattlegroundQueue(bgTemplate, bgQueueTypeId, 0, bgTemplate->GetMaxPlayersPerTeam(), true, 0, errorGuid);
+    if (err)
+    {
+        sendFailed(err, &errorGuid);
+        return;
+    }
+
+    BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
+    GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, true, 0, 0, packet.Roles);
+    uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
+
+    for (GroupReference const& itr : grp->GetMembers())
+    {
+        Player* member = itr.GetSource();
+        uint32 memberSlot = member->AddBattlegroundQueueId(bgQueueTypeId);
+
+        WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, member, memberSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, true);
+        member->SendDirectMessage(battlefieldStatus.Write());
+    }
+
+    TC_LOG_DEBUG("bg.battleground", "Rated Battleground: {} queued a {}-man group with roles {:#x}",
+        _player->GetName(), grp->GetMembersCount(), packet.Roles);
+
+    sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
+}
+
+// CMSG_BATTLEMASTER_JOIN_BRAWL (0x3B00C2) - the rotating PvP Brawl. Body is uint8 Roles + one bit
+// IsSpecialBrawl (see BattlemasterJoinBrawl's comment for the serializer that says so).
+//
+// Like the other three joins in this file the packet carries no queue identity, but here that is not just a
+// convention: the client already knows which brawl is running because the server told it, in
+// SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE. C_PvP.JoinBrawl (client RVA 0x1277770) resolves the brawl by reading
+// back the very global that packet's handler wrote (dword_7FF72F082BB8, or dword_7FF72F082BBC when
+// isSpecialBrawl is set) and looking it up in PvpBrawl.db2. So the authoritative queue identity is whatever this
+// server last advertised, which is exactly what GetActiveBrawl returns - asking it again here rather than
+// trusting anything in the packet keeps the two in step.
+//
+// Queue identity: { BattlemasterListId = the brawl's, Type = 0 (BATTLEGROUND), Rated = false, TeamSize = 0 }.
+// Type 0 is not a placeholder for a missing "brawl" nibble - the client's nibble decoder (VA 0x7FF72AAB59E0) has
+// no brawl case at all; its nine values are 0 BATTLEGROUND, 1 ARENA, 2 WARGAME, 3 CHEAT, 4 ARENASKIRMISH,
+// 6 BRAWLSHUFFLE, 7 RATEDSHUFFLE, 8 BRAWLSOLORBG, 9 RATEDSOLORBG. Brawl-ness is carried by the
+// BattlemasterList row (Flags & 0x20 = IsBrawl), which is what the client itself tests when it decides to render
+// a queue as a brawl (0x7FF72AAB9DBB, and the isBrawl field of QueueSpecificInfo at 0x7FF72AA8D7D5). Unrated,
+// because a brawl has no rating; that also puts the queue on the existing CheckNormalMatch path.
+void WorldSession::HandleBattlemasterJoinBrawl(WorldPackets::Battleground::BattlemasterJoinBrawl& packet)
+{
+    // We never advertise a special-event brawl (HandleRequestScheduledPvpInfo leaves that block out), so the
+    // client has nothing to set this bit for. Retail's captured special-event brawl is an LFGDungeons brawl with
+    // no BattlemasterList at all, which this queue could not serve even if it were advertised.
+    if (packet.IsSpecialBrawl)
+        return;
+
+    Optional<BattlegroundMgr::ActiveBrawl> brawl = sBattlegroundMgr->GetActiveBrawl();
+    if (!brawl)
+        return;
+
+    BattlegroundQueueTypeId bgQueueTypeId =
+        BattlegroundMgr::BGQueueTypeId(uint16(brawl->BattlemasterListId), BattlegroundQueueIdType::Battleground, false, 0);
+
+    if (!BattlegroundMgr::IsValidQueueId(bgQueueTypeId))
+        return;
+
+    BattlemasterListEntry const* battlemasterListEntry = sBattlemasterListStore.AssertEntry(bgQueueTypeId.BattlemasterListId);
+
+    if (_player->InBattleground())
+        return;
+
+    // GetActiveBrawl already refused to advertise a brawl without a template, so this is a reload race, not a
+    // configuration error.
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BattlegroundTypeId(bgQueueTypeId.BattlemasterListId));
+    if (!bgTemplate)
+        return;
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
+
+    auto sendFailed = [&](GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid = nullptr)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result, errorGuid);
+        SendPacket(battlefieldStatus.Write());
+    };
+
+    // C_PvP.JoinBrawl refuses to emit the packet when the selected roles and the class's allowed roles do not
+    // intersect (client error 0x33A), so a zero mask means a client we do not model.
+    if (!packet.Roles)
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    Group* grp = _player->GetGroup();
+    if (grp)
+    {
+        if (grp->GetLeaderGUID() != _player->GetGUID())
+            return;
+
+        // BattlemasterList.MaxGroupSize is the brawl's own party cap (5 for Deep Six).
+        if (grp->GetMembersCount() > battlemasterListEntry->MaxGroupSize)
+        {
+            sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+            return;
+        }
+    }
+
+    if (GetPlayer()->isUsingLfg())
+    {
+        sendFailed(ERR_LFG_CANT_USE_BATTLEGROUND);
+        return;
+    }
+
+    if (!_player->CanJoinToBattleground(bgTemplate))
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_TIMED_OUT);
+        return;
+    }
+
+    if (_player->IsDeserter())
+    {
+        sendFailed(ERR_GROUP_JOIN_BATTLEGROUND_DESERTERS);
+        return;
+    }
+
+    if (_player->GetBattlegroundQueueIndex(bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
+        return;
+
+    if (!_player->HasFreeBattlegroundQueueId())
+    {
+        sendFailed(ERR_BATTLEGROUND_TOO_MANY_QUEUES);
+        return;
+    }
+
+    // check Freeze debuff
+    if (_player->HasAura(9454))
+        return;
+
+    ObjectGuid errorGuid;
+    GroupJoinBattlegroundResult err = ERR_BATTLEGROUND_NONE;
+    if (grp)
+        err = grp->CanJoinBattlegroundQueue(bgTemplate, bgQueueTypeId, 0, bgTemplate->GetMaxPlayersPerTeam(), false, 0, errorGuid);
+
+    if (err)
+    {
+        sendFailed(err, &errorGuid);
+        return;
+    }
+
+    BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
+
+    // isPremade true only for a group that already fills a side, matching HandleBattlemasterJoinOpcode.
+    bool const isPremade = grp && grp->GetMembersCount() >= bgTemplate->GetMinPlayersPerTeam();
+
+    GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, isPremade, 0, 0, packet.Roles);
+    uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
+
+    if (grp)
+    {
+        for (GroupReference const& itr : grp->GetMembers())
+        {
+            Player* member = itr.GetSource();
+            uint32 memberSlot = member->AddBattlegroundQueueId(bgQueueTypeId);
+
+            WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+            BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, member, memberSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, true);
+            member->SendDirectMessage(battlefieldStatus.Write());
+        }
+    }
+    else
+    {
+        uint32 queueSlot = _player->AddBattlegroundQueueId(bgQueueTypeId);
+
+        WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, _player, queueSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, false);
+        SendPacket(battlefieldStatus.Write());
+    }
+
+    TC_LOG_DEBUG("bg.battleground", "Brawl: {} ({}) queued for PvpBrawl {} (BattlemasterList {}) with roles {:#x}",
+        _player->GetName(), _player->GetGUID().ToString(), brawl->PvpBrawlId, bgQueueTypeId.BattlemasterListId, packet.Roles);
 
     sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
 }
@@ -374,44 +932,24 @@ void WorldSession::HandleBattleFieldPortOpcode(WorldPackets::Battleground::Battl
         if (!_player->IsInvitedForBattlegroundQueueType(bgQueueTypeId))
             return;                                 // cheating?
 
-        if (!_player->InBattleground())
-            _player->SetBattlegroundEntryPoint();
-
-        // resurrect the player
-        if (!_player->IsAlive())
-        {
-            _player->ResurrectPlayer(1.0f);
-            _player->SpawnCorpseBones();
-        }
-        // stop taxi flight at port
-        _player->FinishTaxiFlight();
-
-        WorldPackets::Battleground::BattlefieldStatusActive battlefieldStatus;
-        BattlegroundMgr::BuildBattlegroundStatusActive(&battlefieldStatus, bg, _player, battlefieldPort.Ticket.Id, _player->GetBattlegroundQueueJoinTime(bgQueueTypeId), bgQueueTypeId);
-        SendPacket(battlefieldStatus.Write());
-
-        // remove battleground queue status from BGmgr
-        bgQueue.RemovePlayer(_player->GetGUID(), false);
-        // this is still needed here if battleground "jumping" shouldn't add deserter debuff
-        // also this is required to prevent stuck at old battleground after SetBattlegroundId set to new
-        if (Battleground* currentBg = _player->GetBattleground())
-            currentBg->RemovePlayerAtLeave(_player->GetGUID(), false, true);
-
-        // set the destination instance id
-        _player->SetBattlegroundId(bg->GetInstanceID(), bg->GetTypeID(), bgQueueTypeId);
-        // set the destination team
-        _player->SetBGTeam(ginfo.Team);
+        // Solo-queue modes hold the whole lobby together: the accept is recorded, the client is told who is
+        // still deciding, and nobody ports until everyone has answered. ProposalAccept does the porting - for
+        // every member at once - when this accept is the last one.
+        if (bgQueue.ProposalAccept(_player->GetGUID()))
+            return;
 
         // bg->HandleBeforeTeleportToBattleground(_player);
-        BattlegroundMgr::SendToBattleground(_player, bg);
         // add only in HandleMoveWorldPortAck()
         // bg->AddPlayer(_player, team);
-        TC_LOG_DEBUG("bg.battleground", "Battleground: player {} ({}) joined battle for bg {}, bgtype {}, queue {{ BattlemasterListId: {}, Type: {}, Rated: {}, TeamSize: {} }}.",
-            _player->GetName(), _player->GetGUID().ToString(), bg->GetInstanceID(), bg->GetTypeID(),
-            bgQueueTypeId.BattlemasterListId, uint32(bgQueueTypeId.Type), bgQueueTypeId.Rated ? "true" : "false", uint32(bgQueueTypeId.TeamSize));
+        BattlegroundMgr::PortPlayerToBattleground(_player, bg, ginfo.Team, bgQueueTypeId, battlefieldPort.Ticket.Id);
     }
     else // leave queue
     {
+        // Under a group proposal a decline is not just this player leaving: the whole proposal collapses, the
+        // others get SMSG_BATTLEFIELD_STATUS_GROUP_PROPOSAL_FAILED and those who had already accepted are put
+        // back in the queue at the position they held. This player's own removal is the code below.
+        bgQueue.ProposalDecline(_player->GetGUID());
+
         // if player leaves rated arena match before match start, it is counted as he played but he lost
         if (bgQueue.GetQueueId().Rated && ginfo.IsInvitedToBGInstanceGUID)
         {
@@ -574,7 +1112,7 @@ void WorldSession::HandleBattlemasterJoinArena(WorldPackets::Battleground::Battl
     {
         TC_LOG_DEBUG("bg.battleground", "Battleground: arena team id {}, leader {} queued with matchmaker rating {} for type {}", _player->GetArenaTeamId(packet.TeamSizeIndex), _player->GetName(), matchmakerRating, arenatype);
 
-        ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, false, arenaRating, matchmakerRating);
+        ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, false, arenaRating, matchmakerRating, packet.Roles);
         avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
     }
 
@@ -632,19 +1170,59 @@ void WorldSession::HandleRequestRatedPvpInfo(WorldPackets::Battleground::Request
     SendPacket(ratedPvpInfo.Write());
 }
 
+// This is the packet that publishes the running PvP Brawl. It used to answer all-inactive because nothing here
+// scheduled a brawl; now it answers with whatever BattlegroundMgr::GetActiveBrawl() vouches for, and with nothing
+// when it vouches for nothing. GetActiveBrawl only returns a brawl whose BattlemasterList exists, is flagged
+// IsBrawl, is not disabled, and has a battleground_template that resolves to a real map - so the Brawl button can
+// only ever light up for a queue that can actually pop.
+//
+// The special-event slot is left empty on purpose. Retail's captured value for it is PvpBrawl 155 "Decor Duel",
+// whose PvpBrawl.db2 BattlemasterListID is 0 - it is an LFGDungeons brawl, not a battleground, and there is no
+// queue here that could serve it.
+void WorldSession::HandleRequestScheduledPvpInfo(WorldPackets::Battleground::RequestScheduledPvpInfo& /*packet*/)
+{
+    WorldPackets::Battleground::RequestScheduledPvpInfoResponse response;
+
+    if (Optional<BattlegroundMgr::ActiveBrawl> brawl = sBattlegroundMgr->GetActiveBrawl())
+    {
+        WorldPackets::Battleground::RequestScheduledPvpInfoResponse::BrawlInfo& info = response.Brawl.emplace();
+        info.BrawlID = brawl->PvpBrawlId;
+        info.CanQueue = true;
+
+        // The client turns this into `timeLeftUntilNextChange` by adding it to the moment this packet arrived,
+        // and hides the brawl entirely once that deadline passes - so it must be a real future instant, not a
+        // decoration. The brawl here is a fixed configuration rather than a rotation, so the honest deadline is
+        // the next weekly reset: that is when an operator changing the config would take effect, and it is the
+        // cadence retail rotates on. Re-asking after the reset gets a fresh window.
+        time_t const now = GameTime::GetGameTime();
+        time_t const nextChange = sWorld->GetNextWeeklyQuestsResetTime();
+        info.SecondsUntilNextChange = nextChange > now ? uint32(nextChange - now) : uint32(WEEK);
+    }
+
+    SendPacket(response.Write());
+}
+
 void WorldSession::HandleGetPVPOptionsEnabled(WorldPackets::Battleground::GetPVPOptionsEnabled& /*getPvPOptionsEnabled*/)
 {
     WorldPackets::Battleground::PVPOptionsEnabled pvpOptionsEnabled;
-    pvpOptionsEnabled.RatedBattlegrounds = false;
+    // Flipped: HandleJoinRatedBattleground exists and queues for real.
+    pvpOptionsEnabled.RatedBattlegrounds = true;
     pvpOptionsEnabled.PugBattlegrounds = true;
     pvpOptionsEnabled.WargameBattlegrounds = false;
     pvpOptionsEnabled.WargameArenas = false;
     pvpOptionsEnabled.RatedArenas = true;
-    pvpOptionsEnabled.ArenaSkirmish = false;
+    // Flipped because HandleBattlemasterJoinSkirmish now exists: it builds a real
+    // BattlegroundQueueIdType::ArenaSkirmish queue id and the existing unrated matchmaker
+    // (CheckSkirmishForSameFaction) pairs the entries up. This bit gates the client's Skirmish button.
+    pvpOptionsEnabled.ArenaSkirmish = true;
     pvpOptionsEnabled.SoloShuffle = false;
     pvpOptionsEnabled.RatedSoloShuffle = false;
     pvpOptionsEnabled.BattlegroundBlitz = false;
-    pvpOptionsEnabled.RatedBattlegroundBlitz = false;
+    // Flipped because HandleBattlemasterJoinRatedBGBlitz now exists and really queues: this bit gates the
+    // client's "Battleground Blitz" button, and retail sets it (sniffed SMSG_PVP_OPTIONS_ENABLED body = FF C0,
+    // all ten bits). The remaining four stay false until their own handlers land - enabling a bit whose opcode
+    // the server drops just produces a button that silently does nothing.
+    pvpOptionsEnabled.RatedBattlegroundBlitz = true;
     SendPacket(pvpOptionsEnabled.Write());
 }
 
