@@ -985,6 +985,14 @@ namespace WorldPackets
         // carries the per-point deltas afterwards. Both paths stay live - the list consumer 0x21C2520 and the
         // single consumer 0x21C25C0 write into the same array (qword_7FF7877DAE18) and both add the client's
         // millisecond tick onto CaptureTime, so the init does not suppress later updates.
+        //
+        // Because they share that array, the snapshot and the deltas must share a socket, or a player entering a
+        // running capture game can take a delta before the snapshot and have the snapshot write the stale State
+        // back. All three capture-point messages therefore sit on CONNECTION_TYPE_INSTANCE, and that is measured,
+        // not chosen: a census of every .pkt under C:/sniff (75 files) finds SMSG_UPDATE_CAPTURE_POINT 148 times
+        // and SMSG_CAPTURE_POINT_REMOVED 44 times, every single body on connection index 1, across two captures
+        // whose realm socket carries 5402 records each - so index 0 is well populated and the result is signal,
+        // not an artefact. SMSG_MAP_OBJECTIVES_INIT itself appears in no capture; it follows its own array.
         // Wire: uint32 count then count elements, list reader 0x732C20 stepping 48 bytes into element reader
         // 0x731F80. There are no other scalars in the message. Note that the 48 bytes are the CLIENT struct
         // size; on the wire Guid is a packed guid, so elements are variable length.

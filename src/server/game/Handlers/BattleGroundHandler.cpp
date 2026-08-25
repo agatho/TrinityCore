@@ -339,10 +339,10 @@ void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground
     if (!bracketEntry)
         return;
 
-    auto sendFailed = [&](GroupJoinBattlegroundResult result)
+    auto sendFailed = [&](GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid = nullptr)
     {
         WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
-        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result);
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result, errorGuid);
         SendPacket(battlefieldStatus.Write());
     };
 
@@ -354,7 +354,7 @@ void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground
         return;
     }
 
-    Group const* grp = _player->GetGroup();
+    Group* grp = _player->GetGroup();
     if (grp)
     {
         if (grp->GetLeaderGUID() != _player->GetGUID())
@@ -399,6 +399,32 @@ void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground
     // check Freeze debuff
     if (_player->HasAura(9454))
         return;
+
+    // Every check above tests the leader only, but AddGroup below enqueues EVERY member. Group::CanJoinBattlegroundQueue
+    // is the single place in the tree that re-runs them per member, and the one it adds is the one that matters here:
+    // member->InBattlegroundQueueForBattlegroundQueueType(bgQueueTypeId). Without it a player who is already queued solo
+    // for Blitz and then joins someone else's party gets a SECOND GroupQueueInfo while the first keeps a pointer to his
+    // BattlegroundQueue::PlayerQueueInfo - AddGroup (BattlegroundQueue.cpp) reuses the existing m_QueuedPlayers node and
+    // only repoints pl_info.GroupInfo, so the stale ginfo stays in m_QueuedGroups holding a pointer that the next
+    // RemovePlayer frees. CheckSoloQueueMatch then counts and selects that dead entry and StartProposal dereferences it.
+    // It also supplies the two gates the leader-only checks cannot: an equal bracket for every member (bracketEntry here
+    // is derived from the LEADER's level alone) and a free queue slot per member, without which AddBattlegroundQueueId
+    // returns PLAYER_MAX_BATTLEGROUND_QUEUES and the member silently never accepts, timing the proposal out every time.
+    //
+    // isRated = true because Blitz is a rated mode; the only thing that flag gates inside is the arena-team comparison,
+    // which is inert on this tree (Player::GetArenaTeamId always returns 0). MinPlayerCount is likewise only read behind
+    // bgOrTemplate->IsArena(), which is false for BattlemasterList 1101 - it carries PvpType 0, so GetType() is
+    // Battleground (see BattlegroundMgr::IsValidQueueId's RatedBattlegroundBlitz case).
+    ObjectGuid errorGuid;
+    GroupJoinBattlegroundResult err = ERR_BATTLEGROUND_NONE;
+    if (grp)
+        err = grp->CanJoinBattlegroundQueue(bgTemplate, bgQueueTypeId, 0, bgTemplate->GetMaxPlayersPerTeam(), true, 0, errorGuid);
+
+    if (err)
+    {
+        sendFailed(err, &errorGuid);
+        return;
+    }
 
     BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
     GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, false, 0, 0, packet.Roles);
@@ -723,15 +749,46 @@ void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinR
 // because a brawl has no rating; that also puts the queue on the existing CheckNormalMatch path.
 void WorldSession::HandleBattlemasterJoinBrawl(WorldPackets::Battleground::BattlemasterJoinBrawl& packet)
 {
+    // The next two rejections happen before any queue identity exists, so they answer with
+    // BATTLEGROUND_QUEUE_NONE. That is not a truncated answer: the client's SMSG_BATTLEFIELD_STATUS_FAILED
+    // consumer (RVA 0x21C13A0) never reads QueueID at all. It switches on Reason to pick the ERR_* system
+    // message and then tail-calls the SMSG_BATTLEFIELD_STATUS_NONE teardown (RVA 0x21BFA80) with NO
+    // arguments; that teardown resolves the slot through RVA 0x21BF930, which compares the FULL ticket -
+    // RequesterGuid, Type, Id and Time. Ticket.Time comes from Player::GetBattlegroundQueueJoinTime, which
+    // returns 0 for a queue the player never joined, so no slot matches, nothing is torn down, and the
+    // queues the player really holds are untouched. He just gets the error text.
+    // (Decompiled from the 12.1 client this session; see status/battlefield_4B.json beleg for the RVAs.)
+    auto sendFailedBeforeQueueKnown = [&](GroupJoinBattlegroundResult result)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, BATTLEGROUND_QUEUE_NONE, _player, 0, result);
+        SendPacket(battlefieldStatus.Write());
+    };
+
     // We never advertise a special-event brawl (HandleRequestScheduledPvpInfo leaves that block out), so the
     // client has nothing to set this bit for. Retail's captured special-event brawl is an LFGDungeons brawl with
     // no BattlemasterList at all, which this queue could not serve even if it were advertised.
     if (packet.IsSpecialBrawl)
+    {
+        // UNVERIFIED: that ERR_BATTLEGROUND_JOIN_FAILED is the code retail picks here. No capture holds a
+        // rejected brawl join, so only the fact that an answer is owed is established, not its Reason. 35 is
+        // the generic "you cannot join" of the client's table (§10.2 of AGENT_BRIEF_BATTLEFIELD_4B.md) and the
+        // one every other unmodelled-client rejection in this file already uses.
+        sendFailedBeforeQueueKnown(ERR_BATTLEGROUND_JOIN_FAILED);
         return;
+    }
 
     Optional<BattlegroundMgr::ActiveBrawl> brawl = sBattlegroundMgr->GetActiveBrawl();
     if (!brawl)
+    {
+        // Reachable in normal operation: Brawl.Enabled set to 0 at runtime (worldserver.conf.dist) makes
+        // GetActiveBrawl return nothing while the client still holds the last advertised brawl id in
+        // dword_7FF72F082BB8 and C_PvP.JoinBrawl keeps sending. Staying silent leaves the player pressing a
+        // button that does nothing.
+        // UNVERIFIED: the Reason, for the same reason as above.
+        sendFailedBeforeQueueKnown(ERR_BATTLEGROUND_JOIN_FAILED);
         return;
+    }
 
     BattlegroundQueueTypeId bgQueueTypeId =
         BattlegroundMgr::BGQueueTypeId(uint16(brawl->BattlemasterListId), BattlegroundQueueIdType::Battleground, false, 0);
