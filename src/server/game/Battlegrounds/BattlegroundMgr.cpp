@@ -262,7 +262,10 @@ void BattlegroundMgr::PortPlayerToBattleground(Player* player, Battleground* bg,
     if (!player->InBattleground())
         player->SetBattlegroundEntryPoint();
 
-    // resurrect the player
+    // Resurrect the player. Both callers reach this - the ordinary accept in WorldSession::HandleBattleFieldPortOpcode
+    // and BattlegroundQueue::ResolveProposal for the solo queue - so a corpse entering is handled the same way
+    // whichever queue it came from. See the note in HandleBattleFieldPortOpcode for why no path refuses the port
+    // of a dead player instead.
     if (!player->IsAlive())
     {
         player->ResurrectPlayer(1.0f);

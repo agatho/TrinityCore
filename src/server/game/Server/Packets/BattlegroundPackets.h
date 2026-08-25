@@ -488,9 +488,13 @@ namespace WorldPackets
         // Refusal of a CMSG_BATTLEFIELD_PORT. We send zero bytes. Note the client does not require that: like
         // every raw-pointer opcode (dispatcher case 4915211 calls 0x35AF730, which hands over the whole unread
         // rest as an opaque blob) it would swallow any length silently - this consumer simply never reads it.
-        // The consumer 0x21C23E0 is 33 bytes: a null check on a global singleton getter (0x1DF32B0, 3287 call
-        // sites - not a gate specific to this message), then a tail call to ShowSystemMessage(0xAB) at
-        // 0x209AD90. String id 0xAB is entry 171 of the client error table at 0x43D55C0 (stride 24, +0 the ERR_
+        // The consumer 0x21C23E0 is 33 bytes: call 0x1DF32B0, test rax/rax, and on non-null a tail call to
+        // ShowSystemMessage(0xAB) at 0x209AD90. 0x1DF32B0 is not a predicate about this message - it has 3287
+        // call sites, 0x209AD90 itself is one of them, and it returns a pointer that the caller null-checks.
+        // It is also obfuscated: hexrays gives up on it (JUMPOUT), and its prologue takes its own return address
+        // from [rbp+8] and tests that the byte at retaddr-5 is 0xE8, i.e. that it was entered by a direct call.
+        // So the message shows unconditionally in practice; the null check is not a condition we can trigger.
+        // String id 0xAB is entry 171 of the client error table at 0x43D55C0 (stride 24, +0 the ERR_
         // key, +8 the display type): ERR_PLAYER_DEAD, type 2. Type 2 fires the Lua event UI_ERROR_MESSAGE, so
         // this shows as red text in UIErrorsFrame; type 0 is the one that goes to the chat frame.
         // The TrinityCore name is historical - the client carries no "port denied" text, and no SMSG_/CMSG_

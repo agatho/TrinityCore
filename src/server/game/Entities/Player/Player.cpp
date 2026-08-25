@@ -7034,8 +7034,9 @@ void Player::SendCurrencies() const
     SendDirectMessage(packet.Write());
 }
 
-// SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x480014) is decoded but DELIBERATELY not sent. The layout is recorded
-// here so the decode is not repeated; what blocks it is reward data this core does not have.
+// SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x480014) is sent from here, and it publishes only what this core will
+// actually pay. The full decode is recorded below so it is not repeated; what is left empty is left empty
+// on purpose, and every empty block is a wire-legal state retail itself transmits.
 //
 // The wire form was pinned from all 6 occurrences in the 12.0.7 family of captures (build-filtered to
 // 68275/68453/68974 and content-hash deduplicated - "rbg rated BG 12.0.7.pkt" is a byte-identical copy of

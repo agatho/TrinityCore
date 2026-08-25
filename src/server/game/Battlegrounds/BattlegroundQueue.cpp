@@ -1077,6 +1077,11 @@ void BattlegroundQueue::SendProposalStatus(BattlegroundProposal const& proposal,
 
     for (BattlegroundProposalMember const& member : proposal.Members)
     {
+        // Counted above, but not told: the decliner is answered by their own leave-queue path with
+        // SMSG_BATTLEFIELD_STATUS_NONE, which is the last word either way.
+        if (member.Declined)
+            continue;
+
         Player* player = ObjectAccessor::FindConnectedPlayer(member.Guid);
         if (!player)
             continue;
@@ -1139,10 +1144,20 @@ bool BattlegroundQueue::ProposalDecline(ObjectGuid guid)
     TC_LOG_DEBUG("bg.battleground", "Battleground: {} declined the group proposal over BG instance {}; collapsing it.",
         guid.ToString(), proposal->BgInstanceGUID);
 
-    // The decliner is dropped from the proposal first: their own removal from the queue is the caller's
-    // ordinary leave-queue path, and the collapse below must not touch them twice.
+    // The decliner is marked, NOT removed. Removing them made the role block describe 15 of 16 players, and the
+    // client adds Awaited+Secured+Lost per role to get the lobby size: 20 decoded bodies have that sum constant
+    // at the team size, so a short sum is a wrong packet. They are counted as a loss (Accepted is cleared) and
+    // skipped by the collapse below, because their own removal from the queue is the caller's ordinary
+    // leave-queue path and must not happen twice.
     uint32 const instanceId = proposal->BgInstanceGUID;
-    std::erase_if(proposal->Members, [guid](BattlegroundProposalMember const& member) { return member.Guid == guid; });
+    for (BattlegroundProposalMember& member : proposal->Members)
+    {
+        if (member.Guid != guid)
+            continue;
+
+        member.Accepted = false;
+        member.Declined = true;
+    }
 
     ResolveProposal(instanceId, false);
     return true;
@@ -1207,6 +1222,12 @@ void BattlegroundQueue::ResolveProposal(uint32 bgInstanceGuid, bool accepted)
 
     for (BattlegroundProposalMember const& member : proposal.Members)
     {
+        // The decliner is already being taken out of the queue by WorldSession::HandleBattleFieldPortOpcode,
+        // whose RemovePlayer(guid, true) does this same invited-count bookkeeping. Doing it here as well would
+        // decrement it twice.
+        if (member.Declined)
+            continue;
+
         // The invited count was raised once per invited PLAYER, so it has to come back down once per member,
         // while the group's invite flag is a per-entry thing that is only cleared the first time.
         if (PlayerQueueInfo const* playerInfo = Trinity::Containers::MapGetValuePtr(m_QueuedPlayers, member.Guid))

@@ -96,6 +96,10 @@ struct BattlegroundProposalMember
     TeamId Side = TEAM_ALLIANCE;
     ChrSpecializationRole Role = ChrSpecializationRole::Dps;
     bool Accepted = false;
+    // Answered no. Such a member stays in Members so the role block keeps describing the whole lobby - the
+    // client's own invariant, see the comment on BattlefieldStatusGroupProposalFailed - but is skipped by the
+    // collapse, because leaving the queue is the declining session's own business.
+    bool Declined = false;
 };
 
 /*
@@ -108,6 +112,8 @@ struct BattlegroundProposalMember
 
     Collapse is all-or-nothing in both directions. If any member declines or the deadline passes:
       - the members who never accepted leave the queue, as a plain invite timeout would have done;
+      - a member who actively declined stays listed as Declined so the role block still adds up to the lobby
+        size, but is otherwise left to the leave-queue path of the session that declined;
       - the members who DID accept keep their GroupQueueInfo, and with it their JoinTime, so they return to
         the queue in the position they already held rather than at the back of it - they get their invite
         revoked, SMSG_BATTLEFIELD_STATUS_GROUP_PROPOSAL_FAILED, and then SMSG_BATTLEFIELD_STATUS_QUEUED again;

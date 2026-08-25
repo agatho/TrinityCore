@@ -194,13 +194,14 @@ WorldPacket const* LfgPlayerInfo::Write()
 
 WorldPacket const* RequestPvpRewardsResponse::Write()
 {
-    // Block 0, then the two loose flag bytes, then blocks 1..12. The two bytes sit AFTER the first block,
-    // not at the head of the packet - that ordering is what makes the captured bodies balance exactly.
-    _worldPacket << Activity[RandomBattleground];
+    // 12.1 order: all thirteen blocks, THEN the two loose flag bytes. This is NOT the order the 12.0.7
+    // captures show - see the field-order note on the class - and it is deliberate: the structure of this
+    // branch follows the 12.1 client.
+    for (LfgPlayerQuestReward const& activity : Activity)
+        _worldPacket << activity;
+
     _worldPacket << uint8(BrawlFlags);
     _worldPacket << uint8(ExtraFlags);
-    for (std::size_t slot = 1; slot < Activity.size(); ++slot)
-        _worldPacket << Activity[slot];
 
     return &_worldPacket;
 }

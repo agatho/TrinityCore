@@ -41,11 +41,15 @@
 #include "SpellInfo.h"
 #include "World.h"
 
-// Sliding window plus burst, wrap safe over GameTime::GetGameTimeMS(), modelled on AuctionHouseMgr::CheckThrottle:
-// the check itself answers the client rather than letting the caller return in silence. Returns false when the
-// request must be refused. The client's own registrar for SMSG_BATTLEGROUND_INFO_THROTTLED sits in its NPC
-// interaction code (0x1E2F5D0), not in the PvP queue registrar block, which is what places the throttle here
-// on battlemaster gossip rather than on the queue.
+// Sliding window plus burst, modelled on AuctionHouseMgr::CheckThrottle: the check itself answers the client
+// rather than letting the caller return in silence. Returns false when the request must be refused.
+// The window is a std::chrono TimePoint taken from GameTime::Now(), not a GameTime::GetGameTimeMS() millisecond
+// counter, so there is no wrap to be safe about in the first place.
+// The client's own registrar for SMSG_BATTLEGROUND_INFO_THROTTLED sits in its NPC interaction code (0x1E2F5D0),
+// not in the PvP queue registrar block, which is what places the throttle here on battlemaster gossip rather
+// than on the queue. What it displays is settled: consumer 0x1E20180 tail-calls ShowSystemMessage(0x2F8), and
+// entry 760 of the client error table at 0x43D55C0 carries the string key ERR_BATTLEGROUND_INFO_THROTTLED -
+// the one entry in all 1243 that names this opcode.
 // UNVERIFIED: the window and burst are ours. No capture of any build contains this message, so retail's own
 // limits are unknown; the defaults are picked to stay silent during normal play.
 bool WorldSession::CheckBattlegroundInfoThrottle()
@@ -925,6 +929,17 @@ void WorldSession::HandleBattleFieldPortOpcode(WorldPackets::Battleground::Battl
     {
         TC_LOG_DEBUG("bg.battleground", "CMSG_BATTLEFIELD_PORT {} Slot: {}, Unk: {}, Time: {}, AcceptedInvite: {}. Cant find BG with id {}!",
             GetPlayerInfo(), battlefieldPort.Ticket.Id, uint32(battlefieldPort.Ticket.Type), battlefieldPort.Ticket.Time.AsUnderlyingType(), uint32(battlefieldPort.AcceptedInvite), ginfo.IsInvitedToBGInstanceGUID);
+
+        // The one refusal on this path that is a fact rather than a rule of ours: the player accepted a real
+        // invitation, and the battleground instance it pointed at is gone. Upstream returned in silence here, so
+        // the client kept a ready dialog that could never resolve. SMSG_BATTLEFIELD_PORT_DENIED is the only
+        // channel the client has for "your port did not happen": it reads nothing from the body and shows one
+        // system message, see the BattlefieldPortDenied class comment for the consumer.
+        // UNVERIFIED: which refusals retail answers with this message. The displayed text is settled
+        // (ERR_PLAYER_DEAD, table entry 171) and does not describe a vanished instance, but the alternative is
+        // the silence that leaves the dialog hanging, and no capture of any build contains this opcode. Needs a
+        // recording of a port into an instance that was torn down between invitation and accept.
+        SendPacket(WorldPackets::Battleground::BattlefieldPortDenied().Write());
         return;
     }
     else if (bg)
@@ -962,20 +977,18 @@ void WorldSession::HandleBattleFieldPortOpcode(WorldPackets::Battleground::Battl
 
     if (battlefieldPort.AcceptedInvite)
     {
-        // UNVERIFIED: the trigger, not the message. What SMSG_BATTLEFIELD_PORT_DENIED makes the client show is
-        // settled - consumer 0x21C23E0 tail-calls ShowSystemMessage(0xAB), entry 171 of the client error table
-        // at 0x43D55C0, which is ERR_PLAYER_DEAD, "you can't do that while you're dead". What is NOT settled is
-        // when retail raises it: there was no liveness check on this path before, no capture contains the
-        // message, and the name is TrinityCore's own - the client has no "port denied" string anywhere. So the
-        // gate below is read off the text the client displays and needs a recording of a dead character
-        // attempting a port to confirm.
-        // The seven other silent returns in this handler stay silent on purpose: answering them with this
-        // message would put a reason on screen that does not match what actually happened.
-        if (!_player->IsAlive())
-        {
-            SendPacket(WorldPackets::Battleground::BattlefieldPortDenied().Write());
-            return;
-        }
+        // No liveness gate here, and that is a decision rather than an omission. A dead player who accepts is
+        // ported and resurrected by BattlegroundMgr::PortPlayerToBattleground, which is what Blizzard's own UI
+        // expects: CONFIRM_BATTLEFIELD_ENTRY is declared whileDead = 1 in GameDialogDefs.lua, and both accept
+        // paths (that dialog and PVPReadyDialogEnterButtonMixin:OnClick in PVPHelper.lua) close the release-spirit
+        // popup with StaticPopup_Hide("DEATH") once the accept goes through - only meaningful if a corpse can
+        // enter. Retail's refusal for a dead player is a JOIN-time one and has its own code on its own packet:
+        // ERR_GROUP_JOIN_BATTLEGROUND_DEAD, GroupJoinBattlegroundResult 57, client error table entry 588,
+        // travelling in SMSG_BATTLEFIELD_STATUS_FAILED. SMSG_BATTLEFIELD_PORT_DENIED shows the generic
+        // ERR_PLAYER_DEAD instead (table entry 171 via ShowSystemMessage(0xAB) in consumer 0x21C23E0), so it is
+        // not that refusal. An earlier revision of this branch denied the port here; that turned the resurrect
+        // in PortPlayerToBattleground into dead code for this path while the group-proposal path kept using it,
+        // and it stranded the invitation for the full INVITE_ACCEPT_WAIT_TIME.
 
         // check Freeze debuff
         if (_player->HasAura(9454))

@@ -209,12 +209,28 @@ namespace WorldPackets
         // SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x480014). Reply to the empty CMSG_REQUEST_PVP_REWARDS
         // (0x3A0041); in every capture the reply follows the request 100-250 ms later, 1:1.
         //
-        // The body is a FIXED thirteen activity blocks - there is no count field - with two loose bytes
-        // after the first block. Each block is exactly LfgPlayerQuestReward above, which is why that struct
-        // already carries the `Honor` optional. Decoded from all 6 occurrences in the 12.0.7 captures
-        // (bodies 304, 304, 348, 348, 584, 592); the parser consumes every one with zero bytes left over,
-        // and the client reader sub_7FF7290FB600 independently calls the per-block reader sub_7FF7291DAB70
-        // exactly thirteen times with the same two loose u8 reads after block 0.
+        // The body is a FIXED thirteen activity blocks - there is no count field - plus two loose flag bytes.
+        // Each block is exactly LfgPlayerQuestReward above, which is why that struct already carries the
+        // `Honor` optional.
+        //
+        // FIELD ORDER: the two flag bytes MOVED between builds, and Write() emits the 12.1 order.
+        //   12.0.7 (68275/68453): Block[0], u8, u8, Block[1..12].
+        //   12.1   (69382):       Block[0..12], u8, u8.
+        // Both readings are measured, not assumed, and they disagree. For 12.0.7 all six captured bodies
+        // (304, 304, 348, 348, 584, 592 - two of the files are byte-identical copies) parse to exactly zero
+        // bytes left over with the flags after block 0, and parse to a hard desync with the flags at the end:
+        // implausible array counts inside block 1 on five of six, four bytes left over on the sixth. Since the
+        // blocks are variable length, that is discriminating and not a coincidence of equal totals. The
+        // 12.0.7 client agrees with its own capture: its reader sub_7FF7290FB600 calls the per-block reader
+        // sub_7FF7291DAB70 thirteen times with the two loose u8 reads after block 0.
+        // For 12.1 the reader at 0x732900 settles it the other way: 0x732919..0x7329CD are thirteen
+        // `lea rcx, [rdi + 0x20 + 0x80*k]; call 0x756BA0` block reads, and the two `call 0x35AF050`
+        // (Read<uint8>) only follow at 0x7329DF and 0x732A72. Verified by disassembling the range directly.
+        // No 12.1 capture of this opcode exists, so the flip is not confirmed on the wire in that build - but
+        // the client binary is the arbiter over an older capture, and 12.1 is the build this tree serves:
+        // sql/updates/auth/master/2026_08_22_00_auth.sql adds build 69404 (12.1.0), and the opcode table is on
+        // the 12.1 values (SMSG_PONG = 0x4C0009). Emitting the 12.0.7 order here would desync every reply.
+        // Reverting for a 12.0.7 realm is one loop and one pair of writes, right here in Write().
         //
         // Retail leaves blocks it has nothing to say about entirely zero - the rated Blitz capture sent 11
         // of 13 populated, a levelling character only 4 - so an unimplemented activity is written empty
