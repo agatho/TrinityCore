@@ -20,6 +20,9 @@
 
 void LoginDatabaseConnection::DoPrepareStatements()
 {
+    if (!m_reconnecting)
+        m_stmts.resize(MAX_LOGINDATABASE_STATEMENTS);
+
     PrepareStatement(LOGIN_INS_ACCOUNT_WOW_TOKEN, "INSERT INTO account_wow_token (id, account, state, price, createTime, seller_guid) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_UPD_ACCOUNT_WOW_TOKEN, "UPDATE account_wow_token SET account = ?, state = ?, price = ?, seller_guid = ? WHERE id = ?", CONNECTION_ASYNC);
 
@@ -57,8 +60,6 @@ void LoginDatabaseConnection::DoPrepareStatements()
     PrepareStatement(LOGIN_UPD_BNET_PRESENCE_ALL_OFFLINE, "UPDATE battlenet_game_account_presence SET isOnline = 0", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_REP_BNET_BLOCKED, "REPLACE INTO battlenet_account_blocked (accountId, blockedAccountId, blockedBattleTag, creationTime, modifiedTime) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_DEL_BNET_BLOCKED, "DELETE FROM battlenet_account_blocked WHERE accountId = ? AND blockedAccountId = ?", CONNECTION_ASYNC);
-    if (!m_reconnecting)
-        m_stmts.resize(MAX_LOGINDATABASE_STATEMENTS);
 
     PrepareStatement(LOGIN_SEL_REALMLIST, "SELECT id, name, address, localAddress, address3, address4, port, icon, flag, timezone, allowedSecurityLevel, population, gamebuild, Region, Battlegroup FROM realmlist WHERE flag <> 3 ORDER BY name", CONNECTION_SYNCH);
     PrepareStatement(LOGIN_UPD_REALM_POPULATION, "UPDATE realmlist SET population = ? WHERE id = ?", CONNECTION_ASYNC);

@@ -8,6 +8,10 @@ CREATE TABLE `soulbind_conduit` (
   `CovenantID` int NOT NULL DEFAULT '0',
   `SpecSetID` int NOT NULL DEFAULT '0',
   `Flags` int NOT NULL DEFAULT '0',
+  `VerifiedBuild` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`,`VerifiedBuild`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- PerksProgram vendor + activity-threshold hotfix tables (Trading Post)
 --
 DROP TABLE IF EXISTS `perks_activity_threshold`;
@@ -26,6 +30,10 @@ CREATE TABLE `soulbind_conduit_item` (
   `ID` int unsigned NOT NULL DEFAULT '0',
   `ItemID` int NOT NULL DEFAULT '0',
   `ConduitID` int NOT NULL DEFAULT '0',
+  `VerifiedBuild` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`,`VerifiedBuild`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 DROP TABLE IF EXISTS `perks_activity_threshold_group`;
 CREATE TABLE `perks_activity_threshold_group` (
   `Name` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
@@ -41,6 +49,10 @@ CREATE TABLE `soulbind_conduit_rank_properties` (
   `Rank` int NOT NULL DEFAULT '0',
   `ItemLevel` int NOT NULL DEFAULT '0',
   `QualityID` tinyint NOT NULL DEFAULT '0',
+  `VerifiedBuild` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`,`VerifiedBuild`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 DROP TABLE IF EXISTS `perks_activity_threshold_group_locale`;
 CREATE TABLE `perks_activity_threshold_group_locale` (
   `ID` int unsigned NOT NULL DEFAULT '0',
@@ -82,6 +94,10 @@ CREATE TABLE `renown_rewards` (
   `Field_12_0_0_63534_016` int NOT NULL DEFAULT '0',
   `QuestID` int NOT NULL DEFAULT '0',
   `PlayerConditionID` int NOT NULL DEFAULT '0',
+  `VerifiedBuild` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`,`VerifiedBuild`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 DROP TABLE IF EXISTS `perks_vendor_category_locale`;
 CREATE TABLE `perks_vendor_category_locale` (
   `ID` int unsigned NOT NULL DEFAULT '0',

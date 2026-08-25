@@ -7398,9 +7398,9 @@ struct CharShipmentLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "OnCompleteSpellID" },
         { .IsSigned = false, .Type = FT_INT, .Name = "Duration" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
-        { .IsSigned = false, .Type = FT_SHORT, .Name = "GarrFollowerID" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "MaxShipments" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "GarrFollowerID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 10, &CharShipmentMeta::Instance, HOTFIX_SEL_CHAR_SHIPMENT };
@@ -7703,6 +7703,7 @@ struct ExteriorComponentLoadInfo
         { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionZ" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "Size" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "HouseExteriorWmoDataID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "ParentComponentID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "ModelFileDataID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
@@ -7711,8 +7712,7 @@ struct ExteriorComponentLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_9" },
         { .IsSigned = true, .Type = FT_INT, .Name = "GameObjectID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_11" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },                   // NEW in 12.0.5 â€” per WoWDBDefs: references Item.ID
-        { .IsSigned = false, .Type = FT_INT, .Name = "HouseExteriorWmoDataID" },  // ParentIndexField - must be unsigned
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 16, &ExteriorComponentMeta::Instance, HOTFIX_SEL_EXTERIOR_COMPONENT };
@@ -7950,7 +7950,7 @@ struct GarrFollowerLevelXPLoadInfo
     static constexpr DB2FieldMeta Fields[5] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_BYTE, .Name = "GarrFollowerTypeID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "GarrFollowerTypeID" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "FollowerLevel" },
         { .IsSigned = false, .Type = FT_SHORT, .Name = "XpToNextLevel" },
         { .IsSigned = false, .Type = FT_SHORT, .Name = "ShipmentXP" },
@@ -7966,7 +7966,7 @@ struct GarrFollowerQualityLoadInfo
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "XpThreshold" },
         { .IsSigned = false, .Type = FT_INT, .Name = "QualityItemID" },
-        { .IsSigned = true, .Type = FT_BYTE, .Name = "Quality" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "Quality" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "AbilityCount" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "TraitCount" },
         { .IsSigned = false, .Type = FT_SHORT, .Name = "GarrFollowerTypeID" },
@@ -8029,7 +8029,7 @@ struct GarrItemLevelUpgradeDataLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "Operation" },
         { .IsSigned = true, .Type = FT_INT, .Name = "MinItemLevel" },
         { .IsSigned = true, .Type = FT_INT, .Name = "MaxItemLevel" },
-        { .IsSigned = true, .Type = FT_BYTE, .Name = "FollowerTypeID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "FollowerTypeID" },
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 5, &GarrItemLevelUpgradeDataMeta::Instance, HOTFIX_SEL_GARR_ITEM_LEVEL_UPGRADE_DATA };
@@ -8454,14 +8454,13 @@ struct GroupFinderActivityLoadInfo
 
 struct HouseDecorLoadInfo
 {
-    static constexpr DB2FieldMeta Fields[20] =
+    static constexpr DB2FieldMeta Fields[19] =
     {
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
         { .IsSigned = false, .Type = FT_FLOAT, .Name = "InitialRotationX" },
         { .IsSigned = false, .Type = FT_FLOAT, .Name = "InitialRotationY" },
         { .IsSigned = false, .Type = FT_FLOAT, .Name = "InitialRotationZ" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_003" },
         { .IsSigned = true, .Type = FT_INT, .Name = "GameObjectID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "Type" },
@@ -8478,7 +8477,7 @@ struct HouseDecorLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "UiModelSceneID" },
     };
 
-    static constexpr DB2LoadInfo Instance{ Fields, 20, &HouseDecorMeta::Instance, HOTFIX_SEL_HOUSE_DECOR };
+    static constexpr DB2LoadInfo Instance{ Fields, 19, &HouseDecorMeta::Instance, HOTFIX_SEL_HOUSE_DECOR };
 };
 
 struct HouseDecorMaterialLoadInfo
@@ -8571,20 +8570,21 @@ struct HouseRoomLoadInfo
 {
     // 12.0.5.66330 added Field_007 (int32). WoWDBDefs layout 0xFC6C2118 shows it as
     // Field_12_0_5_66330_007 with no confirmed semantic name yet.
-    static constexpr DB2FieldMeta Fields[9] =
+    static constexpr DB2FieldMeta Fields[10] =
     {
-        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_BYTE, .Name = "Size" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_002" },
         { .IsSigned = true, .Type = FT_INT, .Name = "RoomWmoDataID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureAtlasElementID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "WeightCost" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_007" },  // NEW in 12.0.5.66330
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_007" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_008" },  // NEW in 12.1 (0xF04DC279)
     };
 
-    static constexpr DB2LoadInfo Instance{ Fields, 9, &HouseRoomMeta::Instance, HOTFIX_SEL_HOUSE_ROOM };
+    static constexpr DB2LoadInfo Instance{ Fields, 10, &HouseRoomMeta::Instance, HOTFIX_SEL_HOUSE_ROOM };
 };
 
 struct HouseThemeLoadInfo
@@ -8718,7 +8718,7 @@ struct ItemConversionEntryLoadInfo
 
 struct ItemConversionLoadInfo
 {
-    static constexpr DB2FieldMeta Fields[6] =
+    static constexpr DB2FieldMeta Fields[7] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Unknown920" },
@@ -8726,9 +8726,10 @@ struct ItemConversionLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "ItemLogicalCostGroupID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "AlternateItemLogicalCostGroupID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
     };
 
-    static constexpr DB2LoadInfo Instance{ Fields, 6, &ItemConversionMeta::Instance, HOTFIX_SEL_ITEM_CONVERSION };
+    static constexpr DB2LoadInfo Instance{ Fields, 7, &ItemConversionMeta::Instance, HOTFIX_SEL_ITEM_CONVERSION };
 };
 
 struct ItemLogicalCostLoadInfo
@@ -9003,9 +9004,10 @@ struct PerksVendorItemXIntervalLoadInfo
 struct PlayerCompanionInfoLoadInfo
 {
     // PlayerCompanionInfo.dbd LAYOUT F61B5AA1 (build 12.0.5.67186)
-    static constexpr DB2FieldMeta Fields[15] =
+    static constexpr DB2FieldMeta Fields[17] =
     {
         { .IsSigned = false, .Type = FT_STRING, .Name = "UnlockDescription" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Field_12_1_0_68209_001" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "DelvesSeasonID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "TraitTreeID" },
@@ -9019,9 +9021,10 @@ struct PlayerCompanionInfoLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "UiModelSceneID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_011" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_012" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FlavorNodeID" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ParentID" },
     };
-    static constexpr DB2LoadInfo Instance{ Fields, 15, &PlayerCompanionInfoMeta::Instance, HOTFIX_SEL_PLAYER_COMPANION_INFO };
+    static constexpr DB2LoadInfo Instance{ Fields, 17, &PlayerCompanionInfoMeta::Instance, HOTFIX_SEL_PLAYER_COMPANION_INFO };
 };
 
 struct QuestLineLoadInfo

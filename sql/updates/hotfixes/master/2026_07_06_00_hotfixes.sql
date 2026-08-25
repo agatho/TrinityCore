@@ -9,6 +9,10 @@ CREATE TABLE `account_store_category` (
   `OrderIndex` int NOT NULL DEFAULT '0',
   `Icon` int NOT NULL DEFAULT '0',
   `Field_11_0_7_57361_005` tinyint unsigned NOT NULL DEFAULT '0',
+  `VerifiedBuild` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`,`VerifiedBuild`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- RafActivity.db2 (FileDataId 3081207) - the Recruit-A-Friend reward activities. Each activity ties a progress
 -- CriteriaTree to a RewardQuest that delivers the reward. Seeded with the live 12.0.7.68275 rows so the reward
 -- mapping is present even without a client DB2 extraction.
