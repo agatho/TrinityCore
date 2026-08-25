@@ -1369,13 +1369,21 @@ struct PacketCounter
 };
 
 /// Player session in the World
+#if defined(TRINITY_PLAYERBOT_V2)
+namespace Playerbot::V2 { class BotSession; }
+#endif
+
 class TC_GAME_API WorldSession
 {
     public:
         WorldSession(uint32 id, std::string&& name, uint32 battlenetAccountId, std::string&& battlenetAccountEmail,
             std::shared_ptr<WorldSocket>&& sock, AccountTypes sec, uint8 expansion, time_t mute_time, std::string&& os, Minutes timezoneOffset,
-            uint32 build, ClientBuild::VariantId clientBuildVariant, LocaleConstant locale, uint32 recruiter, bool isARecruiter);
-        ~WorldSession();
+            uint32 build, ClientBuild::VariantId clientBuildVariant, LocaleConstant locale, uint32 recruiter, bool isARecruiter
+#if defined(TRINITY_PLAYERBOT_V2)
+            , bool is_bot = false
+#endif
+            );
+        virtual ~WorldSession();                                                // virtual: BotSession derives from this
 
         bool PlayerLoading() const { return !m_playerLoading.IsEmpty(); }
         bool PlayerLogout() const { return m_playerLogout; }
@@ -1385,7 +1393,7 @@ class TC_GAME_API WorldSession
 
         bool IsAddonRegistered(std::string_view prefix) const;
 
-        void SendPacket(WorldPacket const* packet, bool forced = false);
+        virtual void SendPacket(WorldPacket const* packet, bool forced = false);
 
         void SendNotification(char const* format, ...) ATTR_PRINTF(2, 3);
         void SendNotification(uint32 stringId, ...);
@@ -1425,6 +1433,13 @@ class TC_GAME_API WorldSession
         std::string const& GetOS() const { return _os; }
         uint32 GetClientBuild() const { return _clientBuild; }
         ClientBuild::VariantId const& GetClientBuildVariant() const { return _clientBuildVariant; }
+
+        // Always defined so core hook sites can call it unconditionally; a bot-free build answers false.
+#if defined(TRINITY_PLAYERBOT_V2)
+        bool IsBot() const { return _isBot; }
+#else
+        static constexpr bool IsBot() { return false; }
+#endif
 
         bool CanAccessAlliedRaces() const;
 
@@ -2725,6 +2740,11 @@ class TC_GAME_API WorldSession
         AsyncCallbackProcessor<TransactionCallback> _transactionCallbacks;
         AsyncCallbackProcessor<SQLQueryHolderCallback> _queryHolderProcessor;
 
+#if defined(TRINITY_PLAYERBOT_V2)
+    // BotSession derives from WorldSession and drives a bot through the same login/logout and packet paths.
+    friend class Playerbot::V2::BotSession;
+#endif
+
     friend class World;
     protected:
         class DosProtection
@@ -2850,6 +2870,10 @@ class TC_GAME_API WorldSession
         uint64 _accountPerksCacheGrantPeriod = 0;   // interval the base monthly Tender was last granted for this account
 
         ConnectToKey _instanceConnectKey;
+
+#if defined(TRINITY_PLAYERBOT_V2)
+        bool _isBot = false;
+#endif
 
         WorldSession(WorldSession const& right) = delete;
         WorldSession& operator=(WorldSession const& right) = delete;

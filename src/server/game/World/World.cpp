@@ -115,6 +115,9 @@
 #include "WorldSession.h"
 #include "OmniumFolioMgr.h"
 #include "WorldStateMgr.h"
+#if TRINITY_PLAYERBOT_V2
+#include "PlayerbotV2.h"
+#endif
 #include "NemesisMgr.h"
 #include "RitualSiteMgr.h"
 #include "AbyssAnglersMgr.h"
@@ -2511,6 +2514,12 @@ void World::Update(uint32 diff)
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update world scripts"));
         sScriptMgr->OnWorldUpdate(diff);
     }
+#if TRINITY_PLAYERBOT_V2
+    {
+        TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update playerbot v2"));
+        Playerbot::V2::Module::instance().OnWorldUpdate(std::chrono::milliseconds{diff});
+    }
+#endif
 
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update metrics"));

@@ -472,6 +472,9 @@ class TC_GAME_API GameObject : public WorldObject, public GridObject<GameObject>
         UF::UpdateField<UF::MirroredPositionData, int32(WowCS::EntityFragment::FMirroredPositionData_C), 0> m_mirroredPositionData;
 
         TeamId GetControllingTeam() const;
+        // Current capture progress of a GAMEOBJECT_TYPE_CONTROL_ZONE (0-100).
+        // Returns -1.0f for any other type. Diagnostics only.
+        float GetControlZoneValue() const;
 
     protected:
         void CreateModel();

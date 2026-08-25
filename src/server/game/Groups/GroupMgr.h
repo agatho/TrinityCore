@@ -42,6 +42,14 @@ public:
 
     Group* GetGroupByGUID(ObjectGuid const& guid) const;
 
+    // Read-only view of every live group. Needed by the Playerbot module's
+    // group-hygiene pass to enumerate ALL groups â€” including those whose
+    // members are currently offline â€” so it can disband stale pure-bot
+    // groups (server shutdown) and human groups whose human(s) have been
+    // logged out past the idle threshold. No other public API exposes
+    // offline-member groups.
+    GroupContainer const& GetGroupStore() const { return GroupStore; }
+
     uint32 GenerateNewGroupDbStoreId();
     void   RegisterGroupDbStoreId(uint32 storageId, Group* group);
     void   FreeGroupDbStoreId(Group* group);

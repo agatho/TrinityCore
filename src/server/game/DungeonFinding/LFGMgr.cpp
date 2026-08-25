@@ -16,6 +16,7 @@
  */
 
 #include "LFGMgr.h"
+#include "Playerbot/PlayerbotHooks.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "DisableMgr.h"
@@ -368,6 +369,11 @@ void LFGMgr::Update(uint32 diff)
                 else
                     SendLfgUpdateStatus(guid, LfgUpdateData(LFG_UPDATETYPE_PROPOSAL_BEGIN, GetSelectedDungeons(guid)), false);
                 SendLfgUpdateProposal(guid, proposal);
+
+                // PlayerbotV2: bots ack the proposal synchronously so a full group answers
+                // well inside LFG_TIME_PROPOSAL instead of waiting for a snapshot poll.
+                if (Player* candidate = ObjectAccessor::FindConnectedPlayer(guid))
+                    Playerbot::Hooks::OnLfgProposalReceived(candidate, proposalId);
             }
 
             if (proposal.state == LFG_PROPOSAL_SUCCESS)
@@ -1049,6 +1055,38 @@ uint32 LFGMgr::AddProposal(LfgProposal& proposal)
    @param[in]     guid Player guid to update answer
    @param[in]     accept Player answer
 */
+bool LFGMgr::IsRoleCheckPending(ObjectGuid group_guid, ObjectGuid player_guid) const
+{
+    auto it = RoleChecksStore.find(group_guid);
+    if (it == RoleChecksStore.end())
+        return false;
+
+    if (it->second.state != LFG_ROLECHECK_INITIALITING && it->second.state != LFG_ROLECHECK_DEFAULT)
+        return false;
+
+    auto rit = it->second.roles.find(player_guid);
+    // Pending = role hasn't been set yet (PLAYER_ROLE_NONE = 0). Once
+    // UpdateRoleCheck commits a role it shows up here non-zero and we skip.
+    return rit == it->second.roles.end() || rit->second == PLAYER_ROLE_NONE;
+}
+
+uint32 LFGMgr::GetActiveProposalIdForPlayer(ObjectGuid guid) const
+{
+    // First proposal where this player is present and hasn't answered yet.
+    // One queue = one proposal at a time in Trinity's design, but return the
+    // first match rather than assuming uniqueness.
+    for (auto const& [pid, prop] : ProposalsStore)
+    {
+        auto it = prop.players.find(guid);
+        if (it == prop.players.end())
+            continue;
+        if (it->second.accept != LFG_ANSWER_PENDING)
+            continue;
+        return pid;
+    }
+    return 0;
+}
+
 void LFGMgr::UpdateProposal(uint32 proposalId, ObjectGuid guid, bool accept)
 {
     // Check if the proposal exists

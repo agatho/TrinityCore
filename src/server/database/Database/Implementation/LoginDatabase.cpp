@@ -22,6 +22,10 @@ void LoginDatabaseConnection::DoPrepareStatements()
 {
     PrepareStatement(LOGIN_INS_ACCOUNT_WOW_TOKEN, "INSERT INTO account_wow_token (id, account, state, price, createTime, seller_guid) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_UPD_ACCOUNT_WOW_TOKEN, "UPDATE account_wow_token SET account = ?, state = ?, price = ?, seller_guid = ? WHERE id = ?", CONNECTION_ASYNC);
+
+    // Playerbot module statements
+    PrepareStatement(LOGIN_SEL_BNET_ACCOUNT_EXISTS, "SELECT ba.id FROM battlenet_accounts ba LEFT JOIN account a ON a.battlenet_account = ba.id WHERE ba.id = ? LIMIT 1", CONNECTION_SYNCH);
+    PrepareStatement(LOGIN_SEL_BOT_ACCOUNTS_ALL, "SELECT ba.id, ba.email, a.id as legacy_account_id FROM battlenet_accounts ba LEFT JOIN account a ON a.battlenet_account = ba.id WHERE ba.email LIKE '%#%' OR ba.email LIKE '%@playerbot.local' ORDER BY ba.email", CONNECTION_SYNCH);
     PrepareStatement(LOGIN_DEL_ACCOUNT_WOW_TOKEN, "DELETE FROM account_wow_token WHERE id = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_INS_BATTLEPAY_PURCHASE, "INSERT INTO account_battlepay_purchase (id, account, productId, status, resultCode, basePrice, userPrice, timeCreated, walletName) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_SEL_BATTLEPAY_PURCHASE_ACCOUNT, "SELECT id, status, resultCode, productId, basePrice, userPrice, timeCreated FROM account_battlepay_purchase WHERE account = ? ORDER BY id ASC", CONNECTION_ASYNC);
