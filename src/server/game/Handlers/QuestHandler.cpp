@@ -37,6 +37,7 @@
 #include "PoolMgr.h"
 #include "QuestDef.h"
 #include "QuestMgr.h"
+#include "AreaPoiMgr.h"
 #include "QuestPackets.h"
 #include "QuestPools.h"
 #include "ReputationMgr.h"
@@ -756,6 +757,22 @@ void WorldSession::HandleRequestWorldQuestUpdate(WorldPackets::Quest::RequestWor
     //response.WorldQuestUpdates.push_back(WorldPackets::Quest::WorldQuestUpdateInfo(lastUpdate, questID, timer, variableID, value));
     sWorldQuestMgr->FillActiveWorldQuests(response.WorldQuestUpdates);
 
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleRequestAreaPoiUpdate(WorldPackets::Quest::RequestAreaPoiUpdate& /*packet*/)
+{
+    WorldPackets::Quest::AreaPoiUpdateResponse response;
+    sAreaPoiMgr->FillActiveAreaPois(response.AreaPois);
+    SendPacket(response.Write());
+}
+
+// The client sends this variant on its own timer to refresh timed/scheduled area POIs (world-boss and event
+// countdowns). The response is identical to the on-demand request, so it mirrors the handler above.
+void WorldSession::HandleRequestScheduledAreaPoiUpdate(WorldPackets::Quest::RequestScheduledAreaPoiUpdate& /*packet*/)
+{
+    WorldPackets::Quest::AreaPoiUpdateResponse response;
+    sAreaPoiMgr->FillActiveAreaPois(response.AreaPois);
     SendPacket(response.Write());
 }
 

@@ -950,4 +950,20 @@ WorldPacket const* ForceSpawnTrackingUpdate::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* AreaPoiUpdateResponse::Write()
+{
+    _worldPacket << Size<uint32>(AreaPois);
+
+    for (AreaPoiUpdateInfo const& areaPoi : AreaPois)
+    {
+        _worldPacket << areaPoi.LastUpdate;
+        _worldPacket << uint32(areaPoi.AreaPoiID);
+        _worldPacket << uint32(areaPoi.Timer);
+        _worldPacket << int32(areaPoi.VariableID);
+        _worldPacket << int32(areaPoi.Value);
+    }
+
+    return &_worldPacket;
+}
 }

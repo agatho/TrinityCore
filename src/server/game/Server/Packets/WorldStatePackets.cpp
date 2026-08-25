@@ -47,4 +47,21 @@ WorldPacket const* UpdateWorldState::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* ActiveScheduledWorldStateInfo::Write()
+{
+    _worldPacket.reserve(4 + Schedules.size() * 20);
+
+    _worldPacket << Size<uint32>(Schedules);
+
+    for (ScheduledWorldStateInfo const& schedule : Schedules)
+    {
+        _worldPacket << schedule.StartTime;
+        _worldPacket << uint32(schedule.Duration);
+        _worldPacket << uint32(schedule.VariableID);
+        _worldPacket << int32(schedule.Value);
+    }
+
+    return &_worldPacket;
+}
 }
