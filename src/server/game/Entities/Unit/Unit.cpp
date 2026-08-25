@@ -2274,6 +2274,22 @@ void Unit::AttackerStateUpdate(Unit* victim, WeaponAttackType attType, bool extr
     // per swing - SetCombatEventFailed is edge triggered, like SetAttackSwingError next to it. This does not
     // collide with SMSG_ATTACK_SWING_ERROR: that channel only ever carries NotInRange and BadFacing, the two
     // "keep swinging" cases, and is raised by the caller before we get here.
+    //
+    // UNVERIFIED: WHICH of the six refusals retail reports on this channel. Only one of them is settled.
+    // Settled - the dead victim: 2 of the 6 SMSG_COMBAT_EVENT_FAILED bodies in C:\sniff sit in the same
+    // millisecond block immediately behind SMSG_PARTY_KILL_LOG, SMSG_ATTACK_STOP, SMSG_CANCEL_AUTO_REPEAT
+    // and SMSG_LOG_XP_GAIN, so retail does raise it when the target dies under the swing
+    // (dump_12.1.0.69299_2026-08-17_05-09-00.pkt record 29113 and _09-18-50.pkt record 122698; dumped with
+    // C:\dumps\_4b_r7_cef_ctx.py). Open - the other five branches: the remaining 4 bodies decide nothing.
+    // Three of them share one victim and one capture (records 23379/23382/23417) and follow a
+    // SMSG_SPELL_START / SMSG_CAST_FAILED pair rather than any state the server could name, and the sixth
+    // is the lone 12.0.7 body. The subplan is no help either: SUBPLAN_0x4B_battlefield.md 2.3 names three
+    // cases - target gone, out of range, dead - and two of those three are demonstrably NOT this channel,
+    // because out of range and bad facing are the two AttackSwingErr values and travel on
+    // SMSG_ATTACK_SWING_ERROR. So PACIFIED, CANNOT_AUTOATTACK, DISABLE_ATTACKING_EXCEPT_ABILITIES,
+    // DISABLE_AUTOATTACK and the broken line of sight below are DERIVED: they are this server's own list of
+    // silent swing refusals, not a measured retail trigger set. Settling it needs a recording of a player
+    // auto attacking through a stun, a fear and a pillar break, one situation per branch.
     auto discardSwing = [&]
     {
         if (Player* attackerPlayer = ToPlayer())
@@ -2298,9 +2314,20 @@ void Unit::AttackerStateUpdate(Unit* victim, WeaponAttackType attType, bool extr
     if ((attType == BASE_ATTACK || attType == OFF_ATTACK) && !IsWithinLOSInMap(victim))
         return discardSwing();
 
-    // The swing goes through, so the next failure against this victim is a fresh edge again. The ranged
-    // early-out further down is deliberately not reported: it is ordinary control flow, not a refusal.
-    if (Player* attackerPlayer = ToPlayer())
+    // The swing goes through, so the next failure against this victim is a fresh edge again - and, if the
+    // last one had been reported, this is the falling edge that re-arms the client's auto attack with
+    // SMSG_ATTACK_START. See Player::SetCombatEventFailed for why that inverse has to exist: none of the
+    // guards above is checked in DoMeleeAttackIfReady, so a stunned or feared attacker keeps arriving here
+    // and would otherwise be left switched off at the client for good. The ranged early-out further down is
+    // deliberately not reported: it is ordinary control flow, not a refusal.
+    //
+    // Only a NON-extra swing clears the edge, and that is not cosmetic. The CANNOT_AUTOATTACK guard above is
+    // the one that carries stun, fear, confusion and charge, and it is the one guard that lets an extra
+    // attack past ("&& !extra"). Were an extra attack allowed to clear here, a proc landing during a stun
+    // would re-arm the client while the auto attack is still blocked, and the very next ordinary swing would
+    // report the failure again - the pair would flap for as long as the stun holds, which is exactly what
+    // the edge trigger exists to prevent.
+    if (Player* attackerPlayer = ToPlayer(); attackerPlayer && !extra)
         attackerPlayer->SetCombatEventFailed(nullptr);
 
     AtTargetAttacked(victim, true);
@@ -6038,6 +6065,14 @@ bool Unit::AttackStop()
     }
 
     SendMeleeAttackStop(victim);
+
+    // The refusal edge is keyed on the victim, so it has to be dropped when the attack itself ends -
+    // otherwise a player who was refused against this victim, stopped, and later attacked it again would
+    // never get a second SMSG_COMBAT_EVENT_FAILED, the edge being stuck on the same guid. The reverse
+    // direction is safe here: m_attacking is already cleared above, so Player::SetCombatEventFailed cannot
+    // mistake this for a recovery and will not send SMSG_ATTACK_START into an attack that just stopped.
+    if (Player* attackerPlayer = ToPlayer())
+        attackerPlayer->SetCombatEventFailed(nullptr);
 
     return true;
 }

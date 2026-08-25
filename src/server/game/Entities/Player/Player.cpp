@@ -11688,7 +11688,15 @@ Item* Player::EquipItem(uint16 pos, Item* pItem, bool update)
         // it needs a recording of a hunter and a melee character each swapping weapons. Note that the brief's
         // proposed site - Spell::SendSpellCooldown gated on IsAutoRepeat - is refuted by the same data: there
         // is no auto-repeat shot anywhere near any of the five packets.
-        if (Player::GetAttackBySlot(slot, pItem->GetTemplate()->GetInventoryType()) != MAX_ATTACK)
+        // IsInWorld() is not decoration: Player::Create reaches EquipItem twice for a brand new character -
+        // once through StoreNewItemInBestSlots -> EquipNewItem, once through the second pass under "bags and
+        // main-hand weapon must equipped at this moment" - and every class starts with a weapon. At that point
+        // the session is still on the character screen, m_Socket[CONNECTION_TYPE_INSTANCE] is only requested in
+        // WorldSession::HandlePlayerLoginOpcode, and this opcode is declared INSTANCE, so WorldSession::SendPacket
+        // would drop the packet and log "Prevented sending of {} to non existent socket". The login path proper
+        // is clean for a different reason - Player::_LoadInventory equips through QuickEquipItem, which does not
+        // carry this send site - but character creation is not, and the guard covers both.
+        if (IsInWorld() && Player::GetAttackBySlot(slot, pItem->GetTemplate()->GetInventoryType()) != MAX_ATTACK)
         {
             // Zero is the value in all five captured packets and is meaningful: the consumer 0x1D8A150 stores
             // it as the duration of the cooldown record it builds, so 0 clears the cooldown rather than setting
@@ -21908,19 +21916,49 @@ void Player::SetAttackSwingError(Optional<AttackSwingErr> err)
     m_swingErrorMsg = err;
 }
 
-// Edge triggered twin of SetAttackSwingError for the other refusal channel. Pass nullptr once a swing lands
-// so the next discarded one against the same victim is reported again. Only the transition is sent: the
-// client treats SMSG_COMBAT_EVENT_FAILED as an attack stop, so repeating it every swing would flap the
-// player's auto attack and PLAYER_LEAVE_COMBAT for as long as the blocking aura lasts.
+// Edge triggered twin of SetAttackSwingError for the other refusal channel, and SYMMETRIC - that is the
+// point of the falling edge below. SMSG_COMBAT_EVENT_FAILED is not a hint, it is an attack STOP: its client
+// consumer is the thunk SMSG_ATTACK_STOP uses (hook slot 0x462E0D8 and 0x462E0D0 both hold 0x1F79D90, which
+// jumps to 0x1F79C90), and 0x1F79C90 clears the target marker at +696, zeroes the swing timer at +980, drops
+// the auto attack bit 0x40000000 at *(unit+48)+544 and fires PLAYER_LEAVE_COMBAT.
+//
+// Most of the states that raise this edge are TRANSIENT - stun, fear, confusion, charge, pacify, a broken
+// line of sight - and nothing on the server takes the stop back on its own: Unit::DoMeleeAttackIfReady never
+// checks any of them, so the swing timer keeps running through the stun and Unit::Attack, the only caller of
+// SendMeleeAttackStart, is not run again because m_attacking and UNIT_STATE_MELEE_ATTACKING never changed.
+// Left as it was, the client would stand with its auto attack switched off while the server kept swinging.
+// So the falling edge sends the inverse itself. SMSG_ATTACK_START (0x4B0017, hook slot 0x462E0C0 ->
+// 0x1F79AE0) is exactly that inverse, verified against the client rather than assumed: 0x1F79AE0 writes the
+// same target marker at +696, refills the same swing timer at +980 and ORs back the same bit 0x40000000 that
+// 0x1F79C90 clears.
+//
+// Sent direct, not SendMeleeAttackStart: the failure that it undoes went to this player alone, so the
+// surrounding clients never stopped and must not have their swing timer reset.
 void Player::SetCombatEventFailed(Unit const* victim)
 {
     ObjectGuid victimGuid = victim ? victim->GetGUID() : ObjectGuid::Empty;
-    if (!victimGuid.IsEmpty() && victimGuid != m_combatEventFailedVictim)
+    if (victimGuid == m_combatEventFailedVictim)
+        return;
+
+    if (!victimGuid.IsEmpty())
     {
         WorldPackets::Combat::CombatEventFailed combatEventFailed;
         combatEventFailed.Attacker = GetGUID();
         combatEventFailed.Victim = victimGuid;
         SendDirectMessage(combatEventFailed.Write());
+    }
+    else if (Unit* attackTarget = GetVictim())
+    {
+        // Recovered while still swinging at the very victim we reported. Any other way out of the failed
+        // state already carries its own packet - a target switch and a fresh Unit::Attack send
+        // SMSG_ATTACK_START, Unit::AttackStop sends SMSG_ATTACK_STOP - so re-arming is only this case.
+        if (HasUnitState(UNIT_STATE_MELEE_ATTACKING) && attackTarget->GetGUID() == m_combatEventFailedVictim)
+        {
+            WorldPackets::Combat::AttackStart attackStart;
+            attackStart.Attacker = GetGUID();
+            attackStart.Victim = attackTarget->GetGUID();
+            SendDirectMessage(attackStart.Write());
+        }
     }
 
     m_combatEventFailedVictim = victimGuid;
