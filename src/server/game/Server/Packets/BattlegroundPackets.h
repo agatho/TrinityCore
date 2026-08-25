@@ -944,10 +944,23 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             uint32 MapID = 0;
+            // UNVERIFIED: that field 2 is the arena season. Inferred from one capture in which its value, 41,
+            // equals the CurrentArenaSeason of the SMSG_SEASON_INFO sent to the same session and nothing else
+            // in that session. The client only prints it, so a wrong value costs one wrong number in a
+            // combat-log line. Settled by any capture in a different season, or by naming the client global.
             uint32 ArenaSeason = 0;
             PVPMatchBracket Bracket = PVPMatchBracket::Arena2v2;
+            // UNVERIFIED: the meaning of this bit. It was false in the only observation and is only ever
+            // printed as the last %d of "ARENA_MATCH_START,%d,%d,%s,%d". It is NOT "rated" - the capture was a
+            // rated match with the bit clear. We write the observed value; the sender below never sets it.
             bool Unknown1207 = false;
             Timestamp<> StartTime;
+
+            // UNVERIFIED: the layout of the per-player statistics element. The wire carries a counted array of
+            // records read by sub_7FF729112EB0 (720 bytes each in client memory) after StartTime; the count was
+            // 0 in the only capture, which is why the 22-byte body parses with nothing left over. Write()
+            // therefore emits the observed count of zero and this packet carries no per-player payload. A
+            // capture of a match end with populated statistics is what decodes it - see aufnahme_noetig.
         };
 
         enum class BattlegroundCapturePointState : uint8

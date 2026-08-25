@@ -7044,9 +7044,13 @@ void Player::SendCurrencies() const
 // 584 and 592 bytes. The shape is fixed, not counted:
 //
 //     RewardBlock[0]
-//     uint8  A            // 2 in the two small captures, 3 in the rated Blitz one
-//     uint8  B            // 0xC0 in all six
+//     uint8  BrawlFlags   // 0x02 in the two non-PvP captures, 0x03 in the rated Blitz one
+//     uint8  ExtraFlags   // 0xC0 in all six
 //     RewardBlock[1] .. RewardBlock[12]        // 13 blocks in total, always all 13 present
+//
+// Neither flag byte is echoed back at its captured value, and the two bits that are not accounted for -
+// BrawlFlags 0x01 and ExtraFlags 0x80 - are marked UNVERIFIED at the member declarations in LFGPackets.h.
+// The bit-by-bit account lives there, next to the values, rather than being repeated here.
 //
 // where RewardBlock is byte for byte the existing WorldPackets::LFG::LfgPlayerQuestReward and its
 // operator<< in LFGPackets.cpp - uint8 Mask, int32 RewardMoney, int32 RewardXP, the three uint32 counts up

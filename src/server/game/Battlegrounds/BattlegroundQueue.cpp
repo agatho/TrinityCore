@@ -721,17 +721,31 @@ bool BattlegroundQueue::CheckPremadeMatch(BattlegroundBracketId bracket_id, uint
     // this could be 2 cycles but i'm checking only first team in queue - it can cause problem -
     // if first is invited to BG and seconds timer expired, but we can ignore it, because players have only 80 seconds to click to enter bg
     // and when they click or after 80 seconds the queue info is removed from queue
-    uint32 time_before = GameTime::GetGameTimeMS() - sWorld->getIntConfig(CONFIG_BATTLEGROUND_PREMADE_GROUP_WAIT_FOR_MATCH);
-    for (uint32 i = 0; i < PVP_TEAMS_COUNT; i++)
+    //
+    // For a RATED queue this demotion is a one-way trip out of the game. It is written for the unrated case,
+    // where a premade that waited too long gives up its premade privilege and is dealt into the ordinary
+    // player pool by CheckNormalMatch. A rated queue has no such pool: AddGroup routes every rated entry into
+    // BG_QUEUE_PREMADE_* (`if (!m_queueId.Rated && !isPremade) index += PVP_TEAMS_COUNT`), CheckNormalMatch is
+    // only reached from the `if (!m_queueId.Rated)` branch of BattlegroundQueueUpdate, and the two rated
+    // matchmakers - the premade pairing above and CheckSoloQueueMatch - both read the premade lists only.
+    // An entry moved to BG_QUEUE_NORMAL_* there is therefore never looked at again: the player keeps his
+    // queue slot and his status frame, no SMSG_BATTLEFIELD_STATUS_NONE or _FAILED is ever sent, and the
+    // queue only looks alive. A full rated battleground group hits this after
+    // Battleground.PremadeGroupWaitForMatch (30 min by default) purely on the JoinTime half of the test.
+    if (!m_queueId.Rated)
     {
-        if (!m_QueuedGroups[bracket_id][BG_QUEUE_PREMADE_ALLIANCE + i].empty())
+        uint32 time_before = GameTime::GetGameTimeMS() - sWorld->getIntConfig(CONFIG_BATTLEGROUND_PREMADE_GROUP_WAIT_FOR_MATCH);
+        for (uint32 i = 0; i < PVP_TEAMS_COUNT; i++)
         {
-            GroupsQueueType::iterator itr = m_QueuedGroups[bracket_id][BG_QUEUE_PREMADE_ALLIANCE + i].begin();
-            if (!(*itr)->IsInvitedToBGInstanceGUID && ((*itr)->JoinTime < time_before || (*itr)->Players.size() < MinPlayersPerTeam))
+            if (!m_QueuedGroups[bracket_id][BG_QUEUE_PREMADE_ALLIANCE + i].empty())
             {
-                //we must insert group to normal queue and erase pointer from premade queue
-                m_QueuedGroups[bracket_id][BG_QUEUE_NORMAL_ALLIANCE + i].push_front((*itr));
-                m_QueuedGroups[bracket_id][BG_QUEUE_PREMADE_ALLIANCE + i].erase(itr);
+                GroupsQueueType::iterator itr = m_QueuedGroups[bracket_id][BG_QUEUE_PREMADE_ALLIANCE + i].begin();
+                if (!(*itr)->IsInvitedToBGInstanceGUID && ((*itr)->JoinTime < time_before || (*itr)->Players.size() < MinPlayersPerTeam))
+                {
+                    //we must insert group to normal queue and erase pointer from premade queue
+                    m_QueuedGroups[bracket_id][BG_QUEUE_NORMAL_ALLIANCE + i].push_front((*itr));
+                    m_QueuedGroups[bracket_id][BG_QUEUE_PREMADE_ALLIANCE + i].erase(itr);
+                }
             }
         }
     }
@@ -1368,7 +1382,21 @@ void BattlegroundQueue::BattlegroundQueueUpdate(uint32 /*diff*/, BattlegroundBra
     m_SelectionPools[TEAM_ALLIANCE].Init();
     m_SelectionPools[TEAM_HORDE].Init();
 
-    if (!bg_template->IsArena())
+    // A solo queue must NOT be offered to CheckPremadeMatch, even though its template is a battleground and
+    // not an arena. CheckPremadeMatch takes one head entry per faction, adds it whole with
+    // AddGroup(entry, MaxPlayersPerTeam) and then tops both sides up from the BG_QUEUE_NORMAL_* lists - which
+    // for a rated queue are permanently empty, because AddGroup only routes an entry there when
+    // `!m_queueId.Rated && !isPremade`. So with one solo entry queued per faction it would report a match of
+    // one against one, create the instance and StartBattleground() it: a 1v1 "Battleground Blitz" past both
+    // the role quota and the 8-per-side headcount, invited through the ordinary 90 s single-invite path
+    // instead of the all-or-nothing proposal. Its second half is worse still - the demotion loop below moves
+    // any entry smaller than MinPlayersPerTeam (6 for BattlemasterList 1101) out of the premade lists, and
+    // those lists are the only ones CheckSoloQueueMatch reads, so a single pass would empty the solo queue
+    // into a list nothing rated ever looks at again.
+    // The RatedBattlegroundBlitz branch at the end of this function is this queue's matchmaker.
+    bool const isSoloQueue = BattlegroundQueueIdType(m_queueId.Type) == BattlegroundQueueIdType::RatedBattlegroundBlitz;
+
+    if (!bg_template->IsArena() && !isSoloQueue)
     {
         if (CheckPremadeMatch(bracket_id, MinPlayersPerTeam, MaxPlayersPerTeam))
         {

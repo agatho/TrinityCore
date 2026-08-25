@@ -196,17 +196,6 @@ enum class SpellModOp : uint8
 
 #define MAX_SPELLMOD 41
 
-// Row selector of the two client side PvP modifier tables that
-// SMSG_SET_FLAT_SPELL_PVP_MODIFIER / SMSG_SET_PCT_SPELL_PVP_MODIFIER fill.
-// Both packets carry uint32 Modifiers.size() + Modifiers * { uint32 ModIndex (this enum),
-// uint32 ModifierData.size(), ModifierData * { float ModifierValue, uint8 ClassIndex } }.
-// The client stores them as float[MAX_SPELL_PVP_MODIFIER][128] indexed by [ModIndex][ClassIndex],
-// ClassIndex being the SpellClassMask bit as in SMSG_SET_PCT_SPELL_MODIFIER, and initializes them
-// to the neutral 1.0f (pct) / 0.0f (flat).
-// Nothing here populates them: SPELL_AURA_ADD_FLAT_PVP_MODIFIER (646), SPELL_AURA_ADD_PCT_PVP_MODIFIER
-// (647) and their _BY_SPELL_LABEL siblings (648, 649) are all HandleNULL and no PvP modifier is applied
-// to damage or healing, so both opcodes stay STATUS_UNHANDLED - sending values the combat code does not
-// honour would make tooltips disagree with the damage that actually lands.
 enum class SpellPvpModifier : uint8
 {
     HealingAndDamage            = 0,
@@ -220,8 +209,6 @@ enum class SpellPvpModifier : uint8
     PointsIndex3                = 8,
     PointsIndex4                = 9,
 };
-
-#define MAX_SPELL_PVP_MODIFIER 10
 
 enum SpellValueMod : int32
 {

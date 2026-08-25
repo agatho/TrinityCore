@@ -597,8 +597,9 @@ WorldPacket const* PVPMatchStart::Write()
     _worldPacket << uint8(Bracket);
     _worldPacket << Bits<1>(Unknown1207);
     _worldPacket.FlushBits();
-    // Counted array of 720-byte per-player records. Empty in the only capture of this opcode and its element
-    // layout is unverified, so we never emit entries - see the comment on the class.
+    // UNVERIFIED: the element layout of this counted array of per-player records (720 bytes each in client
+    // memory). It was empty in the only capture of this opcode, so we emit the observed count of zero and
+    // never any entries - see the comment on the class.
     _worldPacket << uint32(0);
     _worldPacket << StartTime;
 

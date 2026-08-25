@@ -1256,9 +1256,14 @@ void WorldSession::HandleRequestScheduledPvpInfo(WorldPackets::Battleground::Req
 
         // The client turns this into `timeLeftUntilNextChange` by adding it to the moment this packet arrived,
         // and hides the brawl entirely once that deadline passes - so it must be a real future instant, not a
-        // decoration. The brawl here is a fixed configuration rather than a rotation, so the honest deadline is
-        // the next weekly reset: that is when an operator changing the config would take effect, and it is the
-        // cadence retail rotates on. Re-asking after the reset gets a fresh window.
+        // decoration. That much is read off the client.
+        //
+        // UNVERIFIED: the LENGTH of the window. Retail's own value is not in any capture we hold, and the
+        // client accepts any future instant, so this is our policy and not a decoded field: the brawl here is
+        // a fixed configuration rather than a rotation, and the next weekly reset is the point at which an
+        // operator changing that configuration would take effect. Re-asking after the reset gets a fresh
+        // window. A capture of retail's SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE would replace this choice
+        // with a measurement - see aufnahme_noetig.
         time_t const now = GameTime::GetGameTime();
         time_t const nextChange = sWorld->GetNextWeeklyQuestsResetTime();
         info.SecondsUntilNextChange = nextChange > now ? uint32(nextChange - now) : uint32(WEEK);

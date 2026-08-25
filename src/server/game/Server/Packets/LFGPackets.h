@@ -266,13 +266,28 @@ namespace WorldPackets
 
             std::array<LfgPlayerQuestReward, MaxPvpRewardSlot> Activity = { };
 
-            // The two loose bytes are twelve MSB-first booleans, of which only half are understood. Five of
-            // them (BrawlFlags 0x08/0x04/0x02 and ExtraFlags 0x40) are the per-brawl-type "has already won
-            // this brawl" markers the client returns as the extra `hasWon` value from GetBrawlRewards; we
-            // run no brawl rotation, so those are false and are written false. ExtraFlags 0x80 was set in
-            // every capture and gates something inside the client's Rated Solo Shuffle path; its meaning is
-            // not established, so it is written at the value that was observed and nothing more. The
-            // remaining six bits were zero in every capture and are left zero.
+            // The two loose bytes are read as two plain uint8 and then tested bit by bit. What the captures
+            // actually carried, so the account below can be checked against it:
+            //   BrawlFlags  0x02 in the two non-PvP captures, 0x03 in the rated Blitz one.
+            //   ExtraFlags  0xC0 in all six occurrences.
+            //
+            // Four of those set bits are understood. BrawlFlags 0x08/0x04/0x02 and ExtraFlags 0x40 are the
+            // per-brawl-type "has already won this brawl" markers the client returns as the extra `hasWon`
+            // value from GetBrawlRewards. We run no brawl rotation, so nothing here has been won and all four
+            // are written false - which is why BrawlFlags leaves as 0x00 although no capture was 0x00, and
+            // why ExtraFlags leaves as 0x80 although every capture was 0xC0. That is a decided value, not an
+            // omission.
+            //
+            // UNVERIFIED: ExtraFlags 0x80. Set in all six occurrences and gates something inside the client's
+            // Rated Solo Shuffle path; the branch it feeds was not followed to a conclusion. It is written at
+            // the value that was observed and nothing more.
+            //
+            // UNVERIFIED: BrawlFlags 0x01. Set in the rated Blitz capture, clear in the two non-PvP ones. It
+            // is not one of the four brawl markers above and it is not a bit that was zero everywhere, so
+            // neither reading covers it and its meaning is not established. It is written CLEAR: we cannot
+            // say what setting it would promise the client, and clear is the value two of the three distinct
+            // captures carried. A capture taken from a session with and without an active rated Blitz week
+            // would decide it - see aufnahme_noetig.
             uint8 BrawlFlags = 0x00;
             uint8 ExtraFlags = 0x80;
         };
