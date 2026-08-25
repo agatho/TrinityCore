@@ -542,8 +542,18 @@ bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg,
 
             player->SetInviteForBattlegroundQueueType(bgQueueTypeId, ginfo->IsInvitedToBGInstanceGUID);
 
-            // create remind invite events
-            if (inviteTime > INVITATION_REMIND_TIME)
+            // create remind invite events - but never under a proposal. Retail sends exactly ONE
+            // SMSG_BATTLEFIELD_STATUS_NEED_CONFIRMATION per proposal window, the one at its start:
+            // "C:/sniff/rated BG 12.0.7.pkt" has three windows and each carries a single 0x480000
+            // (ticks 136714 / 864798 / 896705), followed only by 0x48000D until the window ends at
+            // 166467 / 894382 / 916110 - 29,7 s, 29,6 s and an early STATUS_ACTIVE, never a second
+            // confirmation. Without this gate the reminder would land INVITATION_REMIND_TIME before
+            // the deadline, i.e. 10000 ms into the 30000 ms PROPOSAL_ACCEPT_WAIT_TIME window, and
+            // overwrite the role display that SendProposalStatus is maintaining. Worse, it would go
+            // out to members who already accepted: ProposalAccept only sets member.Accepted and
+            // leaves ginfo->IsInvitedToBGInstanceGUID and ginfo->RemoveInviteTime alone, so the
+            // IsPlayerInvited check in BGQueueInviteEvent::Execute stays true for the whole window.
+            if (!proposalManaged && inviteTime > INVITATION_REMIND_TIME)
             {
                 BGQueueInviteEvent* inviteEvent = new BGQueueInviteEvent(player->GetGUID(), ginfo->IsInvitedToBGInstanceGUID, bgTypeId, ginfo->RemoveInviteTime, m_queueId);
                 m_events.AddEvent(inviteEvent, m_events.CalculateTime(Milliseconds(inviteTime - INVITATION_REMIND_TIME)));

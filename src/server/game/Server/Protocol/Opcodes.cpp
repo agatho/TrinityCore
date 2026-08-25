@@ -2326,10 +2326,25 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_REPLACE_TROPHY_RESPONSE,                                      STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_REPORT_PVP_PLAYER_AFK_RESULT,                                 STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_REQUEST_CEMETERY_LIST_RESPONSE,                               STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
-    // Retail sends this on connection index 1, but REALM is kept deliberately: the PvP rewards frame is
-    // opened in the open world, where requiring the instance socket would silently drop the reply.
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_REQUEST_PVP_REWARDS_RESPONSE,                                 STATUS_NEVER,       CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE,                          STATUS_NEVER,       CONNECTION_TYPE_REALM);
+    // Both PvP query replies go out on the instance connection, as retail does. Counted with an own PKT
+    // reader over every capture in C:/sniff: SMSG_REQUEST_PVP_REWARDS_RESPONSE 8x, SMSG_REQUEST_SCHEDULED_
+    // PVP_INFO_RESPONSE 70x across nine builds - 67186, 67314, 68275, 68453, 68974 and the four 12.1 builds
+    // 69273, 69299, 69382, 69404. Every one of the 78 on the instance socket, not one on the realm socket.
+    // (The sniffer field is a socket HANDLE, not a fixed index: most captures number the pair 0/1, but
+    // garrisonlevel2upgrade.pkt numbers it 0/221. The split there is clean and bimodal - each opcode uses
+    // exactly one of the two values, never a third - so 221 is that capture's instance socket, which is why
+    // its two bodies count with the rest rather than against them.)
+    // Flipping REALM -> INSTANCE is the risky direction in general, because a declared socket that does not
+    // exist means the packet is dropped in SendPacket with only a log line. It is safe here on two counts.
+    // First, both of these are replies to a CMSG from a logged-in player who opened a UI frame, so neither
+    // can be in flight during the login burst - that is the criterion that actually governs. Second, the
+    // earlier reasoning for keeping them on REALM (the instance socket "may be absent in the open world")
+    // does not hold anyway: WorldSession requests the second socket in HandlePlayerLoginOpcode, before the
+    // Player object even exists (CharacterHandler.cpp, SendConnectToInstance(WorldAttempt1)), and
+    // WorldSession::PlayerDisconnected treats a missing or closed m_Socket[CONNECTION_TYPE_INSTANCE] as a
+    // disconnect. Watch grep -c "Prevented sending" in Server.log if either ever goes quiet.
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_REQUEST_PVP_REWARDS_RESPONSE,                                 STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE,                          STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESET_COMPRESSION_CONTEXT,                                    STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESET_FAILED_NOTIFY,                                          STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESET_LAST_LOADED_CONFIG_CVARS,                               STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);

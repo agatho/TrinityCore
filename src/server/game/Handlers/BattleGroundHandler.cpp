@@ -361,7 +361,7 @@ void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground
             return;
 
         // BattlemasterList 1101 caps the queueing party at MaxGroupSize (2 on retail - solo or duo).
-        if (grp->GetMembersCount() > battlemasterListEntry->MaxGroupSize)
+        if (int32(grp->GetMembersCount()) > battlemasterListEntry->MaxGroupSize)
         {
             sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
             return;
@@ -588,12 +588,12 @@ void WorldSession::HandleBattlemasterJoinSkirmish(WorldPackets::Battleground::Ba
 void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinRatedBattleground& packet)
 {
     BattlegroundQueueTypeId bgQueueTypeId =
-        BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_RATED_BG, BattlegroundQueueIdType::Battleground, true, 0);
+        BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_RATED_10_VS_10, BattlegroundQueueIdType::Battleground, true, 0);
 
     if (!BattlegroundMgr::IsValidQueueId(bgQueueTypeId))
     {
         TC_LOG_ERROR("network", "Rated Battleground: queue id rejected by IsValidQueueId - BattlemasterList {} missing from the client DB2.",
-            uint32(BATTLEGROUND_RATED_BG));
+            uint32(BATTLEGROUND_RATED_10_VS_10));
         return;
     }
 
@@ -608,10 +608,10 @@ void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinR
     if (_player->InBattleground())
         return;
 
-    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BATTLEGROUND_RATED_BG);
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BATTLEGROUND_RATED_10_VS_10);
     if (!bgTemplate)
     {
-        TC_LOG_ERROR("bg.battleground", "Rated Battleground: no battleground_template row for {} - apply the rated-BG world migration.", uint32(BATTLEGROUND_RATED_BG));
+        TC_LOG_ERROR("bg.battleground", "Rated Battleground: no battleground_template row for {} - apply the rated-BG world migration.", uint32(BATTLEGROUND_RATED_10_VS_10));
         return;
     }
 
@@ -776,7 +776,7 @@ void WorldSession::HandleBattlemasterJoinBrawl(WorldPackets::Battleground::Battl
             return;
 
         // BattlemasterList.MaxGroupSize is the brawl's own party cap (5 for Deep Six).
-        if (grp->GetMembersCount() > battlemasterListEntry->MaxGroupSize)
+        if (int32(grp->GetMembersCount()) > battlemasterListEntry->MaxGroupSize)
         {
             sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
             return;
@@ -1268,12 +1268,18 @@ void WorldSession::HandleRequestScheduledPvpInfo(WorldPackets::Battleground::Req
         // and hides the brawl entirely once that deadline passes - so it must be a real future instant, not a
         // decoration. That much is read off the client.
         //
-        // UNVERIFIED: the LENGTH of the window. Retail's own value is not in any capture we hold, and the
-        // client accepts any future instant, so this is our policy and not a decoded field: the brawl here is
-        // a fixed configuration rather than a rotation, and the next weekly reset is the point at which an
-        // operator changing that configuration would take effect. Re-asking after the reset gets a fresh
-        // window. A capture of retail's SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE would replace this choice
-        // with a measurement - see aufnahme_noetig.
+        // The LENGTH of the window is retail's, measured, not chosen. 70 bodies of this opcode across nine
+        // builds in C:/sniff were resolved to absolute instants (PKT startedTime + (tick - startedTickCount)),
+        // and every single one lands on the next weekly reset of its own region: builds 67186, 67314, 68275,
+        // 68453, 68974 and 69273 all target Tuesday 15:00-15:01 UTC (US), builds 69299, 69382 and 69404 all
+        // target Wednesday 05:52-05:54 UTC (EU). The minute of jitter is the sniffer's tick-to-wallclock
+        // drift, not the field: within one capture the value counts down second for second toward one fixed
+        // instant - e.g. build 68275, 18 bodies between 18:11 and 23:40 on 2026-07-06, secs 74903 down to
+        // 55200, all pointing at 2026-07-07 15:00. So SecondsUntilNextChange is "seconds until the weekly
+        // reset", which is exactly what GetNextWeeklyQuestsResetTime yields.
+        // The brawl id rotates with that window in retail (8, 11, 120, 6, 10, 9 over the nine builds); ours
+        // is a fixed configuration instead, so re-asking after the reset gets a fresh window on the same
+        // brawl. That is a content decision, not a wire one.
         time_t const now = GameTime::GetGameTime();
         time_t const nextChange = sWorld->GetNextWeeklyQuestsResetTime();
         info.SecondsUntilNextChange = nextChange > now ? uint32(nextChange - now) : uint32(WEEK);

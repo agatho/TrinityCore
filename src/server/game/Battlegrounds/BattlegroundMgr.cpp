@@ -162,7 +162,7 @@ void BattlegroundMgr::Update(uint32 diff)
             // Rated battlegrounds are matched by CheckPremadeMatch, which only runs when something
             // schedules an update. Sweep it on the same timer so a queue that could not pair two
             // premades at join time retries instead of sitting idle.
-            BattlegroundQueueTypeId ratedBgQueueId = BGQueueTypeId(BATTLEGROUND_RATED_BG, BattlegroundQueueIdType::Battleground, true, 0);
+            BattlegroundQueueTypeId ratedBgQueueId = BGQueueTypeId(BATTLEGROUND_RATED_10_VS_10, BattlegroundQueueIdType::Battleground, true, 0);
             for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
                 GetBattlegroundQueue(ratedBgQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
 
@@ -511,7 +511,7 @@ void BattlegroundMgr::LoadBattlegroundTemplates()
         bool const isMultiMapBrawl = bgTemplate.MapIDs.size() > 1 && bl->GetFlags().HasFlag(BattlemasterListFlags::IsBrawl);
 
         if (bgTemplate.Id != BATTLEGROUND_AA && bgTemplate.Id != BATTLEGROUND_BLITZ
-            && bgTemplate.Id != BATTLEGROUND_RATED_BG && !IsRandomBattleground(bgTemplate.Id) && !isMultiMapBrawl)
+            && bgTemplate.Id != BATTLEGROUND_RATED_10_VS_10 && !IsRandomBattleground(bgTemplate.Id) && !isMultiMapBrawl)
         {
             uint32 startId = fields[1].GetUInt32();
             if (WorldSafeLocsEntry const* start = sObjectMgr->GetWorldSafeLoc(startId))
