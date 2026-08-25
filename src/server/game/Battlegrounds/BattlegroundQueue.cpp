@@ -1241,9 +1241,32 @@ void BattlegroundQueue::ResolveProposal(uint32 bgInstanceGuid, bool accepted)
     }
 
     // Collapse. Everyone still listed loses the invite; whether they keep their queue slot depends on whether
-    // they accepted.
+    // they accepted - and, for a duo, on how the other half answered.
     SendProposalStatus(proposal, BattlegroundProposalStatus::Failed);
 
+    // Blitz may be entered as a duo (BattlemasterList 1101, MaxGroupSize 2), and below the proposal a queue
+    // ENTRY is atomic: RemovePlayer drops every remaining member of a GroupQueueInfo the moment one of them
+    // leaves a rated queue - the recursive branch above, "everyone from the group should leave too". A duo
+    // whose halves answered differently can therefore not be split: the accepting half leaves with its
+    // partner, and the invariant documented on BattlegroundProposal holds per queue ENTRY, not per player.
+    // Which entries are about to break is settled here, before the first removal, instead of being left to
+    // fall out of that cascade. Otherwise the accepting member is told BATTLEFIELD_STATUS_QUEUED and then, in
+    // the same tick, BATTLEFIELD_STATUS_NONE by the cascade - and which of the two it ends up with depends on
+    // the order the two members happen to have in proposal.Members. A member who declined breaks the entry
+    // too: its own removal only happens after this function returns, in HandleBattleFieldPortOpcode.
+    std::vector<GroupQueueInfo const*> brokenEntries;
+    for (BattlegroundProposalMember const& member : proposal.Members)
+        if (!member.Accepted)
+            if (PlayerQueueInfo const* playerInfo = Trinity::Containers::MapGetValuePtr(m_QueuedPlayers, member.Guid))
+                brokenEntries.push_back(playerInfo->GroupInfo);
+
+    auto entryIsBroken = [&brokenEntries](GroupQueueInfo const* ginfo)
+    {
+        return std::find(brokenEntries.begin(), brokenEntries.end(), ginfo) != brokenEntries.end();
+    };
+
+    // The invite is revoked for everyone first, and only then is anyone removed: the first removal can delete
+    // a GroupQueueInfo that the members listed after it still point at.
     for (BattlegroundProposalMember const& member : proposal.Members)
     {
         // The decliner is already being taken out of the queue by WorldSession::HandleBattleFieldPortOpcode,
@@ -1269,11 +1292,24 @@ void BattlegroundQueue::ResolveProposal(uint32 bgInstanceGuid, bool accepted)
             }
         }
 
+        if (Player* player = ObjectAccessor::FindConnectedPlayer(member.Guid))
+            player->SetInviteForBattlegroundQueueType(m_queueId, 0);
+    }
+
+    for (BattlegroundProposalMember const& member : proposal.Members)
+    {
+        if (member.Declined)
+            continue;
+
         Player* player = ObjectAccessor::FindConnectedPlayer(member.Guid);
         if (!player)
             continue;
 
-        player->SetInviteForBattlegroundQueueType(m_queueId, 0);
+        // Removing one half of a duo takes the other half with it, so a member can already be out of the queue
+        // when its own turn comes. That cascade sent it BATTLEFIELD_STATUS_NONE and there is nothing to add.
+        PlayerQueueInfo const* playerInfo = Trinity::Containers::MapGetValuePtr(m_QueuedPlayers, member.Guid);
+        if (!playerInfo)
+            continue;
 
         uint32 const queueSlot = player->GetBattlegroundQueueIndex(m_queueId);
         if (queueSlot >= PLAYER_MAX_BATTLEGROUND_QUEUES)
@@ -1281,9 +1317,13 @@ void BattlegroundQueue::ResolveProposal(uint32 bgInstanceGuid, bool accepted)
 
         uint32 const joinTime = player->GetBattlegroundQueueJoinTime(m_queueId);
 
-        if (!member.Accepted)
+        if (!member.Accepted || entryIsBroken(playerInfo->GroupInfo))
         {
-            // Never answered, or answered no. Same outcome a plain invite timeout has: out of the queue.
+            // Never answered, answered no, or accepted while sharing a queue entry with someone who did not.
+            // Same outcome a plain invite timeout has: out of the queue. Where this removal cascades onto a
+            // partner who declined, that player sees the cascade BATTLEFIELD_STATUS_NONE shortly before the
+            // one its own session sends - the same ticket in the same state twice, a repeat rather than the
+            // QUEUED-then-NONE contradiction this ordering exists to prevent.
             player->RemoveBattlegroundQueueId(m_queueId);
             RemovePlayer(member.Guid, false);
 

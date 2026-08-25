@@ -136,37 +136,50 @@ void BattlegroundMgr::Update(uint32 diff)
             GetBattlegroundQueue(bgQueueTypeId).BattlegroundQueueUpdate(diff, bracket_id, arenaMMRating);
     }
 
-    // if rating difference counts, maybe force-update queues
-    if (sWorld->getIntConfig(CONFIG_ARENA_MAX_RATING_DIFFERENCE) && sWorld->getIntConfig(CONFIG_ARENA_RATED_UPDATE_TIMER))
+    // The periodic sweep of the rated queues. Arena.RatedUpdateTimer is the tick for all three of them; a
+    // realm that sets it to 0 has switched the sweep off altogether and every rated queue is then moved only
+    // by the ScheduleQueueUpdate a join or a leave triggers.
+    if (uint32 const ratedUpdateTimer = sWorld->getIntConfig(CONFIG_ARENA_RATED_UPDATE_TIMER))
     {
         // it's time to force update
         if (m_NextRatedArenaUpdate < diff)
         {
-            // forced update for rated arenas (scan all, but skipped non rated)
-            TC_LOG_TRACE("bg.arena", "BattlegroundMgr: UPDATING ARENA QUEUES");
-            for (uint8 teamSize : { ARENA_TYPE_2v2, ARENA_TYPE_3v3, ARENA_TYPE_5v5 })
+            // The arena scan keeps the extra condition it has carried upstream for years. That condition is
+            // odd - GetMaxRatingDifference() turns a configured 0 into 5000, so Arena.MaxRatingDifference = 0
+            // does not actually disable rated arena matching, it only widens it - but rated arena is not this
+            // unit's subject and its sweep is left exactly as it was found.
+            if (sWorld->getIntConfig(CONFIG_ARENA_MAX_RATING_DIFFERENCE))
             {
-                BattlegroundQueueTypeId ratedArenaQueueId = BGQueueTypeId(BATTLEGROUND_AA, BattlegroundQueueIdType::Arena, true, teamSize);
-                for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
-                    GetBattlegroundQueue(ratedArenaQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
+                // forced update for rated arenas (scan all, but skipped non rated)
+                TC_LOG_TRACE("bg.arena", "BattlegroundMgr: UPDATING ARENA QUEUES");
+                for (uint8 teamSize : { ARENA_TYPE_2v2, ARENA_TYPE_3v3, ARENA_TYPE_5v5 })
+                {
+                    BattlegroundQueueTypeId ratedArenaQueueId = BGQueueTypeId(BATTLEGROUND_AA, BattlegroundQueueIdType::Arena, true, teamSize);
+                    for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
+                        GetBattlegroundQueue(ratedArenaQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
+                }
             }
 
             // Battleground Blitz is a rated queue too and needs the same periodic sweep. Without it the
             // queue is only ever re-evaluated by the ScheduleQueueUpdate a join or a leave triggers, so a
             // queue that could not form a match at join time (for example the healer quota was not met yet)
             // would sit idle until the next player happens to join, rather than retrying on its own.
+            // Deliberately NOT under the Arena.MaxRatingDifference condition above: CheckSoloQueueMatch
+            // reads no rating at all, it orders by JoinTime and fills a role quota, so that option says
+            // nothing about this queue and switching it off must not switch this sweep off with it.
             BattlegroundQueueTypeId blitzQueueId = BGQueueTypeId(BATTLEGROUND_BLITZ, BattlegroundQueueIdType::RatedBattlegroundBlitz, true, 0);
             for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
                 GetBattlegroundQueue(blitzQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
 
             // Rated battlegrounds are matched by CheckPremadeMatch, which only runs when something
             // schedules an update. Sweep it on the same timer so a queue that could not pair two
-            // premades at join time retries instead of sitting idle.
+            // premades at join time retries instead of sitting idle. CheckPremadeMatch reads no rating
+            // either, so the same reasoning as for Blitz applies.
             BattlegroundQueueTypeId ratedBgQueueId = BGQueueTypeId(BATTLEGROUND_RATED_10_VS_10, BattlegroundQueueIdType::Battleground, true, 0);
             for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
                 GetBattlegroundQueue(ratedBgQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
 
-            m_NextRatedArenaUpdate = sWorld->getIntConfig(CONFIG_ARENA_RATED_UPDATE_TIMER);
+            m_NextRatedArenaUpdate = ratedUpdateTimer;
         }
         else
             m_NextRatedArenaUpdate -= diff;

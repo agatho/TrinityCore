@@ -7087,11 +7087,15 @@ void Player::SendCurrencies() const
 //   - The remaining blocks are activities this core does not run, and retail itself transmits those as
 //     all-zero blocks, so they are left zero rather than filled with something invented.
 //
-// Note on the opcode table: retail sends 0x480014 on connection index 1, while it is declared
-// CONNECTION_TYPE_REALM here. That difference is intentional and must not be "fixed". REALM always has a
-// socket, this frame is opened in the open world where an instance socket need not exist, and
-// SMSG_BATTLEFIELD_STATUS_QUEUED is likewise declared REALM on this branch and works live despite retail
-// also sending it on index 1.
+// Note on the opcode table: this reply is declared CONNECTION_TYPE_INSTANCE, which is the socket retail
+// sends it on - every one of the eight bodies found across the captures in C:/sniff is on the instance
+// socket, none on the realm socket. The counting and the safety argument for the REALM -> INSTANCE
+// direction are written out above the DEFINE_SERVER_OPCODE_HANDLER line in Opcodes.cpp; do not restate them
+// here. An earlier revision of this branch kept the opcode on REALM with the argument that the rewards frame
+// is opened in the open world, where an instance socket need not exist. That argument was measured and is
+// wrong: WorldSession asks for the second socket in HandlePlayerLoginOpcode, before the Player object even
+// exists, and WorldSession::PlayerDisconnected treats a missing instance socket as a disconnect. It is not a
+// reason to move the opcode back.
 void Player::SendPvpRewards() const
 {
     WorldPackets::LFG::RequestPvpRewardsResponse response;

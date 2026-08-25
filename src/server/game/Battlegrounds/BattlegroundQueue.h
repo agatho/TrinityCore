@@ -117,6 +117,12 @@ struct BattlegroundProposalMember
       - the members who DID accept keep their GroupQueueInfo, and with it their JoinTime, so they return to
         the queue in the position they already held rather than at the back of it - they get their invite
         revoked, SMSG_BATTLEFIELD_STATUS_GROUP_PROPOSAL_FAILED, and then SMSG_BATTLEFIELD_STATUS_QUEUED again;
+      - that last point holds per queue ENTRY, not per player. Blitz may be entered as a duo (BattlemasterList
+        1101, MaxGroupSize 2), and a rated queue entry is atomic below the proposal: BattlegroundQueue::
+        RemovePlayer drops every remaining member of a GroupQueueInfo as soon as one of them leaves it. A duo
+        whose halves answered differently therefore leaves together, the accepting half included, with one
+        SMSG_BATTLEFIELD_STATUS_NONE and no SMSG_BATTLEFIELD_STATUS_QUEUED before it. ResolveProposal settles
+        that up front instead of letting it fall out of the removal order;
       - the battleground that was created for the proposal is dropped, so the next attempt picks a fresh map -
         which is exactly what retail does across the three proposal runs in C:\sniff\rated BG 12.0.7.pkt.
 */

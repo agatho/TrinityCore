@@ -1092,6 +1092,14 @@ void Battleground::AddPlayer(Player* player, BattlegroundQueueTypeId queueId)
     SendMatchScoreState(player);
     // Deliberately outside SendMatchScoreState: that one returns early when the battleground has no resource
     // cap (_maxTeamScore == 0), and capture point battlegrounds are not necessarily capped.
+    // UNVERIFIED: where SMSG_MAP_OBJECTIVES_INIT belongs inside the entry burst. What the captures settle is
+    // the triple SendMatchScoreState emits - SMSG_BATTLEGROUND_INIT, then SMSG_BATTLEGROUND_POINTS for Horde
+    // and for Alliance - while no capture of any build carries SMSG_MAP_OBJECTIVES_INIT at all, so its place
+    // relative to those three is not derivable from the wire, and TrinityCore has never sent it either.
+    // Sending it directly afterwards is therefore a choice, not a measurement. It is a safe one: the client
+    // feeds this message and SMSG_UPDATE_CAPTURE_POINT into the same array and re-bases CaptureTime on its
+    // own clock in both (see the comment on SendMapObjectivesInit), so nothing in the burst can be lost to
+    // ordering. Needs a capture of a player entering a capture point battleground that is already running.
     SendMapObjectivesInit(player);
 
     player->RemoveAurasByType(SPELL_AURA_MOUNTED);
