@@ -197,6 +197,7 @@ namespace WorldPackets
         class ReportPvPPlayerAFK;
         class RequestPVPRewards;
         class RequestRatedPvpInfo;
+        class RequestScheduledPvpInfo;
     }
 
     namespace Battlenet
@@ -1708,6 +1709,7 @@ class TC_GAME_API WorldSession
         void HandleAcceptWargameInvite(WorldPackets::Battleground::AcceptWargameInvite& packet);
         void HandleReportPvPAFK(WorldPackets::Battleground::ReportPvPPlayerAFK& reportPvPPlayerAFK);
         void HandleRequestRatedPvpInfo(WorldPackets::Battleground::RequestRatedPvpInfo& packet);
+        void HandleRequestScheduledPvpInfo(WorldPackets::Battleground::RequestScheduledPvpInfo& packet);
         void HandleGetPVPOptionsEnabled(WorldPackets::Battleground::GetPVPOptionsEnabled& getPvPOptionsEnabled);
         void HandleRequestPvpReward(WorldPackets::Battleground::RequestPVPRewards& packet);
         void HandleAreaSpiritHealerQueryOpcode(WorldPackets::Battleground::AreaSpiritHealerQuery& areaSpiritHealerQuery);
