@@ -3913,6 +3913,12 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
 
+            // Covenant soulbind history is guid-keyed and GUIDs are recycled; clear it so a new character on a
+            // reused guid is not read as HasEverJoinedAnyCovenant() and mistaken for a covenant switcher.
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_COVENANT_SOULBIND);
+            stmt->setUInt64(0, guid);
+            trans->Append(stmt);
+
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_DECLINED_NAME);
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
@@ -18676,6 +18682,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     _LoadCharacterBankTabSettings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS));
 
+    _LoadCovenantSoulbinds(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_COVENANT_SOULBINDS));
     _LoadCovenant(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_COVENANT));
     _LoadSoulbindConduits(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUITS));
     _LoadSoulbindConduitSockets(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUIT_SOCKETS));
@@ -20534,6 +20541,158 @@ void Player::ActivateSoulbind(SoulbindEntry const* soulbind)
     ApplyConduitSpells();
 }
 
+// ---- Covenant switching / renown gate (9.1.5) + soulbind-remembering ----
+// Restored from 12.0.7 integration; dropped during the 12.1 reconstruction of feature/covenant-system.
+namespace
+{
+constexpr int32 COVENANT_RENOWN_LEVEL_OFFSET = 1;
+}
+
+CurrencyTypesEntry const* Player::GetCovenantRenownCurrency(uint32 covenantId)
+{
+    CovenantEntry const* covenant = covenantId ? sCovenantStore.LookupEntry(covenantId) : nullptr;
+    if (!covenant || covenant->CurrencyTypesID <= 0)
+        return nullptr;
+
+    // Covenant.db2 also carries the Dragonflight and later major factions, and they publish a CurrencyTypesID
+    // too. Those run on renown REPUTATION (their Faction row publishes RenownCurrencyID) and are served by
+    // UpdateRenownRewards(FactionEntry const*); claiming them here would double-grant and would apply the
+    // Shadowlands-only level offset to them. Only covenants whose faction publishes no renown currency - which
+    // in this build is exactly the four Shadowlands covenants - are currency-driven.
+    FactionEntry const* faction = sFactionStore.LookupEntry(uint32(covenant->FactionID));
+    if (!faction || faction->RenownCurrencyID > 0)
+        return nullptr;
+
+    return sCurrencyTypesStore.LookupEntry(uint32(covenant->CurrencyTypesID));
+}
+
+uint32 Player::GetCovenantIdForRenownCurrency(uint32 currencyId)
+{
+    if (!currencyId)
+        return 0;
+
+    for (CovenantEntry const* covenant : sCovenantStore)
+        if (CurrencyTypesEntry const* currency = GetCovenantRenownCurrency(covenant->ID))
+            if (currency->ID == currencyId)
+                return covenant->ID;
+
+    return 0;
+}
+
+uint32 Player::GetCovenantRenownLevel(uint32 covenantId /*= 0*/) const
+{
+    if (!covenantId)
+        covenantId = m_activeCovenantId;
+
+    CurrencyTypesEntry const* currency = GetCovenantRenownCurrency(covenantId);
+    if (!currency)
+        return 0;
+
+    return GetCurrencyQuantity(currency->ID) + COVENANT_RENOWN_LEVEL_OFFSET;
+}
+
+uint32 Player::GetHighestCovenantRenownLevel() const
+{
+    uint32 highest = 0;
+    for (CovenantEntry const* covenant : sCovenantStore)
+    {
+        CurrencyTypesEntry const* currency = GetCovenantRenownCurrency(covenant->ID);
+        if (!currency)
+            continue;
+
+        // Same guard as UpdateCovenantRenownRewards: quantity 0 means Renown 1 for a covenant the character has
+        // actually joined, but it must not read as Renown 1 for the three it never touched.
+        uint32 quantity = GetCurrencyQuantity(currency->ID);
+        if (!quantity && covenant->ID != m_activeCovenantId)
+            continue;
+
+        highest = std::max(highest, quantity + COVENANT_RENOWN_LEVEL_OFFSET);
+    }
+
+    return highest;
+}
+
+uint32 Player::GetMaxCovenantRenownLevel()
+{
+    // Read the cap rather than hardcode it. Renown is stored as a currency quantity with level = quantity + 1, and
+    // CurrencyTypes 1829-1832 (and the 1822 display mirror) all publish MaxQty 79 through the shared
+    // MaxQtyWorldStateID 19735, i.e. Renown 80 - which is also exactly the highest level RenownRewards.db2 defines
+    // for covenants 1-4. Falls back to the RenownRewards ceiling if the currency ever stops publishing a cap.
+    if (CurrencyTypesEntry const* currency = GetCovenantRenownCurrency(1))
+        if (currency->MaxQty)
+            return currency->MaxQty + COVENANT_RENOWN_LEVEL_OFFSET;
+
+    return 0;
+}
+
+bool Player::IsCovenantSwitchUnlocked() const
+{
+    // The 9.1.5 rule, and only that rule: covenant switching becomes free and unpenalised once ANY covenant has
+    // been taken to maximum renown. The launch-era model (a re-join quest chain, a lockout and a renown penalty)
+    // is deliberately NOT implemented - none of its numbers are published anywhere in the 12.0.7.68275 client
+    // data, so building it would mean inventing them.
+    uint32 const required = GetMaxCovenantRenownLevel();
+    if (!required)
+        return false;
+
+    return GetHighestCovenantRenownLevel() >= required;
+}
+
+bool Player::CanChangeCovenant() const
+{
+    // A character that never pledged is not switching, it is joining. "Never pledged" has to mean never, not
+    // merely "has none right now": spell 338503 "Reset Covenant" sets the covenant to 0, and treating the result
+    // as a first-time joiner would turn reset-then-rejoin into a free switch that skips the renown gate entirely.
+    // HasEverJoinedAnyCovenant() is remembered per covenant on the way out, so it survives the reset.
+    if (!m_activeCovenantId)
+        return !HasEverJoinedAnyCovenant() || IsCovenantSwitchUnlocked();
+
+    return IsCovenantSwitchUnlocked();
+}
+
+void Player::_LoadCovenantSoulbinds(PreparedQueryResult result)
+{
+    if (!result)
+        return;
+
+    do
+    {
+        Field* fields = result->Fetch();
+        m_covenantSoulbinds[fields[0].GetUInt32()] = fields[1].GetUInt32();
+    } while (result->NextRow());
+}
+
+void Player::RememberCovenantSoulbind(uint32 covenantId, uint32 soulbindId)
+{
+    if (!covenantId)
+        return;
+
+    auto [itr, inserted] = m_covenantSoulbinds.insert({ covenantId, soulbindId });
+    if (!inserted)
+    {
+        if (itr->second == soulbindId)
+            return;
+        itr->second = soulbindId;
+    }
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_COVENANT_SOULBIND);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    stmt->setUInt32(1, covenantId);
+    stmt->setUInt32(2, soulbindId);
+    CharacterDatabase.Execute(stmt);
+}
+
+uint32 Player::GetRememberedCovenantSoulbind(uint32 covenantId) const
+{
+    auto itr = m_covenantSoulbinds.find(covenantId);
+    return itr != m_covenantSoulbinds.end() ? itr->second : 0;
+}
+
+bool Player::HasEverJoinedCovenant(uint32 covenantId) const
+{
+    return m_covenantSoulbinds.count(covenantId) != 0;
+}
+
 void Player::SetActiveCovenant(uint32 covenantId)
 {
     // Blizzlike join order is: choose covenant (this) -> then its soulbinds unlock. Driven by
@@ -20544,6 +20703,9 @@ void Player::SetActiveCovenant(uint32 covenantId)
         return;
 
     m_activeCovenantId = covenantId;
+
+    // Record the pledge so HasEverJoinedAnyCovenant()/CanChangeCovenant() can tell a first join from a switch.
+    RememberCovenantSoulbind(covenantId, m_activeSoulbindId);
 
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_COVENANT);
     stmt->setUInt64(0, GetGUID().GetCounter());
