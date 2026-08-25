@@ -5297,9 +5297,9 @@ struct CharShipmentEntry
     int32 SpellID;
     uint32 OnCompleteSpellID;
     int32 Duration;
-    int32 Flags;
-    uint16 GarrFollowerID;
     uint8 MaxShipments;
+    uint16 GarrFollowerID;
+    int32 Flags;
 };
 
 struct ContributionEntry
@@ -5450,7 +5450,8 @@ struct ExteriorComponentEntry
     LocalizedString Name;
     std::array<float, 3> Position;
     uint32 ID;
-    uint8 Size;                             // Meta[3] BYTE: WoWDBDefs "Size"
+    uint8 Size;                             // Meta[3] BYTE
+    uint32 HouseExteriorWmoDataID;          // 12.1 DC257C27: relation moved after Size
     int32 ParentComponentID;                // Meta[4] INT: references another ExteriorComponent (0 for defaults)
     int32 ModelFileDataID;                  // Meta[5] INT: model FileDataID
     int32 Flags;                            // Meta[6] INT: 0x1=IsDefaultFixture, 0x2=UnlockedByDefault
@@ -5459,8 +5460,7 @@ struct ExteriorComponentEntry
     int32 Field_9;                          // Meta[9] INT: unknown
     int32 GameObjectID;                     // Meta[10] INT: references GameObjects
     int32 Field_11;                         // Meta[11] INT: unknown (WoWDBDefs name: Field_11_2_7_64044_011)
-    int32 ItemID;                           // Meta[12] INT: NEW in 12.0.5 â€” references Item.ID (allows the exterior component to be sold/earned as an item, like HouseDecor.ItemID)
-    uint32 HouseExteriorWmoDataID;          // ParentIndexField - must be unsigned
+    int32 ItemID;                           // 12.1 references Item.ID
 };
 
 struct ExteriorComponentExitPointEntry
@@ -5653,7 +5653,7 @@ struct GarrFollowerLevelXPEntry
     // These were previously declared in the reverse order, so every row loaded with the two bytes
     // swapped (FollowerLevel held the type value, GarrFollowerTypeID held the level) — GetFollowerLevelXP
     // then missed for every real (type, level) pair and follower mission XP was silently discarded.
-    int8 GarrFollowerTypeID;
+    uint8 GarrFollowerTypeID;
     uint8 FollowerLevel;
     uint16 XpToNextLevel;
     uint16 ShipmentXP;
@@ -5664,7 +5664,7 @@ struct GarrFollowerQualityEntry
     uint32 ID;
     int32 XpThreshold;
     uint32 QualityItemID;
-    int8 Quality;
+    uint8 Quality;
     uint8 AbilityCount;
     uint8 TraitCount;
     uint16 GarrFollowerTypeID;
@@ -5707,7 +5707,7 @@ struct GarrItemLevelUpgradeDataEntry
     int32 Operation;
     int32 MinItemLevel;
     int32 MaxItemLevel;
-    int8 FollowerTypeID;
+    uint8 FollowerTypeID;
 };
 
 struct GarrMechanicEntry
@@ -5998,7 +5998,6 @@ struct HouseDecorEntry
     LocalizedString Name;                    // Meta field 0: FT_STRING
     DBCPosition3D InitialRotation;           // Meta field 1: FT_FLOAT[3]
     uint32 ID;                               // Meta field 2: IndexField
-    int32 Field_003;
     int32 GameObjectID;
     int32 Flags;
     uint8 Type;
@@ -6071,15 +6070,16 @@ struct HouseLevelRewardInfoEntry
 
 struct HouseRoomEntry
 {
-    uint32 ID;
     LocalizedString Name;
+    uint32 ID;
     int8 Size;
     int32 Flags;
     int32 Field_002;
     int32 RoomWmoDataID;
     int32 UiTextureAtlasElementID;
     int32 WeightCost;
-    int32 Field_007;                         // NEW in 12.0.5.66330 (per WoWDBDefs layout 0xFC6C2118)
+    int32 Field_007;                         // NEW in 12.0.5.66330
+    int32 Field_008;                         // NEW in 12.1 (0xF04DC279)
 };
 
 struct HouseThemeEntry
@@ -6167,6 +6167,7 @@ struct ItemConversionEntry
     int32 ItemLogicalCostGroupID;
     int32 AlternateItemLogicalCostGroupID;
     int32 PlayerConditionID;
+    int32 Flags;
 };
 
 struct ItemConversionEntryEntry
@@ -6348,6 +6349,7 @@ struct PerksVendorItemXIntervalEntry
 struct PlayerCompanionInfoEntry
 {
     LocalizedString UnlockDescription;
+    LocalizedString Field_12_1_0_68209_001;
     uint32 ID;
     int32 DelvesSeasonID;
     int32 TraitTreeID;
@@ -6361,6 +6363,7 @@ struct PlayerCompanionInfoEntry
     int32 UiModelSceneID;
     int32 Field_12_0_0_64499_011;
     int32 Field_12_0_0_64499_012;
+    int32 FlavorNodeID;
     int32 ParentID;                                                                   // Field_12_0_1_64889_014, parent relation
 };
 

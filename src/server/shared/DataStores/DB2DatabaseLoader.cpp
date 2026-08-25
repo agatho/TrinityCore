@@ -29,6 +29,13 @@ char* DB2DatabaseLoader::Load(bool custom, uint32& records, char**& indexTable, 
 {
     // Even though this query is executed only once, prepared statement is used to send data from mysql server in binary format
     HotfixDatabasePreparedStatement* stmt = HotfixDatabase.GetPreparedStatement(_loadInfo->Statement);
+    if (stmt->GetParameters().empty())
+    {
+        // The hotfix SELECT for this store was not prepared (no VerifiedBuild parameter slot), so it cannot be
+        // bound/queried. Skip the hotfix overlay for this store and load from the client .db2 file only.
+        TC_LOG_ERROR("server.loading", "DB2 hotfix statement index {} has no parameters; skipping hotfix load.", uint32(_loadInfo->Statement));
+        return nullptr;
+    }
     stmt->setBool(0, !custom);
     PreparedQueryResult result = HotfixDatabase.Query(stmt);
     if (!result)

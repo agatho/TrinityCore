@@ -175,7 +175,7 @@ void HousingMgr::LoadHouseDecorData()
         data.InitialRotation[0] = entry->InitialRotation.X;
         data.InitialRotation[1] = entry->InitialRotation.Y;
         data.InitialRotation[2] = entry->InitialRotation.Z;
-        data.Field_003 = entry->Field_003;
+        data.Field_003 = 0;                        // 12.1 (HouseDecor layout 0x6A051268) dropped this DB2 field
         data.GameObjectID = entry->GameObjectID;
         data.Flags = entry->Flags;
         data.Type = entry->Type;

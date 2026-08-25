@@ -17,6 +17,10 @@ CREATE TABLE `battle_pet_ability_effect` (
   `Param4` smallint NOT NULL DEFAULT '0',
   `Param5` smallint NOT NULL DEFAULT '0',
   `Param6` smallint NOT NULL DEFAULT '0',
+  `VerifiedBuild` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`,`VerifiedBuild`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 DROP TABLE IF EXISTS `warband_scene_animation`;
 CREATE TABLE `warband_scene_animation` (
   `ID` int unsigned NOT NULL DEFAULT '0',
@@ -61,6 +65,10 @@ CREATE TABLE `battle_pet_ability_state` (
   `BattlePetStateID` int unsigned NOT NULL DEFAULT '0',
   `Value` int NOT NULL DEFAULT '0',
   `BattlePetAbilityID` int unsigned NOT NULL DEFAULT '0',
+  `VerifiedBuild` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`,`VerifiedBuild`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 DROP TABLE IF EXISTS `warband_scene_placement_option`;
 CREATE TABLE `warband_scene_placement_option` (
   `PositionX` float NOT NULL DEFAULT '0',
@@ -85,6 +93,10 @@ CREATE TABLE `battle_pet_ability_turn` (
   `TurnTypeEnum` tinyint unsigned NOT NULL DEFAULT '0',
   `EventTypeEnum` tinyint unsigned NOT NULL DEFAULT '0',
   `BattlePetVisualID` smallint unsigned NOT NULL DEFAULT '0',
+  `VerifiedBuild` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`,`VerifiedBuild`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 DROP TABLE IF EXISTS `warband_scene_plcmnt_anim_override`;
 CREATE TABLE `warband_scene_plcmnt_anim_override` (
   `ID` int unsigned NOT NULL DEFAULT '0',
@@ -111,6 +123,10 @@ CREATE TABLE `battle_pet_effect_properties` (
   `ParamTypeEnum4` tinyint unsigned NOT NULL DEFAULT '0',
   `ParamTypeEnum5` tinyint unsigned NOT NULL DEFAULT '0',
   `ParamTypeEnum6` tinyint unsigned NOT NULL DEFAULT '0',
+  `VerifiedBuild` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`,`VerifiedBuild`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 DROP TABLE IF EXISTS `warband_placement_display_info`;
 CREATE TABLE `warband_placement_display_info` (
   `ID` int unsigned NOT NULL DEFAULT '0',
