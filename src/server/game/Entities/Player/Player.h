@@ -2890,6 +2890,11 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void CreateGarrison(uint32 garrSiteId);
         void DeleteGarrison();
         Garrison* GetGarrison() const { return _garrison.get(); }
+        // House-visit teleport target: set by the door GO script, read+cleared by MapManager so a visitor is
+        // routed to the OWNER's HouseInteriorMap instance. Empty = enter own interior (per feature/housing-system).
+        void SetHouseVisitTarget(ObjectGuid ownerGuid) { _houseVisitTargetOwner = ownerGuid; }
+        ObjectGuid GetHouseVisitTarget() const { return _houseVisitTargetOwner; }
+        void ClearHouseVisitTarget() { _houseVisitTargetOwner = ObjectGuid::Empty; }
 
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }
@@ -3431,6 +3436,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         bool _usePvpItemLevels;
         ObjectGuid _areaSpiritHealerGUID;
+        ObjectGuid _houseVisitTargetOwner;
 
         // Spell cast request handling
     public:
