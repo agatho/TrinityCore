@@ -1761,6 +1761,13 @@ CREATE TABLE IF NOT EXISTS `zone_story` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
+-- 12.1 split ItemSparse.AllowableRace into AllowableRace1/AllowableRace2; the
+-- HOTFIX_SEL_ITEM_SPARSE statement selects the split columns, so the single
+-- `AllowableRace` column shipped by hotfixes_database.sql fails to prepare.
+ALTER TABLE `item_sparse`
+  CHANGE COLUMN `AllowableRace` `AllowableRace1` int NOT NULL DEFAULT 0,
+  ADD COLUMN `AllowableRace2` int NOT NULL DEFAULT 0 AFTER `AllowableRace1`;
+
 -- DNT bank-bag items required by DB2Stores.cpp ItemSparse version-gate,
 -- absent from the extracted client ItemSparse.db2 and from the hotfix chain.
 INSERT IGNORE INTO `item_sparse` (`ID`, `VerifiedBuild`) VALUES (208392, 0), (242709, 0);
