@@ -469,7 +469,8 @@ class TC_GAME_API Battleground
         }
 
         // All three funnel through SetTeamScore so that every score movement, wherever it originates, reaches
-        // the client as SMSG_BATTLEGROUND_POINTS.
+        // the client as SMSG_BATTLEGROUND_POINTS - but only on battlegrounds that declared a score cap via
+        // SetMaxTeamScore. See SetTeamScore for why the flag battlegrounds are excluded.
         void AddPoint(Team team, uint32 points = 1) { SetTeamScore(GetTeamIndexByTeamId(team), m_TeamScores[GetTeamIndexByTeamId(team)] + int32(points)); }
         void SetTeamPoint(Team team, uint32 points = 0) { SetTeamScore(GetTeamIndexByTeamId(team), int32(points)); }
         void RemovePoint(Team team, uint32 points = 1) { SetTeamScore(GetTeamIndexByTeamId(team), m_TeamScores[GetTeamIndexByTeamId(team)] - int32(points)); }

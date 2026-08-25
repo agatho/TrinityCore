@@ -244,6 +244,10 @@ struct battleground_silvershard_mines final : BattlegroundScript
 
     void OnInit() override
     {
+        // The cap for SMSG_BATTLEGROUND_INIT. Same constant the scoring tick clamps against and CheckWinner
+        // compares to, so the client's resource bar cannot drift away from the actual rules.
+        battleground->SetMaxTeamScore(uint16(SilvershardMines::Score::Max));
+
         // setup spawning of cosmetic carts
         _scheduler.Schedule(5s, [&](TaskContext& context)
         {

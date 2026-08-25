@@ -1634,8 +1634,18 @@ bool BGQueueInviteEvent::Execute(uint64 /*e_time*/, uint32 /*p_time*/)
         BattlegroundQueue &bgQueue = sBattlegroundMgr->GetBattlegroundQueue(m_QueueId);
         if (bgQueue.IsPlayerInvited(m_PlayerGuid, m_BgInstanceGUID, m_RemoveTime))
         {
+            // Timeout is the REMAINING life of the invitation, not a constant. InviteGroupToBG schedules this
+            // reminder INVITATION_REMIND_TIME before ginfo->RemoveInviteTime, and that deadline is what
+            // BGQueueRemoveEvent / BGQueueProposalTimeoutEvent actually act on - so it is the only honest
+            // source for the number. A constant INVITE_ACCEPT_WAIT_TIME - INVITATION_REMIND_TIME would restart
+            // the client's confirmation countdown at 70000 ms when 20000 ms are left, and would be wrong by a
+            // further 60000 ms for the shorter PROPOSAL_ACCEPT_WAIT_TIME window of the solo queues, whose
+            // SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS already told the same client 30000 ms.
+            uint32 now = GameTime::GetGameTimeMS();
+            uint32 remaining = m_RemoveTime > now ? m_RemoveTime - now : 0;
+
             WorldPackets::Battleground::BattlefieldStatusNeedConfirmation battlefieldStatus;
-            BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(m_QueueId), INVITE_ACCEPT_WAIT_TIME - INVITATION_REMIND_TIME, m_QueueId);
+            BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(m_QueueId), remaining, m_QueueId);
             player->SendDirectMessage(battlefieldStatus.Write());
         }
     }

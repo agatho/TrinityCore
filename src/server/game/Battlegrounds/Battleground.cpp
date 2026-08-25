@@ -1547,6 +1547,20 @@ void Battleground::SetTeamScore(TeamId teamId, int32 score)
 
     m_TeamScores[teamId] = score;
 
+    // Only resource races put this on the wire. The cap is the discriminator: SendMatchScoreState already
+    // sends neither SMSG_BATTLEGROUND_INIT nor the two entry SMSG_BATTLEGROUND_POINTS without one, so
+    // sending live updates without one would leave the client with a score stream it never got a baseline
+    // or a maximum for - and its handler discards a zero cap outright.
+    //
+    // This is what keeps the flag battlegrounds out. Warsong Gulch and Twin Peaks route their flag captures
+    // through AddPoint too, but a capture count of 0..3 is not a resource amount, and those two already
+    // publish it on a channel of their own: UpdateTeamScore in battleground_warsong_gulch.cpp writes
+    // WORLD_STATE_FLAG_CAPTURES_ALLIANCE / _HORDE, and the one in battleground_twin_peaks.cpp writes
+    // TwinPeaks::WorldStates::FlagCapturesAlliance / FlagCapturesHorde. The only source for this field's
+    // meaning is one Deephaul Ravine style resource race, so it is not stretched past that.
+    if (!_maxTeamScore)
+        return;
+
     WorldPackets::Battleground::BattlegroundPoints battlegroundPoints;
     // The field is a uint16 on the wire; scores are never negative in practice but RemovePoint can in
     // principle underflow, so clamp rather than wrap.

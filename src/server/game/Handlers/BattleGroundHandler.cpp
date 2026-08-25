@@ -642,8 +642,18 @@ void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinR
     if (grp->GetLeaderGUID() != _player->GetGUID())
         return;
 
-    // Rated battlegrounds are a full-roster mode: BattlemasterList 100 is 10v10 and the client's own UI
-    // refuses to send unless the group is full.
+    // Rated battlegrounds are a full-roster mode, and the equality - not a range - is what the client itself
+    // enforces. Blizzard_PVPUI.lua ConquestFrame_UpdateJoinButton only enables the join button on the
+    // 'neededSize == groupSize' branch, with neededSize = CONQUEST_SIZES[RATED_BG_BUTTON_ID]; RATED_BG_BUTTON_ID
+    // is 5 and Constants.lua has CONQUEST_SIZES = { 1, 1, 2, 3, 10 }, so the client sends this opcode only for
+    // a group of exactly 10. A short group gets a tooltip instead of a packet.
+    //
+    // 10 is also what the read below resolves to. BattlemasterList 100 'Rated Battleground' in build
+    // 12.1.0.69382 (wago.tools, confirmed against c:/dumps/sr_scratch/BattlemasterList.csv) is
+    // RatedPlayers 10, MinPlayers 5, MaxPlayers 10, GroupsAllowed 1, MaxGroupSize 10, Flags 0x2 -
+    // and GetMaxPlayersPerTeam() reads MaxPlayers. MinPlayers 5 is the number the match may START with once
+    // formed, not a queueing size; RatedPlayers and MaxGroupSize both agree on 10, so the gate matches the
+    // client whichever of the three the field order is read against.
     if (grp->GetMembersCount() != bgTemplate->GetMaxPlayersPerTeam())
     {
         sendFailed(ERR_ARENA_TEAM_PARTY_SIZE);

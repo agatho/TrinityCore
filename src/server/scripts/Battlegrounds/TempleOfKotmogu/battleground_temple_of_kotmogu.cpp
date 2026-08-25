@@ -32,6 +32,7 @@
 #include "SpellScript.h"
 #include "TaskScheduler.h"
 #include "WorldStateMgr.h"
+#include <algorithm>
 
 namespace TempleOfKotmogu
 {
@@ -228,6 +229,11 @@ struct battleground_temple_of_kotmogu final : BattlegroundScript
 
     void OnInit() override
     {
+        // The cap for SMSG_BATTLEGROUND_INIT. Read from the MaxPoints world state rather than hardcoded,
+        // because that is also what the win check and the orb scoring tick read - the packet and the rules
+        // therefore cannot disagree. Map world states are populated in the Map constructor, before OnInit.
+        battleground->SetMaxTeamScore(uint16(std::max<int32>(0, WorldStateMgr::GetValue(TempleOfKotmogu::WorldStates::MaxPoints, battlegroundMap))));
+
         for (TempleOfKotmogu::StaticOrbData const& data : TempleOfKotmogu::StaticOrbDataValue::Orbs)
             SpawnOrb(&data);
     }
