@@ -13114,10 +13114,6 @@ void Unit::SendTeleportPacket(TeleportLocation const& teleportLocation)
 
         // Broadcast the packet to everyone except self.
         SendMessageToSet(moveUpdateTeleport.Write(), playerMover);
-
-        // A teleport moves the mover onto a fresh time base; whatever remote time the observers held
-        // for it no longer applies.
-        SendMoveMarkRemoteTimeInvalid();
     }
     else
     {
@@ -13143,6 +13139,13 @@ void Unit::SendTeleportPacket(TeleportLocation const& teleportLocation)
 
         SendMessageToSet(moveUpdateTeleport.Write(), true);
     }
+
+    // A teleport moves the mover onto a fresh time base; whatever remote time the observers held for
+    // it no longer applies. This holds for both branches above: they send the same
+    // SMSG_MOVE_UPDATE_TELEPORT to the same observers, and the creature branch is the more frequent
+    // one on a running realm (every NearTeleportTo of a creature). Only the transport lookup failure
+    // above skips it, and that path sends nothing at all, so there is no stale base to invalidate.
+    SendMoveMarkRemoteTimeInvalid();
 }
 
 bool Unit::UpdatePosition(float x, float y, float z, float orientation, bool teleport)

@@ -1389,7 +1389,7 @@ class TC_GAME_API WorldSession
         bool ValidateMovementInfo(Unit const* mover, MovementInfo* mi) const;
 
         void HandleMovementOpcodes(WorldPackets::Movement::ClientPlayerMovement& packet);
-        void HandleMovementOpcode(OpcodeClient opcode, MovementInfo& movementInfo);
+        bool HandleMovementOpcode(OpcodeClient opcode, MovementInfo& movementInfo);
         void HandleSetActiveMoverOpcode(WorldPackets::Movement::SetActiveMover& packet);
         void HandleMoveDismissVehicle(WorldPackets::Vehicle::MoveDismissVehicle& moveDismissVehicle);
         void HandleRequestVehiclePrevSeat(WorldPackets::Vehicle::RequestVehiclePrevSeat& requestVehiclePrevSeat);
@@ -2063,6 +2063,15 @@ class TC_GAME_API WorldSession
         uint32 _timeSyncNextCounter;
         uint32 _timeSyncTimer;
         bool _timeSyncRestartedByClient; // CMSG_TIME_SYNC_RESPONSE_FAILED is honoured at most once per world entry.
+
+        // Damping for the movement force repair in HandleMoveRemoveMovementForces. Guid-agnostic on
+        // purpose: a per-force cooldown is defeated by a client that alternates two guids, a session
+        // wide budget is not, and it needs no bookkeeping that grows with the session.
+        static constexpr Milliseconds MOVEMENT_FORCE_REPAIR_WINDOW = Milliseconds(1000);
+        static constexpr uint32 MOVEMENT_FORCE_REPAIR_BURST = 5;
+        TimePoint _movementForceRepairWindowStart;
+        uint32 _movementForceRepairCount;
+        bool _movementForceRepairThrottleLogged;
 
         // Packets cooldown
         time_t _calendarEventCreationCooldown;

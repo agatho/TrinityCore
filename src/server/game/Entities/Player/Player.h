@@ -2723,6 +2723,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint8 m_movementForceModMagnitudeChanges;
         uint8 m_gravityModifierChanges;
         uint32 m_initialObjectUpdateCompleteIndex; ///< SequenceIndex of the last SMSG_MOVE_INITIAL_OBJECT_UPDATE_COMPLETE, mirrored back by the client
+        TimePoint m_initialObjectUpdateCompleteSentAt; ///< when that message went out, so the handshake round trip is readable in the log
 
         bool HasAtLoginFlag(AtLoginFlags f) const { return (m_atLoginFlags & f) != 0; }
         void SetAtLoginFlag(AtLoginFlags f) { m_atLoginFlags |= f; }

@@ -277,6 +277,7 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
     m_movementForceModMagnitudeChanges = 0;
     m_gravityModifierChanges = 0;
     m_initialObjectUpdateCompleteIndex = 0;
+    m_initialObjectUpdateCompleteSentAt = TimePoint(); // not TimePoint::min(): now - min() overflows the int64 nanosecond duration
 
     /////////////////// Instance System /////////////////////
 
@@ -25047,6 +25048,7 @@ void Player::SendInitialPacketsBeforeAddToMap()
     // Seamless teleports never reach this function (MovementHandler.cpp only calls it when
     // !seamlessTeleport), which is exactly the required behaviour.
     m_initialObjectUpdateCompleteIndex = m_movementCounter++;
+    m_initialObjectUpdateCompleteSentAt = GameTime::Now();
 
     WorldPackets::Movement::MoveInitialObjectUpdateComplete initialObjectUpdateComplete;
     initialObjectUpdateComplete.MoverGUID = GetGUID();

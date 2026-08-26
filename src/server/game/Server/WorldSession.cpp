@@ -147,6 +147,9 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _timeSyncNextCounter(0),
     _timeSyncTimer(0),
     _timeSyncRestartedByClient(false),
+    _movementForceRepairWindowStart(TimePoint()), // not TimePoint::min(): now - min() overflows the int64 nanosecond duration
+    _movementForceRepairCount(0),
+    _movementForceRepairThrottleLogged(false),
     _calendarEventCreationCooldown(0),
     _battlePetMgr(std::make_unique<BattlePets::BattlePetMgr>(this)),
     _collectionMgr(std::make_unique<CollectionMgr>(this))
