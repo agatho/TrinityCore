@@ -425,7 +425,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_DECLINE_NEIGHBORHOOD_INVITES,                       STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleDeclineNeighborhoodInvites);
     DEFINE_HANDLER(CMSG_DECLINE_PETITION,                                   STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDeclinePetition);
     DEFINE_HANDLER(CMSG_DELETE_EQUIPMENT_SET,                               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDeleteEquipmentSet);
-    DEFINE_HANDLER(CMSG_DELVE_TELEPORT_OUT,                                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDelveTeleportOut);
+    DEFINE_HANDLER(CMSG_DELVE_TELEPORT_OUT,                                 STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_DEL_FRIEND,                                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDelFriendOpcode);
     DEFINE_HANDLER(CMSG_DEL_IGNORE,                                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDelIgnoreOpcode);
     DEFINE_HANDLER(CMSG_DESTROY_ITEM,                                       STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleDestroyItemOpcode);
@@ -2562,7 +2562,7 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_VOID_TRANSFER_RESULT,                                         STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_WAIT_QUEUE_FINISH,                                            STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_WAIT_QUEUE_UPDATE,                                            STATUS_NEVER,       CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_WALK_IN_RESULT,                                               STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_WALK_IN_RESULT,                                               STATUS_UNHANDLED,   CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_WARDEN3_DATA,                                                 STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_WARDEN3_DISABLED,                                             STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_WARDEN3_ENABLED,                                              STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);

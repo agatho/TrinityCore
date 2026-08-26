@@ -421,11 +421,6 @@ namespace WorldPackets
         struct HotfixData;
     }
 
-    namespace WalkIn
-    {
-        class DelveTeleportOut;
-        enum class WalkInResultCode : uint8;
-    }
 
     namespace Housing
     {
@@ -1390,8 +1385,6 @@ class TC_GAME_API WorldSession
         void SendHotfixMessage(std::span<int32 const> hotfixIds);
 
         // walk-in (delve / follower dungeon) instance session
-        void HandleDelveTeleportOut(WorldPackets::WalkIn::DelveTeleportOut& packet);
-        void SendWalkInResult(WorldPackets::WalkIn::WalkInResultCode result);
 
         void HandleMoveWorldportAckOpcode(WorldPackets::Movement::WorldPortResponse& packet);
         void HandleMoveWorldportAck();                // for server-side calls
