@@ -284,6 +284,32 @@ namespace WorldPackets
         //   0x48000D - the proposal collapsed and the outstanding players became losses. Both invariants hold
         //   in every sample, and Awaited+Secured+Lost is the constant [0, 4, 12] = 16 players = 8v8 throughout.
         //
+        // Which index of SlotsPerSide/AwaitedPerSide is which faction: NEITHER, and that is measured rather
+        // than assumed. NOTE THE IMAGE BASE - every VA in the next two paragraphs is from wow_dump.bin.i64
+        // as it loads today, at 0x7FF780FD0000, while the sub_7FF729.../sub_7FF72A... VAs elsewhere in this
+        // file come from the older analysis DB based at 0x7FF728900000. The two do NOT convert by a flat
+        // rebase; do not mix them. The reliable bridge is c:\dumps\_4b_hookstate.txt, which lists the
+        // registrar of every 0x4B opcode at today's base.
+        // The two pairs land at +144/+148 and +152/+156 of the 176-byte per-queue record the
+        // client allocates in Ui\PvpInfo.cpp:2175, and that record is reachable only through its two list
+        // heads (0x7FF7853B37D0, 0x7FF7853B37D8) and its finder (0x7FF78318F930). Enumerating every function
+        // that references any of the three gives 41, and exactly three of them touch those four slots: the
+        // allocator, which zeroes them; the handler above (0x7FF783190300), which writes them; and ONE reader
+        // - the legacy Lua global GetWarGameQueueStatus (binding table 0x7FF7853B3B10 -> sub_7FF7831A2690),
+        // which pushes them as four bare numbers in the order SlotsPerSide[1], SlotsPerSide[0],
+        // AwaitedPerSide[1], AwaitedPerSide[0] and labels neither index. Widening the sweep one call level
+        // over all 109 direct callees of those 41 adds nothing: the seven that touch +0x90..+0x9C do so on
+        // other types - a qword at +0x90 beside a byte at +0x98, a 0..5 state byte - and none reads all four.
+        // No file in the retail FrameXML calls GetWarGameQueueStatus at all. The single asymmetry that does
+        // exist, the reader returning index 1 before index 0, carries no name, because no UI names the
+        // returns; it is the whole of what the client says about the ordering.
+        //
+        // The index is therefore a free convention, and this is exactly where the sister field parts company:
+        // SMSG_BATTLEGROUND_POINTS.Team indexes a faction-labelled score array in the client, so its
+        // PvPTeamId inversion is load bearing, while nothing downstream of these four bytes is labelled at
+        // all. SendProposalStatus fills them by TeamId (alliance 0), the same order BattlegroundQueue keeps
+        // its selection pools in, so the server stays self-consistent; no observer can tell the difference.
+        //
         // The capture also settles that this is a BOUNDED proposal and not an open-ended queue readout. Three
         // runs, each with its own MapID, each inside the advertised 30000 ms:
         //   map 2656, ticks 138410..166467 = 28.1 s, then 0x48000E with Lost = [0,2,4] (6 outstanding)
@@ -873,8 +899,19 @@ namespace WorldPackets
         //                      between its own millisecond clock and ours so it can reconstruct server time.
         //   [4..5] uint16  ->  written into BOTH halves of the int[2] at 0x7FF72F082C40, the per-team score
         //                      cap that sits directly next to the score array SMSG_BATTLEGROUND_POINTS
-        //                      writes. Guarded by `if (value)`, so a zero cap is ignored outright - which is
-        //                      why this core only sends the packet for battlegrounds that declare a cap.
+        //                      writes. Guarded by `if (value)`, so a zero cap is ignored outright.
+        //
+        // The asymmetry between those two fields is the whole reason this packet goes out for EVERY match and
+        // not only for the resource races. Field 1 is written before the guard and outside it, and its target
+        // is the client's only source for that offset: at today's image base the store is the single writer
+        // of dword_7FF785778580 (sub_7FF783192490+0x1A), against seven reads in four functions. Two of those
+        // are the arena crowd-control bar - C_PvP.GetArenaCrowdControlDuration (sub_7FF78238D340) and
+        // C_PvP.GetArenaCrowdControlInfo (sub_7FF78238DA40) - and the other two feed C_Commentator's spell
+        // charges; all four add the offset to a SERVER millisecond stamp and then compare the result against
+        // the client's own clock. An arena declares no score cap, so gating the whole send on the cap would
+        // have left every arena with an offset of zero and a CC bar computed across two unrelated epochs.
+        // Sending it with MaxPoints = 0 costs nothing: the client's own `if (value)` discards the zero cap,
+        // and with it both Lua events, so a capless match gets the clock and nothing else.
         // Field names below are ours; the client exports none. The sole capture reads
         // 73 E0 B5 38 | DC 05 = { 951820403, 1500 }, and 1500 is the cap the winning team stopped on.
         class BattlegroundInit final : public ServerPacket

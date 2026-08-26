@@ -1090,8 +1090,8 @@ void Battleground::AddPlayer(Player* player, BattlegroundQueueTypeId queueId)
     player->SendDirectMessage(pvpMatchInitialize.Write());
 
     SendMatchScoreState(player);
-    // Deliberately outside SendMatchScoreState: that one returns early when the battleground has no resource
-    // cap (_maxTeamScore == 0), and capture point battlegrounds are not necessarily capped.
+    // Deliberately outside SendMatchScoreState: that one emits the score baseline only for battlegrounds
+    // with a resource cap (_maxTeamScore != 0), and capture point battlegrounds are not necessarily capped.
     // UNVERIFIED: where SMSG_MAP_OBJECTIVES_INIT belongs inside the entry burst. What the captures settle is
     // the triple SendMatchScoreState emits - SMSG_BATTLEGROUND_INIT, then SMSG_BATTLEGROUND_POINTS for Horde
     // and for Alliance - while no capture of any build carries SMSG_MAP_OBJECTIVES_INIT at all, so its place
@@ -1556,9 +1556,10 @@ void Battleground::SetTeamScore(TeamId teamId, int32 score)
     m_TeamScores[teamId] = score;
 
     // Only resource races put this on the wire. The cap is the discriminator: SendMatchScoreState already
-    // sends neither SMSG_BATTLEGROUND_INIT nor the two entry SMSG_BATTLEGROUND_POINTS without one, so
-    // sending live updates without one would leave the client with a score stream it never got a baseline
-    // or a maximum for - and its handler discards a zero cap outright.
+    // withholds the two entry SMSG_BATTLEGROUND_POINTS without one, so sending live updates without one
+    // would leave the client with a score stream it never got a baseline or a maximum for - and its handler
+    // discards a zero cap outright. (SMSG_BATTLEGROUND_INIT itself does go out either way; it carries the
+    // server clock as well, and that half is unconditional. See SendMatchScoreState.)
     //
     // This is what keeps the flag battlegrounds out. Warsong Gulch and Twin Peaks route their flag captures
     // through AddPoint too, but a capture count of 0..3 is not a resource amount, and those two already
@@ -1585,6 +1586,8 @@ void Battleground::SetMaxTeamScore(uint16 maxTeamScore)
 
     _maxTeamScore = maxTeamScore;
 
+    // A revision DOWN to zero has nothing to deliver: the client keeps its old cap when it is handed a zero
+    // one, so a resend could not clear it anyway, and everyone still in the match already has the clock.
     if (!_maxTeamScore)
         return;
 
@@ -1597,15 +1600,26 @@ void Battleground::SetMaxTeamScore(uint16 maxTeamScore)
 
 void Battleground::SendMatchScoreState(Player* player) const
 {
-    if (!_maxTeamScore)
-        return;
-
     // Capture order at battleground entry (C:\sniff\rated BG 12.0.7.pkt, tick 915464, instance connection):
     // SMSG_BATTLEGROUND_INIT first, then SMSG_BATTLEGROUND_POINTS for horde and then for alliance.
+    //
+    // The INIT goes out for EVERY match, capped or not, because its two fields are not gated alike. Its
+    // first field is the server clock, and the client's handler stores that one before and outside the
+    // guard it puts on the cap - it is the only writer of the offset the arena crowd-control bar and
+    // C_Commentator's spell charges read back. Arenas, Warsong Gulch, Twin Peaks, Alterac Valley and Isle
+    // of Conquest declare no cap, and gating the send on the cap left all of them computing those timers
+    // across two unrelated epochs. See the decode above SMSG_BATTLEGROUND_INIT for the reader census.
     WorldPackets::Battleground::BattlegroundInit battlegroundInit;
     battlegroundInit.ServerTime = GameTime::GetGameTimeMS();
+    // Zero where no cap was declared. The client discards a zero cap itself, so this stays a clock-only
+    // message for everything that is not a resource race.
     battlegroundInit.MaxPoints = _maxTeamScore;
     player->SendDirectMessage(battlegroundInit.Write());
+
+    // The score baseline, unlike the clock, IS meaningless without a cap - and SetTeamScore would never
+    // follow it up with live updates either, so it stays out.
+    if (!_maxTeamScore)
+        return;
 
     for (TeamId teamId : { TEAM_HORDE, TEAM_ALLIANCE })
     {

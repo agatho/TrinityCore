@@ -476,8 +476,10 @@ class TC_GAME_API Battleground
         void RemovePoint(Team team, uint32 points = 1) { SetTeamScore(GetTeamIndexByTeamId(team), m_TeamScores[GetTeamIndexByTeamId(team)] - int32(points)); }
 
         // Resource-race battlegrounds publish their score cap here. Battlegrounds that have no cap leave it
-        // at zero, and then no SMSG_BATTLEGROUND_INIT is sent at all - which is what the client wants, since
-        // its handler discards a zero cap anyway.
+        // at zero, and then SMSG_BATTLEGROUND_INIT still goes out - with MaxPoints = 0, which the client's
+        // handler discards on its own - because that same message carries the server clock, and that half is
+        // unconditional. What a capless battleground does not get is the score baseline. See
+        // SendMatchScoreState, and the reader census above SMSG_BATTLEGROUND_INIT in BattlegroundPackets.h.
         void SetMaxTeamScore(uint16 maxTeamScore);
         uint16 GetMaxTeamScore() const { return _maxTeamScore; }
 

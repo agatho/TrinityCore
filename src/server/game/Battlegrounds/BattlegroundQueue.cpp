@@ -1091,6 +1091,12 @@ void BattlegroundQueue::SendProposalStatus(BattlegroundProposal const& proposal,
                 continue;
             }
 
+            // Indexed by TeamId, the same order the selection pools above use. That choice is free rather
+            // than guessed: the client attaches no faction to either index of this pair - its only reader is
+            // GetWarGameQueueStatus, which hands both back as bare numbers - so nothing on the wire can tell
+            // the two apart. The census is in the decode block above BattlefieldStatusWaitForGroups. Note
+            // that this is NOT the convention of the sister field BattlegroundPoints.Team, which is a real
+            // PvPTeamId because there the client indexes a faction-labelled array with it.
             ++awaitedPerSide[member.Side];
             if (status == BattlegroundProposalStatus::Failed)
                 ++counts.Lost[role];
