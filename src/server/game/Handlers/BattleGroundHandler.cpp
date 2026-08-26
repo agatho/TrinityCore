@@ -782,6 +782,14 @@ void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinR
         return;
     }
 
+    // check Freeze debuff - same gate as HandleBattlemasterJoinOpcode, HandleBattlemasterJoinRatedBGBlitz,
+    // HandleBattlemasterJoinSkirmish, HandleBattlemasterJoinBrawl and HandleBattleFieldPortOpcode.
+    // Group::CanJoinBattlegroundQueue below does not cover it - it tests CanJoinToBattleground, faction,
+    // bracket, arena team, double queue, random queue, deserter and free slots, no aura. Without this a
+    // GM-frozen player is the only one on this tree who can still enter a rated battleground queue.
+    if (_player->HasAura(9454))
+        return;
+
     ObjectGuid errorGuid;
     GroupJoinBattlegroundResult err = grp->CanJoinBattlegroundQueue(bgTemplate, bgQueueTypeId, 0, bgTemplate->GetMaxPlayersPerTeam(), true, 0, errorGuid);
     if (err)
