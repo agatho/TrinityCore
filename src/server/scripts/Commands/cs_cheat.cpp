@@ -67,6 +67,11 @@ public:
     // `return 0`-Stub. Die Wirkung liegt vollstaendig serverseitig in
     // Unit::ApplyDiminishingToDuration; der Opcode haelt einen eigenen Client auf demselben Stand.
     // Erwartetes Testergebnis am Retail-Client ist deshalb: KEINE sichtbare Reaktion.
+    // UNVERIFIED: umgesetzt ist die ZIEL-Lesart - Auren AUF dem Schaltenden laufen ungekuerzt,
+    // nicht "seine eigenen Kontrollzauber werden nicht abgeschwaecht". Die Wahl ist unbelegt und
+    // an der wirksamen Stelle ausfuehrlich begruendet und markiert (Unit::ApplyDiminishingToDuration).
+    // Die Klartextmeldungen unten benennen die umgesetzte Richtung deshalb ausdruecklich, damit ein
+    // GM nicht die andere annimmt.
     static bool HandleDiminishingReturnsCheatCommand(ChatHandler* handler, Optional<bool> enableArg)
     {
         Player* player = handler->GetSession()->GetPlayer();
@@ -78,12 +83,12 @@ public:
         if (enable)
         {
             player->SetCommandStatusOn(CHEAT_IGNORE_DIMINISHING_RETURNS);
-            handler->SendSysMessage("Diminishing returns are now ignored for you.");
+            handler->SendSysMessage("Diminishing returns no longer apply to auras cast on you.");
         }
         else
         {
             player->SetCommandStatusOff(CHEAT_IGNORE_DIMINISHING_RETURNS);
-            handler->SendSysMessage("Diminishing returns apply to you again.");
+            handler->SendSysMessage("Diminishing returns apply to auras cast on you again.");
         }
 
         player->SendDirectMessage(WorldPackets::Spells::CheatIgnoreDiminishingReturns(enable).Write());

@@ -1350,6 +1350,10 @@ namespace WorldPackets
         // SMSG_CHEAT_IGNORE_DIMISHING_RETURNS (0x670002) - ein Bit, danach FlushBits (1 B Draht).
         // Der Handler-Slot zeigt im Retail-Client auf den `return 0`-Stub: die Nachricht wird
         // angenommen und bewirkt dort nichts. Der Serverzustand dahinter ist trotzdem real.
+        // UNVERIFIED: welche WIRKUNGSRICHTUNG das Bit meint (DR auf dem Schaltenden gegen DR
+        // seiner eigenen Kontrollzauber), ist unbelegt und kann aus dem Client nicht belegt werden
+        // - kein Konsument. Begruendet und markiert an der wirksamen Stelle:
+        // Unit::ApplyDiminishingToDuration.
         class CheatIgnoreDiminishingReturns final : public ServerPacket
         {
         public:

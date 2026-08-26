@@ -3406,6 +3406,20 @@ void Spell::EffectActivateObject()
 // UNVERIFIED: das uint32 ist aus Paketgroesse (2 Pakete a 4 B) und Opcodename abgeleitet - der
 // Retail-Client hat fuer 0x670044 keinen registrierten Abonnenten (Slot 0x43AA350 = TAGGED(0x1)),
 // also keinen Leser, aus dem sich die Feldbedeutung ablesen liesse.
+//
+// WELCHES Feld des Effekts die zu schiebende Faehigkeit traegt, ist dagegen BELEGT und nicht
+// geraten. Quelle ist SpellEffect.db2 selbst: von den 57 Zeilen mit Effect == 81 fuellen ALLE 57
+// EffectTriggerSpell und lassen EffectMiscValue[0] auf 0 - bitgleich in zwei Builds geprueft
+// (C:/dumps/SpellEffect_68887.csv, 12.0.7.68887, und
+// C:/dumps/overnight_dataquality_68275/db2_cache/SpellEffect.12.0.7.68275.csv, 12.0.7.68275;
+// 57/57 in beiden). Die Zeilen sind auch inhaltlich eindeutig: die Zauber 225860..225886 heissen
+// in SpellName.db2 "Push Active Ability to Bar", und ihr TriggerSpell ist jeweils die Faehigkeit,
+// die geschoben wird - 225860 -> 205223 Consumption, 225862 -> 220143 Apocalypse,
+// 225863 -> 201467 Fury of the Illidari (die Legion-Artefakt-Aktiven).
+// MiscValue traegt die Faehigkeit in KEINER Zeile. Der frueher hier stehende Vorrang-Vergleich
+// "TriggerSpell, sonst MiscValue" war damit nicht nur unbelegt, sondern die einzige Stelle, an der
+// eine falsche ID stumm hinausgehen konnte, und ist ersetzt. Traegt eine Zeile kein TriggerSpell
+// - etwa aus einer eigenen spell_dbc-Aenderung -, geht jetzt NICHTS hinaus statt einer geratenen ID.
 void Spell::EffectPushAbilityToActionBar()
 {
     if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
@@ -3415,7 +3429,7 @@ void Spell::EffectPushAbilityToActionBar()
     if (!player)
         return;
 
-    int32 spellId = effectInfo->TriggerSpell ? int32(effectInfo->TriggerSpell) : effectInfo->MiscValue;
+    int32 const spellId = int32(effectInfo->TriggerSpell);
     if (spellId <= 0)
         return;
 
