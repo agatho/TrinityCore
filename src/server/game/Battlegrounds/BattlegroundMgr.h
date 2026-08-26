@@ -159,6 +159,15 @@ class TC_GAME_API BattlegroundMgr
         bool isTesting() const { return m_Testing; }
 
         static bool IsRandomBattleground(uint32 battlemasterListId);
+
+        // True for a BattlemasterList that never runs itself. Its `battleground_template` row carries more than
+        // one BattlemasterListXMap map, so CreateNewBattleground draws one of them and builds the instance from
+        // THAT map's single-map template: the instance is filed in bgDataStore under the drawn type id, never
+        // under the queue's own id. Every lookup that starts from a queue id therefore has to search all types.
+        // Random Battleground (32) and Random Epic (901) are the two this tree already knew about by name; the
+        // 12.1 aggregates Battleground Blitz (1101), Rated Battleground (100) and the multi-map brawls behave
+        // exactly the same way, and so does All Arenas (6).
+        bool IsAggregateBattleground(BattlegroundTypeId bgTypeId);
         static BattlegroundQueueTypeId BGQueueTypeId(uint16 battlemasterListId, BattlegroundQueueIdType type, bool rated, uint8 teamSize);
 
         static HolidayIds BGTypeToWeekendHolidayId(BattlegroundTypeId bgTypeId);
@@ -193,7 +202,9 @@ class TC_GAME_API BattlegroundMgr
     private:
         uint32 CreateClientVisibleInstanceId(BattlegroundTypeId bgTypeId, BattlegroundBracketId bracket_id);
         static bool IsArenaType(BattlegroundTypeId bgTypeId);
-        BattlegroundTypeId GetRandomBG(BattlegroundTypeId id);
+        // queueBracket, when given, restricts the draw to maps whose own PVPDifficulty ladder holds a single
+        // bracket that fully contains the queue bracket's level range. See the definition for why.
+        BattlegroundTypeId GetRandomBG(BattlegroundTypeId id, PVPDifficultyEntry const* queueBracket = nullptr);
 
         typedef std::map<BattlegroundTypeId, BattlegroundData> BattlegroundDataContainer;
         BattlegroundDataContainer bgDataStore;

@@ -233,12 +233,10 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPackets::Battleground::Batt
             return;
 
         BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
-        // The parameter order is (…, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating, uint8 roles).
-        // This call used to read (…, false, isPremade, 0): isPremade was landing in ArenaRating while the real
-        // isPremade parameter was hardcoded false. Because AddGroup buckets with
-        // `if (!m_queueId.Rated && !isPremade) index += PVP_TEAMS_COUNT`, every unrated group was filed under
-        // BG_QUEUE_NORMAL_* and CheckPremadeMatch could never fire.
-        GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, nullptr, getQueueTeam(), bracketEntry, isPremade, 0, 0, battlemasterJoin.Roles);
+        // Argument list unchanged from upstream; only the role mask is new. See the group branch below for why
+        // the premade flag is deliberately left where upstream put it. (Here isPremade is still false anyway -
+        // it is only computed in the group branch.)
+        GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, nullptr, getQueueTeam(), bracketEntry, false, isPremade, 0, battlemasterJoin.Roles);
         uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
         uint32 queueSlot = _player->AddBattlegroundQueueId(bgQueueTypeId);
 
@@ -266,8 +264,22 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPackets::Battleground::Batt
         if (!err)
         {
             TC_LOG_DEBUG("bg.battleground", "Battleground: the following players are joining as group:");
-            // Same argument-order fix as the solo path above.
-            ginfo = bgQueue.AddGroup(_player, grp, getQueueTeam(), bracketEntry, isPremade, 0, 0, battlemasterJoin.Roles);
+            // The premade flag is NOT promoted into AddGroup's isPremade parameter, and that is a decision, not
+            // an oversight. AddGroup buckets with `if (!m_queueId.Rated && !isPremade) index += PVP_TEAMS_COUNT`,
+            // so a true flag files the entry in BG_QUEUE_PREMADE_*. For an UNRATED queue exactly one matchmaker
+            // reads those lists - CheckPremadeMatch - and its first condition needs an uninvited premade on BOTH
+            // factions at once; CheckNormalMatch and FillPlayersToBG read BG_QUEUE_NORMAL_* only. A group that
+            // reaches BattlemasterList.MinPlayers would therefore drop out of ordinary matchmaking until an
+            // opposing premade turned up, or until the demotion loop at the end of CheckPremadeMatch released it
+            // - and that loop fires only on `JoinTime < now - CONFIG_BATTLEGROUND_PREMADE_GROUP_WAIT_FOR_MATCH`
+            // (Battleground.PremadeGroupWaitForMatch, 30 min by default) or on `Players.size() < MinPlayersPerTeam`,
+            // which is false for this group by construction. That is not a rare shape: BattlemasterList carries
+            // MinPlayers 5 at MaxGroupSize 5 for Random Battleground (32), Classic Warsong Gulch (2) and Twin
+            // Peaks (108), so ANY full party would be parked. CMSG_BATTLEMASTER_JOIN is not one of this unit's
+            // opcodes and nothing in the 12.1 client asks for a different queue layout, so the call is left
+            // byte-for-byte as upstream wrote it (`false, isPremade, 0` - the flag lands in ArenaRating, which no
+            // unrated code path reads) and only gains the role mask that the 12.1 role-aware queue needs.
+            ginfo = bgQueue.AddGroup(_player, grp, getQueueTeam(), bracketEntry, false, isPremade, 0, battlemasterJoin.Roles);
             avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
         }
 
@@ -884,10 +896,12 @@ void WorldSession::HandleBattlemasterJoinBrawl(WorldPackets::Battleground::Battl
 
     BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
 
-    // isPremade true only for a group that already fills a side, matching HandleBattlemasterJoinOpcode.
-    bool const isPremade = grp && grp->GetMembersCount() >= bgTemplate->GetMinPlayersPerTeam();
-
-    GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, isPremade, 0, 0, packet.Roles);
+    // isPremade stays false, for the same reason it stays false in HandleBattlemasterJoinOpcode: a brawl queue is
+    // unrated, so a true flag would file the entry in BG_QUEUE_PREMADE_*, where only CheckPremadeMatch looks and
+    // only when both factions have a premade waiting. Deep Six (BattlemasterList 879) carries MinPlayers 5 at
+    // MaxGroupSize 6, so a full party would otherwise be invisible to CheckNormalMatch for up to
+    // Battleground.PremadeGroupWaitForMatch (30 min).
+    GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, false, 0, 0, packet.Roles);
     uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
 
     if (grp)
