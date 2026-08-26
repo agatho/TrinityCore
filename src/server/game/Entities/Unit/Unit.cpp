@@ -13139,13 +13139,6 @@ void Unit::SendTeleportPacket(TeleportLocation const& teleportLocation)
 
         SendMessageToSet(moveUpdateTeleport.Write(), true);
     }
-
-    // A teleport moves the mover onto a fresh time base; whatever remote time the observers held for
-    // it no longer applies. This holds for both branches above: they send the same
-    // SMSG_MOVE_UPDATE_TELEPORT to the same observers, and the creature branch is the more frequent
-    // one on a running realm (every NearTeleportTo of a creature). Only the transport lookup failure
-    // above skips it, and that path sends nothing at all, so there is no stale base to invalidate.
-    SendMoveMarkRemoteTimeInvalid();
 }
 
 bool Unit::UpdatePosition(float x, float y, float z, float orientation, bool teleport)
@@ -14360,10 +14353,17 @@ void Unit::SendMoveMarkRemoteTimeInvalid() const
     // clock that no longer applies. It is addressed at everyone who observes the mover; the client
     // that controls it keeps its own clock and is skipped.
     //
-    // UNVERIFIED: the exact situations in which Retail sends this. The opcode does not occur once in
-    // 9595737 packets across all 73 recordings, so the two call sites (Unit::SendTeleportPacket and
-    // the transport change in WorldSession::HandleMovementOpcode) are derived from the meaning of
-    // the flag, not observed.
+    // UNVERIFIED: the situation in which Retail sends this. The opcode does not occur once in
+    // 9595737 packets across all 73 recordings, and here that absence carries weight rather than
+    // being neutral: the two situations this message was first wired to - Unit::SendTeleportPacket
+    // and the transport change in WorldSession::HandleMovementOpcode - were recorded thousands of
+    // times over, creature near-teleports most of all, and no SMSG_MOVE_MARK_REMOTE_TIME_INVALID
+    // came with them. Deriving a trigger from the meaning of the flag would have made the realm
+    // broadcast on every creature near-teleport what Retail demonstrably does not broadcast there.
+    // So this follows WorldSession::SendTimeAdjustment, whose Retail trigger is open in exactly the
+    // same way: no invented game rule, one operator command instead. The only caller is
+    // ".debug send markremotetimeinvalid" (cs_debug.cpp) - enough to exercise the message against a
+    // live client, and honest about the fact that the Retail trigger is still open.
     WorldPackets::Movement::MoveMarkRemoteTimeInvalid markRemoteTimeInvalid;
     markRemoteTimeInvalid.MoverGUID = GetGUID();
     SendMessageToSet(markRemoteTimeInvalid.Write(), GetPlayerMovingMe());

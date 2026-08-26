@@ -516,8 +516,6 @@ bool WorldSession::HandleMovementOpcode(OpcodeClient opcode, MovementInfo& movem
     if (plrMover && (plrMover->GetEmoteState() != 0))
         plrMover->SetEmoteState(EMOTE_ONESHOT_NONE);
 
-    ObjectGuid const previousTransportGUID = mover->m_movementInfo.transport.guid;
-
     /* handle special cases */
     if (!movementInfo.transport.guid.IsEmpty())
     {
@@ -568,11 +566,6 @@ bool WorldSession::HandleMovementOpcode(OpcodeClient opcode, MovementInfo& movem
     movementInfo.guid = mover->GetGUID();
     movementInfo.time = AdjustClientMovementTime(movementInfo.time);
     mover->m_movementInfo = movementInfo;
-
-    // Boarding, leaving or switching a transport moves the mover onto a different time base, so the
-    // remote time observers hold for it is stale from here on.
-    if (previousTransportGUID != movementInfo.transport.guid)
-        mover->SendMoveMarkRemoteTimeInvalid();
 
     // Some vehicles allow the passenger to turn by himself
     if (Vehicle* vehicle = mover->GetVehicle())

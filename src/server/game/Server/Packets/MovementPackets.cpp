@@ -101,9 +101,8 @@ ByteBuffer& operator<<(ByteBuffer& data, MovementInfo const& movementInfo)
     data << WorldPackets::Bits<1>(false); // HeightChangeFailed
     // RemoteTimeValid. Measured, not assumed: all 82742 Retail SMSG_MOVE_UPDATE (0x5E000E) found in
     // 73 recordings parse against this field list byte-exact - 82742 of 82742 end on the last byte,
-    // none short, none with a remainder - and 82452 of them, 99.6%, carry this bit SET. The core wrote a hardcoded false here, which contradicts every one of
-    // those packets. The 290 that carry false are almost all the first update an observer sees for a
-    // mover (258 of 290), i.e. the case where there is no earlier time base to keep.
+    // none short, none with a remainder - and 82452 of them, 99.6%, carry this bit SET. The core
+    // wrote a hardcoded false here, which contradicts every one of those packets.
     //
     // The bit is not the same thing as the client flag SMSG_MOVE_MARK_REMOTE_TIME_INVALID clears: the
     // client only ever RAISES that flag (0x18A00D0, "|= 1") and never lowers it from this bit. What
@@ -111,9 +110,19 @@ ByteBuffer& operator<<(ByteBuffer& data, MovementInfo const& movementInfo)
     // the client keeps the remote clock of every observed mover unusable in one of the two branches,
     // and the invalidate message then has little left to invalidate.
     //
-    // The create block in BaseEntity.cpp is deliberately NOT changed along with this: its bit was
-    // never read off the wire (that would mean parsing SMSG_UPDATE_OBJECT), and the first update to a
-    // new observer is exactly the case in which Retail does send false. See aufnahme_noetig.
+    // UNVERIFIED: what makes Retail send false, and therefore this hardcoded true for the 0.35% of
+    // packets that do not carry it. The 290 measured false cases are SMSG_MOVE_UPDATE written by
+    // this very function, not create blocks, and 258 of them are the first update an observer sees
+    // for a mover - but MovementInfo has no field to carry the bit (the reader below drops it), so
+    // no value written here can reproduce them and the byte-exact round trip of D1 is not obtainable
+    // for those 290. Hardcoded true moves the exact cases from 290 to 82452 of 82742; it does not
+    // close the gap. Closing it needs the rule Retail uses, which is per-observer state the server
+    // does not keep today: a recording that pairs each SMSG_MOVE_UPDATE with the observer's history
+    // of that mover would give it. See aufnahme_noetig.
+    //
+    // The create block in BaseEntity.cpp is deliberately NOT changed along with this - its bit was
+    // never read off the wire, which would mean parsing SMSG_UPDATE_OBJECT, and it is a different
+    // writer with its own unmeasured distribution.
     data << WorldPackets::Bits<1>(true); // RemoteTimeValid
     data << WorldPackets::OptionalInit(movementInfo.inertia);
     data << WorldPackets::OptionalInit(movementInfo.advFlying);
