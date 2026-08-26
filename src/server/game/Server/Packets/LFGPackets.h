@@ -206,8 +206,8 @@ namespace WorldPackets
             std::vector<LfgPlayerDungeonInfo> Dungeon;
         };
 
-        // SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x480014). Reply to the empty CMSG_REQUEST_PVP_REWARDS
-        // (0x3A0041); in every capture the reply follows the request 100-250 ms later, 1:1.
+        // SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x4B0014). Reply to the empty CMSG_REQUEST_PVP_REWARDS
+        // (0x3D0041); in every capture the reply follows the request 100-250 ms later, 1:1.
         //
         // The body is a FIXED thirteen activity blocks - there is no count field - plus two loose flag bytes.
         // Each block is exactly LfgPlayerQuestReward above, which is why that struct already carries the

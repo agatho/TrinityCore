@@ -7034,7 +7034,7 @@ void Player::SendCurrencies() const
     SendDirectMessage(packet.Write());
 }
 
-// SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x480014) is sent from here, and it publishes only what this core will
+// SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x4B0014) is sent from here, and it publishes only what this core will
 // actually pay. The full decode is recorded below so it is not repeated; what is left empty is left empty
 // on purpose, and every empty block is a wire-legal state retail itself transmits.
 //
@@ -7067,7 +7067,7 @@ void Player::SendCurrencies() const
 // Honor 200 with item 135539 in block 12; several blocks carry RewardSpellID 192953. The two non-PvP
 // captures are a levelling character and carry RewardXP (2150, 12250) where the max-level one carries none.
 //
-// The request side is already correct and needs no new trigger: CMSG_REQUEST_PVP_REWARDS (0x3A0041) has an
+// The request side is already correct and needs no new trigger: CMSG_REQUEST_PVP_REWARDS (0x3D0041) has an
 // empty body, matching RequestPVPRewards, and every response in the captures is a direct 1:1 reply to it
 // 100-250 ms later. WorldSession::HandleRequestPvpReward -> here is exactly where retail answers.
 //

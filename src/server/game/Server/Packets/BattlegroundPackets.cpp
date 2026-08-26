@@ -481,7 +481,7 @@ ByteBuffer& operator<<(ByteBuffer& data, RatedMatchDeserterPenalty const& ratedM
     return data;
 }
 
-// SMSG_PVP_MATCH_INITIALIZE (0x480030), body = exactly 39 bytes with a deserter penalty present.
+// SMSG_PVP_MATCH_INITIALIZE (0x4B0030), body = exactly 39 bytes with a deserter penalty present.
 //
 // VERIFIED byte-exact against C:\sniff\rated BG 12.0.7.pkt (client build 68275, read from the uint32 at
 // PKT header offset 6), the single rated-Blitz capture we have. Note that "rbg rated BG 12.0.7.pkt" is a
@@ -505,7 +505,9 @@ ByteBuffer& operator<<(ByteBuffer& data, RatedMatchDeserterPenalty const& ratedM
 // underlying type, so each already occupies 8 bytes and the supposed "hole" is simply the zero upper half
 // of the int64 Duration. Bytes alone cannot separate those two readings here (both candidate fields are
 // zero in this capture), so it is settled from the client instead: the reader trace for 0x480030 in
-// c:/dumps/all_smsg_layouts_68275.json is exactly ten reads -
+// c:/dumps/all_smsg_layouts_68275.json (0x480030 is this same opcode under the 12.0.7 numbering of
+// build 68275; 12.1 shifted the families up by three, hence 0x4B0030 in the header above)
+// is exactly ten reads -
 //   uint32, u8, <qword>, <qword>, u8, uint32, u8, uint32, uint32, uint32
 // - which sums to 4+1+8+8+1+4+1+4+4+4 = 39 and matches the field order below one-for-one. The two qword
 // reads go through the helper at VA 0x7FF72BE6C460, which is `mov r8d, 8` (request 8 bytes) followed by
@@ -540,7 +542,7 @@ WorldPacket const* PVPMatchSetState::Write()
     return &_worldPacket;
 }
 
-// SMSG_PVP_MATCH_COMPLETE (0x48002F), body = 1530 bytes in the capture (13-byte head + 1517 of LogData).
+// SMSG_PVP_MATCH_COMPLETE (0x4B002F), body = 1530 bytes in the capture (13-byte head + 1517 of LogData).
 //
 // VERIFIED byte-exact against the same C:\sniff\rated BG 12.0.7.pkt. The suspicion that an extra int32 sits
 // before the bits byte is WRONG, and for the same reason as PVP_MATCH_INITIALIZE above: Duration is an

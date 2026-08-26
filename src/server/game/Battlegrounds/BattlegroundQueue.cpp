@@ -545,6 +545,9 @@ bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg,
             // create remind invite events - but never under a proposal. Retail sends exactly ONE
             // SMSG_BATTLEFIELD_STATUS_NEED_CONFIRMATION per proposal window, the one at its start:
             // "C:/sniff/rated BG 12.0.7.pkt" has three windows and each carries a single 0x480000
+            // (12.0.7 numbering throughout this capture note: 0x480000 = SMSG_BATTLEFIELD_STATUS_NEED_
+            // CONFIRMATION, 0x48000D = ..._WAIT_FOR_GROUPS, 0x48000E = ..._GROUP_PROPOSAL_FAILED. 12.1
+            // shifted the families up by three, so this tree registers them as 0x4B0000/0x4B000D/0x4B000E.)
             // (ticks 136714 / 864798 / 896705), followed only by 0x48000D until the window ends at
             // 166467 / 894382 / 916110 - 29,7 s, 29,6 s and an early STATUS_ACTIVE, never a second
             // confirmation. Without this gate the reminder would land INVITATION_REMIND_TIME before

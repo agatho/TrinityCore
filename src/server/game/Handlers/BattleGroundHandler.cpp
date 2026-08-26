@@ -310,7 +310,7 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPackets::Battleground::Batt
     sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
 }
 
-// CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ (0x3B00BE) - rated 8v8 solo/duo queue.
+// CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ (0x3E00C0) - rated 8v8 solo/duo queue.
 //
 // Unlike CMSG_BATTLEMASTER_JOIN, this packet carries NO queue identity: the client sends a single role-mask
 // byte and the mode is implied entirely by the opcode. The server therefore builds the queue id itself. The
@@ -498,7 +498,7 @@ void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground
     sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
 }
 
-// CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3B00BF) - unrated 3v3 arena, solo or small group.
+// CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3E00C1) - unrated 3v3 arena, solo or small group.
 //
 // Like the Blitz join this packet carries no queue identity; the mode is implied by the opcode. It queues
 // against BattlemasterList 6 ("All Arenas"), which already has a battleground_template row and whose 15
@@ -649,7 +649,7 @@ void WorldSession::HandleBattlemasterJoinSkirmish(WorldPackets::Battleground::Ba
     sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
 }
 
-// CMSG_JOIN_RATED_BATTLEGROUND (0x3A0025) - the classic 10v10 rated battleground, premade-group only.
+// CMSG_JOIN_RATED_BATTLEGROUND (0x3D0025) - the classic 10v10 rated battleground, premade-group only.
 //
 // Like the Blitz and Skirmish joins this carries no queue identity, only the role mask; the mode is implied
 // by the opcode. The queue id is { BattlemasterListId = 100, Type = 0 (BATTLEGROUND), Rated = true,
@@ -791,7 +791,7 @@ void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinR
     sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
 }
 
-// CMSG_BATTLEMASTER_JOIN_BRAWL (0x3B00C2) - the rotating PvP Brawl. Body is uint8 Roles + one bit
+// CMSG_BATTLEMASTER_JOIN_BRAWL (0x3E00C4) - the rotating PvP Brawl. Body is uint8 Roles + one bit
 // IsSpecialBrawl (see BattlemasterJoinBrawl's comment for the serializer that says so).
 //
 // Like the other three joins in this file the packet carries no queue identity, but here that is not just a

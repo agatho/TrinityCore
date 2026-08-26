@@ -244,13 +244,19 @@ namespace WorldPackets
             WorldPackets::LFG::RideTicket Ticket;
         };
 
-        // SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS (0x48000D) and
-        // SMSG_BATTLEFIELD_STATUS_GROUP_PROPOSAL_FAILED (0x48000E).
+        // SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS (0x4B000D) and
+        // SMSG_BATTLEFIELD_STATUS_GROUP_PROPOSAL_FAILED (0x4B000E).
         //
         // Both were decoded byte for byte from the 18 + 2 occurrences in C:\sniff\rated BG 12.0.7.pkt and
         // confirmed against the client readers. (Note that "rbg rated BG 12.0.7.pkt" is a byte-identical copy
         // of that file, so this is one capture and not two.) The decode is kept here because the wire form is
         // the only place the field MEANINGS are written down.
+        //
+        // NUMBERING: the header lines above carry the 12.1 opcode values, which is what this tree's
+        // Opcodes.h holds (SMSG_PONG = 0x4C0009). Every bare 0x48xxxx below is the SAME opcode under
+        // the 12.0.7 numbering the capture and the 68275 client use - 12.1 shifted the families up by
+        // three, so 0x48000D and 0x4B000D are one opcode, not two. The capture-side values are left
+        // unconverted on purpose: they are what a re-read of the .pkt actually shows.
         //
         //   0x48000D  BattlefieldStatusHeader - 46 bytes: 9-byte packed guid + Id + Type + int64 Time + a bit
         //             flush for the RideTicket, then QueueID count 1, RangeMin 0, RangeMax 90, TeamSize 0,
@@ -391,7 +397,7 @@ namespace WorldPackets
             uint8 Roles = 0;
         };
 
-        // CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ (0x3B00BE), body = exactly 1 byte.
+        // CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ (0x3E00C0), body = exactly 1 byte.
         //
         // The client serializer at VA 0x7FF729153060 writes a single uint8 from obj+0x20 and returns;
         // C_PvP.JoinRatedBGBlitz (RVA 0x1278130) fills that byte with (selectedPvpRoles & ChrClasses.RolesMask).
@@ -414,7 +420,7 @@ namespace WorldPackets
             uint8 Roles = 0;
         };
 
-        // CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3B00BF), body = 3 bytes.
+        // CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3E00C1), body = 3 bytes.
         //
         // Serializer VA 0x7FF729153120 writes obj+0x20 then obj+0x21, then one bit from obj+0x22 and flushes.
         // Producers are C_PvP.JoinSkirmish(id) (RVA 0x2024F30) and C_PvP.RequeueSkirmish() (RVA 0x2025000).
@@ -442,7 +448,7 @@ namespace WorldPackets
             bool Requeue = false;
         };
 
-        // CMSG_JOIN_RATED_BATTLEGROUND (0x3A0025), body = exactly 1 byte: uint8 Roles.
+        // CMSG_JOIN_RATED_BATTLEGROUND (0x3D0025), body = exactly 1 byte: uint8 Roles.
         //
         // Same shape as the Blitz join despite the different opcode group. Client serializer
         // VA 0x7FF7291455E0 writes one uint8 from obj+0x20; producer is the Lua binding
@@ -459,7 +465,7 @@ namespace WorldPackets
             uint8 Roles = 0;
         };
 
-        // CMSG_BATTLEMASTER_JOIN_BRAWL (0x3B00C2), body = 2 bytes.
+        // CMSG_BATTLEMASTER_JOIN_BRAWL (0x3E00C4), body = 2 bytes.
         //
         // Client serializer VA 0x7FF7291531A0: after the opcode header it writes one uint8 from obj+0x20,
         // then a single bit from obj+0x21 and flushes. Derived by the same reading of the same three
@@ -708,7 +714,7 @@ namespace WorldPackets
             void Read() override { }
         };
 
-        // SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE (0x480015). This is the packet that tells the client which
+        // SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE (0x4B0015). This is the packet that tells the client which
         // PvP Brawl is currently running; there is no other source. Its handler, VA 0x7FF72AAC2120, is the only
         // writer of the two globals the whole brawl UI reads: dword_7FF72F082BB8 (the active brawl) and
         // dword_7FF72F082BBC (the active special-event brawl). Both are PvpBrawl.db2 row ids - the handler feeds
@@ -856,7 +862,7 @@ namespace WorldPackets
             uint32 SoloShuffleStatus = 0;
         };
 
-        // SMSG_BATTLEGROUND_POINTS (0x480028), body = exactly 3 bytes.
+        // SMSG_BATTLEGROUND_POINTS (0x4B0028), body = exactly 3 bytes.
         //
         // Client reader at VA 0x7FF7290FD3F3: one uint16 (helper 0x7FF72BE6C3C0) then one byte whose top bit
         // is taken as a bool (helper 0x7FF72BE6C370 followed by `shr al, 7`). The handler, VA 0x7FF72AABB450,
@@ -885,7 +891,7 @@ namespace WorldPackets
             bool Team = false;
         };
 
-        // SMSG_BATTLEGROUND_INIT (0x480029), body = exactly 6 bytes.
+        // SMSG_BATTLEGROUND_INIT (0x4B0029), body = exactly 6 bytes.
         //
         // The reader at VA 0x7FF7290FD47E does not parse this one: helper 0x7FF72BE6C980 just hands the
         // handler a pointer to the remaining bytes. The field split comes from the handler instead,
@@ -938,7 +944,7 @@ namespace WorldPackets
             RatedSoloRBG        = 8     // "Rated Solo RBG"
         };
 
-        // SMSG_PVP_MATCH_START (0x48002D), body = 22 bytes in the one capture we have.
+        // SMSG_PVP_MATCH_START (0x4B002D), body = 22 bytes in the one capture we have.
         //
         // Reader at VA 0x7FF7290FD73D, in wire order: uint32, uint32, uint8, one bit + flush, uint32 element
         // count, int64, then that many 720-byte elements. The capture's count is 0, which accounts for all
