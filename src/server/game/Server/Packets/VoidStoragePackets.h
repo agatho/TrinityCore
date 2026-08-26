@@ -33,13 +33,38 @@ namespace WorldPackets
         // no Lua UI registers for void storage. Nothing in the client can therefore start a void
         // storage session on its own - these packets are server driven only.
 
-        // 152 bytes in the client (JamVoidItem). The client rejects Slot >= 160 (RVA 0x1ED97A0).
+        // JamVoidItem, 152 bytes in the client. The field order below is read out of the client
+        // binary, not inherited from the deleted pre-11.2 TrinityCore definition it happens to
+        // match: the element loop is inlined into the family dispatcher (RVA 0x752320, image base
+        // 0x7FF780FD0000) and reads, per element, in this order
+        //
+        //     0x75241D  call 0x36012B0   ReadPackedGuid  -> element+0x00   Guid
+        //     0x752429  call 0x36012B0   ReadPackedGuid  -> element+0x10   Creator
+        //     0x752438  call 0x35AF190   Read<uint32>    -> element+0x20   Slot
+        //     0x75244A  call 0x6BFC30    ItemInstance    -> element+0x28   Item
+        //     0x75244F  add r14, 0x98    -> next element, stride 152
+        //
+        // The primitives are the ones named in BEFUND_wire_primitiven_69382: 0x36012B0
+        // ReadPackedGuid, 0x35AF190 Read<uint32>. 0x6BFC30 is the ItemInstance reader - it reads
+        // ItemID, then Modifications, then the ItemBonus presence bit (bit 7 of a byte, so
+        // MSB-first), which is the same order this unit measured for ItemInstance at 204 packets
+        // (K5, 147:0 decisive). Cross-checked against raw capstone disassembly of wow_dump.bin, so
+        // the sequence does not rest on Hex-Rays output. The read order IS the wire order; the
+        // offsets only say where each field lands in the 152-byte element.
+        //
+        // SMSG_VOID_STORAGE_TRANSFER_CHANGES uses the identical element: its loop at 0x7525A2
+        // .. 0x7525E1 is the same four calls with the same offsets and the same 0x98 stride, which
+        // is why both opcodes share operator<<(ByteBuffer&, VoidItem const&).
+        //
+        // No round-trip is possible: no recording of family 0x68 exists (0 packets in all twelve
+        // 12.1 captures), so the disassembly is the whole proof. The client rejects Slot >= 160
+        // (RVA 0x1ED97A0).
         struct VoidItem
         {
-            ObjectGuid Guid;
-            ObjectGuid Creator;
-            uint32 Slot = 0;
-            Item::ItemInstance Item;
+            ObjectGuid Guid;                            ///< reader 0x36012B0 at element+0x00
+            ObjectGuid Creator;                         ///< reader 0x36012B0 at element+0x10
+            uint32 Slot = 0;                            ///< reader 0x35AF190 at element+0x20
+            Item::ItemInstance Item;                    ///< reader 0x6BFC30  at element+0x28
         };
 
         // Values the client distinguishes, read from handler RVA 0x1ED9650. Everything outside
@@ -85,6 +110,12 @@ namespace WorldPackets
             std::vector<VoidItem> Items;                ///< at most 255, count is a single byte
         };
 
+        // Wire read from the dispatcher, case 6815746: one byte (0x75256E call 0x35AF050
+        // Read<uint8>) carrying bits<4> AddedCount in the high nibble and bits<4> RemovedCount in
+        // the low one - 0x75257D shr 4 sizes the JamVoidItem vector, 0x75258C and 0xF sizes the
+        // WOWGUID vector - then AddedCount x JamVoidItem, then RemovedCount x PackedGuid. The
+        // element field order is proven at VoidItem above: same four calls, same offsets, same
+        // 152-byte stride as SMSG_VOID_STORAGE_CONTENTS, so nothing here is assumed.
         class VoidStorageTransferChanges final : public ServerPacket
         {
         public:
