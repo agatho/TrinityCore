@@ -46,6 +46,8 @@ public:
     struct PendingMessage
     {
         ChatMsg Type = CHAT_MSG_WHISPER;
+        /// the language the CLIENT asked for, never the one HandleChatMessage resolved it to -
+        /// the confirmation re-enters that function at the top and resolves again
         Language Lang = LANG_UNIVERSAL;
         std::string Text;
         std::string TargetName;

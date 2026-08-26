@@ -110,6 +110,16 @@ void WorldSession::HandleBugReportOpcode(WorldPackets::Ticket::BugReport& bugRep
 // The count lives on the reported player's own session, keyed by distinct reporter, so a single
 // modified client cannot inflate it and it disappears with the character. Enforcement is opt-in
 // through Chat.SpamFilterReport.MuteThreshold; the default only logs.
+//
+// UNVERIFIED: what retail DOES with the report. Every source that exists for this opcode - the
+// writer at 0x7477A0, its trigger 0x20A7880, the SPAMCHECK hit, ChatType 7 - proves only WHEN the
+// CLIENT sends it;
+// there is no Lua binding (no hit for "ReportFiltered" anywhere in wow-ui-source or
+// wow-ui-source-12.0.5), no DB2 field and no documented reaction, and the packet is answered with
+// nothing on the wire, so no recording can show the effect either. Counting one report per
+// distinct reporter and muting at a configured threshold is this server's own policy, chosen
+// because it is the conservative reading of a report the player never triggered by hand; it is
+// off by default. A retail-faithful behaviour cannot be derived from anything available here.
 void WorldSession::HandleChatReportFiltered(WorldPackets::Ticket::ChatReportFiltered& packet)
 {
     Player* reporter = GetPlayer();
@@ -125,6 +135,9 @@ void WorldSession::HandleChatReportFiltered(WorldPackets::Ticket::ChatReportFilt
 
 // Counts one distinct reporter and, above the configured threshold, mutes for the same duration the
 // flood filter uses.
+// UNVERIFIED: threshold and mute duration alike - see HandleChatReportFiltered above. Neither the
+// count-once-per-reporter rule nor reusing ChatFlood.MuteTime has a retail source; both are this
+// server's choice.
 void WorldSession::AddChatSpamFilterReport(ObjectGuid reporterGuid)
 {
     if (!_chatSpamFilterReporters.insert(reporterGuid).second)

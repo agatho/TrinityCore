@@ -173,6 +173,16 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
         }
     }
 
+    // The language exactly as the client asked for it, kept before the resolution below overwrites
+    // it. A message that is held by the cautionary mechanism has to remember THIS value, not the
+    // resolved one: HandleChatMessage is re-entered from scratch when the player confirms, and its
+    // own entry guard above rejects LANG_UNIVERSAL for everything but emote/guild/officer. Handing
+    // back a resolved LANG_UNIVERSAL - which every GM and everyone with RBAC_PERM_TWO_SIDE_-
+    // INTERACTION_CHAT gets here - would make the confirmed whisper disappear and log its own
+    // sender as a hacking attempt. The resolution is not lost, it is simply redone on the re-run,
+    // which is also the correct answer for an aura that has expired in the meantime.
+    Language const requestedLang = lang;
+
     // send in universal language if player in .gm on mode (ignore spell effects)
     if (sender->IsGameMaster())
         lang = LANG_UNIVERSAL;
@@ -419,7 +429,7 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
             // the `sendTo` of censoredmessagerewrite:%d:%d:%s, ItemRefHandlersShared.lua:226-249).
             // So the echo goes out even though the whisper itself is held - see
             // SendCautionaryChatMessage, which sends it ahead of the cautionary packet.
-            if (cautionary && SendCautionaryChatMessage(type, lang, msg, receiver))
+            if (cautionary && SendCautionaryChatMessage(type, requestedLang, msg, receiver))
                 return ChatMessageResult::CautionaryChatPending;
             // Nothing could be held (too many pending at once) - deliver rather than lose it.
 
@@ -1081,13 +1091,17 @@ void WorldSession::SendChatAutoResponded(bool isDND, std::string_view text)
 // though it is being withheld from its recipient. Without it the player writes a whisper and sees
 // nothing at all: no line, no links, no event, and the message expires silently after
 // ChatCautionMgr::ExpirySeconds.
-bool WorldSession::SendCautionaryChatMessage(ChatMsg type, Language lang, std::string const& msg, Player const* target)
+//
+// `requestedLang` is the language as it arrived from the client, NOT the resolved one - see the
+// comment on requestedLang in HandleChatMessage. The re-run on confirmation starts at the top of
+// HandleChatMessage and does its own resolution.
+bool WorldSession::SendCautionaryChatMessage(ChatMsg type, Language requestedLang, std::string const& msg, Player const* target)
 {
     std::string targetName = target->GetName();
 
     ChatCautionMgr::PendingMessage pending;
     pending.Type = type;
-    pending.Lang = lang;
+    pending.Lang = requestedLang;
     pending.Text = msg;
     pending.TargetName = targetName;
     pending.TargetGuid = target->GetGUID();
@@ -1148,6 +1162,11 @@ void WorldSession::HandleChatSendCautionaryChatMessage(WorldPackets::Chat::Cauti
     // changed while the message was held. _chatCautionAccepted keeps the cautionary check from
     // holding the same message a second time AND keeps the flood brake from charging it twice -
     // the first pass already counted it before it was held.
+    //
+    // pending->Lang is the language the CLIENT asked for, not the one the first pass resolved it
+    // to; the ladder below does the resolution itself. Feeding a resolved language back in would
+    // hit HandleChatMessage's own entry guard - LANG_UNIVERSAL is rejected there for a whisper -
+    // and the confirmed message would be swallowed after Take() has already removed it.
     _chatCautionAccepted = true;
     HandleChatMessage(pending->Type, pending->Lang, pending->Text, pending->TargetName,
         pending->TargetGuid.IsEmpty() ? Optional<ObjectGuid>() : Optional<ObjectGuid>(pending->TargetGuid));
