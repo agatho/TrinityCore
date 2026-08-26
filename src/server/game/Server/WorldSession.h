@@ -2062,6 +2062,7 @@ class TC_GAME_API WorldSession
         std::map<uint32, int64> _pendingTimeSyncRequests; // key: counter. value: server time when packet with that counter was sent.
         uint32 _timeSyncNextCounter;
         uint32 _timeSyncTimer;
+        bool _timeSyncRestartedByClient; // CMSG_TIME_SYNC_RESPONSE_FAILED is honoured at most once per world entry.
 
         // Packets cooldown
         time_t _calendarEventCreationCooldown;

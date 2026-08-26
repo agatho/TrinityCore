@@ -99,7 +99,22 @@ ByteBuffer& operator<<(ByteBuffer& data, MovementInfo const& movementInfo)
     data << WorldPackets::Bits<1>(hasFallData);
     data << WorldPackets::Bits<1>(false); // HasSpline
     data << WorldPackets::Bits<1>(false); // HeightChangeFailed
-    data << WorldPackets::Bits<1>(false); // RemoteTimeValid
+    // RemoteTimeValid. Measured, not assumed: all 82742 Retail SMSG_MOVE_UPDATE (0x5E000E) found in
+    // 73 recordings parse against this field list byte-exact - 82742 of 82742 end on the last byte,
+    // none short, none with a remainder - and 82452 of them, 99.6%, carry this bit SET. The core wrote a hardcoded false here, which contradicts every one of
+    // those packets. The 290 that carry false are almost all the first update an observer sees for a
+    // mover (258 of 290), i.e. the case where there is no earlier time base to keep.
+    //
+    // The bit is not the same thing as the client flag SMSG_MOVE_MARK_REMOTE_TIME_INVALID clears: the
+    // client only ever RAISES that flag (0x18A00D0, "|= 1") and never lowers it from this bit. What
+    // this bit decides is whether the flag is raised again after a re-base - with a permanent false
+    // the client keeps the remote clock of every observed mover unusable in one of the two branches,
+    // and the invalidate message then has little left to invalidate.
+    //
+    // The create block in BaseEntity.cpp is deliberately NOT changed along with this: its bit was
+    // never read off the wire (that would mean parsing SMSG_UPDATE_OBJECT), and the first update to a
+    // new observer is exactly the case in which Retail does send false. See aufnahme_noetig.
+    data << WorldPackets::Bits<1>(true); // RemoteTimeValid
     data << WorldPackets::OptionalInit(movementInfo.inertia);
     data << WorldPackets::OptionalInit(movementInfo.advFlying);
     data << WorldPackets::OptionalInit(movementInfo.driveStatus);

@@ -977,21 +977,38 @@ void WorldSession::HandleMoveSetTurnRateCheat(WorldPackets::Movement::MoveSetTur
 {
     // Despite the name this is not a cheat tool: it hangs off the change callback of the client CVar
     // "TurnSpeed" (0x1DEF2D0), whose help text reads "Set the keyboard turn rate in degrees per
-    // second; capped by the server". Every ordinary client sends it once per world entry - all nine
-    // recorded packets carry float(M_PI), which is the CVar default of 180 degrees/s converted to
-    // radians. It must never be treated as an attack.
+    // second; capped by the server". Every ordinary client sends it once per world entry - all
+    // eleven recorded packets, from eleven separate recordings, carry float(M_PI), which is the CVar
+    // default of 180 degrees/s converted to radians. It must never be treated as an attack.
     if (!(moveSetTurnRateCheat.TurnRate > 0.0f) || !std::isfinite(moveSetTurnRateCheat.TurnRate))
         return;
 
     if (!HasPermission(rbac::RBAC_PERM_CHANGE_TURN_RATE))
     {
-        // "capped by the server": without the permission the request is refused and the client is put
-        // back on the rate we hold for it, rather than being left to believe its own value. This is
-        // the path every ordinary client takes on every world entry, so it must not be a no-op:
-        // Unit::SetSpeedRate would return without sending anything, because the rate we are putting
-        // the client back on is by construction the one we already hold. Unit::ResendSpeed sends
-        // SMSG_MOVE_SET_TURN_RATE regardless.
-        if (std::fabs(_player->GetSpeed(MOVE_TURN_RATE) - moveSetTurnRateCheat.TurnRate) > 0.01f)
+        // "capped by the server". The refusal is silent when the client is already asking for the
+        // rate we hold for it, and that is what Retail does: across 73 recordings the eleven
+        // CMSG_MOVE_SET_TURN_RATE_CHEAT with the CVar default float(M_PI) are answered with nothing
+        // at all - SMSG_MOVE_SET_TURN_RATE does not occur a single time in any of them, while
+        // SMSG_MOVE_UPDATE_TURN_RATE does (twice, minutes away and for another mover), so its
+        // absence is a real observation and not a mis-numbered opcode. There is nothing to correct
+        // when both sides already hold the same value.
+        //
+        // The tolerance separates "the same rate written by two different constants" from "a rate
+        // the player actually changed": TrinityCore's playerBaseMoveSpeed[MOVE_TURN_RATE] is
+        // 3.141594f, the client sends float(M_PI) = 3.14159265f, a difference of 1.4e-6 rad/s. One
+        // thousandth of a rad/s is 0.057 degrees/s - 700 times above that mismatch and far below any
+        // turn rate a player would set through the CVar.
+        //
+        // UNVERIFIED: the correcting branch itself. No recording contains a client that asks for a
+        // rate other than the default, so what Retail answers in that case is not observed; sending
+        // the rate we hold is derived from the CVar help text "capped by the server", which promises
+        // a cap rather than a silent discard. Unit::SetSpeedRate cannot be used for it - it returns
+        // without sending anything when the rate is unchanged, and the rate we put the client back
+        // on is by construction the one we already hold. Unit::ResendSpeed sends
+        // SMSG_MOVE_SET_TURN_RATE unconditionally and raises m_forced_speed_changes[MOVE_TURN_RATE],
+        // so HandleForceSpeedChangeAck reads the CMSG_MOVE_FORCE_TURN_RATE_CHANGE_ACK that follows
+        // as expected rather than as a speed hack.
+        if (std::fabs(_player->GetSpeed(MOVE_TURN_RATE) - moveSetTurnRateCheat.TurnRate) > 0.001f)
             _player->ResendSpeed(MOVE_TURN_RATE);
 
         return;
@@ -1144,17 +1161,46 @@ void WorldSession::HandleTimeSyncResponseFailed(WorldPackets::Misc::TimeSyncResp
 {
     // "The first sync request after the world change carried index N != 0." The client demands that
     // the counter restarts at 0 per world instance (guard 0x1E2B340), and rejects exactly one
-    // request per world entry. Only act on an index we really sent, so a client cannot use this to
-    // wipe the clock samples at will.
+    // request per world entry.
+    //
+    // The rejected index has to be an ordinary sync index we really handed out. The two special
+    // records SPECIAL_INIT_ACTIVE_MOVER_TIME_SYNC_COUNTER (0xFFFFFFFF) and
+    // SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER (0xFFFFFFFE) live in the same map but were never sent
+    // as a sequence index, so a rejection naming them is a lie by construction.
+    if (!_timeSyncNextCounter)
+        return;
+
+    uint32 const highestIssuedIndex = _timeSyncNextCounter - 1;
+    if (timeSyncResponseFailed.SequenceIndex > highestIssuedIndex)
+        return;
+
     if (!_pendingTimeSyncRequests.contains(timeSyncResponseFailed.SequenceIndex))
         return;
+
+    // The restart is honoured at most once per world entry, exactly as the client describes its own
+    // behaviour. Without this the handler is not self-limiting: the restart puts the counter back to
+    // 0 and the request that follows registers index 0 again, so a repeated _FAILED(0) would pass
+    // the check above every time and let a client drive an endless restart loop.
+    if (_timeSyncRestartedByClient)
+        return;
+
+    _timeSyncRestartedByClient = true;
 
     TC_LOG_DEBUG("network", "CMSG_TIME_SYNC_RESPONSE_FAILED: client rejected sequence index {} for {}, restarting the time sync counter",
         timeSyncResponseFailed.SequenceIndex, GetPlayerInfo());
 
-    // Clears the counter and everything still outstanding; the request that follows carries index 0,
-    // which is the one the client will accept.
-    ResetTimeSync();
+    // Restart the ordinary counter at 0 - the request that follows carries index 0, which is the one
+    // the client will accept. This deliberately does NOT go through ResetTimeSync(): that clears the
+    // whole map, and the two special records above are open during exactly this window (registered
+    // in Map::SendInitSelf and in WorldSession::HandleContinuePlayerLogin). Losing them makes
+    // HandleTimeSync return without a word for CMSG_MOVE_INIT_ACTIVE_MOVER_COMPLETE and
+    // CMSG_QUEUED_MESSAGES_END, and the world-entry clock probe silently disappears - the same
+    // damage the range sweeps in HandleTimeSyncResponseDropped and HandleDiscardedTimeSyncAcks are
+    // capped against.
+    _pendingTimeSyncRequests.erase(_pendingTimeSyncRequests.begin(),
+        _pendingTimeSyncRequests.upper_bound(highestIssuedIndex));
+    _timeSyncNextCounter = 0;
+
     SendTimeSync();
 }
 

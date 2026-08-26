@@ -14333,12 +14333,34 @@ void Unit::UpdateGravityModifier()
 
 void Unit::SendMoveMarkRemoteTimeInvalid() const
 {
-    // The consumer (0x1F14820) resolves the guid to a mover and clears bit 0 of its movement flag
-    // word - the RemoteTimeValid bit of MovementInfo. It is addressed at everyone who observes the
-    // mover; the client that controls it keeps its own clock and is skipped.
-    // UNVERIFIED: the exact situations in which Retail sends this. The opcode appears in none of the
-    // ten recordings, so the two call sites (Unit::SendTeleportPacket and the transport change in
-    // WorldSession::HandleMovementOpcode) are derived from the meaning of the flag, not observed.
+    // The consumer (0x1F14820) resolves the guid to a mover and clears bit 0 of the flag word at
+    // offset 0x378 of its move component. That bit is the client's own "I hold a usable time base
+    // for this remote mover" state, and clearing it is a real state change, not a repetition of what
+    // MovementInfo already says:
+    //
+    //   * The bit is set in the remote-clock reconciliation routine 0x18A00D0, called first thing by
+    //     the movement-update applier 0x18A66E0. The applier hands it the packet time (parsed
+    //     MovementInfo +0x18) and the RemoteTimeValid bit (parsed MovementInfo +0xAE, the sixth bit
+    //     of the bit section). The routine keeps the last accepted remote time pair at +0x2C8/+0x2CC
+    //     and re-bases it when the bit is CLEAR, or when the drift exceeds 10000 ms; afterwards it
+    //     raises the bit with |= 1.
+    //   * That "|= 1" is the only setter of the bit in the whole binary. The wire's RemoteTimeValid
+    //     never clears it - it merely takes part in deciding whether the bit is raised again. So no
+    //     value of that bit, in MovementPackets.cpp or in the create block in BaseEntity.cpp, can
+    //     achieve what this message achieves.
+    //   * Apart from this handler only the active-mover change (0x1F0B210) clears it. A byte-pattern
+    //     search of .text for or/and/bts against [reg+378h] with bit 0 finds exactly these three
+    //     sites, no others.
+    //
+    // The effect is therefore: every observer drops the time base it accumulated for this mover and
+    // rebuilds it from the next movement packet, instead of smoothing the new position against a
+    // clock that no longer applies. It is addressed at everyone who observes the mover; the client
+    // that controls it keeps its own clock and is skipped.
+    //
+    // UNVERIFIED: the exact situations in which Retail sends this. The opcode does not occur once in
+    // 9595737 packets across all 73 recordings, so the two call sites (Unit::SendTeleportPacket and
+    // the transport change in WorldSession::HandleMovementOpcode) are derived from the meaning of
+    // the flag, not observed.
     WorldPackets::Movement::MoveMarkRemoteTimeInvalid markRemoteTimeInvalid;
     markRemoteTimeInvalid.MoverGUID = GetGUID();
     SendMessageToSet(markRemoteTimeInvalid.Write(), GetPlayerMovingMe());

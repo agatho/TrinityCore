@@ -146,6 +146,7 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _pendingTimeSyncRequests(),
     _timeSyncNextCounter(0),
     _timeSyncTimer(0),
+    _timeSyncRestartedByClient(false),
     _calendarEventCreationCooldown(0),
     _battlePetMgr(std::make_unique<BattlePets::BattlePetMgr>(this)),
     _collectionMgr(std::make_unique<CollectionMgr>(this))
@@ -1810,6 +1811,7 @@ void WorldSession::ResetTimeSync()
 {
     _timeSyncNextCounter = 0;
     _pendingTimeSyncRequests.clear();
+    _timeSyncRestartedByClient = false;
 }
 
 void WorldSession::SendTimeSync()
