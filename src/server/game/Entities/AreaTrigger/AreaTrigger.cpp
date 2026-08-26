@@ -475,15 +475,30 @@ void AreaTrigger::ClearOverrideMoveCurve()
 // Changing the decal at runtime needs two things: the update field so a client that only learns
 // about the area trigger later builds the right decal, and SMSG_AREA_TRIGGER_UPDATE_DECAL_PROPERTIES
 // for the clients that already have it - those rebuild the decal geometry from DecalProperties.db2
-// only when told to (client handler RVA 0x1F5E420). Sending it before the area trigger is in world
-// would be pointless: the client ignores the message while its own DecalPropertiesID is still 0.
+// only when told to (client handler RVA 0x1F5E420 -> 0x1F59CA0).
+//
+// The two are ORDER DEPENDENT, and the natural order is the wrong one. The client handler reads its
+// OWN copy of DecalPropertiesID (object offset +644) and returns without doing anything while that
+// copy is zero; the message carries nothing but the guid, so it cannot supply the new id itself.
+// SetUpdateFieldValue only enqueues the object in Map::_updateObjects (BaseEntity::
+// AddToObjectUpdateIfNeeded), and that queue is not flushed until Map::SendObjectUpdates at the end
+// of the tick - long after SendMessageToSet has put this packet in the session queue. Sent in that
+// order the message is evaluated against the OLD id: a no-op when the old id was 0, and a rebuild
+// from the stale row when it was not. So the pending field update is flushed to the visible players
+// here, before the message goes out.
+//
+// Known limitation, not a guess: clearing the decal (new id 0) cannot be pushed to clients that
+// already have the area trigger. Their gate is "own id non-zero", so after the field reaches them
+// the message would be a no-op, and there is no other opcode for it - the old decal geometry stays
+// until the area trigger leaves their view. The early return below is therefore deliberate.
+//
 // UNVERIFIED: that the client field at object offset +644 is called DecalPropertiesID. The
 // behaviour is proven (the handler gates the rebuild on it), the name is convention - the string
 // "decalPropertiesID" exists at RVA 0x3D66AC0 but no code relates it to offset 644.
 // UNVERIFIED: no caller changes the decal at runtime. Both call sites above run during Create(),
 // so this core never actually emits SMSG_AREA_TRIGGER_UPDATE_DECAL_PROPERTIES today; the send path
-// is untested against a live client. A spell or script effect that re-decals a live area trigger
-// would be the first real trigger.
+// and the flush below are untested against a live client. A spell or script effect that re-decals a
+// live area trigger would be the first real trigger.
 void AreaTrigger::SetDecalPropertiesId(uint32 decalPropertiesId)
 {
     if (*m_areaTriggerData->DecalPropertiesID == decalPropertiesId)
@@ -491,12 +506,28 @@ void AreaTrigger::SetDecalPropertiesId(uint32 decalPropertiesId)
 
     SetUpdateFieldValue(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::DecalPropertiesID), decalPropertiesId);
 
-    if (IsInWorld() && decalPropertiesId)
+    if (!IsInWorld() || !decalPropertiesId)
+        return;
+
+    // flush the field before the message, see the note above
+    if (m_objectUpdated)
     {
-        WorldPackets::AreaTrigger::AreaTriggerUpdateDecalProperties packet;
-        packet.AreaTriggerGUID = GetGUID();
-        SendMessageToSet(packet.Write(), false);
+        RemoveFromObjectUpdate();                           // taken out of Map::_updateObjects, it is built right here instead
+        UpdateDataMapType updateData;
+        BuildUpdate(updateData);                            // clears the change mask and m_objectUpdated
+
+        WorldPacket updatePacket;
+        for (auto& [receiver, data] : updateData)
+        {
+            data.BuildPacket(&updatePacket);
+            receiver->SendDirectMessage(&updatePacket);
+            updatePacket.clear();
+        }
     }
+
+    WorldPackets::AreaTrigger::AreaTriggerUpdateDecalProperties packet;
+    packet.AreaTriggerGUID = GetGUID();
+    SendMessageToSet(packet.Write(), false);
 }
 
 void AreaTrigger::SetSpellVisual(SpellCastVisual const& visual)

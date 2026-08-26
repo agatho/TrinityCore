@@ -71,7 +71,10 @@ namespace WorldPackets
         // Tells the client to rebuild the decal of one area trigger from DecalProperties.db2.
         // Client handler RVA 0x1F5E420 looks the object up by guid (type mask 0x800) and only calls
         // the rebuild when its own copy of AreaTriggerData::DecalPropertiesID is non zero - the
-        // packet is a no-op otherwise, so the update field has to reach the client first.
+        // packet is a no-op otherwise, so the update field has to reach the client first. That
+        // ordering is not automatic and is enforced at the only send site, AreaTrigger::
+        // SetDecalPropertiesId, which flushes the pending field update before this message; the
+        // same gate also means a decal cannot be cleared this way. See the note there.
         // No Lua event is involved; the effect is purely visual.
         class AreaTriggerUpdateDecalProperties final : public ServerPacket
         {
