@@ -35,10 +35,13 @@
 #include "MovementPackets.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "RBAC.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Transport.h"
 #include "Vehicle.h"
+#include <algorithm>
+#include <cmath>
 #include <boost/accumulators/framework/accumulator_set.hpp>
 #include <boost/accumulators/framework/features.hpp>
 #include <boost/accumulators/statistics/mean.hpp>
@@ -139,6 +142,11 @@ bool WorldSession::ValidateMovementInfo(Unit const* mover, MovementInfo* mi) con
     // Client first checks if spline elevation != 0, then verifies flag presence
     if (G3D::fuzzyNe(mi->stepUpStartElevation, 0.0f))
         mi->AddMovementFlag(MOVEMENTFLAG_SPLINE_ELEVATION);
+
+    //! The gravity modifier is server-owned - it is only ever changed by SPELL_AURA_MOD_GRAVITY via
+    //! Unit::UpdateGravityModifier. Until this handler existed the client value was taken over
+    //! unchecked, which let anyone pick their own gravity. Overwrite it with what we sent.
+    mi->gravityModifier = mover->m_movementInfo.gravityModifier;
 
     #undef REMOVE_VIOLATING_FLAGS
 
@@ -496,6 +504,8 @@ void WorldSession::HandleMovementOpcode(OpcodeClient opcode, MovementInfo& movem
     if (plrMover && (plrMover->GetEmoteState() != 0))
         plrMover->SetEmoteState(EMOTE_ONESHOT_NONE);
 
+    ObjectGuid const previousTransportGUID = mover->m_movementInfo.transport.guid;
+
     /* handle special cases */
     if (!movementInfo.transport.guid.IsEmpty())
     {
@@ -546,6 +556,11 @@ void WorldSession::HandleMovementOpcode(OpcodeClient opcode, MovementInfo& movem
     movementInfo.guid = mover->GetGUID();
     movementInfo.time = AdjustClientMovementTime(movementInfo.time);
     mover->m_movementInfo = movementInfo;
+
+    // Boarding, leaving or switching a transport moves the mover onto a different time base, so the
+    // remote time observers hold for it is stale from here on.
+    if (previousTransportGUID != movementInfo.transport.guid)
+        mover->SendMoveMarkRemoteTimeInvalid();
 
     // Some vehicles allow the passenger to turn by himself
     if (Vehicle* vehicle = mover->GetVehicle())
@@ -853,6 +868,125 @@ void WorldSession::HandleMoveSetModMovementForceMagnitudeAck(WorldPackets::Movem
     mover->SendMessageToSet(updateModMovementForceMagnitude.Write(), false);
 }
 
+void WorldSession::HandleMoveGravityModifierChangeAck(WorldPackets::Movement::MovementSpeedAck& gravityModifierAck)
+{
+    Unit* mover = ValidateAndGetUnitBeingMoved(gravityModifierAck.Ack.Status.guid, gravityModifierAck.GetOpcode(), true);
+    if (!mover)
+        return;
+
+    if (!ValidateMovementInfo(mover, &gravityModifierAck.Ack.Status))
+        return;
+
+    // The client copies value and sequence index out of the SMSG_MOVE_SET_GRAVITY_MODIFIER it last
+    // received and sends them back unchanged (consumer 0x1F111F0, sender 0x18AA570), so a mismatch
+    // means the value was tampered with rather than merely stale. Same skip-all-but-the-last
+    // bookkeeping as the movement force magnitude ack, for the same reason: several changes in
+    // flight produce several acks and only the final one describes the current state.
+    if (_player->m_gravityModifierChanges > 0)
+    {
+        --_player->m_gravityModifierChanges;
+        if (!_player->m_gravityModifierChanges)
+        {
+            float expectedGravityModifier = mover->m_movementInfo.gravityModifier;
+            if (std::fabs(expectedGravityModifier - gravityModifierAck.Speed) > 0.01f)
+            {
+                TC_LOG_DEBUG("misc", "Player {} from account id {} kicked for incorrect gravity modifier (must be {} instead {})",
+                    _player->GetName(), _player->GetSession()->GetAccountId(), expectedGravityModifier, gravityModifierAck.Speed);
+                _player->GetSession()->KickPlayer("WorldSession::HandleMoveGravityModifierChangeAck Incorrect gravity modifier");
+                return;
+            }
+        }
+    }
+
+    gravityModifierAck.Ack.Status.time = AdjustClientMovementTime(gravityModifierAck.Ack.Status.time);
+
+    WorldPackets::Movement::MoveUpdateGravityModifier updateGravityModifier;
+    updateGravityModifier.Status = &gravityModifierAck.Ack.Status;
+    updateGravityModifier.GravityModifier = mover->m_movementInfo.gravityModifier;
+    mover->SendMessageToSet(updateGravityModifier.Write(), false);
+}
+
+void WorldSession::HandleMoveInitialObjectUpdateCompleteAck(WorldPackets::Movement::MovementAckMessage& initialObjectUpdateCompleteAck)
+{
+    Unit* mover = ValidateAndGetUnitBeingMoved(initialObjectUpdateCompleteAck.Ack.Status.guid, initialObjectUpdateCompleteAck.GetOpcode(), true);
+    if (!mover)
+        return;
+
+    if (!ValidateMovementInfo(mover, &initialObjectUpdateCompleteAck.Ack.Status))
+        return;
+
+    // The client mirrors the sequence index byte for byte - 18 of 18 recorded pairs - so a value we
+    // did not send belongs to an earlier world entry or is made up. Either way it says nothing about
+    // the current one.
+    if (uint32(initialObjectUpdateCompleteAck.Ack.AckIndex) != _player->m_initialObjectUpdateCompleteIndex)
+    {
+        TC_LOG_DEBUG("network", "CMSG_MOVE_INITIAL_OBJECT_UPDATE_COMPLETE_ACK: {} acked index {} but {} was sent, ignoring",
+            GetPlayerInfo(), initialObjectUpdateCompleteAck.Ack.AckIndex, _player->m_initialObjectUpdateCompleteIndex);
+        return;
+    }
+
+    initialObjectUpdateCompleteAck.Ack.Status.time = AdjustClientMovementTime(initialObjectUpdateCompleteAck.Ack.Status.time);
+    mover->m_movementInfo = initialObjectUpdateCompleteAck.Ack.Status;
+
+    // This is the moment the client has worked through the whole initial SMSG_UPDATE_OBJECT wave and
+    // its movement prediction is initialised.
+    // UNVERIFIED: what the Retail server does with this ack. Only the client side is observable - it
+    // queues a state change of type 0x6B and mirrors the sequence index. The refresh below follows
+    // the CMSG_MOVE_INIT_ACTIVE_MOVER_COMPLETE twin, which marks the same milestone.
+    _player->UpdateObjectVisibility(false);
+}
+
+void WorldSession::HandleMoveRemoveMovementForces(WorldPackets::Movement::ClientPlayerMovement& removeMovementForces)
+{
+    // The whole payload of this message is the guid list inside the MovementInfo - the writer
+    // (0x6997C0) is byte for byte the one of CMSG_MOVE_STOP apart from the opcode. Blizzard calls the
+    // field removeAreaTriggerGUIDs, and the client fills it from its own movement/collision layer
+    // (sender 0x18A1870) when it drops forces locally. It is not an ack on a server command, so the
+    // position part is handled like that of any other movement message.
+    std::vector<ObjectGuid> removeForcesIDs = std::move(removeMovementForces.Status.removeForcesIDs);
+    removeMovementForces.Status.removeForcesIDs.clear();
+
+    Unit* mover = ValidateAndGetUnitBeingMoved(removeMovementForces.Status.guid, removeMovementForces.GetOpcode(), false);
+    if (!mover)
+        return;
+
+    HandleMovementOpcode(removeMovementForces.GetOpcode(), removeMovementForces.Status);
+
+    for (ObjectGuid const& removeForcesID : removeForcesIDs)
+    {
+        // Server side, an AreaTrigger force is dropped by AreaTriggerAI::OnUnitExit. If we still hold
+        // it, the mover has not left the trigger as far as we are concerned, and honouring the
+        // request would let a client shrug off a boss mechanic. Repair the client instead of
+        // trusting it. The usual case is that the force is already gone and this merely confirms it.
+        if (mover->ResendMovementForce(removeForcesID))
+            TC_LOG_DEBUG("entities.unit", "CMSG_MOVE_REMOVE_MOVEMENT_FORCES: {} wants force {} dropped while still inside it, re-applying",
+                GetPlayerInfo(), removeForcesID.ToString());
+    }
+}
+
+void WorldSession::HandleMoveSetTurnRateCheat(WorldPackets::Movement::MoveSetTurnRateCheat& moveSetTurnRateCheat)
+{
+    // Despite the name this is not a cheat tool: it hangs off the change callback of the client CVar
+    // "TurnSpeed" (0x1DEF2D0), whose help text reads "Set the keyboard turn rate in degrees per
+    // second; capped by the server". Every ordinary client sends it once per world entry - all nine
+    // recorded packets carry float(M_PI), which is the CVar default of 180 degrees/s converted to
+    // radians. It must never be treated as an attack.
+    if (!(moveSetTurnRateCheat.TurnRate > 0.0f) || !std::isfinite(moveSetTurnRateCheat.TurnRate))
+        return;
+
+    if (!HasPermission(rbac::RBAC_PERM_CHANGE_TURN_RATE))
+    {
+        // "capped by the server": without the permission the request is refused and the client is put
+        // back on the rate we hold for it, rather than being left to believe its own value.
+        if (std::fabs(_player->GetSpeed(MOVE_TURN_RATE) - moveSetTurnRateCheat.TurnRate) > 0.01f)
+            _player->SetSpeedRate(MOVE_TURN_RATE, _player->GetSpeedRate(MOVE_TURN_RATE));
+
+        return;
+    }
+
+    _player->SetSpeed(MOVE_TURN_RATE, moveSetTurnRateCheat.TurnRate);
+}
+
 void WorldSession::HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyInertiaAck& moveApplyInertiaAck)
 {
     Unit* mover = ValidateAndGetUnitBeingMoved(moveApplyInertiaAck.Ack.Status.guid, moveApplyInertiaAck.GetOpcode(), true);
@@ -991,6 +1125,79 @@ void WorldSession::HandleTimeSync(uint32 counter, int64 clientTime, TimePoint re
 void WorldSession::HandleTimeSyncResponse(WorldPackets::Misc::TimeSyncResponse const& timeSyncResponse)
 {
     HandleTimeSync(timeSyncResponse.SequenceIndex, timeSyncResponse.ClientTime, timeSyncResponse.GetReceivedTime());
+}
+
+void WorldSession::HandleTimeSyncResponseFailed(WorldPackets::Misc::TimeSyncResponseFailed const& timeSyncResponseFailed)
+{
+    // "The first sync request after the world change carried index N != 0." The client demands that
+    // the counter restarts at 0 per world instance (guard 0x1E2B340), and rejects exactly one
+    // request per world entry. Only act on an index we really sent, so a client cannot use this to
+    // wipe the clock samples at will.
+    if (!_pendingTimeSyncRequests.contains(timeSyncResponseFailed.SequenceIndex))
+        return;
+
+    TC_LOG_DEBUG("network", "CMSG_TIME_SYNC_RESPONSE_FAILED: client rejected sequence index {} for {}, restarting the time sync counter",
+        timeSyncResponseFailed.SequenceIndex, GetPlayerInfo());
+
+    // Clears the counter and everything still outstanding; the request that follows carries index 0,
+    // which is the one the client will accept.
+    ResetTimeSync();
+    SendTimeSync();
+}
+
+void WorldSession::HandleTimeSyncResponseDropped(WorldPackets::Misc::TimeSyncResponseDropped const& timeSyncResponseDropped)
+{
+    // Both fields are sequence indices, not a sequence plus a client time - the producer (0x1896AD0)
+    // reads +0x14 of the oldest and of the most recent still open record. It reports a RANGE of
+    // requests that expired.
+    if (timeSyncResponseDropped.SequenceIndexA > timeSyncResponseDropped.SequenceIndexB)
+        return;
+
+    TC_LOG_DEBUG("network", "CMSG_TIME_SYNC_RESPONSE_DROPPED: client dropped sequence indices {}..{} for {}",
+        timeSyncResponseDropped.SequenceIndexA, timeSyncResponseDropped.SequenceIndexB, GetPlayerInfo());
+
+    // Drop them without computing a clock delta: there is no client time to pair them with, and a
+    // request the client will never answer would otherwise sit in _pendingTimeSyncRequests for the
+    // rest of the session - the map is only ever shrunk by a matching response or by ResetTimeSync.
+    // Erasing over the map range rather than counting through the numeric one keeps a bogus
+    // 0..0xFFFFFFFF range cheap.
+    _pendingTimeSyncRequests.erase(_pendingTimeSyncRequests.lower_bound(timeSyncResponseDropped.SequenceIndexA),
+        _pendingTimeSyncRequests.upper_bound(timeSyncResponseDropped.SequenceIndexB));
+}
+
+void WorldSession::HandleDiscardedTimeSyncAcks(WorldPackets::Misc::DiscardedTimeSyncAcks const& discardedTimeSyncAcks)
+{
+    // "Everything up to and including MaxSequenceIndex is settled." Always follows a DROPPED and
+    // always sits right before the client restarts its counter at 0. The client sends it twice in
+    // some of the recordings, 1-2 s apart, so this has to be idempotent - erasing a range is.
+    // The two special counters live at the very top of the value range and are deliberately out of
+    // reach of this sweep, which only ever walks up to a real sequence index.
+    _pendingTimeSyncRequests.erase(_pendingTimeSyncRequests.begin(),
+        _pendingTimeSyncRequests.upper_bound(discardedTimeSyncAcks.MaxSequenceIndex));
+}
+
+void WorldSession::SendTimeAdjustment(float timeScale)
+{
+    // The client applies the factor to its clock (0x354EDA0), logs "Time elapse scaled by %g to %g"
+    // and answers with CMSG_TIME_ADJUSTMENT_RESPONSE. It files the adjustment in the same list as an
+    // ordinary sync request (kind 1 instead of 0), so it shares the sequence namespace with them and
+    // its answer is a clock sample like any other.
+    // UNVERIFIED: which situation makes Retail send this. The opcode appears in none of the ten
+    // recordings, so there is no observed trigger and no observed range for timeScale.
+    WorldPackets::Misc::TimeAdjustment timeAdjustment;
+    timeAdjustment.SequenceIndex = _timeSyncNextCounter;
+    timeAdjustment.TimeScale = timeScale;
+    SendPacket(timeAdjustment.Write());
+
+    RegisterTimeSync(_timeSyncNextCounter);
+    ++_timeSyncNextCounter;
+}
+
+void WorldSession::HandleTimeAdjustmentResponse(WorldPackets::Misc::TimeAdjustmentResponse const& timeAdjustmentResponse)
+{
+    // Layout-identical to CMSG_TIME_SYNC_RESPONSE and drawn from the same clock, so it feeds the
+    // clock delta computation the same way. The scale factor is not echoed back.
+    HandleTimeSync(timeAdjustmentResponse.SequenceIndex, timeAdjustmentResponse.ClientTime, timeAdjustmentResponse.GetReceivedTime());
 }
 
 void WorldSession::HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd const& queuedMessagesEnd)

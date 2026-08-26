@@ -13088,6 +13088,10 @@ void Unit::SendTeleportPacket(TeleportLocation const& teleportLocation)
 
         // Broadcast the packet to everyone except self.
         SendMessageToSet(moveUpdateTeleport.Write(), playerMover);
+
+        // A teleport moves the mover onto a fresh time base; whatever remote time the observers held
+        // for it no longer applies.
+        SendMoveMarkRemoteTimeInvalid();
     }
     else
     {
@@ -14183,6 +14187,32 @@ void Unit::RemoveMovementForce(ObjectGuid id)
         _movementForces.reset();
 }
 
+bool Unit::ResendMovementForce(ObjectGuid id)
+{
+    // Re-assert a force the client believes it has dropped. Used by
+    // CMSG_MOVE_REMOVE_MOVEMENT_FORCES, where the client reports the AreaTrigger guids whose forces
+    // it removed locally; if we still hold one, the mover has not left that trigger as far as we are
+    // concerned. Returns false when the force is already gone, which is the normal case.
+    if (!_movementForces)
+        return false;
+
+    MovementForces::Container const* forces = _movementForces->GetForces();
+    auto itr = std::find_if(forces->begin(), forces->end(), [id](MovementForce const& force) { return force.ID == id; });
+    if (itr == forces->end())
+        return false;
+
+    if (Player const* movingPlayer = GetPlayerMovingMe())
+    {
+        WorldPackets::Movement::MoveApplyMovementForce applyMovementForce;
+        applyMovementForce.MoverGUID = GetGUID();
+        applyMovementForce.SequenceIndex = m_movementCounter++;
+        applyMovementForce.Force = &*itr;
+        movingPlayer->SendDirectMessage(applyMovementForce.Write());
+    }
+
+    return true;
+}
+
 bool Unit::SetIgnoreMovementForces(bool ignore)
 {
     if (ignore == HasUnitMovementFlag(MOVEMENTFLAG_IGNORE_MOVEMENT_FORCES))
@@ -14244,6 +14274,48 @@ void Unit::UpdateMovementForcesModMagnitude()
         if (_movementForces->IsEmpty())
             _movementForces.reset();
     }
+}
+
+void Unit::UpdateGravityModifier()
+{
+    // Same shape as UpdateMovementForcesModMagnitude above: the mover gets the addressed message and
+    // owes us an ack, everybody else gets the broadcast variant right away.
+    // The client copies both fields of SMSG_MOVE_SET_GRAVITY_MODIFIER straight into the queued state
+    // change (consumer 0x1F111F0: movss [rec+0x68], value / mov [rec+0xB8], sequence) and sends them
+    // back unchanged in CMSG_MOVE_FORCE_GRAVITY_MODIFIER_CHANGE_ACK, so the ack is worth checking.
+    float gravityModifier = GetTotalAuraMultiplier(SPELL_AURA_MOD_GRAVITY);
+
+    m_movementInfo.gravityModifier = gravityModifier;
+
+    if (Player* movingPlayer = GetPlayerMovingMe())
+    {
+        WorldPackets::Movement::MoveSetGravityModifier setGravityModifier;
+        setGravityModifier.MoverGUID = GetGUID();
+        setGravityModifier.SequenceIndex = m_movementCounter++;
+        setGravityModifier.GravityModifier = gravityModifier;
+        movingPlayer->SendDirectMessage(setGravityModifier.Write());
+        ++movingPlayer->m_gravityModifierChanges;
+    }
+    else
+    {
+        WorldPackets::Movement::MoveUpdateGravityModifier updateGravityModifier;
+        updateGravityModifier.Status = &m_movementInfo;
+        updateGravityModifier.GravityModifier = gravityModifier;
+        SendMessageToSet(updateGravityModifier.Write(), true);
+    }
+}
+
+void Unit::SendMoveMarkRemoteTimeInvalid() const
+{
+    // The consumer (0x1F14820) resolves the guid to a mover and clears bit 0 of its movement flag
+    // word - the RemoteTimeValid bit of MovementInfo. It is addressed at everyone who observes the
+    // mover; the client that controls it keeps its own clock and is skipped.
+    // UNVERIFIED: the exact situations in which Retail sends this. The opcode appears in none of the
+    // ten recordings, so the two call sites (Unit::SendTeleportPacket and the transport change in
+    // WorldSession::HandleMovementOpcode) are derived from the meaning of the flag, not observed.
+    WorldPackets::Movement::MoveMarkRemoteTimeInvalid markRemoteTimeInvalid;
+    markRemoteTimeInvalid.MoverGUID = GetGUID();
+    SendMessageToSet(markRemoteTimeInvalid.Write(), GetPlayerMovingMe());
 }
 
 void Unit::ApplyInertia(int32 id, Milliseconds duration)

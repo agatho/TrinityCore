@@ -82,18 +82,17 @@ ByteBuffer& operator<<(ByteBuffer& data, MovementInfo const& movementInfo)
     data << float(movementInfo.pitch);
     data << float(movementInfo.stepUpStartElevation);
 
-    uint32 removeMovementForcesCount = 0;
-    data << removeMovementForcesCount;
+    data << uint32(movementInfo.removeForcesIDs.size());
 
     uint32 moveIndex = 0;
     data << moveIndex;
 
     data << float(movementInfo.gravityModifier);
 
-    /*for (uint32 i = 0; i < removeMovementForcesCount; ++i)
-    {
-        data << ObjectGuid;
-    }*/
+    // deferred payload of the count written above - the client reads it here, before the bit section
+    // (reader 0x6E9470, writer loop 0x6E9A6D with stride 0x10, client 12.1.0.69382)
+    for (ObjectGuid const& removeForcesID : movementInfo.removeForcesIDs)
+        data << removeForcesID;
 
     data << WorldPackets::OptionalInit(movementInfo.standingOnGameObjectGUID);
     data << WorldPackets::Bits<1>(hasTransportData);
@@ -170,8 +169,12 @@ ByteBuffer& operator>>(ByteBuffer& data, MovementInfo& movementInfo)
 
     data >> movementInfo.gravityModifier;
 
-    for (uint32 i = 0; i < removeMovementForcesCount; ++i)
-        data >> WorldPackets::Ignored<ObjectGuid>;
+    // These are the AreaTrigger guids of the forces the client is dropping. They used to be read
+    // into Ignored<ObjectGuid>, which made CMSG_MOVE_REMOVE_MOVEMENT_FORCES - whose entire payload
+    // is this list - unreadable. Client field JamCliMovementStatus.removeAreaTriggerGUIDs@176.
+    movementInfo.removeForcesIDs.resize(removeMovementForcesCount);
+    for (ObjectGuid& removeForcesID : movementInfo.removeForcesIDs)
+        data >> removeForcesID;
 
     data >> WorldPackets::OptionalInit(movementInfo.standingOnGameObjectGUID);
     bool hasTransport = data.ReadBit();
@@ -1038,6 +1041,43 @@ void MoveTimeSkipped::Read()
 {
     _worldPacket >> MoverGUID;
     _worldPacket >> TimeSkipped;
+}
+
+WorldPacket const* MoveInitialObjectUpdateComplete::Write()
+{
+    _worldPacket << MoverGUID;
+    _worldPacket << uint32(SequenceIndex);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* MoveSetGravityModifier::Write()
+{
+    _worldPacket << MoverGUID;
+    _worldPacket << uint32(SequenceIndex);
+    _worldPacket << float(GravityModifier);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* MoveUpdateGravityModifier::Write()
+{
+    _worldPacket << *Status;
+    _worldPacket << float(GravityModifier);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* MoveMarkRemoteTimeInvalid::Write()
+{
+    _worldPacket << MoverGUID;
+
+    return &_worldPacket;
+}
+
+void MoveSetTurnRateCheat::Read()
+{
+    _worldPacket >> TurnRate;
 }
 
 WorldPacket const* MoveSkipTime::Write()

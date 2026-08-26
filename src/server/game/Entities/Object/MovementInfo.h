@@ -205,6 +205,12 @@ struct MovementInfo
 
     float gravityModifier = 1.0f;
 
+    // AreaTrigger guids of the movement forces the client wants dropped, carried by
+    // CMSG_MOVE_REMOVE_MOVEMENT_FORCES. Blizzard calls this field removeAreaTriggerGUIDs
+    // (JamCliMovementStatus@176, client 12.1.0.69382); it is transient and only ever populated
+    // for that one opcode - every other movement message leaves it empty.
+    std::vector<ObjectGuid> removeForcesIDs;
+
     Optional<ObjectGuid> standingOnGameObjectGUID;
 
     MovementFlags GetMovementFlags() const { return flags; }

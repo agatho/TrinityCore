@@ -1187,8 +1187,11 @@ class TC_GAME_API Unit : public WorldObject
         MovementForces const* GetMovementForces() const { return _movementForces.get(); }
         void ApplyMovementForce(ObjectGuid id, Position origin, float magnitude, MovementForceType type, Position direction = {}, ObjectGuid transportGuid = ObjectGuid::Empty);
         void RemoveMovementForce(ObjectGuid id);
+        bool ResendMovementForce(ObjectGuid id);
         bool SetIgnoreMovementForces(bool ignore);
         void UpdateMovementForcesModMagnitude();
+        void UpdateGravityModifier();
+        void SendMoveMarkRemoteTimeInvalid() const;
 
         void ApplyInertia(int32 id, Milliseconds duration);
         void RemoveInertia(int32 id);

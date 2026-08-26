@@ -508,6 +508,10 @@ namespace WorldPackets
         class SetSelection;
         class ViolenceLevel;
         class TimeSyncResponse;
+        class TimeSyncResponseFailed;
+        class TimeSyncResponseDropped;
+        class DiscardedTimeSyncAcks;
+        class TimeAdjustmentResponse;
         class TutorialSetFlag;
         class SetDungeonDifficulty;
         class SetRaidDifficulty;
@@ -561,6 +565,7 @@ namespace WorldPackets
         class MoveApplyInertiaAck;
         class MoveRemoveInertiaAck;
         class MoveInitActiveMoverComplete;
+        class MoveSetTurnRateCheat;
     }
 
     namespace NPC
@@ -1218,6 +1223,7 @@ class TC_GAME_API WorldSession
         // Time Synchronisation
         void ResetTimeSync();
         void SendTimeSync();
+        void SendTimeAdjustment(float timeScale);
         void RegisterTimeSync(uint32 counter);
         uint32 AdjustClientMovementTime(uint32 time) const;
 
@@ -1397,6 +1403,10 @@ class TC_GAME_API WorldSession
         void HandleMoveTimeSkippedOpcode(WorldPackets::Movement::MoveTimeSkipped& moveTimeSkipped);
         void HandleMovementAckMessage(WorldPackets::Movement::MovementAckMessage& movementAck);
         void HandleMoveInitActiveMoverComplete(WorldPackets::Movement::MoveInitActiveMoverComplete const& moveInitActiveMoverComplete);
+        void HandleMoveInitialObjectUpdateCompleteAck(WorldPackets::Movement::MovementAckMessage& initialObjectUpdateCompleteAck);
+        void HandleMoveGravityModifierChangeAck(WorldPackets::Movement::MovementSpeedAck& gravityModifierAck);
+        void HandleMoveRemoveMovementForces(WorldPackets::Movement::ClientPlayerMovement& removeMovementForces);
+        void HandleMoveSetTurnRateCheat(WorldPackets::Movement::MoveSetTurnRateCheat& moveSetTurnRateCheat);
 
         void HandleRequestRaidInfoOpcode(WorldPackets::Party::RequestRaidInfo& packet);
 
@@ -1710,6 +1720,10 @@ class TC_GAME_API WorldSession
         void HandleSetTitleOpcode(WorldPackets::Character::SetTitle& packet);
         void HandleTimeSync(uint32 counter, int64 clientTime, TimePoint responseReceiveTime);
         void HandleTimeSyncResponse(WorldPackets::Misc::TimeSyncResponse const& timeSyncResponse);
+        void HandleTimeSyncResponseFailed(WorldPackets::Misc::TimeSyncResponseFailed const& timeSyncResponseFailed);
+        void HandleTimeSyncResponseDropped(WorldPackets::Misc::TimeSyncResponseDropped const& timeSyncResponseDropped);
+        void HandleDiscardedTimeSyncAcks(WorldPackets::Misc::DiscardedTimeSyncAcks const& discardedTimeSyncAcks);
+        void HandleTimeAdjustmentResponse(WorldPackets::Misc::TimeAdjustmentResponse const& timeAdjustmentResponse);
         void HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd const& queuedMessagesEnd);
         void HandleWhoIsOpcode(WorldPackets::Who::WhoIsRequest& packet);
         void HandleResetInstancesOpcode(WorldPackets::Instance::ResetInstances& packet);

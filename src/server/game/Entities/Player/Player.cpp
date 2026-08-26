@@ -275,6 +275,8 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
     m_forced_speed_changes = { };
 
     m_movementForceModMagnitudeChanges = 0;
+    m_gravityModifierChanges = 0;
+    m_initialObjectUpdateCompleteIndex = 0;
 
     /////////////////// Instance System /////////////////////
 
@@ -25034,6 +25036,22 @@ void Player::SendInitialPacketsBeforeAddToMap()
     SendDirectMessage(initialSetup.Write());
 
     SetMovedUnit(this);
+
+    // Announce that the initial object update is coming. Retail sends this before the first large
+    // SMSG_UPDATE_OBJECT of the new world - between SMSG_WORLD_SERVER_INFO and SMSG_LEGACY_LOOT_RULES
+    // in 18 of 18 recorded world entries - not after it, so the end of this function is the right
+    // place and Map::SendInitSelf is not. The name is misleading: the message does not report a
+    // finished send, it announces the state the client is asked to confirm afterwards.
+    // The client answers with CMSG_MOVE_INITIAL_OBJECT_UPDATE_COMPLETE_ACK once the whole update wave
+    // has been processed - measured 13..1259 ms later, median 154 ms.
+    // Seamless teleports never reach this function (MovementHandler.cpp only calls it when
+    // !seamlessTeleport), which is exactly the required behaviour.
+    m_initialObjectUpdateCompleteIndex = m_movementCounter++;
+
+    WorldPackets::Movement::MoveInitialObjectUpdateComplete initialObjectUpdateComplete;
+    initialObjectUpdateComplete.MoverGUID = GetGUID();
+    initialObjectUpdateComplete.SequenceIndex = m_initialObjectUpdateCompleteIndex;
+    SendDirectMessage(initialObjectUpdateComplete.Write());
 }
 
 void Player::SendInitialPacketsAfterAddToMap()
@@ -25097,6 +25115,16 @@ void Player::SendInitialPacketsAfterAddToMap()
 
     if (HasAuraType(SPELL_AURA_DISABLE_INERTIA))
         setCompoundState.StateChanges.emplace_back(SMSG_MOVE_DISABLE_INERTIA, m_movementCounter++);
+
+    // Gravity was missing from this chain, so a relog silently dropped the modifier while the aura
+    // itself was restored from character_aura. SMSG_MOVE_SET_GRAVITY_MODIFIER has the same
+    // {guid, sequence, float} shape as the speed messages, so it uses the generic Speed slot of
+    // MoveStateChange.
+    if (HasAuraType(SPELL_AURA_MOD_GRAVITY))
+    {
+        WorldPackets::Movement::MoveStateChange& gravity = setCompoundState.StateChanges.emplace_back(SMSG_MOVE_SET_GRAVITY_MODIFIER, m_movementCounter++);
+        gravity.Speed = GetTotalAuraMultiplier(SPELL_AURA_MOD_GRAVITY);
+    }
 
     if (!setCompoundState.StateChanges.empty())
     {

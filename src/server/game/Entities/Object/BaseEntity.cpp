@@ -287,13 +287,13 @@ void BaseEntity::BuildMovementUpdate(ByteBuffer& data, CreateObjectBits flags, P
         data << float(unit->m_movementInfo.pitch);                     // Pitch
         data << float(unit->m_movementInfo.stepUpStartElevation);      // StepUpStartElevation
 
-        data << uint32(0);                                             // RemoveForcesIDs.size()
+        data << uint32(unit->m_movementInfo.removeForcesIDs.size());   // RemoveForcesIDs.size()
         data << uint32(0);                                             // MoveIndex
 
         data << float(unit->m_movementInfo.gravityModifier);
 
-        //for (std::size_t i = 0; i < RemoveForcesIDs.size(); ++i)
-        //    data << ObjectGuid(RemoveForcesIDs);
+        for (ObjectGuid const& removeForcesID : unit->m_movementInfo.removeForcesIDs)
+            data << removeForcesID;
 
         data.WriteBit(HasStandingOnGameObjectGUID);                    // HasStandingOnGameObjectGUID
         data.WriteBit(!unit->m_movementInfo.transport.guid.IsEmpty()); // HasTransport
