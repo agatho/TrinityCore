@@ -1384,8 +1384,6 @@ class TC_GAME_API WorldSession
         void BuildHotfixRecords(std::span<int32 const> hotfixIds, std::vector<WorldPackets::Hotfix::HotfixData>& records, ByteBuffer& content) const;
         void SendHotfixMessage(std::span<int32 const> hotfixIds);
 
-        // walk-in (delve / follower dungeon) instance session
-
         void HandleMoveWorldportAckOpcode(WorldPackets::Movement::WorldPortResponse& packet);
         void HandleMoveWorldportAck();                // for server-side calls
         void HandleSuspendTokenResponse(WorldPackets::Movement::SuspendTokenResponse& suspendTokenResponse);
