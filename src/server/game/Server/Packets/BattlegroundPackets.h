@@ -336,7 +336,14 @@ namespace WorldPackets
         // collapsed proposal drops its battleground and the next attempt calls CreateNewBattleground again.
         //
         // Their CONNECTION_TYPE_REALM declaration is confirmed rather than merely a safe default: retail sends
-        // both on connection index 0 in the capture, unlike SMSG_BATTLEFIELD_STATUS_QUEUED on index 1.
+        // both on connection index 0 in the capture. An earlier revision of this comment added "unlike
+        // SMSG_BATTLEFIELD_STATUS_QUEUED on index 1" - that was wrong, and it was the only reason this branch
+        // ever had to suspect the QUEUED line in Opcodes.cpp. Recounted over all 75 .pkt files under C:/sniff,
+        // the entire status block is on index 0 without exception: QUEUED 102/102, WAIT_FOR_GROUPS 36/36,
+        // GROUP_PROPOSAL_FAILED 4/4, NEED_CONFIRMATION 6/6, ACTIVE 4/4, NONE 2/2 - and in the same files the
+        // second socket does exist and does carry traffic (SMSG_BATTLEGROUND_POINTS 644/644 and
+        // SMSG_REQUEST_PVP_REWARDS_RESPONSE 8/8 on index 1), so index 0 here is a real choice by retail and
+        // not an artefact of a single-socket capture. CONNECTION_TYPE_REALM stands for all of them.
 
         // The per-role counters below are indexed in wire order, which is identical to ChrSpecializationRole
         // (Tank 0, Healer 1, Dps 2) - and that enum is what the queue code actually indexes with

@@ -7071,15 +7071,18 @@ void Player::SendCurrencies() const
 // empty body, matching RequestPVPRewards, and every response in the captures is a direct 1:1 reply to it
 // 100-250 ms later. WorldSession::HandleRequestPvpReward -> here is exactly where retail answers.
 //
-// Only what this core will actually pay is published, and it is read from the same configuration the award
-// path reads, so the advertised figure cannot drift from the received one:
+// Only what this core will actually pay is published, and every input of the advertised figure is taken from
+// the same place the award path takes it, so the advertised figure cannot drift from the received one:
 //   - Honour is the winner's bonus from Battleground::EndBattleground. That path treats the config value as
 //     a KILL COUNT and runs it through GetBonusHonorFromKill, so the same conversion is done here rather
 //     than printing the raw config number, and the first-win-of-the-day distinction is the player's own
-//     GetRandomWinner() flag exactly as it is there. Outside a battleground there is no bracket to take a
-//     max level from, so the player's own level (capped at 80, as GetBonusHonorFromKill caps it) stands in.
+//     GetRandomWinner() flag exactly as it is there. The level that conversion is keyed on is the BRACKET's
+//     max level, capped at 80, not the player's own - the player's own level is what an earlier revision
+//     used, and it was a real drift of up to 13 percent for anyone standing below their bracket's ceiling.
+//     The bracket is resolved outside a battleground exactly as the queue resolves it, on the block's own
+//     BattlemasterList map; see the loop below.
 //     WHICH blocks may carry it is decided by the same predicate as the payout, not by a hand-written list
-//     of modes - see the loop below.
+//     of modes - also in that loop.
 //   - Conquest is deliberately NOT advertised. CONFIG_BG_REWARD_WINNER_CONQUEST_FIRST/LAST are declared in
 //     World.cpp and read by nothing at all, so this core awards no Conquest; publishing a figure would
 //     promise a payout that never arrives.
@@ -7106,7 +7109,6 @@ void Player::SendPvpRewards() const
     uint32 const winnerKills = GetRandomWinner()
         ? sWorld->getIntConfig(CONFIG_BG_REWARD_WINNER_HONOR_LAST)
         : sWorld->getIntConfig(CONFIG_BG_REWARD_WINNER_HONOR_FIRST);
-    uint32 const winnerHonor = Trinity::Honor::hk_honor_at_level(std::min<uint8>(GetLevel(), 80), float(winnerKills));
 
     // An earlier revision filled blocks 0, 1, 5 and 11 with the sentence "every battleground pays this same
     // bonus". That sentence is wrong, and it made this reply promise honour the match end never delivers.
@@ -7141,9 +7143,29 @@ void Player::SendPvpRewards() const
     };
 
     for (auto const& [slot, battlemasterListId] : battlegroundBlocks)
-        if (BattlegroundMgr::IsRandomBattleground(battlemasterListId)
-            || BattlegroundMgr::IsBGWeekend(BattlegroundTypeId(battlemasterListId)))
-            response.Activity[slot].Honor = int32(winnerHonor);
+    {
+        if (!BattlegroundMgr::IsRandomBattleground(battlemasterListId)
+            && !BattlegroundMgr::IsBGWeekend(BattlegroundTypeId(battlemasterListId)))
+            continue;
+
+        // The level fed to hk_honor_at_level is the BRACKET's max level, not the player's own, because that is
+        // what the payout uses: Battleground::GetBonusHonorFromKill runs std::min<uint32>(GetMaxLevel(), 80U),
+        // and GetMaxLevel is _pvpDifficultyEntry->MaxLevel - the entry CreateNewBattleground resolved on
+        // queueTemplate->MapIDs.front(), i.e. on this very block's BattlemasterList. Since honour is strictly
+        // linear in that level (multiplier * level * 1.55f), quoting GetLevel() here shorted a level-70
+        // character in the 70-79 bracket by about 13 percent of what the match end then paid. Resolved per
+        // block rather than once, because each block keys on its own aggregate and those need not share a
+        // PVPDifficulty ladder - the same reason CreateNewBattleground looks it up on the queue's map.
+        BattlegroundTemplate const* queueTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BattlegroundTypeId(battlemasterListId));
+        if (!queueTemplate || queueTemplate->MapIDs.empty())
+            continue;
+
+        PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(queueTemplate->MapIDs.front(), GetLevel());
+        if (!bracketEntry)
+            continue;
+
+        response.Activity[slot].Honor = int32(Trinity::Honor::hk_honor_at_level(std::min<uint8>(bracketEntry->MaxLevel, 80), float(winnerKills)));
+    }
 
     SendDirectMessage(response.Write());
 }

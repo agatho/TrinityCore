@@ -1346,11 +1346,16 @@ void BattlegroundQueue::ResolveProposal(uint32 bgInstanceGuid, bool accepted)
         // Accepted, and is being sent back through no fault of their own. Their GroupQueueInfo is left alone,
         // so JoinTime - and with it the position CheckSoloQueueMatch orders by - is exactly what it was.
         GroupQueueInfo groupInfo;
-        uint32 const avgWaitTime = GetPlayerGroupInfoData(member.Guid, &groupInfo)
-            ? GetAverageQueueWaitTime(&groupInfo, proposal.BracketId) : 0;
+        bool const hasGroupInfo = GetPlayerGroupInfoData(member.Guid, &groupInfo);
+        uint32 const avgWaitTime = hasGroupInfo ? GetAverageQueueWaitTime(&groupInfo, proposal.BracketId) : 0;
 
+        // AsGroup is derived, not assumed: a Blitz duo (BattlemasterList 1101, MaxGroupSize 2) that both
+        // accepted while a third member let the window lapse re-enters here with its queue entry intact, and
+        // the very next CMSG_REQUEST_BATTLEFIELD_STATUS would answer true from the same Players.size() - so a
+        // hardcoded false made the bit read true, false, true on one ticket within seconds.
         WorldPackets::Battleground::BattlefieldStatusQueued packet;
-        BattlegroundMgr::BuildBattlegroundStatusQueued(&packet, player, queueSlot, joinTime, m_queueId, avgWaitTime, false);
+        BattlegroundMgr::BuildBattlegroundStatusQueued(&packet, player, queueSlot, joinTime, m_queueId, avgWaitTime,
+            hasGroupInfo && groupInfo.Players.size() > 1);
         player->SendDirectMessage(packet.Write());
     }
 
