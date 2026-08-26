@@ -148,6 +148,15 @@ bool WorldSession::ValidateMovementInfo(Unit const* mover, MovementInfo* mi) con
     //! unchecked, which let anyone pick their own gravity. Overwrite it with what we sent.
     mi->gravityModifier = mover->m_movementInfo.gravityModifier;
 
+    //! removeForcesIDs is a one-shot request, not a piece of movement state. Every caller that
+    //! assigns to Unit::m_movementInfo passes through here first, and from there the list would be
+    //! written into every SMSG_MOVE_UPDATE (MovementPackets.cpp:85) and every SMSG_UPDATE_OBJECT
+    //! (BaseEntity.cpp:290) of that mover, for the rest of the session - a client could hang a list
+    //! of AreaTrigger guids of its choosing onto any CMSG_MOVE_* and have the server tell everyone
+    //! around it to drop those forces. Only HandleMoveRemoveMovementForces reads the list, and it
+    //! takes it out of the packet before it gets here.
+    mi->removeForcesIDs.clear();
+
     #undef REMOVE_VIOLATING_FLAGS
 
     return true;
@@ -977,9 +986,13 @@ void WorldSession::HandleMoveSetTurnRateCheat(WorldPackets::Movement::MoveSetTur
     if (!HasPermission(rbac::RBAC_PERM_CHANGE_TURN_RATE))
     {
         // "capped by the server": without the permission the request is refused and the client is put
-        // back on the rate we hold for it, rather than being left to believe its own value.
+        // back on the rate we hold for it, rather than being left to believe its own value. This is
+        // the path every ordinary client takes on every world entry, so it must not be a no-op:
+        // Unit::SetSpeedRate would return without sending anything, because the rate we are putting
+        // the client back on is by construction the one we already hold. Unit::ResendSpeed sends
+        // SMSG_MOVE_SET_TURN_RATE regardless.
         if (std::fabs(_player->GetSpeed(MOVE_TURN_RATE) - moveSetTurnRateCheat.TurnRate) > 0.01f)
-            _player->SetSpeedRate(MOVE_TURN_RATE, _player->GetSpeedRate(MOVE_TURN_RATE));
+            _player->ResendSpeed(MOVE_TURN_RATE);
 
         return;
     }
@@ -1161,8 +1174,22 @@ void WorldSession::HandleTimeSyncResponseDropped(WorldPackets::Misc::TimeSyncRes
     // rest of the session - the map is only ever shrunk by a matching response or by ResetTimeSync.
     // Erasing over the map range rather than counting through the numeric one keeps a bogus
     // 0..0xFFFFFFFF range cheap.
+    //
+    // Both bounds come straight from the client, so the sweep has to be capped at the highest index
+    // we really handed out. SPECIAL_INIT_ACTIVE_MOVER_TIME_SYNC_COUNTER (0xFFFFFFFF) and
+    // SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER (0xFFFFFFFE) live in the same map at the very top of
+    // the value range; an uncapped range would take them with it, and the world-entry clock probe
+    // that HandleTimeSync performs for CMSG_MOVE_INIT_ACTIVE_MOVER_COMPLETE and for
+    // CMSG_QUEUED_MESSAGES_END would then find nothing and return without a word.
+    if (!_timeSyncNextCounter)
+        return;
+
+    uint32 const highestIssuedIndex = _timeSyncNextCounter - 1;
+    if (timeSyncResponseDropped.SequenceIndexA > highestIssuedIndex)
+        return;
+
     _pendingTimeSyncRequests.erase(_pendingTimeSyncRequests.lower_bound(timeSyncResponseDropped.SequenceIndexA),
-        _pendingTimeSyncRequests.upper_bound(timeSyncResponseDropped.SequenceIndexB));
+        _pendingTimeSyncRequests.upper_bound(std::min(timeSyncResponseDropped.SequenceIndexB, highestIssuedIndex)));
 }
 
 void WorldSession::HandleDiscardedTimeSyncAcks(WorldPackets::Misc::DiscardedTimeSyncAcks const& discardedTimeSyncAcks)
@@ -1170,10 +1197,18 @@ void WorldSession::HandleDiscardedTimeSyncAcks(WorldPackets::Misc::DiscardedTime
     // "Everything up to and including MaxSequenceIndex is settled." Always follows a DROPPED and
     // always sits right before the client restarts its counter at 0. The client sends it twice in
     // some of the recordings, 1-2 s apart, so this has to be idempotent - erasing a range is.
-    // The two special counters live at the very top of the value range and are deliberately out of
-    // reach of this sweep, which only ever walks up to a real sequence index.
+    //
+    // MaxSequenceIndex is unchecked client input, so the sweep is capped at the highest index we
+    // really handed out. Without the cap a MaxSequenceIndex of 0xFFFFFFFF empties the whole map,
+    // including SPECIAL_INIT_ACTIVE_MOVER_TIME_SYNC_COUNTER and
+    // SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER, which sit at the top of the value range - and the
+    // world-entry clock probe in HandleTimeSync would silently do nothing from then on.
+    if (!_timeSyncNextCounter)
+        return;
+
+    uint32 const highestIssuedIndex = _timeSyncNextCounter - 1;
     _pendingTimeSyncRequests.erase(_pendingTimeSyncRequests.begin(),
-        _pendingTimeSyncRequests.upper_bound(discardedTimeSyncAcks.MaxSequenceIndex));
+        _pendingTimeSyncRequests.upper_bound(std::min(discardedTimeSyncAcks.MaxSequenceIndex, highestIssuedIndex)));
 }
 
 void WorldSession::SendTimeAdjustment(float timeScale)
@@ -1183,7 +1218,10 @@ void WorldSession::SendTimeAdjustment(float timeScale)
     // ordinary sync request (kind 1 instead of 0), so it shares the sequence namespace with them and
     // its answer is a clock sample like any other.
     // UNVERIFIED: which situation makes Retail send this. The opcode appears in none of the ten
-    // recordings, so there is no observed trigger and no observed range for timeScale.
+    // recordings, so there is no observed trigger and no observed range for timeScale. Rather than
+    // invent a game rule, the only caller is the operator command ".debug send timeadjustment"
+    // (cs_debug.cpp) - enough to exercise the pair against a live client, and honest about the fact
+    // that the Retail trigger is still open.
     WorldPackets::Misc::TimeAdjustment timeAdjustment;
     timeAdjustment.SequenceIndex = _timeSyncNextCounter;
     timeAdjustment.TimeScale = timeScale;

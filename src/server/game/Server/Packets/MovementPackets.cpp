@@ -172,6 +172,16 @@ ByteBuffer& operator>>(ByteBuffer& data, MovementInfo& movementInfo)
     // These are the AreaTrigger guids of the forces the client is dropping. They used to be read
     // into Ignored<ObjectGuid>, which made CMSG_MOVE_REMOVE_MOVEMENT_FORCES - whose entire payload
     // is this list - unreadable. Client field JamCliMovementStatus.removeAreaTriggerGUIDs@176.
+    //
+    // The count precedes its payload, so it must be checked against what is left in the buffer
+    // BEFORE it reaches std::vector::resize. This is the shared reader of every movement message,
+    // and a resize of an unchecked client uint32 throws std::length_error/std::bad_alloc, which is
+    // not a ByteBufferException - it would walk straight out of WorldSession::Update. The smallest
+    // an ObjectGuid can be on the wire is the 2-byte mask with no bytes set
+    // (ObjectGuid.cpp:1113), so anything above that many remaining bytes cannot be a real list.
+    if (removeMovementForcesCount > (data.size() - data.rpos()) / sizeof(uint16))
+        throw ByteBufferPositionException(data.rpos(), data.size(), std::size_t(removeMovementForcesCount) * sizeof(uint16));
+
     movementInfo.removeForcesIDs.resize(removeMovementForcesCount);
     for (ObjectGuid& removeForcesID : movementInfo.removeForcesIDs)
         data >> removeForcesID;

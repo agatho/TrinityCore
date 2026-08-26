@@ -56,6 +56,7 @@ EndScriptData */
 #include "World.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
+#include <cmath>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -93,6 +94,7 @@ public:
             { "setphaseshift",      HandleDebugSendSetPhaseShiftCommand,   rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "spellfail",          HandleDebugSendSpellFailCommand,       rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "playerchoice",       HandleDebugSendPlayerChoiceCommand,    rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "timeadjustment",     HandleDebugSendTimeAdjustmentCommand,  rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
         };
         static ChatCommandTable debugCommandTable =
         {
@@ -1109,6 +1111,25 @@ public:
 
         map->AddToMap(v);
 
+        return true;
+    }
+
+    static bool HandleDebugSendTimeAdjustmentCommand(ChatHandler* handler, float timeScale)
+    {
+        // The only trigger SMSG_TIME_ADJUSTMENT has. Which game situation makes Retail send it is
+        // not known - the opcode appears in none of the ten recordings, so there is no observed
+        // trigger and no observed range for timeScale (see WorldSession::SendTimeAdjustment).
+        // Rather than invent a game rule, the message is put where an operator can fire it: the
+        // client answers with CMSG_TIME_ADJUSTMENT_RESPONSE and logs "Time elapse scaled by %g to
+        // %g" (consumer 0x1E2B3B0, format string 0x3D015E0), which is what makes the pair testable.
+        if (!std::isfinite(timeScale) || timeScale <= 0.0f)
+        {
+            handler->SendSysMessage("TimeScale must be a finite positive factor.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        handler->GetSession()->SendTimeAdjustment(timeScale);
         return true;
     }
 

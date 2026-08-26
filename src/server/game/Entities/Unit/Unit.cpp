@@ -8972,6 +8972,23 @@ void Unit::SetSpeed(UnitMoveType mtype, float newValue)
     SetSpeedRate(mtype, newValue / (IsControlledByPlayer() ? playerBaseMoveSpeed[mtype] : baseMoveSpeed[mtype]));
 }
 
+namespace
+{
+// Spline packets are for creatures and move_update are for players
+constexpr OpcodeServer MoveTypeToOpcode[MAX_MOVE_TYPE][3] =
+{
+    {SMSG_MOVE_SPLINE_SET_WALK_SPEED,        SMSG_MOVE_SET_WALK_SPEED,        SMSG_MOVE_UPDATE_WALK_SPEED       },
+    {SMSG_MOVE_SPLINE_SET_RUN_SPEED,         SMSG_MOVE_SET_RUN_SPEED,         SMSG_MOVE_UPDATE_RUN_SPEED        },
+    {SMSG_MOVE_SPLINE_SET_RUN_BACK_SPEED,    SMSG_MOVE_SET_RUN_BACK_SPEED,    SMSG_MOVE_UPDATE_RUN_BACK_SPEED   },
+    {SMSG_MOVE_SPLINE_SET_SWIM_SPEED,        SMSG_MOVE_SET_SWIM_SPEED,        SMSG_MOVE_UPDATE_SWIM_SPEED       },
+    {SMSG_MOVE_SPLINE_SET_SWIM_BACK_SPEED,   SMSG_MOVE_SET_SWIM_BACK_SPEED,   SMSG_MOVE_UPDATE_SWIM_BACK_SPEED  },
+    {SMSG_MOVE_SPLINE_SET_TURN_RATE,         SMSG_MOVE_SET_TURN_RATE,         SMSG_MOVE_UPDATE_TURN_RATE        },
+    {SMSG_MOVE_SPLINE_SET_FLIGHT_SPEED,      SMSG_MOVE_SET_FLIGHT_SPEED,      SMSG_MOVE_UPDATE_FLIGHT_SPEED     },
+    {SMSG_MOVE_SPLINE_SET_FLIGHT_BACK_SPEED, SMSG_MOVE_SET_FLIGHT_BACK_SPEED, SMSG_MOVE_UPDATE_FLIGHT_BACK_SPEED},
+    {SMSG_MOVE_SPLINE_SET_PITCH_RATE,        SMSG_MOVE_SET_PITCH_RATE,        SMSG_MOVE_UPDATE_PITCH_RATE       },
+};
+}
+
 void Unit::SetSpeedRate(UnitMoveType mtype, float rate)
 {
     rate = std::max(rate, 0.01f);
@@ -8983,20 +9000,6 @@ void Unit::SetSpeedRate(UnitMoveType mtype, float rate)
     m_speed_rate[mtype] = rate;
 
     PropagateSpeedChange();
-
-    // Spline packets are for creatures and move_update are for players
-    static OpcodeServer const moveTypeToOpcode[MAX_MOVE_TYPE][3] =
-    {
-        {SMSG_MOVE_SPLINE_SET_WALK_SPEED,        SMSG_MOVE_SET_WALK_SPEED,        SMSG_MOVE_UPDATE_WALK_SPEED       },
-        {SMSG_MOVE_SPLINE_SET_RUN_SPEED,         SMSG_MOVE_SET_RUN_SPEED,         SMSG_MOVE_UPDATE_RUN_SPEED        },
-        {SMSG_MOVE_SPLINE_SET_RUN_BACK_SPEED,    SMSG_MOVE_SET_RUN_BACK_SPEED,    SMSG_MOVE_UPDATE_RUN_BACK_SPEED   },
-        {SMSG_MOVE_SPLINE_SET_SWIM_SPEED,        SMSG_MOVE_SET_SWIM_SPEED,        SMSG_MOVE_UPDATE_SWIM_SPEED       },
-        {SMSG_MOVE_SPLINE_SET_SWIM_BACK_SPEED,   SMSG_MOVE_SET_SWIM_BACK_SPEED,   SMSG_MOVE_UPDATE_SWIM_BACK_SPEED  },
-        {SMSG_MOVE_SPLINE_SET_TURN_RATE,         SMSG_MOVE_SET_TURN_RATE,         SMSG_MOVE_UPDATE_TURN_RATE        },
-        {SMSG_MOVE_SPLINE_SET_FLIGHT_SPEED,      SMSG_MOVE_SET_FLIGHT_SPEED,      SMSG_MOVE_UPDATE_FLIGHT_SPEED     },
-        {SMSG_MOVE_SPLINE_SET_FLIGHT_BACK_SPEED, SMSG_MOVE_SET_FLIGHT_BACK_SPEED, SMSG_MOVE_UPDATE_FLIGHT_BACK_SPEED},
-        {SMSG_MOVE_SPLINE_SET_PITCH_RATE,        SMSG_MOVE_SET_PITCH_RATE,        SMSG_MOVE_UPDATE_PITCH_RATE       },
-    };
 
     if (GetTypeId() == TYPEID_PLAYER)
     {
@@ -9012,25 +9015,48 @@ void Unit::SetSpeedRate(UnitMoveType mtype, float rate)
     if (Player* playerMover = Unit::ToPlayer(GetUnitBeingMoved())) // unit controlled by a player.
     {
         // Send notification to self
-        WorldPackets::Movement::MoveSetSpeed selfpacket(moveTypeToOpcode[mtype][1]);
+        WorldPackets::Movement::MoveSetSpeed selfpacket(MoveTypeToOpcode[mtype][1]);
         selfpacket.MoverGUID = GetGUID();
         selfpacket.SequenceIndex = m_movementCounter++;
         selfpacket.Speed = GetSpeed(mtype);
         playerMover->GetSession()->SendPacket(selfpacket.Write());
 
         // Send notification to other players
-        WorldPackets::Movement::MoveUpdateSpeed packet(moveTypeToOpcode[mtype][2]);
+        WorldPackets::Movement::MoveUpdateSpeed packet(MoveTypeToOpcode[mtype][2]);
         packet.Status = &m_movementInfo;
         packet.Speed = GetSpeed(mtype);
         playerMover->SendMessageToSet(packet.Write(), false);
     }
     else
     {
-        WorldPackets::Movement::MoveSplineSetSpeed packet(moveTypeToOpcode[mtype][0]);
+        WorldPackets::Movement::MoveSplineSetSpeed packet(MoveTypeToOpcode[mtype][0]);
         packet.MoverGUID = GetGUID();
         packet.Speed = GetSpeed(mtype);
         SendMessageToSet(packet.Write(), true);
     }
+}
+
+void Unit::ResendSpeed(UnitMoveType mtype)
+{
+    // Restate a speed the client already disagrees with, without changing it. SetSpeedRate cannot
+    // do this: it returns early when the new rate equals the one we hold (Unit.cpp, "Update speed
+    // only on change"), which is exactly the situation here - the server value is unchanged, it is
+    // the client that has drifted off it. Used by CMSG_MOVE_SET_TURN_RATE_CHEAT when the sender
+    // lacks the permission to raise its turn rate.
+    Player* playerMover = Unit::ToPlayer(GetUnitBeingMoved());
+    if (!playerMover)
+        return;
+
+    // Registered like any other forced change so that WorldSession::HandleForceSpeedChangeAck
+    // treats the incoming ack as expected instead of as a speed hack.
+    if (Player* self = ToPlayer())
+        ++self->m_forced_speed_changes[mtype];
+
+    WorldPackets::Movement::MoveSetSpeed selfpacket(MoveTypeToOpcode[mtype][1]);
+    selfpacket.MoverGUID = GetGUID();
+    selfpacket.SequenceIndex = m_movementCounter++;
+    selfpacket.Speed = GetSpeed(mtype);
+    playerMover->GetSession()->SendPacket(selfpacket.Write());
 }
 
 void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
