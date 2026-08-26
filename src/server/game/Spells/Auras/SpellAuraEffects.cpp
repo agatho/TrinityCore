@@ -1036,6 +1036,29 @@ void AuraEffect::CalculatePeriodic(Unit* caster, bool resetPeriodicTimer /*= tru
     }
 }
 
+// Der PvP-Index (das ModIndex-Feld von SMSG_SET_FLAT_/PCT_SPELL_PVP_MODIFIER bzw. das Feld
+// PvpModIndex der Label-Aktualisierungsfelder) eines beliebigen PvP-Modifikators.
+// Die vier PvP-Typen haben keine gemeinsame Basis, die pvpOp fuehrt: die Maskenvarianten erben von
+// SpellPvpModifierByClassMask, die Labelvarianten direkt von SpellModifier. Der Typ ist deshalb
+// der einzige zuverlaessige Unterscheider - er wird im Konstruktor gesetzt und ist die Groesse,
+// nach der auch Player::AddSpellMod und Player::SendSpellModifiers verzweigen.
+// Liefert nullopt fuer jeden Nicht-PvP-Modifikator.
+static Optional<SpellPvpModifier> GetSpellModifierPvpIndex(SpellModifier const* mod)
+{
+    switch (mod->type)
+    {
+        case SPELLMOD_FLAT_PVP:
+        case SPELLMOD_PCT_PVP:
+            return static_cast<SpellPvpModifierByClassMask const*>(mod)->pvpOp;
+        case SPELLMOD_LABEL_FLAT_PVP:
+            return static_cast<SpellFlatPvpModifierByLabel const*>(mod)->pvpOp;
+        case SPELLMOD_LABEL_PCT_PVP:
+            return static_cast<SpellPctPvpModifierByLabel const*>(mod)->pvpOp;
+        default:
+            return {};
+    }
+}
+
 void AuraEffect::CalculateSpellMod()
 {
     switch (GetAuraType())
@@ -1180,6 +1203,28 @@ void AuraEffect::CalculateSpellMod()
             isValid = false;
             if (logErrors())
                 TC_LOG_ERROR("spells.aura.effect", "Aura script for spell id {} created invalid spell modifier type {}", GetId(), AsUnderlyingType(m_spellmod->type));
+        }
+
+        // Bereichspruefung fuer den PvP-Index AUCH auf dem Skriptpfad. Die Pruefung in den
+        // case-Zweigen oben sitzt VOR CallScriptEffectCalcSpellModHandlers und deckt nur den
+        // DB2-Weg ab; ein Aura-Skript kann pvpOp danach beliebig setzen oder den Modifikator
+        // selbst anlegen. Der Konsument im Client (0x1D8AC00 / 0x1D8AC90) schreibt UNGEPRUEFT
+        // nach `tabelle[ModIndex * 128 + ClassIndex]` in eine Tabelle mit genau 10 Zeilen -
+        // ein Index >= MAX_SPELL_PVP_MODIFIER ueberschreibt Client-Speicher hinter der Tabelle
+        // (Begruendung an SpellPvpModifier in SpellDefines.h). Der Server darf so einen
+        // Modifikator daher nicht entstehen lassen; der Sendeweg Player::SendSpellModifiers ->
+        // SetSpellPvpModifier::ModIndex hat keinen eigenen Filter.
+        // Bewusst OHNE logErrors(): anders als bei op/type ist die Folge hier nicht ein wirkungs-
+        // loser Modifikator, sondern Speicherkorruption beim Client. Das wird immer protokolliert,
+        // auch wenn kein DoEffectCalcSpellMod-Skript geladen ist.
+        if (Optional<SpellPvpModifier> pvpOp = GetSpellModifierPvpIndex(m_spellmod))
+        {
+            if (AsUnderlyingType(*pvpOp) >= MAX_SPELL_PVP_MODIFIER)
+            {
+                isValid = false;
+                TC_LOG_ERROR("spells.aura.effect", "Aura {} effect {} ended up with SpellPvpModifier {} out of range 0..{} - modifier dropped, sending it would corrupt client memory",
+                    GetId(), GetEffIndex(), AsUnderlyingType(*pvpOp), MAX_SPELL_PVP_MODIFIER - 1);
+            }
         }
 
         if (!isValid)

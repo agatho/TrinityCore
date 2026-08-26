@@ -4903,8 +4903,25 @@ void Spell::SendSpellGo()
 // deckungsgleich. Welches Merkmal sie trennt, gibt der Client nicht her. Da beide denselben
 // Zustand nur nachtragen und der Client Wiederholungen selbst abfaengt, ist ein Zuviel hier
 // folgenlos, ein Zuwenig dagegen eine fehlende Zauberleiste.
+// Das "Zuviel ist folgenlos" gilt AUSSCHLIESSLICH fuer die Doppelung ZWISCHEN 0x67002E und
+// 0x670031 am selben Cast, nicht fuer die Frage, OB ein Cast nachgetragen werden darf: einen
+// Cast, den der Server als unsichtbar eingestuft hat, darf auch der Nachtrag nicht zeigen. Diese
+// Entscheidung trifft der IsNeedSendToClient()-Waechter am Anfang der Funktion.
 void Spell::SendResumeCast(Player const* receiver) const
 {
+    // Dieselbe Sperre, mit der SendSpellStart (:4691) und SendSpellGo (:4799) beginnen. Ohne sie
+    // traegt der Nachtrag beim Sichtbarwerden genau die Zauber nach, die der Server absichtlich
+    // verschweigt: ein getriggerter Zauber ohne SpellXSpellVisualID/ScriptVisualID, ohne
+    // Kanalisierung und ohne Trefferverzoegerung wird ueber SetCurrentCastSpell (:3593)
+    // unabhaengig von IsNeedSendToClient() in CURRENT_GENERIC_SPELL registriert und von
+    // Player::SendInitialVisiblePackets dort wieder herausgezogen. Der einlaufende Spieler saehe
+    // dann
+    // eine Zauberleiste (UNIT_SPELLCAST_START, Konsument 0x1D8AE20) und einen Zaubervisual-
+    // Zustand (0x1F2B340) fuer einen Cast, zu dem er nie ein SMSG_SPELL_START gesehen hat und
+    // nie ein SMSG_SPELL_GO bekommen wird - beide brechen an derselben Bedingung ab.
+    if (!IsNeedSendToClient())
+        return;
+
     if (m_spellState != SPELL_STATE_PREPARING && m_spellState != SPELL_STATE_CHANNELING)
         return;
 

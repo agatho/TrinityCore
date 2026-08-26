@@ -3389,7 +3389,18 @@ void Player::RemoveSpell(uint32 spell_id, bool disabled /*= false*/, bool learn_
         // TAGGED(0x1)). Struktur und Ausloeser sind allein aus der Symmetrie zu
         // SMSG_PUSH_SPELL_TO_ACTION_BAR abgeleitet. Fuer 0x670045 gibt es UI-seitig auch kein
         // eigenes Ereignis, nur indirekt ACTIONBAR_SLOT_CHANGED.
-        SendDirectMessage(WorldPackets::Spells::RemoveSpellFromActionBar(spell_id).Write());
+        //
+        // suppressMessaging gilt hier MIT. Der Draht fuehrt kein SuppressMessaging-Feld (4 B,
+        // nur SpellID), also ist Nichtsenden die einzige Art, den Schalter zu befolgen - und die
+        // richtige: alle drei Aufrufer mit suppressMessaging=true entfernen einen ABGELEITETEN,
+        // voruebergehenden Zauber, der beim naechsten Anlegen wieder gelernt wird -
+        // Player::ApplyAzeriteEssencePower (:8603), AuraEffect::HandleLearnSpell
+        // (SpellAuraEffects.cpp:5406) und die Reittier-Ausruestung (SpellEffects.cpp:6083). Fuer
+        // die ist ein Leeren des Aktionsleistenplatzes verlorene Spielereinstellung: das
+        // Gegenstueck SMSG_PUSH_SPELL_TO_ACTION_BAR stellt keinen Platz wieder her, es weist
+        // einen neuen zu.
+        if (!suppressMessaging)
+            SendDirectMessage(WorldPackets::Spells::RemoveSpellFromActionBar(spell_id).Write());
     }
 }
 
