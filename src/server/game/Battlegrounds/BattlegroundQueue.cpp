@@ -224,7 +224,6 @@ GroupQueueInfo* BattlegroundQueue::AddGroup(Player const* leader, Group const* g
     ginfo->ArenaMatchmakerRating     = MatchmakerRating;
     ginfo->OpponentsTeamRating       = 0;
     ginfo->OpponentsMatchmakerRating = 0;
-    ginfo->Roles                     = roles;
 
     ginfo->Players.clear();
 

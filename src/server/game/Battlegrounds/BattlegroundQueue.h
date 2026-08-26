@@ -59,13 +59,15 @@ struct GroupQueueInfo                                       // stores informatio
     uint32  ArenaMatchmakerRating;                          // if rated match, inited to the rating of the team
     uint32  OpponentsTeamRating;                            // for rated arena matches
     uint32  OpponentsMatchmakerRating;                      // for rated arena matches
-    uint8   Roles;                                          // lfg::PLAYER_ROLE_* mask from the join packet.
-                                                            // For a group this is the QUEUER's mask only: the wire
-                                                            // carries no per-member roles. Matchmaking therefore
-                                                            // does NOT read this - it reads PlayerQueueInfo::Role,
-                                                            // which exists for every member. This is kept as the
-                                                            // record of what the queuer asked for, and is what
-                                                            // narrows their own PlayerQueueInfo::Role.
+                                                            // The join packet's lfg::PLAYER_ROLE_* mask is
+                                                            // deliberately NOT stored here. For a group it is the
+                                                            // QUEUER's mask only - the wire carries no per-member
+                                                            // roles - so it is consumed once, in AddGroup, to narrow
+                                                            // the queuer's own PlayerQueueInfo::Role. Everything
+                                                            // afterwards (matchmaking, the role block of
+                                                            // SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS, the Role byte
+                                                            // of SMSG_BATTLEFIELD_STATUS_NEED_CONFIRMATION) reads
+                                                            // PlayerQueueInfo::Role, which exists for every member.
 };
 
 enum BattlegroundQueueGroupTypes

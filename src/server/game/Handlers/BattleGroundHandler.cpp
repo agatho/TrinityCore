@@ -636,8 +636,9 @@ void WorldSession::HandleBattlemasterJoinSkirmish(WorldPackets::Battleground::Ba
     }
 
     BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
-    // Unrated, so no rating is carried. Roles are stored but no skirmish matchmaker consults them - the wire
-    // only ever tells us the queuer's own mask, never the other party members'.
+    // Unrated, so no rating is carried. The role mask narrows the queuer's own PlayerQueueInfo::Role in
+    // AddGroup and is not kept beyond that - no skirmish matchmaker consults it, and the wire only ever
+    // tells us the queuer's own mask, never the other party members'.
     GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, false, 0, 0, packet.Roles);
     uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
 
