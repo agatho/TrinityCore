@@ -121,21 +121,22 @@ WorldPacket const* GossipMessage::Write()
     _worldPacket << int32(FriendshipFactionID);
     _worldPacket << Size<uint32>(GossipOptions);
     _worldPacket << Size<uint32>(GossipText);
-    _worldPacket << OptionalInit(RandomTextID);
-    _worldPacket << OptionalInit(BroadcastTextID);
-    _worldPacket.FlushBits();
 
     for (ClientGossipOptions const& options : GossipOptions)
         _worldPacket << options;
+
+    for (ClientGossipText const& text : GossipText)
+        _worldPacket << text;
+
+    _worldPacket << OptionalInit(RandomTextID);
+    _worldPacket << OptionalInit(BroadcastTextID);
+    _worldPacket.FlushBits();
 
     if (RandomTextID)
         _worldPacket << int32(*RandomTextID);
 
     if (BroadcastTextID)
         _worldPacket << int32(*BroadcastTextID);
-
-    for (ClientGossipText const& text : GossipText)
-        _worldPacket << text;
 
     return &_worldPacket;
 }
@@ -158,12 +159,11 @@ ByteBuffer& operator<<(ByteBuffer& data, VendorItem const& item)
     data << int32(item.Quantity);
     data << int32(item.ExtendedCostID);
     data << int32(item.PlayerConditionFailed);
+    data << item.Item;
     data << Bits<1>(item.Locked);
     data << Bits<1>(item.DoNotFilterOnVendor);
     data << Bits<1>(item.Refundable);
     data.FlushBits();
-
-    data << item.Item;
 
     return data;
 }
