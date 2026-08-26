@@ -14962,9 +14962,10 @@ void Player::IncompleteQuest(uint32 quest_id)
         // !Explored threshold in AreaExploredOrEventHappens, this needs a real transition out of COMPLETE.
         // ItemRemovedQuestCheck calls us for every removed objective item, i.e. also when the quest had been
         // INCOMPLETE all along -- invalidating the client cache there would cost a re-query for nothing.
-        // UNVERIFIED: which server event retail hangs SMSG_QUEST_UPDATE_FAILED on -- IncompleteQuest or
-        // FailQuest. Consumer 0x1E23050 does the same thing in both cases, so the client cannot decide it;
-        // needs the recording listed under aufnahme_noetig in status/quest_65.json.
+        // UNVERIFIED: whether retail hangs SMSG_QUEST_UPDATE_FAILED on this transition. Consumer 0x1E23050
+        // does the same thing for every transition out of COMPLETE, so the client cannot decide it; needs the
+        // recording listed under aufnahme_noetig in status/quest_65.json. FailQuest carries the same send for
+        // the same reason -- see the COMPLETE -> FAILED path there.
         if (oldStatus == QUEST_STATUS_COMPLETE)
             SendQuestUpdateFailed(quest_id);
     }
@@ -15373,6 +15374,17 @@ void Player::FailQuest(uint32 questId)
         }
         else
             SendQuestFailed(questId);
+
+        // The second transition out of QUEST_STATUS_COMPLETE, next to the one in IncompleteQuest: the guard
+        // above lets a timed quest without objectives go COMPLETE -> FAILED here. Consumer 0x1E23050 drops the
+        // client QuestCache entry for this quest, and it needs that in this case for the same reason -- the
+        // cached state says "complete" and the server no longer agrees. SendQuestTimerFailed/SendQuestFailed
+        // just above are different opcodes with different consumers and do not touch that cache.
+        // UNVERIFIED: the send order relative to SendQuestTimerFailed. Placed after it because the guard makes
+        // GetLimitTime() non-zero for every quest that can reach this line, so the order is at least fixed;
+        // which of the two retail puts first needs the recording under aufnahme_noetig in status/quest_65.json.
+        if (qStatus == QUEST_STATUS_COMPLETE)
+            SendQuestUpdateFailed(questId);
 
         // Destroy quest items on quest failure.
         for (QuestObjective const& obj : quest->GetObjectives())
@@ -17308,9 +17320,11 @@ void Player::SendQuestComplete(uint32 questId) const
 // the consumer of SMSG_QUEST_UPDATE_COMPLETE (0x1E22DD0) does; sent when a quest that was complete is
 // complete no longer.
 // UNVERIFIED: the trigger, not the wire. The single uint32 payload and the cache invalidation are read out of
-// the consumer, but which server event retail sends this on -- IncompleteQuest (the only caller today) or
-// FailQuest -- is not derivable from the client, because the consumer behaves identically either way. Needs
-// the recording listed under aufnahme_noetig in status/quest_65.json.
+// the consumer, but which server event retail sends this on is not derivable from the client, because the
+// consumer behaves identically either way. Because it behaves identically, both server-side transitions out of
+// QUEST_STATUS_COMPLETE send it: IncompleteQuest and FailQuest (the COMPLETE -> FAILED path of a timed quest
+// without objectives). What is unverified is therefore not which of the two, but whether retail sends it on
+// these transitions at all -- needs the recording listed under aufnahme_noetig in status/quest_65.json.
 void Player::SendQuestUpdateFailed(uint32 questId) const
 {
     if (!questId)

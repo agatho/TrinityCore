@@ -303,6 +303,15 @@ void PlayerMenu::BuildGossipOptions(std::vector<WorldPackets::NPC::ClientGossipO
 // the gossip window the client already has open -- no GUID, no texts, no quest list. Consumer 0x249D870
 // swaps the list and fires GOSSIP_OPTIONS_REFRESHED; the frame is not rebuilt, so the interaction is left
 // untouched here on purpose.
+// Pre-existing limit of this server, not of this message: ClientGossipOptions::Status is a 2-bit field and
+// GossipOptionStatus has four values (Available, Unavailable, Locked, AlreadyComplete), but BuildGossipOptions
+// above is the only place in the whole tree that ever writes it, and it writes Available unconditionally. The
+// refresh can therefore only add or drop whole rows -- whichever gossip_menu_option row still passes its
+// conditions -- and can never report the status change of an option that stays in the list. That is exactly
+// what retail uses the opcode for first (Blizzard_TorghastLevelPicker refreshes on PARTY_LEADER_CHANGED,
+// GROUP_ROSTER_UPDATE, GROUP_FORMED, UNIT_AREA_CHANGED, UNIT_PHASE -- status changes on unchanged options).
+// Recorded under abweichungen_von_tc in status/quest_65.json; lifting it means giving GossipMenuItem a status
+// source, which is beyond this unit.
 void PlayerMenu::SendGossipRefreshOptions() const
 {
     WorldPackets::NPC::GossipOptionsRefreshed packet;
