@@ -1021,11 +1021,6 @@ BattlegroundProposal const* BattlegroundQueue::FindProposalFor(ObjectGuid guid) 
     return nullptr;
 }
 
-bool BattlegroundQueue::IsInProposal(ObjectGuid guid) const
-{
-    return FindProposalFor(guid) != nullptr;
-}
-
 void BattlegroundQueue::StartProposal(Battleground* bg, BattlegroundBracketId bracketId, uint32 playersPerTeam, PvpRoleHeadcount const& perSideQuota)
 {
     BattlegroundProposal proposal;

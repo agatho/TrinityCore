@@ -328,14 +328,9 @@ namespace WorldPackets
         // Their CONNECTION_TYPE_REALM declaration is confirmed rather than merely a safe default: retail sends
         // both on connection index 0 in the capture, unlike SMSG_BATTLEFIELD_STATUS_QUEUED on index 1.
 
-        // Wire order of the per-role counters, identical to ChrSpecializationRole (Tank 0, Healer 1, Dps 2).
-        enum class PvpQueueRole : uint8
-        {
-            Tank    = 0,
-            Healer  = 1,
-            Damager = 2
-        };
-
+        // The per-role counters below are indexed in wire order, which is identical to ChrSpecializationRole
+        // (Tank 0, Healer 1, Dps 2) - and that enum is what the queue code actually indexes with
+        // (PlayerQueueInfo::Role, RoleIndex, FoldRole), so no second enum is declared here for it.
         std::size_t constexpr PVP_QUEUE_ROLE_COUNT = 3;
 
         struct PvpRoleQueueCounts

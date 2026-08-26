@@ -481,7 +481,6 @@ class TC_GAME_API Battleground
         // unconditional. What a capless battleground does not get is the score baseline. See
         // SendMatchScoreState, and the reader census above SMSG_BATTLEGROUND_INIT in BattlegroundPackets.h.
         void SetMaxTeamScore(uint16 maxTeamScore);
-        uint16 GetMaxTeamScore() const { return _maxTeamScore; }
 
         Trinity::unique_weak_ptr<Battleground> GetWeakPtr() const { return m_weakRef; }
         void SetWeakPtr(Trinity::unique_weak_ptr<Battleground> weakRef) { m_weakRef = std::move(weakRef); }

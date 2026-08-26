@@ -7078,6 +7078,8 @@ void Player::SendCurrencies() const
 //     than printing the raw config number, and the first-win-of-the-day distinction is the player's own
 //     GetRandomWinner() flag exactly as it is there. Outside a battleground there is no bracket to take a
 //     max level from, so the player's own level (capped at 80, as GetBonusHonorFromKill caps it) stands in.
+//     WHICH blocks may carry it is decided by the same predicate as the payout, not by a hand-written list
+//     of modes - see the loop below.
 //   - Conquest is deliberately NOT advertised. CONFIG_BG_REWARD_WINNER_CONQUEST_FIRST/LAST are declared in
 //     World.cpp and read by nothing at all, so this core awards no Conquest; publishing a figure would
 //     promise a payout that never arrives.
@@ -7106,13 +7108,42 @@ void Player::SendPvpRewards() const
         : sWorld->getIntConfig(CONFIG_BG_REWARD_WINNER_HONOR_FIRST);
     uint32 const winnerHonor = Trinity::Honor::hk_honor_at_level(std::min<uint8>(GetLevel(), 80), float(winnerKills));
 
-    // Every battleground pays this same bonus - EndBattleground does not vary it by bracket - so the
-    // battleground-shaped activities this core actually queues for all advertise it, and nothing else does.
-    for (uint8 slot : { uint8(WorldPackets::LFG::RequestPvpRewardsResponse::RandomBattleground),
-                        uint8(WorldPackets::LFG::RequestPvpRewardsResponse::RatedBattleground),
-                        uint8(WorldPackets::LFG::RequestPvpRewardsResponse::BrawlBattleground),
-                        uint8(WorldPackets::LFG::RequestPvpRewardsResponse::BattlegroundBlitz) })
-        response.Activity[slot].Honor = int32(winnerHonor);
+    // An earlier revision filled blocks 0, 1, 5 and 11 with the sentence "every battleground pays this same
+    // bonus". That sentence is wrong, and it made this reply promise honour the match end never delivers.
+    // Battleground::EndBattleground pays the winner's bonus ONLY inside
+    //   if (IsRandomBattleground(bgPlayer->queueTypeId.BattlemasterListId)
+    //       || IsBGWeekend(BattlegroundTypeId(bgPlayer->queueTypeId.BattlemasterListId)))
+    // and the id it tests is the AGGREGATE id of the queue the player joined - Player::m_bgData.queueId,
+    // handed to Battleground::AddPlayer - not the single map the aggregate resolved to. IsRandomBattleground
+    // is true for exactly BATTLEGROUND_RB (32) and BATTLEGROUND_RANDOM_EPIC (901), and
+    // BGTypeToWeekendHolidayId knows only AV/EY/WS/SA/AB/IC/TP/BFG, so for 100, 879 and 1101 it yields
+    // HOLIDAY_NONE, which IsHolidayActive rejects unconditionally. Rated Battleground, the brawl and Blitz
+    // therefore pay no completion bonus in this core, while Random Epic Battleground - which was missing -
+    // does.
+    //
+    // So the predicate is asked here instead of a list of modes being written out by hand, block by block,
+    // on the BattlemasterList each block's queue is keyed on. That is the only construction in which the
+    // advertised figure cannot drift from the received one, which is what the paragraph above promises.
+    // The brawl block reads the running brawl's own BattlemasterList rather than a constant, because which
+    // brawl runs is configuration (PvpBrawl.db2 via BattlegroundMgr::GetActiveBrawl); with no brawl running
+    // there is nothing to advertise either way.
+    uint32 activeBrawlBattlemasterListId = 0;
+    if (Optional<BattlegroundMgr::ActiveBrawl> brawl = sBattlegroundMgr->GetActiveBrawl())
+        activeBrawlBattlemasterListId = brawl->BattlemasterListId;
+
+    std::pair<uint8, uint32> const battlegroundBlocks[] =
+    {
+        { WorldPackets::LFG::RequestPvpRewardsResponse::RandomBattleground,     BATTLEGROUND_RB },
+        { WorldPackets::LFG::RequestPvpRewardsResponse::RatedBattleground,      BATTLEGROUND_RATED_10_VS_10 },
+        { WorldPackets::LFG::RequestPvpRewardsResponse::BrawlBattleground,      activeBrawlBattlemasterListId },
+        { WorldPackets::LFG::RequestPvpRewardsResponse::RandomEpicBattleground, BATTLEGROUND_RANDOM_EPIC },
+        { WorldPackets::LFG::RequestPvpRewardsResponse::BattlegroundBlitz,      BATTLEGROUND_BLITZ }
+    };
+
+    for (auto const& [slot, battlemasterListId] : battlegroundBlocks)
+        if (BattlegroundMgr::IsRandomBattleground(battlemasterListId)
+            || BattlegroundMgr::IsBGWeekend(BattlegroundTypeId(battlemasterListId)))
+            response.Activity[slot].Honor = int32(winnerHonor);
 
     SendDirectMessage(response.Write());
 }

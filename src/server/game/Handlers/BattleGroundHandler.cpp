@@ -347,16 +347,45 @@ void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground
         return;
     }
 
-    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
-    if (!bracketEntry)
-        return;
-
     auto sendFailed = [&](GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid = nullptr)
     {
         WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
         BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result, errorGuid);
         SendPacket(battlefieldStatus.Write());
     };
+
+    // LOWER LEVEL BOUND. This is not redundant with the bracket lookup below, and taking it for redundant is
+    // exactly how it came to be missing here: DB2Manager::GetBattlegroundBracketByLevel returns nullptr only
+    // below the lowest MinLevel of the MAP, and PVPDifficulty gives map 2107 - MapIDs.front() for both
+    // BattlemasterList 1101 and 100 - a ladder that starts at 10-19, while BattlemasterList.MinLevel is 60
+    // for Battleground Blitz and 50 for Rated Battleground. Without this gate a level-10 character is filed
+    // into the 10-19 bracket of a rated 8v8 queue, and CreateNewBattleground even finds maps for it
+    // (2107, 2245, 727, 998, 761, 726 and 2106 all carry 10-19). Nothing further down catches it either:
+    // HandleBattleFieldPortOpcode checks only the UPPER bound, Player::CanJoinToBattleground is a pure RBAC
+    // check, and Group::CanJoinBattlegroundQueue compares members only against EACH OTHER - which a solo
+    // join never even reaches. The arena sibling never exposed the hole because BattlemasterList 6 carries
+    // MinLevel 20 and map 1505's ladder likewise begins at 20-29; the analogy does not carry to the three
+    // aggregates, whose ladders sit 40 to 50 levels below their declared minimum.
+    //
+    // Player::GetBGAccessByLevel is the tree's own gate for this question - it reads BattlemasterList
+    // MinLevel/MaxLevel through BattlegroundTemplate - and HandleBattlemasterHelloOpcode already uses it.
+    //
+    // On the Reason: the client's Reason -> GlobalString table (read out of 0x21C13A0, tabulated in §10.2 of
+    // AGENT_BRIEF_BATTLEFIELD_4B.md) has no code meaning "below this queue's minimum level". 58,
+    // ERR_BATTLEGROUND_JOIN_REQUIRES_LEVEL, is the tournament-realm all-participants-at-max-level rule, not a
+    // minimum, and every value the table does not list falls into the client's default branch, which prints
+    // nothing and still tears the queue slot down. 35 is that table's generic "you cannot join", so it is the
+    // only value here that leaves the player with a message rather than a silently vanishing queue. What
+    // retail sends is not claimed: retail's own UI gates these queues by level, so no capture can hold it.
+    if (!_player->GetBGAccessByLevel(BattlegroundTypeId(bgQueueTypeId.BattlemasterListId)))
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
 
     // The retail client refuses to send this opcode with no role selected, so a zero mask means either a
     // modified client or a UI state we do not model. Either way the matchmaker cannot place the player.
@@ -524,6 +553,18 @@ void WorldSession::HandleBattlemasterJoinSkirmish(WorldPackets::Battleground::Ba
         return;
     }
 
+    // Lower level bound. Unlike its three siblings this queue had no gap to close - BattlemasterList 6
+    // carries MinLevel 20 and map 1505's ladder begins at 20-29, so the bracket lookup below already refuses
+    // everyone this refuses. It is stated explicitly all the same, for two reasons: it stops the invariant
+    // from resting on two DB2 tables happening to agree (the very assumption that produced the hole in the
+    // three aggregates), and below level 20 the player now gets a message instead of the lookup's silent
+    // return. See HandleBattlemasterJoinRatedBGBlitz for the account of the Reason.
+    if (!_player->GetBGAccessByLevel(BattlegroundTypeId(bgQueueTypeId.BattlemasterListId)))
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
     PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
     if (!bracketEntry)
         return;
@@ -653,16 +694,25 @@ void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinR
         return;
     }
 
-    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
-    if (!bracketEntry)
-        return;
-
     auto sendFailed = [&](GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid = nullptr)
     {
         WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
         BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result, errorGuid);
         SendPacket(battlefieldStatus.Write());
     };
+
+    // Lower level bound - BattlemasterList 100 declares MinLevel 50 while map 2107's ladder starts at 10-19.
+    // The full account of why the bracket lookup below does not cover this, and why the Reason is 35, is in
+    // HandleBattlemasterJoinRatedBGBlitz; do not restate it here.
+    if (!_player->GetBGAccessByLevel(BattlegroundTypeId(bgQueueTypeId.BattlemasterListId)))
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
 
     if (!packet.Roles)
     {
@@ -819,16 +869,26 @@ void WorldSession::HandleBattlemasterJoinBrawl(WorldPackets::Battleground::Battl
     if (!bgTemplate)
         return;
 
-    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
-    if (!bracketEntry)
-        return;
-
     auto sendFailed = [&](GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid = nullptr)
     {
         WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
         BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result, errorGuid);
         SendPacket(battlefieldStatus.Write());
     };
+
+    // Lower level bound - Deep Six (BattlemasterList 879) declares MinLevel 50 while map 2106's ladder starts
+    // at 10-19. The full account of why the bracket lookup below does not cover this, and why the Reason is
+    // 35, is in HandleBattlemasterJoinRatedBGBlitz; do not restate it here. Note that this reads the RUNNING
+    // brawl's own BattlemasterList, so a future brawl with a different minimum is gated by its own number.
+    if (!_player->GetBGAccessByLevel(BattlegroundTypeId(bgQueueTypeId.BattlemasterListId)))
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
 
     // C_PvP.JoinBrawl refuses to emit the packet when the selected roles and the class's allowed roles do not
     // intersect (client error 0x33A), so a zero mask means a client we do not model.
@@ -844,7 +904,10 @@ void WorldSession::HandleBattlemasterJoinBrawl(WorldPackets::Battleground::Battl
         if (grp->GetLeaderGUID() != _player->GetGUID())
             return;
 
-        // BattlemasterList.MaxGroupSize is the brawl's own party cap (5 for Deep Six).
+        // BattlemasterList.MaxGroupSize is the brawl's own party cap - 6 for Deep Six, which carries
+        // MinPlayers 5, MaxPlayers 6, RatedPlayers 6 and MaxGroupSize 6 in build 12.1.0.69382
+        // (c:/dumps/sr_scratch/BattlemasterList.csv row 879, wago.tools). The 5 an earlier revision of this
+        // comment named is MinPlayers, not the cap; the read below always used the right field.
         if (int32(grp->GetMembersCount()) > battlemasterListEntry->MaxGroupSize)
         {
             sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);

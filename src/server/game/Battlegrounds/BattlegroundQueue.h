@@ -212,8 +212,6 @@ class TC_GAME_API BattlegroundQueue
 
         /* All-or-nothing group proposals - see BattlegroundProposal above. */
 
-        // True when this player is held by a proposal, i.e. their accept/decline must not be acted on alone.
-        bool IsInProposal(ObjectGuid guid) const;
         // Records an accept. Returns false when the player is not in a proposal, in which case the caller
         // must fall back to the ordinary per-player invite handling. When the accept completes the proposal
         // this ports every member.
