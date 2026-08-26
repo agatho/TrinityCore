@@ -93,6 +93,9 @@ public:
             { "setphaseshift",      HandleDebugSendSetPhaseShiftCommand,   rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "spellfail",          HandleDebugSendSpellFailCommand,       rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "playerchoice",       HandleDebugSendPlayerChoiceCommand,    rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "isquestcomplete",    HandleDebugSendIsQuestCompleteCommand, rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "questpopup",         HandleDebugSendQuestPopupCommand,      rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "questcompletetext",  HandleDebugSendQuestCompletionTextCommand, rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
         };
         static ChatCommandTable debugCommandTable =
         {
@@ -309,6 +312,60 @@ public:
     {
         Player* player = handler->GetPlayer();
         player->SendPlayerChoice(player->GetGUID(), choiceId);
+        return true;
+    }
+
+    // SMSG_IS_QUEST_COMPLETE_RESPONSE (0x650004). The only consumer in the retail client, 0x1E2B600, is a
+    // console diagnostic that prints "Quest %d is%s complete"; there is no CMSG_IS_QUEST_COMPLETE in the
+    // client's opcode table or in TrinityCore's, so the request half sits in the developer client. This
+    // command is the send path a realm can reach it from: .debug send isquestcomplete <questId>.
+    static bool HandleDebugSendIsQuestCompleteCommand(ChatHandler* handler, uint32 questId)
+    {
+        if (!sObjectMgr->GetQuestTemplate(questId))
+        {
+            handler->SendSysMessage(LANG_COMMAND_QUEST_NOTFOUND);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        handler->GetPlayer()->SendIsQuestCompleteResponse(questId);
+        return true;
+    }
+
+    // SMSG_DISPLAY_QUEST_POPUP (0x65001E). Consumer 0x221F090 hands the quest id to AddAutoQuestPopUp
+    // (0x2221810) with type 0, which the Lua binding C.GetAutoQuestPopUp (0x223EA30) reports as "OFFER" and
+    // Blizzard_AutoQuestPopUpTracker.lua turns into the offer toast in the objective tracker.
+    // UNVERIFIED: which server side event makes retail push this -- no packet of this opcode occurs in the
+    // ten 12.1 recordings, so the trigger cannot be read off the wire either.
+    static bool HandleDebugSendQuestPopupCommand(ChatHandler* handler, uint32 questId)
+    {
+        if (!sObjectMgr->GetQuestTemplate(questId))
+        {
+            handler->SendSysMessage(LANG_COMMAND_QUEST_NOTFOUND);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        handler->GetPlayer()->SendDisplayQuestPopup(questId);
+        return true;
+    }
+
+    // SMSG_SHOW_QUEST_COMPLETION_TEXT (0x650015). Consumer 0x1E24800 fills the same UI globals as
+    // SMSG_QUEST_GIVER_OFFER_REWARD_MESSAGE (the text behind C.GetRewardText among them) and fires the Lua
+    // event QUEST_COMPLETE, but the message carries no reward block and no questgiver GUID.
+    // UNVERIFIED: which server side event makes retail send it instead of the offer reward message.
+    static bool HandleDebugSendQuestCompletionTextCommand(ChatHandler* handler, uint32 questId)
+    {
+        Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
+        if (!quest)
+        {
+            handler->SendSysMessage(LANG_COMMAND_QUEST_NOTFOUND);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        Player* player = handler->GetPlayer();
+        player->SendShowQuestCompletionText(quest, player->GetTarget());
         return true;
     }
 

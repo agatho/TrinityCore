@@ -595,6 +595,11 @@ namespace WorldPackets
         // SMSG_QUEST_NON_LOG_UPDATE_COMPLETE -- consumer 0x1E22D80 reads exactly one uint32 from the raw
         // payload, gates it on 0x2225680 (quest type filter) and fires WORLD_QUEST_COMPLETED_BY_SPELL(questID).
         // The TrinityCore opcode name predates that event; the payload is a quest id either way.
+        // The subplan lists this opcode as "raw buffer, no handler found, content not determinable from the
+        // binary". That is wrong: hook slot 0x462DDC0 is not NULL in the image, it holds 0x1E22D80 outright,
+        // with two registrars (0x226993 in 0x1F5C80, 0x226DBA in 0x1F6D10) writing it.
+        // Dispatcher case 6619144 hands over the whole unread rest (0x35AF730), the consumer dereferences it
+        // twice and takes four bytes -- so four bytes is what the client consumes, and what we write.
         class QuestNonLogUpdateComplete final : public ServerPacket
         {
         public:
@@ -608,6 +613,8 @@ namespace WorldPackets
         // SMSG_QUEST_UPDATE_FAILED -- consumer 0x1E23050 reads exactly one uint32 from the raw payload, marks
         // that quest dirty in the client's QuestCache and schedules a re-query. Mirror of
         // SMSG_QUEST_UPDATE_COMPLETE (0x650009), whose consumer 0x1E22DD0 does the same cache lookup.
+        // Same correction as above: hook slot 0x462DDB0 is not NULL, it holds 0x1E23050 in the image.
+        // Both quest ids run through the identical murmur finalizer keyed DataCache<QuestCache> lookup.
         class QuestUpdateFailed final : public ServerPacket
         {
         public:
@@ -919,7 +926,11 @@ namespace WorldPackets
             bool IsReroll = false;
         };
 
-        // CMSG_CLOSE_QUEST_CHOICE -- the player dismisses the active PlayerChoice UI. Empty payload.
+        // CMSG_CLOSE_QUEST_CHOICE (0x3D017D) -- the player dismisses the active PlayerChoice UI.
+        // UNVERIFIED: empty payload. This opcode is not part of family 0x65 and no client serializer for it
+        // could be found -- no function in the 94012 entry cfunc cache of 12.1.0.69382 writes the constant
+        // 0x3D017D, and the opcodes table carries it with name_source 'tc_source', i.e. the name and the
+        // value come from TrinityCore's own catalogue, not from a decoded writer.
         class CloseQuestChoice final : public ClientPacket
         {
         public:
