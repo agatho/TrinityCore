@@ -3791,9 +3791,19 @@ void Spell::EffectQuestComplete()
             player->CompleteQuest(questId);
 
         // SMSG_QUEST_NON_LOG_UPDATE_COMPLETE. Its consumer (0x1E22D80) fires WORLD_QUEST_COMPLETED_BY_SPELL,
-        // so this is the one place that opcode belongs: a spell effect just completed a world quest.
-        if (quest->IsWorldQuest() && player->GetQuestStatus(questId) != QUEST_STATUS_INCOMPLETE)
-            player->SendQuestNonLogUpdateComplete(questId);
+        // so this is the one place that opcode belongs: a spell effect just completed a world quest. The event
+        // name is the whole condition -- it has to be *this* effect that completed it. questStatus above is the
+        // state before the effect, so the send needs an actual transition into a completed state: COMPLETE, or
+        // straight to REWARDED, which CompleteQuest produces for a QUEST_FLAGS_TRACKING_EVENT quest.
+        // Without the comparison the message also goes out where nothing happened at all -- a world quest with
+        // none of the three flags falls through both branches untouched, and NONE != INCOMPLETE would still
+        // send, telling the client a quest the player does not even have was completed by a spell.
+        if (quest->IsWorldQuest())
+        {
+            QuestStatus newQuestStatus = player->GetQuestStatus(questId);
+            if (newQuestStatus != questStatus && (newQuestStatus == QUEST_STATUS_COMPLETE || newQuestStatus == QUEST_STATUS_REWARDED))
+                player->SendQuestNonLogUpdateComplete(questId);
+        }
     }
 }
 

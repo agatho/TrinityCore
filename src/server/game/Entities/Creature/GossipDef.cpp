@@ -36,6 +36,7 @@ GossipMenu::GossipMenu()
 {
     _menuId = 0;
     _locale = DEFAULT_LOCALE;
+    _recomputable = false;
 }
 
 GossipMenu::~GossipMenu() = default;
@@ -45,6 +46,10 @@ uint32 GossipMenu::AddMenuItem(int32 gossipOptionId, int32 orderIndex, GossipOpt
     std::string boxText, Optional<int32> spellId, Optional<int32> overrideIconId, uint32 sender, uint32 action)
 {
     ASSERT(_menuItems.size() <= GOSSIP_MAX_MENU_ITEMS);
+
+    // Every item that lands here makes the menu differ from what PrepareGossipMenu would rebuild; the one
+    // caller that may claim otherwise is PrepareGossipMenu itself, which sets the flag again when it is done.
+    _recomputable = false;
 
     // Find a free new id - script case
     if (orderIndex == -1)
@@ -201,6 +206,7 @@ bool GossipMenu::IsMenuItemCoded(uint32 orderIndex) const
 void GossipMenu::ClearMenu()
 {
     _menuItems.clear();
+    _recomputable = false;
 }
 
 PlayerMenu::PlayerMenu(WorldSession* session) : _session(session)

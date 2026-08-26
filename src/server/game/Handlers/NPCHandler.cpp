@@ -277,7 +277,7 @@ void WorldSession::HandleGossipSelectOptionOpcode(WorldPackets::NPC::GossipSelec
 // availability while the frame stays up -- Blizzard_TorghastLevelPicker refreshes on PARTY_LEADER_CHANGED,
 // GROUP_ROSTER_UPDATE, GROUP_FORMED, UNIT_AREA_CHANGED and UNIT_PHASE. The menu is therefore rebuilt from the
 // gossip source, not replayed from the cached one, or the refresh would answer with exactly what the client
-// already has.
+// already has -- but only where that rebuild is possible, see GossipMenu::IsRecomputable below.
 void WorldSession::HandleGossipRefreshOptions(WorldPackets::NPC::GossipRefreshOptions& /*packet*/)
 {
     InteractionData const& interaction = _player->PlayerTalkClass->GetInteractionData();
@@ -293,9 +293,28 @@ void WorldSession::HandleGossipRefreshOptions(WorldPackets::NPC::GossipRefreshOp
     if (!source)
         return;
 
-    // PrepareGossipMenu clears the menu itself, so the id has to be taken first.
-    uint32 menuId = _player->PlayerTalkClass->GetGossipMenu().GetMenuId();
-    _player->PrepareGossipMenu(source, menuId, true);
+    // Only a menu that PrepareGossipMenu built by itself may be rebuilt here. 19 script files assemble their
+    // options with AddGossipItemFor, 9 of them with texts of their own that have no gossip_menu_option row at
+    // all, and such a script usually never sets a menu id either -- GossipMenu::ClearMenu leaves _menuId
+    // untouched, so GetMenuId() would hand back 0 or the id of the previous conversation. Rebuilding from the
+    // table in that case answers the refresh with a shorter or empty list, and consumer 0x249D870 swaps the open
+    // window's list against whatever arrives: the effect would not be "same list, current status" but
+    // "options gone".
+    // Re-entering CreatureAI::OnGossipHello instead is no way out. It is the script's *entry* point and runs the
+    // script's side effects -- encounter starts, casts, SendCloseGossip -- and the client decides when to send
+    // this opcode (Blizzard_TorghastLevelPicker refreshes on GROUP_ROSTER_UPDATE and UNIT_PHASE), so that would
+    // hand the client a lever to re-trigger them at will. For a script-owned menu the list the server already
+    // holds is therefore the best answer it can give, and it is at least the list the client already shows.
+    GossipMenu& gossipMenu = _player->PlayerTalkClass->GetGossipMenu();
+    if (gossipMenu.IsRecomputable())
+    {
+        // PrepareGossipMenu clears the menu itself, so the id has to be taken first.
+        uint32 menuId = gossipMenu.GetMenuId();
+        _player->PrepareGossipMenu(source, menuId, true);
+    }
+    else
+        TC_LOG_DEBUG("network", "WORLD: CMSG_GOSSIP_REFRESH_OPTIONS - gossip menu of {} is script owned and cannot be recomputed, resending it unchanged.",
+            interaction.SourceGuid.ToString());
 
     _player->PlayerTalkClass->SendGossipRefreshOptions();
 }

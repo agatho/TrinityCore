@@ -14002,6 +14002,11 @@ void Player::PrepareGossipMenu(WorldObject* source, uint32 menuId, bool showQues
         if (canTalk)
             PlayerTalkClass->GetGossipMenu().AddMenuItem(gossipMenuItem, gossipMenuItem.MenuID, gossipMenuItem.OrderIndex);
     }
+
+    // The menu is now exactly the gossip_menu_option rows of menuId that pass their conditions, so it can be
+    // recomputed from the table alone. This is what lets WorldSession::HandleGossipRefreshOptions rebuild it;
+    // note the Taxinode early return above deliberately leaves the flag false, that menu is incomplete.
+    PlayerTalkClass->GetGossipMenu().SetRecomputable(true);
 }
 
 void Player::SendPreparedGossip(WorldObject* source)
@@ -14944,6 +14949,8 @@ void Player::IncompleteQuest(uint32 quest_id)
 {
     if (quest_id)
     {
+        QuestStatus oldStatus = GetQuestStatus(quest_id);
+
         SetQuestStatus(quest_id, QUEST_STATUS_INCOMPLETE);
 
         uint16 log_slot = FindQuestSlot(quest_id);
@@ -14951,8 +14958,15 @@ void Player::IncompleteQuest(uint32 quest_id)
             RemoveQuestSlotState(log_slot, QUEST_STATE_COMPLETE);
 
         // Mirror of CompleteQuest -> SendQuestComplete: the client caches per-quest completion state and only
-        // drops it when it is told to (consumer 0x1E23050).
-        SendQuestUpdateFailed(quest_id);
+        // drops it when it is told to (consumer 0x1E23050). Like its counterpart, which sits behind the
+        // !Explored threshold in AreaExploredOrEventHappens, this needs a real transition out of COMPLETE.
+        // ItemRemovedQuestCheck calls us for every removed objective item, i.e. also when the quest had been
+        // INCOMPLETE all along -- invalidating the client cache there would cost a re-query for nothing.
+        // UNVERIFIED: which server event retail hangs SMSG_QUEST_UPDATE_FAILED on -- IncompleteQuest or
+        // FailQuest. Consumer 0x1E23050 does the same thing in both cases, so the client cannot decide it;
+        // needs the recording listed under aufnahme_noetig in status/quest_65.json.
+        if (oldStatus == QUEST_STATUS_COMPLETE)
+            SendQuestUpdateFailed(quest_id);
     }
 }
 
@@ -17293,6 +17307,10 @@ void Player::SendQuestComplete(uint32 questId) const
 // Consumer 0x1E23050 marks the quest dirty in the client QuestCache and schedules a re-query, exactly the way
 // the consumer of SMSG_QUEST_UPDATE_COMPLETE (0x1E22DD0) does; sent when a quest that was complete is
 // complete no longer.
+// UNVERIFIED: the trigger, not the wire. The single uint32 payload and the cache invalidation are read out of
+// the consumer, but which server event retail sends this on -- IncompleteQuest (the only caller today) or
+// FailQuest -- is not derivable from the client, because the consumer behaves identically either way. Needs
+// the recording listed under aufnahme_noetig in status/quest_65.json.
 void Player::SendQuestUpdateFailed(uint32 questId) const
 {
     if (!questId)

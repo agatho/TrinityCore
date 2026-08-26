@@ -201,6 +201,14 @@ class TC_GAME_API GossipMenu
             return _menuItems.empty();
         }
 
+        // True only while the menu holds exactly what Player::PrepareGossipMenu(source, GetMenuId()) produces,
+        // i.e. while it can be recomputed from gossip_menu_option alone. Every AddMenuItem clears the flag and
+        // PrepareGossipMenu sets it again once it is done, so a script that adds an option of its own with
+        // AddGossipItemFor -- or cherry-picks single rows out of a menu -- leaves it false: that composition
+        // exists nowhere but in the script. Read by WorldSession::HandleGossipRefreshOptions.
+        bool IsRecomputable() const { return _recomputable; }
+        void SetRecomputable(bool recomputable) { _recomputable = recomputable; }
+
         GossipMenuItem const* GetItem(int32 gossipOptionId) const;
         GossipMenuItem const* GetItemByIndex(uint32 orderIndex) const;
 
@@ -219,6 +227,7 @@ class TC_GAME_API GossipMenu
         GossipMenuItemContainer _menuItems;
         uint32 _menuId;
         LocaleConstant _locale;
+        bool _recomputable;
 };
 
 class TC_GAME_API QuestMenu

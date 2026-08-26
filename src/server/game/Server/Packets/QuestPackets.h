@@ -615,6 +615,8 @@ namespace WorldPackets
         // SMSG_QUEST_UPDATE_COMPLETE (0x650009), whose consumer 0x1E22DD0 does the same cache lookup.
         // Same correction as above: hook slot 0x462DDB0 is not NULL, it holds 0x1E23050 in the image.
         // Both quest ids run through the identical murmur finalizer keyed DataCache<QuestCache> lookup.
+        // UNVERIFIED: the trigger, not the wire -- see Player::SendQuestUpdateFailed. The consumer cannot tell
+        // IncompleteQuest from FailQuest apart, so the server side event this hangs on is still a guess.
         class QuestUpdateFailed final : public ServerPacket
         {
         public:
@@ -931,6 +933,10 @@ namespace WorldPackets
         // could be found -- no function in the 94012 entry cfunc cache of 12.1.0.69382 writes the constant
         // 0x3D017D, and the opcodes table carries it with name_source 'tc_source', i.e. the name and the
         // value come from TrinityCore's own catalogue, not from a decoded writer.
+        // Reviewed 2026-08-26: the handler stays -- it only resets a PlayerInteractionType::PlayerChoice
+        // interaction and that effect is proven through HandlePlayerChoiceResponse -- but the opcode does NOT
+        // count as accepted. Value and name have to be reconciled against a decoded writer by a unit for
+        // family 0x3D before this marker may be removed.
         class CloseQuestChoice final : public ClientPacket
         {
         public:
