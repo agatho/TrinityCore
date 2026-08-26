@@ -1001,7 +1001,14 @@ void WorldSession::HandleBattleFieldPortOpcode(WorldPackets::Battleground::Battl
         return;
     }
 
-    uint32 mapId = bgTemplate->MapIDs.front();
+    // The queue template's first map, and NOT bg->GetMapId(), which is what upstream substituted here once the
+    // instance was known. bracketEntry below is used for exactly one thing - the ScheduleQueueUpdate on the
+    // leave path - and that call has to name the bracket the QUEUE is keyed by. For an aggregate
+    // BattlemasterList the drawn map is a different map with its own PVPDifficulty numbering, so resolving the
+    // bracket there would schedule an update for a bracket this queue holds nobody in, and the leave would
+    // never re-evaluate the bracket it actually emptied. BattlegroundMgr::CreateNewBattleground now settles the
+    // same question the same way. For a single-map queue this is bit-for-bit the map upstream used.
+    uint32 const mapId = bgTemplate->MapIDs.front();
 
     // BGTemplateId returns BATTLEGROUND_AA when it is arena queue.
     // Do instance id search as there is no AA bg instances.
@@ -1023,8 +1030,6 @@ void WorldSession::HandleBattleFieldPortOpcode(WorldPackets::Battleground::Battl
         SendPacket(WorldPackets::Battleground::BattlefieldPortDenied().Write());
         return;
     }
-    else if (bg)
-        mapId = bg->GetMapId();
 
     TC_LOG_DEBUG("bg.battleground", "CMSG_BATTLEFIELD_PORT {} Slot: {}, Unk: {}, Time: {}, AcceptedInvite: {}.",
         GetPlayerInfo(), battlefieldPort.Ticket.Id, uint32(battlefieldPort.Ticket.Type), battlefieldPort.Ticket.Time.AsUnderlyingType(), uint32(battlefieldPort.AcceptedInvite));
