@@ -1069,7 +1069,17 @@ void AuraEffect::CalculateSpellMod()
 
             // Index 3 ist im Client 69382 nirgends aufgerufen und deshalb unbelegt; der
             // Modifikator kann uebertragen, aber serverseitig nicht angewendet werden.
-            SpellModOp op = SpellPvpModifierToSpellModOp(pvpOp).value_or(SpellModOp::HealingAndDamage);
+            // UNVERIFIED: welche SpellModOp-Bedeutung hinter PvP-Index 3 steckt. Der Ausweichwert
+            // ist deshalb SpellModOp(MAX_SPELLMOD) - ein Wert AUSSERHALB des gueltigen Bereichs
+            // 0..40. Player::GetSpellModValues wird nur mit echten SpellModOp gerufen und laeuft
+            // ueber spellModTypeRange, dessen Endwaechter auf `(*itr)->op != op` prueft; ein
+            // Modifikator mit op == 41 faellt damit aus JEDEM Bereich heraus und wird serverseitig
+            // nie angewendet. Uebertragen wird er trotzdem: Player::AddSpellMod schreibt
+            // pvpMod->pvpOp auf den Draht, nicht op, und gruppiert ueber (op, type) + pvpOp -
+            // ein eigener op-Wert haelt die Gruppe sogar sauber getrennt.
+            // Ein value_or(HealingAndDamage) waere das Gegenteil: der Client wendet aus Index 3
+            // nichts an, der Server aber Heilung und Schaden.
+            SpellModOp op = SpellPvpModifierToSpellModOp(pvpOp).value_or(SpellModOp(MAX_SPELLMOD));
             if (GetAuraType() == SPELL_AURA_ADD_FLAT_PVP_MODIFIER)
             {
                 if (!m_spellmod)

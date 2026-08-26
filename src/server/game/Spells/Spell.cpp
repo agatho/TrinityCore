@@ -4612,19 +4612,33 @@ void Spell::SendCastResult(SpellCastResult result, int32* param1 /*= nullptr*/, 
     FillSpellCastFailedArgs(castFailed, m_castId, m_spellInfo, result, m_customError, param1, param2, failedBy);
     receiver->SendDirectMessage(castFailed.Write());
 
-    // SMSG_SPELL_FAILURE_MESSAGE (0x67004D) - Zusatz zu SMSG_CAST_FAILED, kein Ersatz.
-    // Der Client loest den Code ueber denselben Mapper auf, der die 324-Werte-Tabelle
-    // SpellCastResult traegt (0x1DB4E80), und zeigt den Fehlertext als Systemmeldung 0x38
-    // (ERR_SPELL_FAILED_S, GameError-Tabelle 0x43D55C0 + 56*24 = 0x43D5B00) im Chat.
-    // Das Feld ist ein SpellCastResult, KEINE SpellID - wer eine SpellID sendet, zeigt dem
-    // Spieler einen zufaelligen Fehlertext.
-    // SPELL_FAILED_DONT_REPORT hat keinen Text und wuerde eine leere Zeile erzeugen.
-    // UNVERIFIED: fuer welche Teilmenge der Fehlschlaege Retail diesen Zusatz sendet, ist
-    // offline nicht bestimmbar - in keiner der zwoelf Aufnahmen kommt 0x67004D vor. Der Client
-    // drosselt die Meldung UI-seitig selbst (THROTTLED_MESSAGE_TYPES,
-    // Blizzard_UIErrorsFrame/Mainline/UIErrorsFrame.lua:60).
-    if (result != SPELL_FAILED_DONT_REPORT)
-        receiver->SendDirectMessage(WorldPackets::Spells::SpellFailureMessage(result).Write());
+    // SMSG_SPELL_FAILURE_MESSAGE (0x67004D) wird hier ABSICHTLICH NICHT gesendet.
+    //
+    // Der Draht ist belegt und vollstaendig (Case 0x751A1A, RAWPTR 0x35AF730, 4 B fest): das
+    // uint32 ist ein SpellCastResult, KEINE SpellID. Der Client loest es ueber denselben Mapper
+    // auf, der die 324-Werte-Tabelle traegt (0x1DB4E80), und gibt den Text als Systemmeldung
+    // 0x38 aus (ERR_SPELL_FAILED_S, GameError-Tabelle 0x43D55C0 + 56*24 = 0x43D5B00, Kanal 2 =
+    // Chat).
+    //
+    // Die AUSLOESEBEDINGUNG ist unbelegt, und sie ist nicht "jeder Fehlschlag". Der Opcode
+    // kommt in keiner der zwoelf Aufnahmen vor; ein Zusatzpaket hinter jedem SMSG_CAST_FAILED
+    // wuerde zu jeder roten UI-Meldung eine zweite Zeile im CHAT erzeugen - also bei jedem
+    // Tastendruck auf einen Zauber in Abklingzeit. Dass Retail so verfaehrt, ist mit dem Bestand
+    // unvereinbar: der Zensus ueber alle Aufnahmen (C:/dumps/all_sniffs_catalog.json, 1 358 584
+    // Datensaetze) zaehlt SMSG_CAST_FAILED 810 Mal in 10 Aufnahmen, SMSG_SPELL_FAILURE 736 Mal
+    // und SMSG_SPELL_FAILED_OTHER 871 Mal - 0x67004D kommt ueberhaupt nicht vor. Eine
+    // 1:1-Kopplung an SMSG_CAST_FAILED haette 810 Vorkommen ergeben muessen, nicht null.
+    // (Zum Vergleich: SMSG_RESTART_GLOBAL_COOLDOWN, das aus demselben Grund nicht angeschlossen
+    // ist, kommt immerhin 15 Mal vor.)
+    //
+    // Dieselbe Beweislage fuehrt bei SMSG_RESTART_GLOBAL_COOLDOWN (0x670054) zum selben
+    // Ergebnis, siehe SpellHistory::AddGlobalCooldown - dort sogar bei besserer Datenlage.
+    //
+    // Vermutung, ausdruecklich UNBELEGT: eine enge Teilmenge der Fehlschlaege, fuer die es keine
+    // eigene UI-Meldung gibt (der Client drosselt die Systemmeldung ausserdem selbst,
+    // THROTTLED_MESSAGE_TYPES in Blizzard_UIErrorsFrame/Mainline/UIErrorsFrame.lua:60).
+    // Aufnahme, die das schliesst: fehlschlagende Zauber mit Systemmeldung im Chat - welcher
+    // SpellCastResult den Zusatz ausloest und welcher nicht.
 }
 
 void Spell::SendPetCastResult(SpellCastResult result, int32* param1 /*= nullptr*/, int32* param2 /*= nullptr*/) const

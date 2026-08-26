@@ -22865,9 +22865,27 @@ void Player::GetSpellModValues(SpellInfo const* spellInfo, SpellModOp op, Spell*
     // die Anwendung selbst ist dieselbe wie bei den Nicht-PvP-Zwillingen (flat wird addiert,
     // pct multipliziert, Beleg 0x1D8B1C0).
     // UNVERIFIED: WORAN der Client "PvP-Kontext" festmacht, ist offline nicht auslesbar - die
-    // Nachschlagefunktion bekommt den Schalter vom Aufrufer. Serverseitig gilt hier die engste
-    // belegbare Regel: der Zauber trifft einen Spieler.
-    if (spell && Object::ToPlayer(spell->m_targets.GetUnitTarget()))
+    // Nachschlagefunktion 0x1D8B1C0 bekommt den Schalter vom Aufrufer, und im Abbild ist keine
+    // Aufrufstelle mit konstantem Schalter zu finden.
+    //
+    // "Der Zauber trifft einen Spieler" ist als Regel ZU WEIT: eine Heilung auf einen Mitspieler
+    // in einer PvE-Schlachtzugsbegegnung erfuellt sie, ist aber kein PvP - der Modifikator wuerde
+    // dort die Zahl veraendern, ohne dass es einen PvP-Kontext gibt. Serverseitig gilt deshalb die
+    // engere Regel: das Ziel ist spielergesteuert UND es besteht ein PvP-Verhaeltnis - der Caster
+    // ist in einem Schlachtfeld oder einer Arena, oder Caster und Ziel sind beide PvP-markiert
+    // (auch FFA). Damit greift der Modifikator in keiner PvE-Begegnung ohne Kriegsmodus.
+    // Auch diese Regel ist eine Einschraenkung ohne Beleg, nur eine engere - sie kann zu wenig
+    // anwenden, wo die urspruengliche zu viel angewendet hat. Aufnahme, die das schliesst, steht
+    // unter aufnahme_noetig in status/spell_67.json.
+    bool isPvpContext = false;
+    if (spell)
+    {
+        if (Unit const* unitTarget = spell->m_targets.GetUnitTarget())
+            isPvpContext = unitTarget->IsCharmedOwnedByPlayerOrPlayer()
+                && (InBattleground() || ((IsPvP() || IsFFAPvP()) && (unitTarget->IsPvP() || unitTarget->IsFFAPvP())));
+    }
+
+    if (isPvpContext)
     {
         for (SpellModifier* mod : spellModTypeRange(SPELLMOD_FLAT_PVP))
         {
@@ -23158,9 +23176,9 @@ void Player::SendSpellModifiers() const
     }
 
     // PvP-Varianten. Hier wird nicht ueber die Sortierreihenfolge gruppiert, sondern ueber den
-    // ModIndex selbst: die Menge ist nach SpellModOp sortiert, und SpellPvpModifier::Unknown3 hat
-    // keine belegte SpellModOp-Entsprechung - zwei verschiedene ModIndex koennten sonst
-    // denselben op tragen und die Gruppierung zerreissen.
+    // ModIndex selbst: die Menge ist nach SpellModOp sortiert, und der PvP-Index 3 (im Enum eine
+    // Luecke ohne Namen) hat keine belegte SpellModOp-Entsprechung - zwei verschiedene ModIndex
+    // koennten sonst denselben op tragen und die Gruppierung zerreissen.
     std::map<uint32, std::vector<WorldPackets::Spells::SpellModifierData>> flatPvpMods;
     std::map<uint32, std::vector<WorldPackets::Spells::SpellModifierData>> pctPvpMods;
 
