@@ -652,7 +652,12 @@ namespace WorldPackets
         // (callback 0x1DEF2D0, registered 0x168B7C, default 180 degrees/s, help text
         // "Set the keyboard turn rate in degrees per second; capped by the server").
         // Wire: a single float in radians/s - the write slot 0x35AFCC0 is the dedicated float slot,
-        // and all 9 sniffed packets are byte-identical 'db 0f 49 40' = float(M_PI) = 180 degrees/s.
+        // and all 11 recorded packets are byte-identical 'db 0f 49 40' = float(M_PI) = 180 degrees/s.
+        // Eleven is the measured count and the only one: 73 .pkt files under C:/sniff, duplicates by
+        // name and size removed, 11 CMSG_MOVE_SET_TURN_RATE_CHEAT (0x410024) in 11 separate
+        // recordings and 0 SMSG_MOVE_SET_TURN_RATE (0x5E0027). Re-measured for this round with
+        // C:/dumps/_mv_r3_turnrate2.py; WorldSession::HandleMoveSetTurnRateCheat rests on the same
+        // count, and the "10 Pakete" of SUBPLAN_move_41_5E.md section 7.2 is a stale estimate.
         class MoveSetTurnRateCheat final : public ClientPacket
         {
         public:

@@ -25139,7 +25139,11 @@ void Player::SendInitialPacketsAfterAddToMap()
     if (HasAuraType(SPELL_AURA_MOD_GRAVITY))
     {
         WorldPackets::Movement::MoveStateChange& gravity = setCompoundState.StateChanges.emplace_back(SMSG_MOVE_SET_GRAVITY_MODIFIER, m_movementCounter++);
-        gravity.Speed = GetTotalAuraMultiplier(SPELL_AURA_MOD_GRAVITY);
+        // Same value and same source as Unit::UpdateGravityModifier - see the measurement of
+        // EffectBasePointsF for aura 644 documented at Unit::CalculateGravityModifier. Reading the
+        // amount as a percentage, as GetTotalAuraMultiplier does, put a factor of 1.0035 on the wire
+        // here for an aura that means 0.35.
+        gravity.Speed = CalculateGravityModifier();
 
         // Without this the login send is the one SMSG_MOVE_SET_GRAVITY_MODIFIER the server does not
         // count, and WorldSession::HandleMoveGravityModifierChangeAck kicks on the counter reaching

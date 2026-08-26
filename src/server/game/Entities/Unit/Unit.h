@@ -1191,6 +1191,7 @@ class TC_GAME_API Unit : public WorldObject
         bool SetIgnoreMovementForces(bool ignore);
         void UpdateMovementForcesModMagnitude();
         void UpdateGravityModifier();
+        float CalculateGravityModifier() const;
         void SendMoveMarkRemoteTimeInvalid() const;
 
         void ApplyInertia(int32 id, Milliseconds duration);

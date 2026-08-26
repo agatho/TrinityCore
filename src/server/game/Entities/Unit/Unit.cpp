@@ -14298,6 +14298,36 @@ void Unit::UpdateMovementForcesModMagnitude()
     }
 }
 
+float Unit::CalculateGravityModifier() const
+{
+    // The amount of SPELL_AURA_MOD_GRAVITY IS the gravity factor. It is not a percentage on top of
+    // 1.0, and this is measured in the client data rather than assumed: SpellEffect.db2 of the 12.1
+    // client (layout 5362E3D4, M:\World of Warcraft\dbc\enUS, read with C:\dumps\_nc6_db2.py)
+    // holds exactly eleven effects with EffectAura 644, and every one of them carries a fractional
+    // EffectBasePointsF - 0.35, 0.35, 0.35, 0.4, 0.5, 0.65, 0.7, 0.8, 0.9, 0.9, 0.9. Not one is a
+    // percentage. The control measurement with the same decoder rules out a decoding artefact:
+    // SPELL_AURA_MOD_INCREASE_SPEED (31) has whole percentages in the same column (Sprint 70,
+    // Aspect of the Cheetah 90, Blazing Speed 150).
+    //
+    // 1.0f is the client's own neutral value, so below 1 is lighter and above 1 is heavier gravity:
+    // the mover state the client builds for CMSG_MOVE_FORCE_GRAVITY_MODIFIER_CHANGE_ACK initialises
+    // the field to 0x3F800000 (0x18AA570, the type-29 applier).
+    //
+    // Reading the amount as a percentage - which is what Unit::GetTotalAuraMultiplier does, since it
+    // runs AddPct(multiplier, GetAmount()) - turns 0.35 into a factor of 1.0035. The aura would then
+    // do nothing at all, silently, on every spell that carries it.
+    //
+    // UNVERIFIED: how Retail combines two of these auras on one unit. Each of the eleven spells
+    // carries exactly one MOD_GRAVITY effect and no recording shows two at once, so composing them
+    // multiplicatively is a server decision. The single-aura case - the only one the data shows - is
+    // unaffected by it.
+    float gravityModifier = 1.0f;
+    for (AuraEffect const* aurEff : GetAuraEffectsByType(SPELL_AURA_MOD_GRAVITY))
+        gravityModifier *= float(aurEff->GetAmount());
+
+    return gravityModifier;
+}
+
 void Unit::UpdateGravityModifier()
 {
     // Same shape as UpdateMovementForcesModMagnitude above: the mover gets the addressed message and
@@ -14305,7 +14335,25 @@ void Unit::UpdateGravityModifier()
     // The client copies both fields of SMSG_MOVE_SET_GRAVITY_MODIFIER straight into the queued state
     // change (consumer 0x1F111F0: movss [rec+0x68], value / mov [rec+0xB8], sequence) and sends them
     // back unchanged in CMSG_MOVE_FORCE_GRAVITY_MODIFIER_CHANGE_ACK, so the ack is worth checking.
-    float gravityModifier = GetTotalAuraMultiplier(SPELL_AURA_MOD_GRAVITY);
+    //
+    // The consumer opens with a gate - "if ((mover->flags[0x378] & 0x80000) == 0)" - that drops the
+    // message instead of queueing it. The gate is not this message's own: it stands byte-identical
+    // in front of all nine members of this consumer family, one per state-change type, and the other
+    // eight are the speed setters that every TrinityCore realm drives on every login. Read off the
+    // ack each type sends (0x18AA020 ff.): type 24 answers with CMSG_MOVE_FORCE_RUN_SPEED_CHANGE_ACK
+    // (0x410029), 25 RUN_BACK (0x41002A), 26 WALK (0x41003F), 27 SWIM (0x41002B), 28 SWIM_BACK
+    // (0x410040), 29 GRAVITY (0x410022), 30 FLIGHT (0x41004C), 31 FLIGHT_BACK (0x41004D), 32
+    // TURN_RATE (0x410041). Gravity therefore reaches the client exactly when a run speed change
+    // does, and no gravity-specific gate exists.
+    //
+    // Bit 19 itself is written in exactly five places in the whole .text and never from network
+    // input: set at 0x20D0A4 and 0x1F0B623, cleared at 0x20CFDB, 0x1E2B65F and 0x1F0B35B. All five
+    // sit in the client's own world transfer and active mover switch - 0x20CFA0 carries the string
+    // "Abort New World Handler", and 0x1F0B210, the active mover change, clears the bit on the mover
+    // it releases and in the same branch sets it on the one it takes over (through 0x1F0B5F0). Which
+    // of the two states an ordinary mover is in is thus decided locally by the client, and it is
+    // decided identically for gravity and for run speed. Nothing the server sends can influence it.
+    float gravityModifier = CalculateGravityModifier();
 
     m_movementInfo.gravityModifier = gravityModifier;
 
