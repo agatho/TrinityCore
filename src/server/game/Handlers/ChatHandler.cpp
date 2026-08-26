@@ -147,12 +147,6 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
 {
     Player* sender = GetPlayer();
 
-    // The realm's chat service is in maintenance. The client has already been told with
-    // SMSG_CHAT_DOWN / SMSG_CHAT_IS_DOWN and prints CHAT_SERVER_DISCONNECTED_MESSAGE itself, so
-    // there is nothing to answer here.
-    if (!sWorld->getBoolConfig(CONFIG_CHAT_SERVICE_ENABLED))
-        return ChatMessageResult::ChatServiceDown;
-
     if (lang == LANG_UNIVERSAL && type != CHAT_MSG_EMOTE && type != CHAT_MSG_GUILD && type != CHAT_MSG_OFFICER)
     {
         TC_LOG_ERROR("entities.player.cheat", "CMSG_MESSAGECHAT: Possible hacking-attempt: {} tried to send a message in universal language", GetPlayerInfo());
@@ -235,16 +229,26 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
         return ChatMessageResult::Muted;
     }
 
-    if (type != CHAT_MSG_AFK && type != CHAT_MSG_DND)
-    {
-        if (!sender->UpdateSpeakTime(Player::ChatFloodThrottle::REGULAR))
-        {
-            // Bestand B1: SMSG_CHAT_RESTRICTED reason 1 (ERR_CHAT_THROTTLED). Previously the
-            // flood filter only armed the mute for the NEXT message and said nothing about this one.
-            SendChatRestricted(ERR_CHAT_THROTTLED);
-            return ChatMessageResult::Muted;
-        }
-    }
+    // Command lines have to survive the two gates this unit put in front of ParseCommands below -
+    // the flood brake and the chat service switch. Neither exists on retail for commands: a chat
+    // outage does not disable server commands, and worldserver.conf.dist names ".reload config" as
+    // the way back out of Chat.Service.Enabled = 0, so a gate in front of the parser would lock
+    // itself in. Both gates therefore only decide the fate of a CHAT line and are answered after
+    // ParseCommands has declined the line. ParseCommands is the only authority on what a command
+    // line is (Chat.cpp:181), so it is called rather than a second prefix test.
+    //
+    // The flood brake keeps its full effect: it is evaluated here, in the same place and the same
+    // order as before, so the counter and m_muteTime move exactly as they did - only the
+    // ERR_CHAT_THROTTLED answer is deferred. That is what restores the pre-B1 order for every
+    // check that sits BETWEEN the flood brake and ParseCommands (GM_SILENCE_AURA, length, empty):
+    // before B1 UpdateSpeakTime returned void, so the offending line walked through all of them.
+    // Deciding the command case right here instead would let a flooding line skip the GM silence.
+    //
+    // _chatCautionAccepted: the re-run of a confirmed held message (HandleChatSendCautionaryChatMessage)
+    // must not be charged again - the first pass already counted this very message before holding it.
+    bool floodLimitTripped = false;
+    if (type != CHAT_MSG_AFK && type != CHAT_MSG_DND && !_chatCautionAccepted)
+        floodLimitTripped = !sender->UpdateSpeakTime(Player::ChatFloodThrottle::REGULAR);
 
     if (sender->HasAura(GM_SILENCE_AURA) && type != CHAT_MSG_WHISPER)
     {
@@ -260,6 +264,26 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
 
     if (ChatHandler(this).ParseCommands(msg.c_str()))
         return ChatMessageResult::HandledCommand;
+
+    // The line is not a command, so the two deferred gates decide it now.
+    //
+    // Bestand B1: SMSG_CHAT_RESTRICTED reason 1 (ERR_CHAT_THROTTLED). Previously the flood filter
+    // only armed the mute for the NEXT message and said nothing about this one; now the line that
+    // trips the limit is dropped and answered. Letting a command line past this opens no spam gap:
+    // UpdateSpeakTime has just set m_muteTime, so every following line - command or not - already
+    // stops at CanSpeak() above. At most one line per mute window gets this far, as before B1.
+    if (floodLimitTripped)
+    {
+        SendChatRestricted(ERR_CHAT_THROTTLED);
+        return ChatMessageResult::Muted;
+    }
+
+    // The realm's chat service is in maintenance. The client has already been told with
+    // SMSG_CHAT_DOWN / SMSG_CHAT_IS_DOWN and prints CHAT_SERVER_DISCONNECTED_MESSAGE itself, so
+    // there is nothing to answer here. The gate sits BEHIND ParseCommands on purpose - see the
+    // comment on floodLimitTripped above.
+    if (!sWorld->getBoolConfig(CONFIG_CHAT_SERVICE_ENABLED))
+        return ChatMessageResult::ChatServiceDown;
 
     // do message validity checks
     if (!ValidateMessage(GetPlayer(), msg))
@@ -1053,6 +1077,10 @@ bool WorldSession::SendCautionaryChatMessage(ChatMsg type, Language lang, std::s
 // 0x2667E30 answers CMSG_CHAT_SEND_CAUTIONARY_CHANNEL_MESSAGE unconditionally and there is no drop
 // path, so nothing is held back here (AGENT_BRIEF_CHAT_2C_4A.md K4). A server that waited for a
 // decision would just delay the message by one round trip.
+// UNVERIFIED: that retail also delivers immediately instead of holding the channel message until
+// the acknowledgement arrives. The consumer proves only that the CLIENT answers without asking the
+// player; it says nothing about what the server does meanwhile. The two variants differ solely in
+// the send order on the wire, so only a recording can decide it - see aufnahme_noetig.
 void WorldSession::SendCautionaryChannelMessage(std::string const& msg)
 {
     WorldPackets::Chat::CautionaryChannelMessage cautionary;
@@ -1076,7 +1104,8 @@ void WorldSession::HandleChatSendCautionaryChatMessage(WorldPackets::Chat::Cauti
 
     // Re-run the whole ladder: the group/guild/channel membership and the mute state may have
     // changed while the message was held. _chatCautionAccepted keeps the cautionary check from
-    // holding the same message a second time.
+    // holding the same message a second time AND keeps the flood brake from charging it twice -
+    // the first pass already counted it before it was held.
     _chatCautionAccepted = true;
     HandleChatMessage(pending->Type, pending->Lang, pending->Text, pending->TargetName,
         pending->TargetGuid.IsEmpty() ? Optional<ObjectGuid>() : Optional<ObjectGuid>(pending->TargetGuid));

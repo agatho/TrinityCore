@@ -2076,7 +2076,7 @@ class TC_GAME_API WorldSession
         // Chat messages this session is holding back until the player confirms or drops them
         // (SMSG_CAUTIONARY_CHAT_MESSAGE). Session state on purpose - it must not survive a relog.
         std::unique_ptr<ChatCautionMgr> _chatCautionMgr;
-        bool _chatCautionAccepted;      ///< true while re-running a confirmed held message, stops it being held again
+        bool _chatCautionAccepted;      ///< true while re-running a confirmed held message: stops it being held again and stops the flood brake counting it twice
 
         // Distinct reporters that told us this session's player tripped their client side spam
         // filter (CMSG_CHAT_REPORT_FILTERED). One entry per reporter, so a single client cannot

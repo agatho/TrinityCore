@@ -2118,7 +2118,8 @@ ChatFlood.MuteTime = 10
 #                     SMSG_CHAT_IS_DOWN, so the client shows CHAT_SERVER_DISCONNECTED_MESSAGE and
 #                     stops offering chat. Turning it back on sends SMSG_CHAT_RECONNECT, after which
 #                     the client re-joins every channel it knows - expect a wave of
-#                     CMSG_CHAT_JOIN_CHANNEL. Reloadable with .reload config.
+#                     CMSG_CHAT_JOIN_CHANNEL. Ingame commands keep working while it is off, so
+#                     .reload config is still the way back. Reloadable with .reload config.
 #        Default:     1 - (Enabled)
 #                     0 - (Disabled, chat is in maintenance)
 
