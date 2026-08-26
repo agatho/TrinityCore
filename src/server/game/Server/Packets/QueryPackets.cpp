@@ -515,8 +515,8 @@ WorldPacket const* QueryItemTextResponse::Write()
 {
     _worldPacket << Bits<1>(Valid);
     _worldPacket.FlushBits();
-    _worldPacket << Item;
     _worldPacket << Id;
+    _worldPacket << Item;
 
     return &_worldPacket;
 }
