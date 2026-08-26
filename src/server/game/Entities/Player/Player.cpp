@@ -21734,11 +21734,11 @@ void Player::outDebugValues() const
 /***               FLOOD FILTER SYSTEM                 ***/
 /*********************************************************/
 
-void Player::UpdateSpeakTime(ChatFloodThrottle::Index index)
+bool Player::UpdateSpeakTime(ChatFloodThrottle::Index index)
 {
     // ignore chat spam protection for GMs in any mode
     if (GetSession()->HasPermission(rbac::RBAC_PERM_SKIP_CHECK_CHAT_SPAM))
-        return;
+        return true;
 
     uint32 limit;
     uint32 delay;
@@ -21753,14 +21753,15 @@ void Player::UpdateSpeakTime(ChatFloodThrottle::Index index)
             delay = sWorld->getIntConfig(CONFIG_CHATFLOOD_ADDON_MESSAGE_DELAY);
             break;
         default:
-            return;
+            return true;
     }
 
+    bool allowed = true;
     time_t current = GameTime::GetGameTime();
     if (m_chatFloodData[index].Time > current)
     {
         if (!limit)
-            return;
+            return true;
 
         ++m_chatFloodData[index].Count;
         if (m_chatFloodData[index].Count >= limit)
@@ -21771,12 +21772,18 @@ void Player::UpdateSpeakTime(ChatFloodThrottle::Index index)
                 GetSession()->m_muteTime = new_mute;
 
             m_chatFloodData[index].Count = 0;
+
+            // The message that trips the limit is the one the client is told about, with
+            // SMSG_CHAT_RESTRICTED reason 1 (ERR_CHAT_THROTTLED). It used to be delivered anyway
+            // and only the next one was blocked, silently, by the mute.
+            allowed = false;
         }
     }
     else
         m_chatFloodData[index].Count = 1;
 
     m_chatFloodData[index].Time = current + delay;
+    return allowed;
 }
 
 /*********************************************************/
@@ -22365,11 +22372,14 @@ void Player::Whisper(std::string_view text, Language language, Player* target, b
         ChatHandler(GetSession()).SendSysMessage(LANG_COMMAND_WHISPERON);
     }
 
-    // announce afk or dnd message
+    // announce afk or dnd message. SMSG_CHAT_AUTO_RESPONDED (0x4A000E) carries the target's own
+    // reply text and a single bit that selects the chat type: consumer 0x1DDFC30 computes
+    // ChatMsg = 0x17 + (IsDND != 0), so the client renders it as CHAT_MSG_AFK / CHAT_MSG_DND with
+    // specialFlags "AFK"/"DND" instead of as a plain system line.
     if (target->isAFK())
-        ChatHandler(GetSession()).PSendSysMessage(LANG_PLAYER_AFK, target->GetName().c_str(), target->autoReplyMsg.c_str());
+        GetSession()->SendChatAutoResponded(false, target->autoReplyMsg);
     else if (target->isDND())
-        ChatHandler(GetSession()).PSendSysMessage(LANG_PLAYER_DND, target->GetName().c_str(), target->autoReplyMsg.c_str());
+        GetSession()->SendChatAutoResponded(true, target->autoReplyMsg);
 }
 
 void Player::Whisper(uint32 textId, Player* target, bool /*isBossWhisper = false*/)

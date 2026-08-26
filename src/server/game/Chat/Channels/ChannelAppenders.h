@@ -254,6 +254,40 @@ private:
     ObjectGuid _guid;
 };
 
+// SMSG_CHANNEL_NOTIFY Type 0x0F / 0x10. The client's own ChatNotify table (RVA 0x39B69D0,
+// stride 16, 39 entries) has MODERATION_ON / MODERATION_OFF at exactly these indices and renders
+// them as "[%s] Channel moderation enabled/disabled by %s.". Modelled on
+// AnnouncementsOn/OffAppend, which is the same shape of toggle.
+struct ModerationOnAppend
+{
+    explicit ModerationOnAppend(ObjectGuid const& guid) : _guid(guid) { }
+
+    static uint8 const NotificationType = CHAT_MODERATION_ON_NOTICE;
+
+    void Append(WorldPackets::Channel::ChannelNotify& data) const
+    {
+        data.SenderGuid = _guid;
+    }
+
+private:
+    ObjectGuid _guid;
+};
+
+struct ModerationOffAppend
+{
+    explicit ModerationOffAppend(ObjectGuid const& guid) : _guid(guid) { }
+
+    static uint8 const NotificationType = CHAT_MODERATION_OFF_NOTICE;
+
+    void Append(WorldPackets::Channel::ChannelNotify& data) const
+    {
+        data.SenderGuid = _guid;
+    }
+
+private:
+    ObjectGuid _guid;
+};
+
 struct MutedAppend
 {
     static uint8 const NotificationType = CHAT_MUTED_NOTICE;

@@ -305,6 +305,30 @@ namespace WorldPackets
             std::string Text;
             std::string DiagInfo;
         };
+
+        // CMSG_CHAT_REPORT_FILTERED (0x2C0004). Serializer 0x7477A0 in build 12.1.0.69382:
+        //   Write<uint32>(0x2C0004); WritePackedGuid(object+32);
+        // { PackedGuid SenderGUID }, 2..18 bytes. Nothing else.
+        //
+        // It is NOT a player report, despite the family it lives in. The only construction site is
+        // 0x20A7880, the client's SMSG_CHAT handler: when an incoming WHISPER (ChatType 7) hits the
+        // client side SPAMCHECK table (0x2CB6840 against RTTI TSHashTable<SPAMCHECK,HASHKEY_STR> at
+        // 0x44F4450, fed from SpamMessages.db2) the message is hidden and this packet is sent with
+        // the sender's guid. So it is an automatic "I filtered this out" report and the counterpart
+        // of SMSG_EXPECTED_SPAM_RECORDS (0x4A0005), which ships those patterns in the first place.
+        //
+        // Kept in TicketPackets, and under this name, because origin/feature/bnet-presence already
+        // has it here - a second class elsewhere would be two truths for one opcode. The handler
+        // semantics differ, see WorldSession::HandleChatReportFiltered.
+        class ChatReportFiltered final : public ClientPacket
+        {
+        public:
+            explicit ChatReportFiltered(WorldPacket&& packet) : ClientPacket(CMSG_CHAT_REPORT_FILTERED, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid SenderGUID;
+        };
     }
 }
 

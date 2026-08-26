@@ -1223,6 +1223,22 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
         SendPacket(motd.Write());
     }
 
+    // SMSG_EXPECTED_SPAM_RECORDS (0x4A0005): the patterns the client filters incoming chat against.
+    // Consumer 0x20B31A0 replaces its container, so this is a login-once packet.
+    SendExpectedSpamRecords();
+
+    // SMSG_CHAT_IS_DOWN (0x4A0015) is the state form of the chat outage: the client sets its outage
+    // flag and prints CHAT_SERVER_DISCONNECTED_MESSAGE. Nothing is sent while chat is up, because
+    // the client's flag already starts at 0.
+    if (!sWorld->getBoolConfig(CONFIG_CHAT_SERVICE_ENABLED))
+        SendChatServiceStatus(false, true);
+
+    // SMSG_CHAT_REGIONAL_SERVICE_STATUS (0x4A001D). Status 0 means available, and the client
+    // debounces against its cached value which also starts at 0 - so only the unavailable case
+    // produces a CHAT_REGIONAL_STATUS_CHANGED event at login.
+    if (!sWorld->getBoolConfig(CONFIG_CHAT_REGIONAL_SERVICE_ENABLED))
+        SendChatRegionalServiceStatus(false);
+
     SendSetTimeZoneInformation();
 
     // Send PVPSeason

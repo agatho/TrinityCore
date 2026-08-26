@@ -2658,7 +2658,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
             uint32 Count = 0;
         };
 
-        void UpdateSpeakTime(ChatFloodThrottle::Index index);
+        /// Returns false when this message trips the flood limit and must not be delivered.
+        bool UpdateSpeakTime(ChatFloodThrottle::Index index);
 
         /*********************************************************/
         /***                 VARIOUS SYSTEMS                   ***/

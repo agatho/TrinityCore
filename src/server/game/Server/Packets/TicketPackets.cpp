@@ -400,4 +400,9 @@ void BugReport::Read()
     _worldPacket >> SizedString::Data(DiagInfo);
     _worldPacket >> SizedString::Data(Text);
 }
+
+void ChatReportFiltered::Read()
+{
+    _worldPacket >> SenderGUID;
+}
 }

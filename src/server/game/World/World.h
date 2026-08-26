@@ -104,6 +104,9 @@ enum WorldBoolConfigs : uint32
 {
     CONFIG_DURABILITY_LOSS_IN_PVP = 0,
     CONFIG_ADDON_CHANNEL,
+    CONFIG_CHAT_SERVICE_ENABLED,
+    CONFIG_CHAT_REGIONAL_SERVICE_ENABLED,
+    CONFIG_CHAT_CAUTIONARY_ENABLED,
     CONFIG_CLEAN_CHARACTER_DB,
     CONFIG_GRID_UNLOAD,
     CONFIG_STATS_SAVE_ONLY_ON_LOGOUT,
@@ -309,6 +312,7 @@ enum WorldIntConfigs : uint32
     CONFIG_CHATFLOOD_ADDON_MESSAGE_COUNT,
     CONFIG_CHATFLOOD_ADDON_MESSAGE_DELAY,
     CONFIG_CHATFLOOD_MUTE_TIME,
+    CONFIG_CHAT_SPAM_FILTER_REPORT_MUTE_THRESHOLD,
     CONFIG_CREATURE_FAMILY_ASSISTANCE_DELAY,
     CONFIG_CREATURE_FAMILY_FLEE_DELAY,
     CONFIG_WORLD_BOSS_LEVEL_DIFF,
@@ -658,6 +662,8 @@ class TC_GAME_API World
         void SendGMText(uint32 string_id, ...);
         void SendServerMessage(ServerMessageType messageID, std::string_view stringParam = {}, Player const* player = nullptr);
         void SendGlobalMessage(WorldPacket const* packet, WorldSession* self = nullptr, Optional<Team> team = { });
+        void SendChatServiceStatusToAll();
+        void SendChatRegionalServiceStatusToAll();
         void SendGlobalGMMessage(WorldPacket const* packet, WorldSession* self = nullptr, Optional<Team> team = { });
 
         /// Are we in the middle of a shutdown?

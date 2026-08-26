@@ -2724,6 +2724,11 @@ bool Guild::Validate()
 }
 
 // Broadcasts
+bool Guild::HasChatRankRight(Player const* player, bool officerOnly) const
+{
+    return _HasRankRight(player, officerOnly ? GR_RIGHT_OFFCHATSPEAK : GR_RIGHT_GCHATSPEAK);
+}
+
 void Guild::BroadcastToGuild(WorldSession* session, bool officerOnly, std::string_view msg, uint32 language) const
 {
     if (session && session->GetPlayer() && _HasRankRight(session->GetPlayer(), officerOnly ? GR_RIGHT_OFFCHATSPEAK : GR_RIGHT_GCHATSPEAK))

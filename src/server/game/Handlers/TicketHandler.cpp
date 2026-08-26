@@ -18,8 +18,13 @@
 #include "WorldSession.h"
 #include "Common.h"
 #include "DatabaseEnv.h"
+#include "GameTime.h"
+#include "Log.h"
+#include "ObjectAccessor.h"
+#include "Player.h"
 #include "SupportMgr.h"
 #include "TicketPackets.h"
+#include "World.h"
 
 void WorldSession::HandleGMTicketGetCaseStatusOpcode(WorldPackets::Ticket::GMTicketGetCaseStatus& /*packet*/)
 {
@@ -93,6 +98,52 @@ void WorldSession::HandleBugReportOpcode(WorldPackets::Ticket::BugReport& bugRep
     stmt->setString(0, bugReport.Text);
     stmt->setString(1, bugReport.DiagInfo);
     CharacterDatabase.Execute(stmt);
+}
+
+// CMSG_CHAT_REPORT_FILTERED (0x2C0004). The client is telling us that IT hid an incoming whisper
+// because the text hit one of the patterns we shipped with SMSG_EXPECTED_SPAM_RECORDS. That makes
+// this a spam filter hit report about the SENDER, not a complaint filed by a user - so it is
+// counted, not turned into a ticket. One ticket per hit (what origin/feature/bnet-presence does
+// here) would let one client fill the ticket queue, and it misreads the trigger: the player never
+// pressed anything.
+//
+// The count lives on the reported player's own session, keyed by distinct reporter, so a single
+// modified client cannot inflate it and it disappears with the character. Enforcement is opt-in
+// through Chat.SpamFilterReport.MuteThreshold; the default only logs.
+void WorldSession::HandleChatReportFiltered(WorldPackets::Ticket::ChatReportFiltered& packet)
+{
+    Player* reporter = GetPlayer();
+    if (!reporter || packet.SenderGUID.IsEmpty() || packet.SenderGUID == reporter->GetGUID())
+        return;
+
+    Player* reported = ObjectAccessor::FindConnectedPlayer(packet.SenderGUID);
+    if (!reported)
+        return;     // the sender logged out in the meantime - nothing to count against
+
+    reported->GetSession()->AddChatSpamFilterReport(reporter->GetGUID());
+}
+
+// Counts one distinct reporter and, above the configured threshold, mutes for the same duration the
+// flood filter uses.
+void WorldSession::AddChatSpamFilterReport(ObjectGuid reporterGuid)
+{
+    if (!_chatSpamFilterReporters.insert(reporterGuid).second)
+        return;     // already counted this reporter
+
+    uint32 reportCount = uint32(_chatSpamFilterReporters.size());
+    TC_LOG_INFO("chat.spam", "Client side spam filter report against {}: {} distinct reporter(s)",
+        GetPlayerInfo(), reportCount);
+
+    uint32 threshold = sWorld->getIntConfig(CONFIG_CHAT_SPAM_FILTER_REPORT_MUTE_THRESHOLD);
+    if (!threshold || reportCount < threshold)
+        return;
+
+    time_t newMute = GameTime::GetGameTime() + sWorld->getIntConfig(CONFIG_CHATFLOOD_MUTE_TIME);
+    if (m_muteTime < newMute)
+        m_muteTime = newMute;
+
+    TC_LOG_WARN("chat.spam", "Muted {} - {} distinct clients filtered its messages as spam",
+        GetPlayerInfo(), reportCount);
 }
 
 void WorldSession::HandleComplaint(WorldPackets::Ticket::Complaint& packet)

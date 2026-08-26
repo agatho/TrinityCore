@@ -137,6 +137,31 @@ namespace WorldPackets
             std::string ChannelName;
         };
 
+        // SMSG_CHANNEL_NOTIFY_NPE_JOINED_BATCH (0x4A0018) - { uint32, uint32, uint32 }, exactly
+        // 12 bytes. Raw pointer class; the format is in consumer 0x20AB190, which reads three
+        // dwords at +0, +4 and +8:
+        //   +0 ChatChannelID - must be non zero AND must match field +0x130 (304) of an entry in the
+        //      client's own channel table (base 0x4C998E0, stride 608), otherwise nothing happens
+        //   +4, +8 - the two %d arguments of the GlobalString NPEV2_CHAT_BATCH_JOIN_MESSAGE
+        //      (string at 0x3D79070, binary only - it is not in the 12.1 UI source tree), passed in
+        //      that order (raw listing at 0x20AB211..0x20AB227)
+        // The whole path is additionally gated on dword_7FF7852F3918 (RVA 0x4323918) being zero;
+        // that gate is 1 in the retail image, so retail clients drop this silently.
+        // Server side it belongs to the only Mentor ruleset channel, ChatChannels row 32
+        // "Newcomer Chat".
+        // Build 12.1.0.69382, no reference packet.
+        class ChannelNotifyNPEJoinedBatch final : public ServerPacket
+        {
+        public:
+            explicit ChannelNotifyNPEJoinedBatch() : ServerPacket(SMSG_CHANNEL_NOTIFY_NPE_JOINED_BATCH, 12) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 ChatChannelID = 0;
+            uint32 JoinedCount = 0;     ///< UNVERIFIED: first %d of NPEV2_CHAT_BATCH_JOIN_MESSAGE
+            uint32 TotalCount = 0;      ///< UNVERIFIED: second %d of NPEV2_CHAT_BATCH_JOIN_MESSAGE
+        };
+
         class ChannelCommand final : public ClientPacket
         {
         public:

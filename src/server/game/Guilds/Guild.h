@@ -828,6 +828,9 @@ class TC_GAME_API Guild
 
         // Broadcasts
         void BroadcastToGuild(WorldSession* session, bool officerOnly, std::string_view msg, uint32 language = LANG_UNIVERSAL) const;
+        /// Whether the player may talk in guild / officer chat. Needed by the chat handler to
+        /// answer with SMSG_CHAT_NOT_IN_GUILD (ERR_GUILD_PERMISSIONS) instead of failing silently.
+        bool HasChatRankRight(Player const* player, bool officerOnly) const;
         void BroadcastAddonToGuild(WorldSession* session, bool officerOnly, std::string_view msg, std::string_view prefix, bool isLogged) const;
         void BroadcastPacketToRank(WorldPacket const* packet, GuildRankId rankId) const;
         void BroadcastPacket(WorldPacket const* packet) const;

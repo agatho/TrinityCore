@@ -39,6 +39,7 @@
 #include <unordered_map>
 
 class BlackMarketEntry;
+class ChatCautionMgr;
 class CollectionMgr;
 class Creature;
 class InstanceLock;
@@ -312,6 +313,7 @@ namespace WorldPackets
         class ChatReportIgnored;
         class CanLocalWhisperTargetRequest;
         class UpdateAADCStatus;
+        class CautionaryAction;
     }
 
     namespace Collections
@@ -774,6 +776,7 @@ namespace WorldPackets
 
     namespace Ticket
     {
+        class ChatReportFiltered;
         class GMTicketGetSystemStatus;
         class GMTicketGetCaseStatus;
         class SubmitUserFeedback;
@@ -1639,6 +1642,20 @@ class TC_GAME_API WorldSession
         void SendChatPlayerNotfoundNotice(std::string const& name);
         void SendPlayerAmbiguousNotice(std::string const& name);
         void SendChatRestricted(ChatRestrictionType restriction);
+        void SendChatNotInParty(ChatMsg type);
+        void SendChatNotInGuild(uint32 guildCommandError);           ///< @see enum GuildCommandError - NOT a ChatMsg
+        void SendChatIgnoredAccountMuted();
+        void SendChatServiceStatus(bool available, bool initial);
+        void SendChatRegionalServiceStatus(bool available);
+        void SendExpectedSpamRecords();
+        void SendChatAutoResponded(bool isDND, std::string_view text);
+        bool SendCautionaryChatMessage(ChatMsg type, Language lang, std::string const& msg, std::string const& targetName, ObjectGuid targetGuid);
+        void SendCautionaryChannelMessage(std::string const& msg);
+        void HandleChatSendCautionaryChatMessage(WorldPackets::Chat::CautionaryAction& packet);
+        void HandleChatDropCautionaryChatMessage(WorldPackets::Chat::CautionaryAction& packet);
+        void HandleChatSendCautionaryChannelMessage(WorldPackets::Chat::CautionaryAction& packet);
+        void HandleChatReportFiltered(WorldPackets::Ticket::ChatReportFiltered& packet);
+        void AddChatSpamFilterReport(ObjectGuid reporterGuid);
         void HandleTextEmoteOpcode(WorldPackets::Chat::CTextEmote& packet);
         void HandleChatIgnoredOpcode(WorldPackets::Chat::ChatReportIgnored& chatReportIgnored);
         void HandleChatCanLocalWhisperTargetRequest(WorldPackets::Chat::CanLocalWhisperTargetRequest const& canLocalWhisperTargetRequest);
@@ -2055,6 +2072,16 @@ class TC_GAME_API WorldSession
         std::unique_ptr<BattlePets::BattlePetMgr> _battlePetMgr;
 
         std::unique_ptr<CollectionMgr> _collectionMgr;
+
+        // Chat messages this session is holding back until the player confirms or drops them
+        // (SMSG_CAUTIONARY_CHAT_MESSAGE). Session state on purpose - it must not survive a relog.
+        std::unique_ptr<ChatCautionMgr> _chatCautionMgr;
+        bool _chatCautionAccepted;      ///< true while re-running a confirmed held message, stops it being held again
+
+        // Distinct reporters that told us this session's player tripped their client side spam
+        // filter (CMSG_CHAT_REPORT_FILTERED). One entry per reporter, so a single client cannot
+        // inflate the count.
+        GuidSet _chatSpamFilterReporters;
 
         ConnectToKey _instanceConnectKey;
 

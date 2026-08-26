@@ -39,6 +39,7 @@ Channel::Channel(ObjectGuid const& guid, uint32 channelId, uint32 team /*= 0*/, 
     _isDirty(false),
     _nextActivityUpdateTime(0),
     _announceEnabled(false),                                               // no join/leave announces
+    _moderationEnabled(false),
     _ownershipEnabled(false),                                              // no ownership handout
     _isOwnerInvisible(false),
     _channelFlags(CHANNEL_FLAG_GENERAL),                                   // for all built-in channels
@@ -64,6 +65,7 @@ Channel::Channel(ObjectGuid const& guid, std::string const& name, uint32 team /*
     _isDirty(false),
     _nextActivityUpdateTime(0),
     _announceEnabled(true),
+    _moderationEnabled(false),
     _ownershipEnabled(true),
     _isOwnerInvisible(false),
     _channelFlags(CHANNEL_FLAG_CUSTOM),
@@ -232,6 +234,15 @@ void Channel::JoinChannel(Player* player, std::string const& pass)
     SendToOne(builder, guid);
 
     JoinNotify(guid);
+
+    // SMSG_CHANNEL_NOTIFY_NPE_JOINED_BATCH (0x4A0018). ChatChannels row 32 "Newcomer Chat" is the
+    // only row in 69382 with Ruleset == Mentor, and it is the one channel that summarises newcomer
+    // joins instead of announcing them one by one - built-in channels have _announceEnabled == false
+    // and therefore no per-join text of their own.
+    if (IsConstant())
+        if (ChatChannelsEntry const* channelEntry = sChatChannelsStore.LookupEntry(_channelId))
+            if (channelEntry->GetRuleset() == ChatChannelRuleset::Mentor)
+                SendNPEJoinedBatch(1);
 
     // Custom channel handling
     if (!IsConstant())
@@ -892,16 +903,119 @@ void Channel::SetOwner(ObjectGuid const& guid, bool exclaim)
     }
 }
 
-void Channel::SilenceAll(Player const* /*player*/, std::string const& /*name*/)
+// CMSG_CHAT_CHANNEL_MODERATE (0x2C0016). Toggle, exactly like Channel::Announce - the client's
+// argument class for this opcode is the one-argument "Usage: %s(\"channel\")" group (sender
+// 0x20B9F10), which contains only queries and target-less toggles.
+// The DIRECTION is not derivable offline: the 12.1 retail client has no trigger for this opcode at
+// all. Its eleven channel command Lua thunks load their opcode from the .rdata table
+// 0x3C20C40..0x3C20C68 and 0x2C0016 is not among them; a scan of the whole image for the dword
+// 0x002C0016 finds only the serializer (0x748AD9) and the opcode stamp (0x748B82). So no round trip
+// test was possible - see offene Frage O3.
+void Channel::Moderate(Player const* player)
 {
+    ObjectGuid const& guid = player->GetGUID();
+
+    if (!IsOn(guid))
+    {
+        NotMemberAppend appender;
+        ChannelNameBuilder<NotMemberAppend> builder(this, appender);
+        SendToOne(builder, guid);
+        return;
+    }
+
+    PlayerInfo const& playerInfo = _playersStore.at(guid);
+    if (!playerInfo.IsModerator() && !player->GetSession()->HasPermission(rbac::RBAC_PERM_CHANGE_CHANNEL_NOT_MODERATOR))
+    {
+        NotModeratorAppend appender;
+        ChannelNameBuilder<NotModeratorAppend> builder(this, appender);
+        SendToOne(builder, guid);
+        return;
+    }
+
+    _moderationEnabled = !_moderationEnabled;
+
+    if (_moderationEnabled)
+    {
+        ModerationOnAppend appender(guid);
+        ChannelNameBuilder<ModerationOnAppend> builder(this, appender);
+        SendToAll(builder);
+    }
+    else
+    {
+        ModerationOffAppend appender(guid);
+        ChannelNameBuilder<ModerationOffAppend> builder(this, appender);
+        SendToAll(builder);
+    }
 }
 
-void Channel::UnsilenceAll(Player const* /*player*/, std::string const& /*name*/)
+// Bestand B3: both of these were empty bodies although both opcodes are STATUS_LOGGEDIN, dispatched
+// and reachable through a macro - the pure silent ack that the acceptance criteria calls out.
+//
+// They are the per-player mute, not a channel wide switch: the shared client body 0x7487B0 that
+// CMSG_CHAT_CHANNEL_SILENCE_ALL / _UNSILENCE_ALL use carries SizedString<7> ChannelName plus
+// SizedString<9> Name, i.e. a target player, and Channel::SetMute / UnsetMute were sitting unused
+// right next to these stubs.
+//
+// Muting requires a moderated channel; otherwise the answer is CHAT_NOT_MODERATED_NOTICE (0x1C),
+// which is why NotModeratedAppend existed in the tree without a single user.
+void Channel::SilenceAll(Player const* player, std::string const& name)
 {
+    if (!_moderationEnabled)
+    {
+        NotModeratedAppend appender;
+        ChannelNameBuilder<NotModeratedAppend> builder(this, appender);
+        SendToOne(builder, player->GetGUID());
+        return;
+    }
+
+    SetMute(player, name);
 }
 
+void Channel::UnsilenceAll(Player const* player, std::string const& name)
+{
+    if (!_moderationEnabled)
+    {
+        NotModeratedAppend appender;
+        ChannelNameBuilder<NotModeratedAppend> builder(this, appender);
+        SendToOne(builder, player->GetGUID());
+        return;
+    }
+
+    UnsetMute(player, name);
+}
+
+// CMSG_CHAT_CHANNEL_DECLINE_INVITE has nothing to clean up on this server: Channel::Invite is
+// stateless - it sends the invite notice and keeps no pending-invite record - so there is no
+// server side invitation to withdraw. The client drops its own pending invite locally.
 void Channel::DeclineInvite(Player const* /*player*/)
 {
+}
+
+// SMSG_CHANNEL_NOTIFY_NPE_JOINED_BATCH (0x4A0018), 12 bytes.
+// Consumer 0x20AB190 looks ChatChannelID up in the client's own channel table and silently does
+// nothing if it is 0 or unknown to that client, so this must go out after SMSG_CHANNEL_NOTIFY_JOINED.
+// The path is additionally gated on 0x4323918 == 0 in the client, and that gate is 1 in the retail
+// image, so a retail client drops this without a trace (Dev-Client path).
+void Channel::SendNPEJoinedBatch(uint32 joinedCount) const
+{
+    uint32 channelId = _channelId;
+    uint32 totalCount = GetNumPlayers();
+
+    auto builder = [channelId, joinedCount, totalCount](LocaleConstant /*locale*/)
+    {
+        Trinity::PacketSenderOwning<WorldPackets::Channel::ChannelNotifyNPEJoinedBatch>* notify = new Trinity::PacketSenderOwning<WorldPackets::Channel::ChannelNotifyNPEJoinedBatch>();
+        notify->Data.ChatChannelID = channelId;
+        // UNVERIFIED: the two dwords are the %d arguments of the GlobalString
+        // NPEV2_CHAT_BATCH_JOIN_MESSAGE, in this order (raw listing 0x20AB211..0x20AB227). Their
+        // meaning is not stated anywhere - the string exists only in the binary (0x3D79070), not in
+        // the 12.1 UI source tree, so the wording that would name them is unavailable.
+        notify->Data.JoinedCount = joinedCount;
+        notify->Data.TotalCount = totalCount;
+        notify->Data.Write();
+        return notify;
+    };
+
+    SendToAll(builder);
 }
 
 void Channel::JoinNotify(ObjectGuid const& guid) const

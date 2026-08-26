@@ -12026,6 +12026,79 @@ void ObjectMgr::LoadPhaseNames()
     TC_LOG_INFO("server.loading", ">> Loaded {} phase names in {} ms.", count, GetMSTimeDiffToNow(oldMSTime));
 }
 
+// `chat_spam_record` - the spam patterns of this realm. Two consumers, one table:
+//   * SMSG_EXPECTED_SPAM_RECORDS (0x4A0005) ships the raw pattern strings to every client at login;
+//     the client filters INCOMING chat against them and answers a hit with
+//     CMSG_CHAT_REPORT_FILTERED (0x2C0004).
+//   * the cautionary chat check runs the same patterns against OUTGOING whispers and channel
+//     messages and, when enabled, holds the message back with SMSG_CAUTIONARY_CHAT_MESSAGE.
+// There is no DB2 for this: SpamMessages.db2 exists (135 rows in 69382) but is not loaded by this
+// tree, and the set is realm specific anyway. SpamMessages.db2 is a sensible seed.
+void ObjectMgr::LoadChatSpamRecords()
+{
+    uint32 oldMSTime = getMSTime();
+    _chatSpamRecords.clear();
+    _chatSpamPatterns.clear();
+
+    //                                               0     1
+    QueryResult result = WorldDatabase.Query("SELECT `ID`, `Text` FROM `chat_spam_record` ORDER BY `ID`");
+
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 chat spam records. DB table `chat_spam_record` is empty.");
+        return;
+    }
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        uint32 id = fields[0].GetUInt32();
+        std::string text = fields[1].GetString();
+
+        if (text.empty())
+        {
+            TC_LOG_ERROR("sql.sql", "Table `chat_spam_record` has an empty Text for ID {}, skipped.", id);
+            continue;
+        }
+
+        // The wire carries the length in 9 bits, so 511 bytes is the hard ceiling; the client reads
+        // into a 512 byte element and appends its own terminator.
+        if (text.length() > 511)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `chat_spam_record` ID {} has a Text of {} bytes, but the wire format allows at most 511. Skipped.",
+                id, text.length());
+            continue;
+        }
+
+        // Compiled once. A malformed pattern must not take the realm down, and it must not silently
+        // disable the whole list either.
+        try
+        {
+            _chatSpamPatterns.emplace_back(text, std::regex::ECMAScript | std::regex::icase | std::regex::optimize);
+        }
+        catch (std::regex_error const& e)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `chat_spam_record` ID {} is not a usable regular expression ({}). It is still sent to clients, "
+                "but the server side cautionary check will not use it.", id, e.what());
+        }
+
+        _chatSpamRecords.push_back(std::move(text));
+    } while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} chat spam records ({} usable as server side patterns) in {} ms.",
+        _chatSpamRecords.size(), _chatSpamPatterns.size(), GetMSTimeDiffToNow(oldMSTime));
+}
+
+bool ObjectMgr::MatchesChatSpamPattern(std::string const& text) const
+{
+    for (std::regex const& pattern : _chatSpamPatterns)
+        if (std::regex_search(text, pattern))
+            return true;
+
+    return false;
+}
+
 std::string ObjectMgr::GetPhaseName(uint32 phaseId) const
 {
     PhaseNameContainer::const_iterator iter = _phaseNameStore.find(phaseId);
