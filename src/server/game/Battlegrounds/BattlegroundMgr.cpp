@@ -209,12 +209,24 @@ void BattlegroundMgr::BuildBattlegroundStatusNone(WorldPackets::Battleground::Ba
     battlefieldStatus->Ticket.Time = joinTime;
 }
 
-void BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(WorldPackets::Battleground::BattlefieldStatusNeedConfirmation* battlefieldStatus, Battleground const* bg, Player const* player, uint32 ticketId, uint32 joinTime, uint32 timeout, BattlegroundQueueTypeId queueId)
+// role is the INVITED player's own role, not the queuer's and not a mask. The client reads the byte as a
+// signed char (consumer RVA 0x21BFDB0, image base 0x7FF780FD0000), stores it in the battlefield-status slot
+// and immediately turns it into a role BIT with "1 << (role + 1)", then keys a table lookup on the same
+// role + 1 before firing UPDATE_BATTLEFIELD_STATUS. That shift is what identifies the numbering beyond
+// doubt: ChrSpecializationRole Tank 0 / Healer 1 / Dps 2 maps onto 2 / 4 / 8, which is exactly
+// lfg::PLAYER_ROLE_TANK / _HEALER / _DAMAGE. A hardcoded 0 therefore did not mean "unset" - it announced
+// every invited player, in every mode, as a TANK.
+// Retail agrees: all three SMSG_BATTLEFIELD_STATUS_NEED_CONFIRMATION bodies in C:\sniff\rated BG 12.0.7.pkt
+// (ticks 136714 / 864798 / 896705, 55 bytes each) carry 0x01, and the queuer of that capture is a Holy
+// Priest - SMSG_BATTLEFIELD_STATUS_QUEUED at tick 136009 carries SpecSelected 257 - who joined with role
+// mask 0x04, lfg::PLAYER_ROLE_HEALER. A mask on the wire would have read 4, not 1.
+void BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(WorldPackets::Battleground::BattlefieldStatusNeedConfirmation* battlefieldStatus, Battleground const* bg, Player const* player, uint32 ticketId, uint32 joinTime, uint32 timeout, BattlegroundQueueTypeId queueId,
+    ChrSpecializationRole role)
 {
     BuildBattlegroundStatusHeader(&battlefieldStatus->Hdr, player, ticketId, joinTime, queueId);
     battlefieldStatus->Mapid = bg->GetMapId();
     battlefieldStatus->Timeout = timeout;
-    battlefieldStatus->Role = 0;
+    battlefieldStatus->Role = uint8(AsUnderlyingType(role));
 }
 
 void BattlegroundMgr::BuildBattlegroundStatusActive(WorldPackets::Battleground::BattlefieldStatusActive* battlefieldStatus, Battleground const* bg, Player const* player, uint32 ticketId, uint32 joinTime, BattlegroundQueueTypeId queueId)

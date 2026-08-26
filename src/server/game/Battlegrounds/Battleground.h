@@ -139,6 +139,16 @@ enum BattlegroundTimeIntervals
     // when it expires. 30000 is what SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS advertises in every captured
     // body of C:\sniff\rated BG 12.0.7.pkt, and all three captured proposal runs fit inside it.
     PROPOSAL_ACCEPT_WAIT_TIME       = 30000,                // ms
+    // How long the CONFIRMATION DIALOG of a proposal-managed invite is told to run, which is not the same
+    // number as the deadline above and must not be filled from it. Retail sends 28000 in the Timeout field
+    // of all three SMSG_BATTLEFIELD_STATUS_NEED_CONFIRMATION bodies of C:\sniff\rated BG 12.0.7.pkt
+    // (ticks 136714 / 864798 / 896705) while the SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS bodies of the very
+    // same three windows all carry 30000 (18 bodies, every one re-decoded). The two-second gap is not noise:
+    // the client turns Timeout into an absolute expiry the moment it reads the packet - consumer RVA
+    // 0x21BFDB0 computes "now + Timeout" and stores it where C_PvP.GetBattlefieldPortExpiration reads it -
+    // so a dialog filled with the deadline itself expires on the exact tick BGQueueProposalTimeoutEvent
+    // tears the proposal down, and a click on the last tick races the teardown. 28000 leaves that margin.
+    PROPOSAL_CONFIRM_WAIT_TIME      = 28000,                // ms
     TIME_AUTOCLOSE_BATTLEGROUND     = 120000,               // ms
     MAX_OFFLINE_TIME                = 300,                  // secs
     RESPAWN_ONE_DAY                 = 86400,                // secs

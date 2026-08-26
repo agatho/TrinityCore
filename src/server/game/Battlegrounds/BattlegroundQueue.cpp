@@ -484,6 +484,12 @@ void BattlegroundQueue::RemovePlayer(ObjectGuid guid, bool decreaseInvitedCount)
     }
 }
 
+ChrSpecializationRole BattlegroundQueue::GetPlayerRole(ObjectGuid guid) const
+{
+    QueuedPlayersMap::const_iterator itr = m_QueuedPlayers.find(guid);
+    return itr != m_QueuedPlayers.end() ? itr->second.Role : ChrSpecializationRole::Dps;
+}
+
 //returns true when player pl_guid is in queue and is invited to bgInstanceGuid
 bool BattlegroundQueue::IsPlayerInvited(ObjectGuid pl_guid, const uint32 bgInstanceGuid, const uint32 removeTime)
 {
@@ -551,7 +557,7 @@ bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg,
             // (ticks 136714 / 864798 / 896705), followed only by 0x48000D until the window ends at
             // 166467 / 894382 / 916110 - 29,7 s, 29,6 s and an early STATUS_ACTIVE, never a second
             // confirmation. Without this gate the reminder would land INVITATION_REMIND_TIME before
-            // the deadline, i.e. 10000 ms into the 30000 ms PROPOSAL_ACCEPT_WAIT_TIME window, and
+            // the deadline, i.e. 8000 ms into the 28000 ms PROPOSAL_CONFIRM_WAIT_TIME window, and
             // overwrite the role display that SendProposalStatus is maintaining. Worse, it would go
             // out to members who already accepted: ProposalAccept only sets member.Accepted and
             // leaves ginfo->IsInvitedToBGInstanceGUID and ginfo->RemoveInviteTime alone, so the
@@ -576,7 +582,7 @@ bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg,
                  player->GetName(), player->GetGUID().ToString(), bg->GetInstanceID(), queueSlot, m_queueId.BattlemasterListId);
 
             WorldPackets::Battleground::BattlefieldStatusNeedConfirmation battlefieldStatus;
-            BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(bgQueueTypeId), inviteTime, bgQueueTypeId);
+            BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(bgQueueTypeId), inviteTime, bgQueueTypeId, itr->second->Role);
             player->SendDirectMessage(battlefieldStatus.Write());
         }
         return true;
@@ -1652,7 +1658,7 @@ void BattlegroundQueue::BattlegroundQueueUpdate(uint32 /*diff*/, BattlegroundBra
 
             for (uint32 i = 0; i < PVP_TEAMS_COUNT; ++i)
                 for (GroupsQueueType::const_iterator citr = m_SelectionPools[TEAM_ALLIANCE + i].SelectedGroups.begin(); citr != m_SelectionPools[TEAM_ALLIANCE + i].SelectedGroups.end(); ++citr)
-                    InviteGroupToBG((*citr), bg2, (*citr)->Team, PROPOSAL_ACCEPT_WAIT_TIME, true);
+                    InviteGroupToBG((*citr), bg2, (*citr)->Team, PROPOSAL_CONFIRM_WAIT_TIME, true);
 
             TC_LOG_DEBUG("bg.battleground", "Proposing a Battleground Blitz match ({} per team: {} tanks, {} healers, {} damagers)",
                 perTeam, tanks, healers, perTeam - tanks - healers);
@@ -1699,7 +1705,7 @@ bool BGQueueInviteEvent::Execute(uint64 /*e_time*/, uint32 /*p_time*/)
             uint32 remaining = m_RemoveTime > now ? m_RemoveTime - now : 0;
 
             WorldPackets::Battleground::BattlefieldStatusNeedConfirmation battlefieldStatus;
-            BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(m_QueueId), remaining, m_QueueId);
+            BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(m_QueueId), remaining, m_QueueId, bgQueue.GetPlayerRole(m_PlayerGuid));
             player->SendDirectMessage(battlefieldStatus.Write());
         }
     }

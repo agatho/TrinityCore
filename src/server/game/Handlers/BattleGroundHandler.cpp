@@ -427,6 +427,25 @@ void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground
         return;
     }
 
+    // The exclusion against the random-battleground queue, on the solo path. A party is already covered:
+    // Group::CanJoinBattlegroundQueue tests every member with
+    // "bgOrTemplate->Id != BATTLEGROUND_AA && isInRandomBgQueue -> ERR_IN_RANDOM_BG" (Group.cpp), and
+    // BattlemasterList 1101 is not BATTLEGROUND_AA - but that function is only called under "if (grp)"
+    // further down, so without this a player standing in the random queue may stack Blitz on top of it
+    // ALONE while the same player in a duo is refused. That asymmetry is not a retail question, it is an
+    // invariant of this tree; HandleBattlemasterJoinOpcode, which these handlers were written along, carries
+    // the same test on its own solo path.
+    // Only this half of the pair is needed. Its mirror, ERR_IN_NON_RANDOM_BG, guards joining the RANDOM
+    // queue while already queued elsewhere, and BattlegroundMgr::IsRandomBattleground is true only for
+    // BATTLEGROUND_RB (32) and BATTLEGROUND_RANDOM_EPIC (901) - never for 1101.
+    if (!grp
+        && (_player->InBattlegroundQueueForBattlegroundQueueType(BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_RB, BattlegroundQueueIdType::Battleground, false, 0))
+            || _player->InBattlegroundQueueForBattlegroundQueueType(BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_RANDOM_EPIC, BattlegroundQueueIdType::Battleground, false, 0))))
+    {
+        sendFailed(ERR_IN_RANDOM_BG);
+        return;
+    }
+
     // already queued for Blitz
     if (_player->GetBattlegroundQueueIndex(bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
         return;
@@ -933,6 +952,19 @@ void WorldSession::HandleBattlemasterJoinBrawl(WorldPackets::Battleground::Battl
         return;
     }
 
+    // Exclusion against the random-battleground queue on the solo path, exactly as in
+    // HandleBattlemasterJoinRatedBGBlitz; the account of why the group path already has it and this one did
+    // not is there, do not restate it here. It applies unchanged to a brawl: BattlemasterList 879 is neither
+    // BATTLEGROUND_AA nor a random battleground, so Group::CanJoinBattlegroundQueue does refuse a party
+    // member who is in the random queue, and nothing refused the same player queueing alone.
+    if (!grp
+        && (_player->InBattlegroundQueueForBattlegroundQueueType(BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_RB, BattlegroundQueueIdType::Battleground, false, 0))
+            || _player->InBattlegroundQueueForBattlegroundQueueType(BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_RANDOM_EPIC, BattlegroundQueueIdType::Battleground, false, 0))))
+    {
+        sendFailed(ERR_IN_RANDOM_BG);
+        return;
+    }
+
     if (_player->GetBattlegroundQueueIndex(bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
         return;
 
@@ -1241,7 +1273,8 @@ void WorldSession::HandleRequestBattlefieldStatusOpcode(WorldPackets::Battlegrou
                 continue;
 
             WorldPackets::Battleground::BattlefieldStatusNeedConfirmation battlefieldStatus;
-            BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, _player, i, _player->GetBattlegroundQueueJoinTime(bgQueueTypeId), getMSTimeDiff(GameTime::GetGameTimeMS(), ginfo.RemoveInviteTime), bgQueueTypeId);
+            BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, _player, i, _player->GetBattlegroundQueueJoinTime(bgQueueTypeId), getMSTimeDiff(GameTime::GetGameTimeMS(), ginfo.RemoveInviteTime), bgQueueTypeId,
+                bgQueue.GetPlayerRole(_player->GetGUID()));
             SendPacket(battlefieldStatus.Write());
         }
         else

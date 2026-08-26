@@ -169,6 +169,10 @@ class TC_GAME_API BattlegroundQueue
         void RemovePlayer(ObjectGuid guid, bool decreaseInvitedCount);
         bool IsPlayerInvited(ObjectGuid pl_guid, const uint32 bgInstanceGuid, const uint32 removeTime);
         bool GetPlayerGroupInfoData(ObjectGuid guid, GroupQueueInfo* ginfo);
+        // The queued player's own resolved role, for the callers that hold only a guid. Dps for a player who
+        // is not in this queue at all - the same value ResolveQueueRole falls back to - because every caller
+        // is about to write the byte into a packet and none of them can usefully refuse to send it.
+        ChrSpecializationRole GetPlayerRole(ObjectGuid guid) const;
         void PlayerInvitedToBGUpdateAverageWaitTime(GroupQueueInfo* ginfo, BattlegroundBracketId bracket_id);
         uint32 GetAverageQueueWaitTime(GroupQueueInfo* ginfo, BattlegroundBracketId bracket_id) const;
 
@@ -227,10 +231,12 @@ class TC_GAME_API BattlegroundQueue
 
         BattlegroundQueueTypeId m_queueId;
 
-        // inviteTime is how long the invited players have to answer. A proposal-managed invite passes
-        // PROPOSAL_ACCEPT_WAIT_TIME and suppresses the per-player BGQueueRemoveEvent, because the proposal's
-        // own deadline owns the removal - two independent removers racing on the same tick would strand half
-        // the lobby.
+        // inviteTime is how long the invited players have to answer, and it is what the confirmation dialog
+        // is told. A proposal-managed invite passes PROPOSAL_CONFIRM_WAIT_TIME - two seconds SHORTER than the
+        // proposal's own PROPOSAL_ACCEPT_WAIT_TIME deadline, which is the gap retail leaves, see the constants
+        // in Battleground.h - and suppresses the per-player BGQueueRemoveEvent, because the proposal's own
+        // deadline owns the removal; two independent removers racing on the same tick would strand half the
+        // lobby.
         bool InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg, Team side, uint32 inviteTime = INVITE_ACCEPT_WAIT_TIME, bool proposalManaged = false);
 
         // Opens a proposal over the two filled selection pools and tells its members it is running.

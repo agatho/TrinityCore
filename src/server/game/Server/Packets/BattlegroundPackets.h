@@ -196,6 +196,10 @@ namespace WorldPackets
             uint32 Timeout = 0;
             uint32 Mapid = 0;
             BattlefieldStatusHeader Hdr;
+            // ChrSpecializationRole of the invited player - Tank 0, Healer 1, Dps 2 - NOT an lfg role mask.
+            // Kept as a plain uint8 because that is what goes on the wire and what the neighbouring role
+            // counters in this file use; BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation carries the
+            // evidence for the numbering and for what the client does with it.
             uint8 Role = 0;
         };
 
