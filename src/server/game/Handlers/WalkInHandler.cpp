@@ -36,6 +36,11 @@ void WorldSession::SendWalkInResult(WorldPackets::WalkIn::WalkInResultCode resul
 // (RVA 0x12DCAC0), so everything below is the server side re-check plus the conditions only the
 // server can judge - whether there is a recorded entrance to return to at all.
 //
+// The one condition that is not a re-check is the session gate below: the request is only honoured
+// for a player who is actually IN a walk-in session (ActivePlayerData::WalkInData), and refused with
+// a wire value for everything else. Without it the handler would act on any instance map, raid and
+// scenario included - see the comment at the gate.
+//
 // The re-check follows LFGMgr::TeleportPlayer (LFGMgr.cpp:1385-1396), which guards the very same
 // operation - pulling a player out of an instance - and is the only place in this core that already
 // decides it. Its condition list is taken over one for one; only the result values differ, because
@@ -80,7 +85,47 @@ void WorldSession::HandleDelveTeleportOut(WorldPackets::WalkIn::DelveTeleportOut
         return;
     }
 
-    if (!player->GetMap()->IsDungeon())
+    // The session gate, and the only condition that justifies this opcode at all. "Walk-in" is not a
+    // property of the map: Map::IsDungeon (Map.cpp:3303) delegates to MapEntry::IsDungeon
+    // (DB2Structure.h:2930) = MAP_INSTANCE || MAP_RAID || MAP_SCENARIO, so a map test would let any
+    // logged in client leave any raid or scenario mid encounter with an empty packet.
+    //
+    // The walk-in session is a field, not a map kind: ActivePlayerData::WalkInData
+    // (UpdateFields.h:1470, optional) carries MapID, InstanceID, WalkInInstanceType and
+    // WalkInPartyGUID, and the client's event for it says what its lifetime is - WALK_IN_DATA_UPDATE
+    // fires "when the player or a private party member join a new walk-in instance or when the
+    // instance is shut down" (DelvesUIDocumentation.lua:533-539). Present means: this player is in a
+    // walk-in instance session. Requiring it AND requiring it to name the map the player is actually
+    // standing on is the narrowest condition this core can state, and the narrow one is the right
+    // one for an opcode whose only effect is to pull a player off a map.
+    //
+    // The client asks the question a second way, and it asks it of a different field: C_PartyInfo
+    // .IsPartyWalkIn (RVA 0x12E7E20) is one compare of one byte of the client's party object against
+    // 5 - "cmp byte ptr [rax+2F0h], 5" at RVA 0x12E7E74, on the same object C_PartyInfo
+    // .IsPartyInJailersTower walks at RVA 0x12E7950. Five is a party type this core does not know
+    // (GroupType, Group.h:89-91: NONE 0, NORMAL 1, WORLD_PVP 4) and never writes, neither on
+    // PlayerData::PartyType (UpdateFields.h:661, Player::SetPartyType) nor in SMSG_PARTY_UPDATE
+    // (Group.cpp:840). It is not the gate here: the party type says the group is a walk-in group,
+    // WalkInData says which instance session the player is in, and the second is what a teleport out
+    // has to be right about.
+    //
+    // This core never sets WalkInData - it has no delve and no follower dungeon content, so no code
+    // path starts a walk-in session - which means the handler refuses every request as long as that
+    // stays true. That is the intended reading of the packet, not a stub: the alternative, accepting
+    // any instance map, grants an exit this core has no opcode for anywhere else.
+    //
+    // WalkInData::InstanceID is deliberately left out of the comparison: this core's instance id is
+    // a locally assigned uint32 (Map.h:353) while the field is int64, nothing fills either side of
+    // it today, and no recording shows the field populated - an equality test would be a guess about
+    // the id space rather than a check. MapID plus Map::IsDungeon already pins the player to the map
+    // the session names.
+    // UNVERIFIED: that RETAIL answers a request from outside a walk-in session with exactly this
+    // code. It cannot be read off the client - no recording shows a server sending any refusal here,
+    // and 4 is the code this handler already used for the map test it replaces. What is not a guess
+    // is that the request must be refused rather than acted on.
+    if (!player->m_activePlayerData->WalkInData.has_value()
+        || player->m_activePlayerData->WalkInData->MapID != int32(player->GetMapId())
+        || !player->GetMap()->IsDungeon())
     {
         SendWalkInResult(WorldPackets::WalkIn::WalkInResultCode::InvalidTeleportLocation);
         return;
