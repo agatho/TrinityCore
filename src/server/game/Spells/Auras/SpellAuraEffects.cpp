@@ -42,6 +42,7 @@
 #include "Spell.h"
 #include "SpellHistory.h"
 #include "SpellMgr.h"
+#include "SpellPackets.h"
 #include "SpellScript.h"
 #include "ThreatManager.h"
 #include "Unit.h"
@@ -715,8 +716,8 @@ NonDefaultConstructible<pAuraEffectHandler> AuraEffectHandler[TOTAL_AURAS]=
     &AuraEffect::HandleNULL,                                      //643 SPELL_AURA_MOD_RANGED_ATTACK_SPEED_FLAT
     &AuraEffect::HandleNULL,                                      //644 SPELL_AURA_MOD_GRAVITY
     &AuraEffect::HandleNULL,                                      //645
-    &AuraEffect::HandleNULL,                                      //646 SPELL_AURA_ADD_FLAT_PVP_MODIFIER
-    &AuraEffect::HandleNULL,                                      //647 SPELL_AURA_ADD_PCT_PVP_MODIFIER
+    &AuraEffect::HandleNoImmediateEffect,                         //646 SPELL_AURA_ADD_FLAT_PVP_MODIFIER implemented in AuraEffect::CalculateSpellMod()
+    &AuraEffect::HandleNoImmediateEffect,                         //647 SPELL_AURA_ADD_PCT_PVP_MODIFIER implemented in AuraEffect::CalculateSpellMod()
     &AuraEffect::HandleNULL,                                      //648 SPELL_AURA_ADD_FLAT_PVP_MODIFIER_BY_SPELL_LABEL
     &AuraEffect::HandleNULL,                                      //649 SPELL_AURA_ADD_PCT_PVP_MODIFIER_BY_SPELL_LABEL
     &AuraEffect::HandleNULL,                                      //650
@@ -1049,6 +1050,40 @@ void AuraEffect::CalculateSpellMod()
                 m_spellmod = new SpellPctModifierByClassMask(SpellModOp(GetMiscValue()), GetId(), GetBase(), GetSpellEffectInfo().SpellClassMask);
             static_cast<SpellPctModifierByClassMask*>(m_spellmod)->value = GetAmount();
             break;
+        // Familie 0x67 - SMSG_SET_FLAT_/PCT_SPELL_PVP_MODIFIER.
+        // Der MiscValue traegt hier Blizzards KURZES PvP-Enum (SpellPvpModifier, 0..9), nicht
+        // SpellModOp: die Zieltabelle im Client hat genau 10 Zeilen, und die
+        // Nachschlagefunktion 0x1D8B1C0 begrenzt auf 0..9. Wer einen SpellModOp (0..40)
+        // durchreicht, laesst den ungeprueft schreibenden Konsumenten 0x1D8AC00 / 0x1D8AC90
+        // hinter die Tabelle greifen.
+        case SPELL_AURA_ADD_FLAT_PVP_MODIFIER:
+        case SPELL_AURA_ADD_PCT_PVP_MODIFIER:
+        {
+            SpellPvpModifier pvpOp = SpellPvpModifier(GetMiscValue());
+            if (uint32(GetMiscValue()) >= MAX_SPELL_PVP_MODIFIER)
+            {
+                TC_LOG_ERROR("spells", "Aura {} effect {} has SpellPvpModifier {} out of range 0..{} - not applied, sending it would corrupt client memory",
+                    GetId(), GetEffIndex(), GetMiscValue(), MAX_SPELL_PVP_MODIFIER - 1);
+                break;
+            }
+
+            // Index 3 ist im Client 69382 nirgends aufgerufen und deshalb unbelegt; der
+            // Modifikator kann uebertragen, aber serverseitig nicht angewendet werden.
+            SpellModOp op = SpellPvpModifierToSpellModOp(pvpOp).value_or(SpellModOp::HealingAndDamage);
+            if (GetAuraType() == SPELL_AURA_ADD_FLAT_PVP_MODIFIER)
+            {
+                if (!m_spellmod)
+                    m_spellmod = new SpellFlatPvpModifierByClassMask(op, pvpOp, GetId(), GetBase(), GetSpellEffectInfo().SpellClassMask);
+                static_cast<SpellFlatPvpModifierByClassMask*>(m_spellmod)->value = GetAmountAsInt();
+            }
+            else
+            {
+                if (!m_spellmod)
+                    m_spellmod = new SpellPctPvpModifierByClassMask(op, pvpOp, GetId(), GetBase(), GetSpellEffectInfo().SpellClassMask);
+                static_cast<SpellPctPvpModifierByClassMask*>(m_spellmod)->value = GetAmount();
+            }
+            break;
+        }
         case SPELL_AURA_ADD_FLAT_MODIFIER_BY_SPELL_LABEL:
             if (!m_spellmod)
                 m_spellmod = new SpellFlatModifierByLabel(SpellModOp(GetMiscValue()), GetId(), GetBase(), GetMiscValueB());
@@ -1131,7 +1166,35 @@ void AuraEffect::ChangeAmount(SpellEffectValue newAmount, bool mark, bool onStac
     }
 
     if (GetSpellInfo()->HasAttribute(SPELL_ATTR8_AURA_POINTS_ON_CLIENT) || Aura::EffectTypeNeedsSendingAmount(GetAuraType()))
-        GetBase()->SetNeedClientUpdateForTargets();
+    {
+        // SMSG_AURA_POINTS_DEPLETED (0x670012) - der schmale Sonderfall von SMSG_AURA_UPDATE.
+        // Der Konsument 0x1EF8DF0 macht genau eines: er sucht ueber Slot den Aureneintrag der
+        // Einheit (Schranke unit[0x5F8], Schrittweite 0x108) und setzt dessen Points[EffectIndex]
+        // auf 0. Er traegt weder Dauer noch Stapel noch EstimatedPoints - deshalb ersetzt er den
+        // vollen Aurenblock nur dann, wenn ausser dem auf 0 gefallenen Punktwert nichts zu
+        // uebertragen ist.
+        // Aus der Reihe faellt der Fall mit geschaetzten Punktwerten: die stehen in einem
+        // eigenen Feld des vollen Blocks und blieben sonst stehen.
+        bool hasEstimatedAmounts = std::ranges::any_of(GetBase()->GetAuraEffects(),
+            [](AuraEffect const* effect) { return effect && effect->GetEstimatedAmount().has_value(); });
+
+        if (GetAmount() == SpellEffectValue(0) && !hasEstimatedAmounts)
+        {
+            for (AuraApplication* aurApp : effectApplications)
+            {
+                if (aurApp->GetRemoveMode() != AURA_REMOVE_NONE || aurApp->GetSlot() >= MAX_AURAS)
+                    continue;
+
+                WorldPackets::Spells::AuraPointsDepleted auraPointsDepleted;
+                auraPointsDepleted.UnitGUID = aurApp->GetTarget()->GetGUID();
+                auraPointsDepleted.Slot = aurApp->GetSlot();
+                auraPointsDepleted.EffectIndex = GetEffIndex();
+                aurApp->GetTarget()->SendMessageToSet(auraPointsDepleted.Write(), true);
+            }
+        }
+        else
+            GetBase()->SetNeedClientUpdateForTargets();
+    }
 }
 
 void AuraEffect::HandleEffect(AuraApplication * aurApp, uint8 mode, bool apply, AuraEffect const* triggeredBy /*= nullptr*/)

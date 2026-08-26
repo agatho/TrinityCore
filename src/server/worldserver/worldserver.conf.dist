@@ -2386,6 +2386,30 @@ Visibility.Notify.Period.InBG         = 1000
 Visibility.Notify.Period.InArenas     = 1000
 
 #
+#    CombatLog.File.MaxFileSize
+#    CombatLog.File.Threshold
+#    CombatLog.File.FlushInterval
+#    CombatLog.File.MaxSeconds
+#        Description: Controls how the client writes its WoWCombatLog.txt. Sent once per login
+#                     as SMSG_SETUP_COMBAT_LOG_FILE_FLUSH. Only takes effect while the player
+#                     has /combatlog enabled.
+#                     MaxFileSize  - bytes written before the client rotates the file
+#                     Threshold    - fill ratio of the in-memory buffer that forces a write
+#                     FlushInterval- seconds between periodic writes
+#                     MaxSeconds   - seconds before an unwritten buffer is flushed anyway
+#                     Any value <= 0 makes the client fall back to its own built-in default,
+#                     which is exactly the default listed here.
+#        Default:     262144 - (CombatLog.File.MaxFileSize)
+#                     0.8    - (CombatLog.File.Threshold)
+#                     1.0    - (CombatLog.File.FlushInterval)
+#                     300    - (CombatLog.File.MaxSeconds)
+
+CombatLog.File.MaxFileSize  = 262144
+CombatLog.File.Threshold    = 0.8
+CombatLog.File.FlushInterval = 1.0
+CombatLog.File.MaxSeconds   = 300
+
+#
 ###################################################################################################
 
 ###################################################################################################

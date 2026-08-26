@@ -178,6 +178,8 @@ enum SpellModType : uint8
     SPELLMOD_PCT          = 1,                            // SPELL_AURA_ADD_PCT_MODIFIER
     SPELLMOD_LABEL_FLAT   = 2,                            // SPELL_AURA_ADD_FLAT_MODIFIER_BY_SPELL_LABEL
     SPELLMOD_LABEL_PCT    = 3,                            // SPELL_AURA_ADD_PCT_MODIFIER_BY_SPELL_LABEL
+    SPELLMOD_FLAT_PVP     = 4,                            // SPELL_AURA_ADD_FLAT_PVP_MODIFIER
+    SPELLMOD_PCT_PVP      = 5,                            // SPELL_AURA_ADD_PCT_PVP_MODIFIER
     SPELLMOD_END
 };
 
@@ -282,6 +284,33 @@ struct SpellPctModifierByClassMask : SpellModifierByClassMask
 {
     SpellPctModifierByClassMask(SpellModOp _op, uint32 _spellId, Aura* _ownerAura, flag128 _mask)
         : SpellModifierByClassMask(_op, SPELLMOD_PCT, _spellId, _ownerAura, _mask) { }
+
+    float value = { };
+};
+
+// PvP-Zaubermodifikatoren (SMSG_SET_FLAT_/PCT_SPELL_PVP_MODIFIER, Familie 0x67).
+// pvpOp ist der Wert, der auf den Draht geht (SpellPvpModifier, 0..9); op ist die daraus
+// abgeleitete SpellModOp-Bedeutung, die der Server selbst anwendet.
+struct SpellPvpModifierByClassMask : SpellModifierByClassMask
+{
+    SpellPvpModifierByClassMask(SpellModOp _op, SpellPvpModifier _pvpOp, SpellModType _type, uint32 _spellId, Aura* _ownerAura, flag128 const& _mask)
+        : SpellModifierByClassMask(_op, _type, _spellId, _ownerAura, _mask), pvpOp(_pvpOp) { }
+
+    SpellPvpModifier pvpOp;
+};
+
+struct SpellFlatPvpModifierByClassMask : SpellPvpModifierByClassMask
+{
+    SpellFlatPvpModifierByClassMask(SpellModOp _op, SpellPvpModifier _pvpOp, uint32 _spellId, Aura* _ownerAura, flag128 _mask)
+        : SpellPvpModifierByClassMask(_op, _pvpOp, SPELLMOD_FLAT_PVP, _spellId, _ownerAura, _mask) { }
+
+    int32 value = { };
+};
+
+struct SpellPctPvpModifierByClassMask : SpellPvpModifierByClassMask
+{
+    SpellPctPvpModifierByClassMask(SpellModOp _op, SpellPvpModifier _pvpOp, uint32 _spellId, Aura* _ownerAura, flag128 _mask)
+        : SpellPvpModifierByClassMask(_op, _pvpOp, SPELLMOD_PCT_PVP, _spellId, _ownerAura, _mask) { }
 
     float value = { };
 };
@@ -1076,7 +1105,8 @@ enum PlayerCommandStates
     CHEAT_CASTTIME  = 0x02,
     CHEAT_COOLDOWN  = 0x04,
     CHEAT_POWER     = 0x08,
-    CHEAT_WATERWALK = 0x10
+    CHEAT_WATERWALK = 0x10,
+    CHEAT_IGNORE_DIMINISHING_RETURNS = 0x20      // SMSG_CHEAT_IGNORE_DIMISHING_RETURNS (0x670002)
 };
 
 enum PlayerLogXPReason : uint8

@@ -4611,6 +4611,20 @@ void Spell::SendCastResult(SpellCastResult result, int32* param1 /*= nullptr*/, 
     castFailed.Visual = m_SpellVisual;
     FillSpellCastFailedArgs(castFailed, m_castId, m_spellInfo, result, m_customError, param1, param2, failedBy);
     receiver->SendDirectMessage(castFailed.Write());
+
+    // SMSG_SPELL_FAILURE_MESSAGE (0x67004D) - Zusatz zu SMSG_CAST_FAILED, kein Ersatz.
+    // Der Client loest den Code ueber denselben Mapper auf, der die 324-Werte-Tabelle
+    // SpellCastResult traegt (0x1DB4E80), und zeigt den Fehlertext als Systemmeldung 0x38
+    // (ERR_SPELL_FAILED_S, GameError-Tabelle 0x43D55C0 + 56*24 = 0x43D5B00) im Chat.
+    // Das Feld ist ein SpellCastResult, KEINE SpellID - wer eine SpellID sendet, zeigt dem
+    // Spieler einen zufaelligen Fehlertext.
+    // SPELL_FAILED_DONT_REPORT hat keinen Text und wuerde eine leere Zeile erzeugen.
+    // UNVERIFIED: fuer welche Teilmenge der Fehlschlaege Retail diesen Zusatz sendet, ist
+    // offline nicht bestimmbar - in keiner der zwoelf Aufnahmen kommt 0x67004D vor. Der Client
+    // drosselt die Meldung UI-seitig selbst (THROTTLED_MESSAGE_TYPES,
+    // Blizzard_UIErrorsFrame/Mainline/UIErrorsFrame.lua:60).
+    if (result != SPELL_FAILED_DONT_REPORT)
+        receiver->SendDirectMessage(WorldPackets::Spells::SpellFailureMessage(result).Write());
 }
 
 void Spell::SendPetCastResult(SpellCastResult result, int32* param1 /*= nullptr*/, int32* param2 /*= nullptr*/) const
@@ -4854,6 +4868,102 @@ void Spell::SendSpellGo()
     packet.LogData.Initialize(this);
 
     m_caster->SendCombatLogMessage(&packet);
+}
+
+// SMSG_RESUME_CAST (0x67002E) und SMSG_RESUME_CAST_BAR (0x670031)
+//
+// Beide sind Zustandsnachtraege fuer einen Client, der eine BEREITS LAUFENDE Zauberwirkung erst
+// jetzt zu sehen bekommt - das Gegenstueck zu SendAurasForTarget im selben Pfad.
+//   * 0x670031 setzt die Zauberleiste: der Konsument 0x1D8AE20 rechnet Endzeit
+//     `now + TimeRemaining` und Startzeit `now + TimeRemaining - CastTime` und feuert
+//     UNIT_SPELLCAST_START / _CHANNEL_START / _EMPOWER_START.
+//   * 0x67002E setzt den aktiven Zaubervisual-Zustand der Einheit (unit+944 CastID,
+//     unit+960 SpellID, unit+964 Visual, unit+984 Ziel) ueber 0x1F2B340.
+//
+// Das Senden ist idempotent: 0x1F2B340 vergleicht die neue SpellID mit unit+960 und ueberspringt
+// die Benachrichtigung, wenn sich nichts geaendert hat; 0x1D8AE20 verwirft die Nachricht, wenn
+// der Cast bereits abgelaufen ist (`now - endTime >= 0`).
+//
+// UNVERIFIED: dass Retail beide Nachrichten fuer dieselbe Lage schickt, ist nicht belegt - der
+// Zensus zaehlt 102 Pakete 0x67002E gegen 364 Pakete 0x670031, die Ausloeser sind also nicht
+// deckungsgleich. Welches Merkmal sie trennt, gibt der Client nicht her. Da beide denselben
+// Zustand nur nachtragen und der Client Wiederholungen selbst abfaengt, ist ein Zuviel hier
+// folgenlos, ein Zuwenig dagegen eine fehlende Zauberleiste.
+void Spell::SendResumeCast(Player const* receiver) const
+{
+    if (m_spellState != SPELL_STATE_PREPARING && m_spellState != SPELL_STATE_CHANNELING)
+        return;
+
+    Unit* unitCaster = m_caster->ToUnit();
+    if (!unitCaster)
+        return;
+
+    WorldPackets::Spells::ResumeCast resumeCast;
+    resumeCast.CasterGUID = unitCaster->GetGUID();
+    resumeCast.Visual = m_SpellVisual;
+    resumeCast.CastID = m_castId;
+    resumeCast.TargetGUID = m_targets.GetUnitTargetGUID();
+    resumeCast.SpellID = m_spellInfo->Id;
+    receiver->SendDirectMessage(resumeCast.Write());
+
+    WorldPackets::Spells::ResumeCastBar resumeCastBar;
+    resumeCastBar.CasterGUID = unitCaster->GetGUID();
+    resumeCastBar.TargetGUID = m_targets.GetUnitTargetGUID();
+    resumeCastBar.SpellID = m_spellInfo->Id;
+    resumeCastBar.Visual = m_SpellVisual;
+    resumeCastBar.TimeRemaining = Milliseconds(std::max(m_timer, 0));
+    resumeCastBar.CastTime = Milliseconds(uint32(std::max(m_spellState == SPELL_STATE_CHANNELING ? m_channelDuration : m_casttime, 0)));
+
+    // Dieselben zwei Werte, die SMSG_SPELL_CHANNEL_START in seinem InterruptImmunities-Paar
+    // fuehrt - der Client legt sie in denselben Slots ab (unit+972 / unit+976).
+    uint32 schoolImmunityMask = unitCaster->GetSchoolImmunityMask();
+    uint64 mechanicImmunityMask = unitCaster->GetMechanicImmunityMask();
+    if (schoolImmunityMask || mechanicImmunityMask)
+    {
+        resumeCastBar.InterruptImmunities.emplace();
+        resumeCastBar.InterruptImmunities->SchoolImmunities = schoolImmunityMask;
+        resumeCastBar.InterruptImmunities->Immunities = mechanicImmunityMask;
+    }
+
+    receiver->SendDirectMessage(resumeCastBar.Write());
+}
+
+// SMSG_NOTIFY_DEST_LOC_SPELL_CAST (0x670036) - Zielort-Geschoss.
+//
+// NICHT ANGESCHLOSSEN. Der Draht ist vollstaendig ausgelesen (Leser 0x68A980) und die Werte
+// stehen hier bereit, aber der EMPFAENGERKREIS ist offline nicht bestimmbar, und eine falsche
+// Wahl ist nicht folgenlos:
+//   * SMSG_SPELL_GO baut dieselbe 104-B-Nutzlast bereits LOKAL (Pfad 0x1DC5A10) und uebergibt
+//     sie direkt an die Geschosserzeugung - ohne den Dedup-Knoten zu setzen.
+//   * Die Doppelmeldungs-Unterdrueckung in 0x1D89F30 (`CastIndex - node[0x40] <= 0`,
+//     jle 0x1D89F94) greift deshalb nur zwischen zwei 0x670036-Paketen, nicht gegen SPELL_GO.
+// Wer die Nachricht zusaetzlich an die SPELL_GO-Empfaenger schickt, erzeugt also ein ZWEITES
+// Geschoss. Der plausible Empfaengerkreis - Beobachter, die den Zielort sehen, den Caster aber
+// nicht - laesst sich aus dem Client nicht belegen.
+// Aufnahme, die das schliesst: mehrere Zielort-Wuerfe (Blizzard, Fallendes Ziel) desselben
+// Casters, aufgezeichnet von einem zweiten Client in Zielortnaehe.
+// Zusaetzlich offen: CastIndex muss pro Caster streng monoton wachsen; ob Retail bei 1 beginnt,
+// pro Cast oder pro Geschoss zaehlt und wann er zurueckgesetzt wird, sagt der Client nicht.
+void Spell::SendNotifyDestLocSpellCast(Player const* receiver, uint8 castIndex) const
+{
+    SpellDestination const empty;
+    SpellDestination const& dest = m_targets.GetDst() ? *m_targets.GetDst() : empty;
+    SpellDestination const& src = m_targets.GetSrc() ? *m_targets.GetSrc() : empty;
+
+    WorldPackets::Spells::NotifyDestLocSpellCast packet;
+    packet.Caster = m_caster->GetGUID();
+    packet.DestTransport = dest._transportGUID;
+    packet.SpellID = m_spellInfo->Id;
+    packet.Visual = m_SpellVisual;
+    packet.SourceLoc = src._position;
+    packet.DestLoc = dest._position;
+    packet.Pitch = m_targets.GetPitch();
+    packet.Speed = m_targets.GetSpeed();
+    packet.TravelTime = Milliseconds(uint32(m_delayMoment));
+    packet.CastIndex = castIndex;
+    packet.CastID = m_castId;
+
+    receiver->SendDirectMessage(packet.Write());
 }
 
 /// Writes miss and hit targets for a SMSG_SPELL_GO packet

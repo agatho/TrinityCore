@@ -392,6 +392,10 @@ void SpellHistory::StartCooldown(SpellInfo const* spellInfo, uint32 itemId, Spel
     else
         cooldown = *forcedCooldown;
 
+    // Basiswert merken, bevor Modifikatoren, Haste und Recovery-Rate greifen - nur eine
+    // ABWEICHUNG davon muss dem Client mitgeteilt werden (SMSG_SPELL_CATEGORY_COOLDOWN).
+    Duration const baseCategoryCooldown = categoryCooldown;
+
     // overwrite time for selected category
     if (!onHold)
     {
@@ -519,6 +523,39 @@ void SpellHistory::StartCooldown(SpellInfo const* spellInfo, uint32 itemId, Spel
                 spellCooldown.SpellCooldowns.emplace_back(spellInfo->Id, uint32(cooldown.count()));
                 playerOwner->SendDirectMessage(spellCooldown.Write());
             }
+        }
+    }
+
+    // SMSG_SPELL_CATEGORY_COOLDOWN (0x670006)
+    //
+    // Das ist ein ZUSAETZLICHER Kanal neben ActivePlayerData::CategoryCooldownMods, kein Ersatz:
+    // die Update-Fields tragen einen dauerhaften MODIFIKATOR (SpellCategoryID + ModCooldown,
+    // gespeist von Aura 341), der Opcode dagegen eine LAUFENDE Kategorie-Abklingzeit - der
+    // Konsument 0x1E2E6F0 legt einen Cooldown-Satz mit SpellID = 0, Startzeit (+0x28, aus dem
+    // ms-Zaehler 0x354ED10) und Dauer (+0x2C) an. Beides gleichzeitig zu bedienen erzeugt keine
+    // doppelten Modifikatoren, weil der Opcode gar keinen Modifikator setzt.
+    //
+    // Gesendet wird nur, wenn die Kategorie-Abklingzeit vom DB2-Wert ABWEICHT: sonst rechnet
+    // der Client sie sich aus SpellCooldowns.CategoryRecoveryTime selbst aus, und genau das
+    // erklaert, warum der Opcode im Zensus ueber 274 056 Pakete nur ein einziges Mal vorkommt.
+    //
+    // Wachbedingung im Client: `if (Category && ModCooldown)` - sonst wird die Nachricht
+    // wortlos verworfen. Deshalb hier beide Werte pruefen.
+    if (categoryId && categoryCooldown > Duration::zero() && categoryCooldown != baseCategoryCooldown)
+    {
+        if (Player* playerOwner = GetPlayerOwner())
+        {
+            WorldPackets::Spells::SpellCategoryCooldown categoryCooldownPacket;
+            categoryCooldownPacket.Category = categoryId;
+            categoryCooldownPacket.ModCooldown = duration_cast<Milliseconds>(categoryCooldown);
+            // UNVERIFIED: ModRate wird hier nicht getrennt uebertragen - TrinityCore rechnet die
+            // Rate bereits in categoryCooldown hinein (SPELL_AURA_MOD_RECOVERY_RATE oben). 1.0f
+            // ist zugleich der Wert, mit dem der Client den Slot vorbelegt (0x74E97A).
+            categoryCooldownPacket.ModRate = 1.0f;
+            // IsPet leitet der Client bei SMSG_SPELL_COOLDOWN aus "Caster-GUID != Spieler-GUID"
+            // ab (Manager-Auswahl 184*flag); dieselbe Unterscheidung gilt hier.
+            categoryCooldownPacket.IsPet = playerOwner != _owner;
+            playerOwner->SendDirectMessage(categoryCooldownPacket.Write());
         }
     }
 }
@@ -1022,6 +1059,18 @@ bool SpellHistory::HasGlobalCooldown(SpellInfo const* spellInfo) const
     return itr != _globalCooldowns.end() && itr->second > Clock::now();
 }
 
+// SMSG_RESTART_GLOBAL_COOLDOWN (0x670054) wird hier ABSICHTLICH NICHT gesendet.
+//
+// Der Draht ist trivial und vollstaendig belegt (Case 0x751D43: PackedGuid + uint32, 6..22 B),
+// die AUSLOESEBEDINGUNG ist es nicht. Retail schickt den Opcode nur etwa 15 Mal in 1,3 Millionen
+// Sniff-Datensaetzen, und zwar zwischen SMSG_SPELL_PREPARE und SMSG_SPELL_START - in den zwoelf
+// Aufnahmen, die diesem Zweig zugrunde liegen, kommt er ueberhaupt nicht vor.
+// Bedingungsloses Senden bei jedem AddGlobalCooldown waere also nachweislich falsches Verhalten,
+// und der Konsument 0x1D9B360 gibt die Bedingung nicht her: er setzt den GCD neu und feuert
+// PET_BAR_UPDATE_COOLDOWN (Tiefe 1 ueber 0x1D73150), ohne einen Sonderfall zu unterscheiden.
+// Vermutung, ausdruecklich UNBELEGT: GCD-Neustart nach einem abgebrochenen oder umgeleiteten
+// Cast. Aufnahme, die das schliesst: die ~15 Vorkommen im Kontext - welcher Zauber, welche
+// Nachrichten davor und danach.
 void SpellHistory::AddGlobalCooldown(SpellInfo const* spellInfo, Duration duration)
 {
     _globalCooldowns[spellInfo->StartRecoveryCategory] = time_point_cast<Duration>(Clock::now() + duration);

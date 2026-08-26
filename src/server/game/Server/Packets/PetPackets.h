@@ -159,6 +159,19 @@ namespace WorldPackets
             std::vector<uint32> Spells;
         };
 
+        // SMSG_PET_CLEAR_SPELLS (0x670013) - leere Nachricht.
+        // Beleg: Case 0x74F37E liest nichts; Konsument 0x22C0020 setzt fuenf Globals auf 0 und
+        // baut die Begleiter-Aktionsleiste neu auf (Ereignisse UNIT_PET, PET_UI_CLOSE,
+        // PET_SPECIALIZATION_CHANGED, RAISED_AS_GHOUL, ACTIONBAR_SLOT_CHANGED ueber 0x22BD5A0).
+        // Draht: 16 Pakete, alle 0 B.
+        class PetClearSpells final : public ServerPacket
+        {
+        public:
+            explicit PetClearSpells() : ServerPacket(SMSG_PET_CLEAR_SPELLS, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
         struct PetRenameData
         {
             ObjectGuid PetGUID;

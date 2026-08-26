@@ -342,6 +342,7 @@ class TC_GAME_API Spell
         void EffectSummonPlayer();
         void EffectActivateObject();
         void EffectApplyGlyph();
+        void EffectPushAbilityToActionBar();
         void EffectEnchantHeldItem();
         void EffectSummonObject();
         void EffectChangeRaidMarker();
@@ -562,6 +563,8 @@ class TC_GAME_API Spell
         static void SendCastResult(Player const* caster, SpellInfo const* spellInfo, SpellCastVisual spellVisual, ObjectGuid cast_count, SpellCastResult result, SpellCustomErrors customError = SPELL_CUSTOM_ERROR_NONE, int32* param1 = nullptr, int32* param2 = nullptr);
         void SendCastResult(SpellCastResult result, int32* param1 = nullptr, int32* param2 = nullptr, ObjectGuid const& failedBy = ObjectGuid::Empty) const;
         void SendPetCastResult(SpellCastResult result, int32* param1 = nullptr, int32* param2 = nullptr) const;
+        void SendNotifyDestLocSpellCast(Player const* receiver, uint8 castIndex) const;
+        void SendResumeCast(Player const* receiver) const;
         void SendMountResult(MountResult result);
         void SendSpellStart();
         void SendSpellGo();

@@ -1222,6 +1222,244 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // ---------------------------------------------------------------------
+        // Familie 0x67 - Phase A (Client-Build 12.1.0.69382, alle RVA gegen ImageBase)
+        // Feldfolge und Feldbreiten stammen aus dem Client-Binary, gegengerechnet an den
+        // Referenzpaketen aus C:/dumps/fam67_sniff_sizes_12_1.json.
+        // ---------------------------------------------------------------------
+
+        // SMSG_SET_FLAT_SPELL_PVP_MODIFIER / SMSG_SET_PCT_SPELL_PVP_MODIFIER (0x670029 / 0x67002A)
+        // ACHTUNG: ModIndex ist hier uint32, bei den Nicht-PvP-Zwillingen uint8.
+        // Beleg: Elementleser 0x68A1D0 ruft R32 @0x35AF190 (Aufruf 0x68A1F5, Ablage
+        // `mov [rbx], eax` @0x68A205), waehrend der Nicht-PvP-Leser 0x68A0F0 R8 @0x35AF050
+        // ruft (`mov [rbx], al` @0x68A12B). Kein Schiebeausdruck, also echte Felder.
+        // Draht: 0x67002A min 17 B = 4 + 4 + 4 + 5 -- mit uint8 waeren es 14.
+        struct SpellPvpModifier
+        {
+            uint32 ModIndex = 0;                            ///< SpellPvpModifier, 0..9 (NICHT SpellModOp)
+            std::vector<SpellModifierData> ModifierData;
+        };
+
+        class TC_GAME_API SetSpellPvpModifier final : public ServerPacket
+        {
+        public:
+            explicit SetSpellPvpModifier(OpcodeServer opcode) : ServerPacket(opcode, 4 + 4 + 4 + 5) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<SpellPvpModifier> Modifiers;
+        };
+
+        // SMSG_SPELL_CATEGORY_COOLDOWN (0x670006) - festes Quadrupel, KEINE Liste.
+        // Beleg: Handler 0x74E94D..0x74EA15 (inline im Dispatcher 0x74E520):
+        //   R32 @0x74E987 -> Category, R32 @0x74E9A6 -> ModCooldown (ms),
+        //   R32 @0x74E9C5 (movss 0x74E9CA/0x74E9DC, Vorbelegung 1.0f @0x74E97A) -> ModRate,
+        //   R8 @0x74E9E9 mit `shr al,7` @0x74E9F5 -> IsPet.
+        // Draht: 1 Paket a 13 B, `9e040000 905f0100 0000803f 00`.
+        // Wachbedingung im Konsumenten 0x1E2E6F0: `if (Category && ModCooldown)`, sonst
+        // verwirft der Client die Nachricht wortlos.
+        class SpellCategoryCooldown final : public ServerPacket
+        {
+        public:
+            explicit SpellCategoryCooldown() : ServerPacket(SMSG_SPELL_CATEGORY_COOLDOWN, 4 + 4 + 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            int32 Category = 0;
+            Duration<Milliseconds, int32> ModCooldown;
+            float ModRate = 1.0f;
+            bool IsPet = false;
+        };
+
+        // SMSG_SPELL_FAILURE_MESSAGE (0x67004D)
+        // Das uint32 ist ein SpellCastResult, KEINE SpellID. Beleg: Konsument 0x1D89100
+        //   01D89108  mov ecx, [rcx]        ; *(uint32*)payload
+        //   01D8910A  call 0x1DB4E80        ; CastResult -> "SPELL_FAILED_*"-Schluessel
+        //   01D8911D  call 0x567420         ; GlobalStrings -> lokalisierter Text
+        //   01D89125  mov ecx, 0x38         ; GameError 56 = ERR_SPELL_FAILED_S
+        // 0x1DB4E80 ist derselbe Mapper, der die 324-Werte-Tabelle SpellCastResult aufloest.
+        class SpellFailureMessage final : public ServerPacket
+        {
+        public:
+            explicit SpellFailureMessage() : ServerPacket(SMSG_SPELL_FAILURE_MESSAGE, 4) { }
+            explicit SpellFailureMessage(int32 reason) : ServerPacket(SMSG_SPELL_FAILURE_MESSAGE, 4), Reason(reason) { }
+
+            WorldPacket const* Write() override;
+
+            int32 Reason = 0;                               ///< SpellCastResult (0..323)
+        };
+
+        // SMSG_SCRIPT_CAST (0x670049) - der Client wirkt den Zauber ohne Spielereingabe.
+        // Beleg: Konsument 0x1E24FB0 liest den ersten uint32 und ruft 0x1D4F8E0(ctx, SpellID, ...).
+        class ScriptCast final : public ServerPacket
+        {
+        public:
+            explicit ScriptCast() : ServerPacket(SMSG_SCRIPT_CAST, 4) { }
+            explicit ScriptCast(int32 spellId) : ServerPacket(SMSG_SCRIPT_CAST, 4), SpellID(spellId) { }
+
+            WorldPacket const* Write() override;
+
+            int32 SpellID = 0;
+        };
+
+        // SMSG_PUSH_SPELL_TO_ACTION_BAR (0x670044)
+        // Draht: 2 Pakete a 4 B (`80af0500`). Slot 0x43AA350 haelt ein Event-Objekt mit
+        // getaggtem Zeiger (Wert 0x1) - kein Abonnent im statischen Abbild, deshalb ist kein
+        // Konsument auslesbar.
+        // UNVERIFIED: dass das uint32 eine SpellID ist, folgt aus der konstanten Paketgroesse
+        // und dem Opcodenamen, nicht aus einem Leser.
+        class PushSpellToActionBar final : public ServerPacket
+        {
+        public:
+            explicit PushSpellToActionBar() : ServerPacket(SMSG_PUSH_SPELL_TO_ACTION_BAR, 4) { }
+            explicit PushSpellToActionBar(int32 spellId) : ServerPacket(SMSG_PUSH_SPELL_TO_ACTION_BAR, 4), SpellID(spellId) { }
+
+            WorldPacket const* Write() override;
+
+            int32 SpellID = 0;
+        };
+
+        // SMSG_REMOVE_SPELL_FROM_ACTION_BAR (0x670045)
+        // UNVERIFIED: kein Referenzpaket und kein Konsument im Abbild; die Struktur ist allein
+        // aus der Symmetrie zu SMSG_PUSH_SPELL_TO_ACTION_BAR abgeleitet.
+        class RemoveSpellFromActionBar final : public ServerPacket
+        {
+        public:
+            explicit RemoveSpellFromActionBar() : ServerPacket(SMSG_REMOVE_SPELL_FROM_ACTION_BAR, 4) { }
+            explicit RemoveSpellFromActionBar(int32 spellId) : ServerPacket(SMSG_REMOVE_SPELL_FROM_ACTION_BAR, 4), SpellID(spellId) { }
+
+            WorldPacket const* Write() override;
+
+            int32 SpellID = 0;
+        };
+
+        // SMSG_RESTART_GLOBAL_COOLDOWN (0x670054)
+        // Beleg: Case 0x751D43 - RGUID @0x36012B0 gefolgt von R32 @0x35AF190. Laenge 6..22 B.
+        // Kein Referenzpaket in den 12 Aufnahmen.
+        class RestartGlobalCooldown final : public ServerPacket
+        {
+        public:
+            explicit RestartGlobalCooldown() : ServerPacket(SMSG_RESTART_GLOBAL_COOLDOWN, 18 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid CasterGUID;
+            int32 SpellID = 0;
+        };
+
+        // SMSG_CHEAT_IGNORE_DIMISHING_RETURNS (0x670002) - ein Bit, danach FlushBits (1 B Draht).
+        // Der Handler-Slot zeigt im Retail-Client auf den `return 0`-Stub: die Nachricht wird
+        // angenommen und bewirkt dort nichts. Der Serverzustand dahinter ist trotzdem real.
+        class CheatIgnoreDiminishingReturns final : public ServerPacket
+        {
+        public:
+            explicit CheatIgnoreDiminishingReturns() : ServerPacket(SMSG_CHEAT_IGNORE_DIMISHING_RETURNS, 1) { }
+            explicit CheatIgnoreDiminishingReturns(bool enable) : ServerPacket(SMSG_CHEAT_IGNORE_DIMISHING_RETURNS, 1), Enable(enable) { }
+
+            WorldPacket const* Write() override;
+
+            bool Enable = false;
+        };
+
+        // SMSG_NOTIFY_DEST_LOC_SPELL_CAST (0x670036) - Zielort-Geschoss.
+        // Beleg: Leser 0x68A980 (ein Basisblock, keine Schleife, keine Bit-Sektion, kein String):
+        //   RGUID 0x68AA03 / 0x68AA10, R32 0x68AA2D..0x68AB40, R8 0x68AB62, RGUID 0x68AB78.
+        // Laenge 55..103 B.
+        // CastIndex muss pro Caster STRENG MONOTON wachsen: Handler 0x1D89F30 verwirft die
+        // Nachricht bei `CastIndex - node[0x40] <= 0` (jle 0x1D89F94) - lautlos, ohne Log.
+        class NotifyDestLocSpellCast final : public ServerPacket
+        {
+        public:
+            explicit NotifyDestLocSpellCast() : ServerPacket(SMSG_NOTIFY_DEST_LOC_SPELL_CAST, 18 + 18 + 12 * 4 + 1 + 18) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Caster;
+            ObjectGuid DestTransport;                       ///< TransportTracking::TrackingInfo, kein zweites Ziel
+            int32 SpellID = 0;
+            SpellCastVisual Visual;
+            TaggedPosition<Position::XYZ> SourceLoc;
+            TaggedPosition<Position::XYZ> DestLoc;
+            float Pitch = 0.0f;
+            float Speed = 0.0f;
+            Duration<Milliseconds, uint32> TravelTime;
+            uint8 CastIndex = 0;                            ///< muss pro Caster streng monoton steigen
+            ObjectGuid CastID;                              ///< HighGuid::Cast (47)
+        };
+
+        // SMSG_AURA_POINTS_DEPLETED (0x670012)
+        // Beleg: Case 0x74F2EB - RGUID @0x74F316, R16 @0x74F32E (`mov [rsp+0x60], ax`),
+        // R8 @0x74F350 (`mov [rsp+0x62], al`); keine Schiebeausdruecke, also echte Felder.
+        // Konsument 0x1EF8DF0: Slot indiziert die Aurenliste der Einheit (Schranke unit[0x5F8],
+        // Schrittweite 0x108), EffectIndex indiziert deren Points-Array und wird auf 0 gesetzt.
+        // Draht: 190 Pakete, 12..19 B; Beispiel `0fe0 407fab09 441608 0e00 00` = 9 + 2 + 1.
+        class AuraPointsDepleted final : public ServerPacket
+        {
+        public:
+            explicit AuraPointsDepleted() : ServerPacket(SMSG_AURA_POINTS_DEPLETED, 18 + 2 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid UnitGUID;
+            uint16 Slot = 0;                                ///< Aurenslot wie in SMSG_AURA_UPDATE
+            uint8 EffectIndex = 0;                          ///< Index in AuraDataInfo::Points
+        };
+
+        // SMSG_RESUME_CAST (0x67002E)
+        // Beleg: Case 0x75052F - RGUID 0x750565 (msg+0x20), Unterleser 0x6BF980 (2x R32 =
+        // SpellCastVisual, msg+0x30), RGUID 0x75057D (msg+0x38), RGUID 0x750589 (msg+0x48),
+        // R32 0x75059E (msg+0x58).
+        // Konsument 0x1D88DC0 prueft msg+0x38 auf HighGuid::Cast (47) und uebergibt
+        // (Unit, CastID, msg+0x58, msg+0x30, msg+0x48) an 0x1F2B340, das
+        //   unit+944 = CastID | unit+960 = msg+0x58 | unit+964 = Visual | unit+984 = msg+0x48
+        // setzt - dieselben Slots, die der lokale Pfad 0x1F2B160 aus castObj+96 / +72 / +84 /
+        // +136 fuellt. castObj+72 ist die SpellID (0x1DC7440 setzt sie aus Arg 2), castObj+136
+        // wird von `UnitShouldDisplaySpellTargetName` (0x1728F10) als Einheiten-GUID
+        // aufgeloest, ist also das Zauberziel.
+        // Draht: 102 Pakete, 37..61 B. Beispielpaket 38 B = 9 + 8 + 15 + 2 + 4; dessen dritte
+        // GUID traegt den Typ 47 (0xbc >> 2), die vierte ist leer.
+        class ResumeCast final : public ServerPacket
+        {
+        public:
+            explicit ResumeCast() : ServerPacket(SMSG_RESUME_CAST, 18 + 8 + 18 + 18 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid CasterGUID;
+            SpellCastVisual Visual;
+            ObjectGuid CastID;                              ///< HighGuid::Cast (47)
+            ObjectGuid TargetGUID;
+            int32 SpellID = 0;
+        };
+
+        // SMSG_RESUME_CAST_BAR (0x670031)
+        // Beleg: Case 0x7507B6 - RGUID 0x7507E8 (msg+0x20), RGUID 0x7507F4 (msg+0x30),
+        // R32 0x750809 (msg+0x40), Unterleser 0x6BF980 (SpellCastVisual, msg+0x44),
+        // R32 0x750833 (msg+0x4C), R32 0x750851 (msg+0x50), R8 0x750870 mit `shr al,7`
+        // (msg+0x54) und - nur wenn gesetzt - R32 0x750892 / 0x7508AA (msg+0x58 / msg+0x5C).
+        // Konsument 0x1D8AE20: SpellID gegen den Spell-Store geprueft (0x4DBFA0), Endzeit
+        // `now + TimeRemaining`, Startzeit `now + TimeRemaining - CastTime`; das optionale
+        // Paar landet in unit+972 / +976 - denselben Slots, die SMSG_SPELL_CHANNEL_START
+        // (Konsument 0x1D85B90) aus seinem InterruptImmunities-Paar fuellt und die
+        // SMSG_SPELL_START ueber 0x1D85110 aus JamSpellCastData+1704 (`immunities`) speist.
+        // Feuert UNIT_SPELLCAST_START / _CHANNEL_START / _EMPOWER_START.
+        // Draht: 364 Pakete, 32..53 B. Beispielpaket 32 B = 9 + 2 + 4 + 8 + 4 + 4 + 1.
+        class ResumeCastBar final : public ServerPacket
+        {
+        public:
+            explicit ResumeCastBar() : ServerPacket(SMSG_RESUME_CAST_BAR, 18 + 18 + 4 + 8 + 4 + 4 + 1 + 8) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid CasterGUID;
+            ObjectGuid TargetGUID;
+            int32 SpellID = 0;
+            SpellCastVisual Visual;
+            Duration<Milliseconds, uint32> TimeRemaining;
+            Duration<Milliseconds, uint32> CastTime;
+            Optional<SpellChannelStartInterruptImmunities> InterruptImmunities;
+        };
+
         ByteBuffer& operator>>(ByteBuffer& buffer, SpellCastRequest& request);
     }
 }

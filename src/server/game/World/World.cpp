@@ -837,6 +837,11 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Visibility.Notify.Period.InInstances"sv, .DefaultValue = DEFAULT_VISIBILITY_NOTIFY_PERIOD, .Index = CONFIG_VISIBILITY_NOTIFY_PERIOD_INSTANCE },
         { .Name = "Visibility.Notify.Period.InBG"sv, .DefaultValue = DEFAULT_VISIBILITY_NOTIFY_PERIOD, .Index = CONFIG_VISIBILITY_NOTIFY_PERIOD_BATTLEGROUND },
         { .Name = "Visibility.Notify.Period.InArenas"sv, .DefaultValue = DEFAULT_VISIBILITY_NOTIFY_PERIOD, .Index = CONFIG_VISIBILITY_NOTIFY_PERIOD_ARENA },
+        // Familie 0x67 - SMSG_SETUP_COMBAT_LOG_FILE_FLUSH. Die Vorgaben sind exakt die Werte,
+        // die das Referenzpaket aus dem Sniff traegt (0x40000 / 0.8f / 1.0f / 300) und die der
+        // Client selbst einsetzt, wenn ein Feld <= 0 ist.
+        { .Name = "CombatLog.File.MaxFileSize"sv, .DefaultValue = 262144, .Index = CONFIG_COMBAT_LOG_FILE_MAX_FILE_SIZE },
+        { .Name = "CombatLog.File.MaxSeconds"sv, .DefaultValue = 300, .Index = CONFIG_COMBAT_LOG_FILE_MAX_SECONDS },
         { .Name = "CharDelete.Method"sv, .DefaultValue = 0, .Index = CONFIG_CHARDELETE_METHOD },
         { .Name = "CharDelete.MinLevel"sv, .DefaultValue = 0, .Index = CONFIG_CHARDELETE_MIN_LEVEL },
         { .Name = "CharDelete.DeathKnight.MinLevel"sv, .DefaultValue = 0, .Index = CONFIG_CHARDELETE_DEATH_KNIGHT_MIN_LEVEL },
@@ -925,6 +930,9 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Visibility.Distance.Instances"sv, .DefaultValue = DEFAULT_VISIBILITY_INSTANCE, .Index = CONFIG_MAX_VISIBILITY_DISTANCE_INSTANCE, .Min = 0.0f, .Max = MAX_VISIBILITY_DISTANCE },
         { .Name = "Visibility.Distance.BG"sv, .DefaultValue = DEFAULT_VISIBILITY_BGARENAS, .Index = CONFIG_MAX_VISIBILITY_DISTANCE_BATTLEGROUND, .Min = 0.0f, .Max = MAX_VISIBILITY_DISTANCE },
         { .Name = "Visibility.Distance.Arenas"sv, .DefaultValue = DEFAULT_VISIBILITY_BGARENAS, .Index = CONFIG_MAX_VISIBILITY_DISTANCE_ARENA, .Min = 0.0f, .Max = MAX_VISIBILITY_DISTANCE },
+        // Familie 0x67 - SMSG_SETUP_COMBAT_LOG_FILE_FLUSH
+        { .Name = "CombatLog.File.Threshold"sv, .DefaultValue = 0.8f, .Index = CONFIG_COMBAT_LOG_FILE_THRESHOLD },
+        { .Name = "CombatLog.File.FlushInterval"sv, .DefaultValue = 1.0f, .Index = CONFIG_COMBAT_LOG_FILE_FLUSH_INTERVAL },
         { .Name = "Respawn.DynamicRateCreature"sv, .DefaultValue = 10.0f, .Index = CONFIG_RESPAWN_DYNAMICRATE_CREATURE, .Min = 0.0f },
         { .Name = "Respawn.DynamicRateGameObject"sv, .DefaultValue = 10.0f, .Index = CONFIG_RESPAWN_DYNAMICRATE_GAMEOBJECT, .Min = 0.0f },
         { .Name = "Stats.Limits.Dodge"sv, .DefaultValue = 95.0f, .Index = CONFIG_STATS_LIMITS_DODGE },

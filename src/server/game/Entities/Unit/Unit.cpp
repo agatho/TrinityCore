@@ -5570,6 +5570,20 @@ void Unit::ExitAllAreaTriggers()
         at->HandleUnitExit(this);
 }
 
+// SMSG_DAMAGE_CALC_LOG (0x670056) gehoerte hier her - hinter
+// `if (player->IsAdvancedCombatLoggingEnabled())`, wie das uebrige erweiterte Kampflog.
+// Die Paketklasse (WorldPackets::CombatLog::DamageCalcLog) ist vollstaendig und der Opcode ist
+// freigeschaltet; gesendet wird trotzdem nichts, und zwar aus einem Grund, der nicht am Client
+// liegt: die Nachricht traegt die EINZELNEN RECHENSCHRITTE der Schadensformel (Enum
+// CalcStepType, 61 Werte, Tabelle 0x43C89B0 - Blizzards eigene Gliederung), und TrinityCore
+// haelt diese Zwischenschritte nirgends fest. Unit::SpellDamageBonusDone und
+// Unit::MeleeDamageBonusDone rechnen die Faktoren direkt in den Schaden hinein.
+// Etwas anderes als die echten Schritte einzusetzen, waere eine erfundene Wirkung: der Client
+// druckt jede Zeile woertlich in sein Debug-Log der Kategorie "Damage Calculator", und ein
+// erfundener Zwischenschritt liest sich dort wie eine Messung.
+// Was fehlt, ist also keine Aufnahme, sondern ein eigener Arbeitsschritt: die Schadenspipeline
+// mit einem Schrittsammler zu instrumentieren. Das ist eine Aenderung an der Schadensrechnung
+// und gehoert nicht in eine Opcode-Einheit.
 void Unit::SendSpellNonMeleeDamageLog(SpellNonMeleeDamage const* log)
 {
     WorldPackets::CombatLog::SpellNonMeleeDamageLog packet;
@@ -9396,6 +9410,13 @@ bool Unit::ApplyDiminishingToDuration(SpellInfo const* auraSpellInfo, int32& dur
     // test pet/charm masters instead pets/charmeds
     Unit const* targetOwner = GetCharmerOrOwner();
     Unit const* casterOwner = caster->GetCharmerOrOwner();
+
+    // .cheat diminishingreturns - der Schalter, den SMSG_CHEAT_IGNORE_DIMISHING_RETURNS (0x670002)
+    // dem Client mitteilt. Der Retail-Client hat den Konsumenten ausgebaut (der Slot zeigt auf
+    // den `return 0`-Stub), die serverseitige Wirkung ist davon unberuehrt.
+    if (Player const* targetPlayer = Object::ToPlayer(targetOwner ? targetOwner : this))
+        if (targetPlayer->GetCommandStatus(CHEAT_IGNORE_DIMINISHING_RETURNS))
+            return true;
 
     if (limitDuration > 0 && duration > limitDuration)
     {

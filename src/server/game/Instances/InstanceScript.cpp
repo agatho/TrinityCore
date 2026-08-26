@@ -16,6 +16,7 @@
  */
 
 #include "InstanceScript.h"
+#include "CombatLogPackets.h"
 #include "AreaBoundary.h"
 #include "Creature.h"
 #include "CreatureAI.h"
@@ -422,6 +423,7 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                     instance->DoOnPlayers([](Player* player)
                     {
                         player->AtEndOfEncounter(EncounterType::DungeonEncounter);
+                        player->SendDirectMessage(WorldPackets::CombatLog::FlushCombatLogFile().Write());
                     });
                     break;
                 }
@@ -446,9 +448,17 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                         UpdateLfgEncounterState(bossInfo);
                     }
 
+                    // SMSG_FLUSH_COMBAT_LOG_FILE (0x670010) - leere Nachricht.
+                    // Am Ende einer Begegnung schreibt der Client sein WoWCombatLog.txt sofort
+                    // auf die Platte, statt auf das naechste Intervall zu warten. Das ist der
+                    // Punkt, an dem eine Log-Auswertung den Kampf vollstaendig vorfindet.
+                    // Konsument 0x1E0B2E0 prueft ein Global und verwirft die Nachricht
+                    // wirkungslos, wenn der Spieler kein /combatlog laufen hat - das ist kein
+                    // Fehler und braucht serverseitig keine Bedingung.
                     instance->DoOnPlayers([](Player* player)
                     {
                         player->AtEndOfEncounter(EncounterType::DungeonEncounter);
+                        player->SendDirectMessage(WorldPackets::CombatLog::FlushCombatLogFile().Write());
                     });
                     break;
                 }

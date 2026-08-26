@@ -196,6 +196,14 @@ enum class SpellModOp : uint8
 
 #define MAX_SPELLMOD 41
 
+// Der Client fuehrt fuer die PvP-Zaubermodifikatoren ein eigenes, kuerzeres Enum als SpellModOp:
+// die Nachschlagefunktion 0x1D8B1C0 begrenzt den Index auf 0..9, die Zieltabelle 0x6805960 hat
+// 10 Zeilen a 128 Slots (0x6804560 -> 0x6805960 = 0x1400 = 10 * 128 * 4), und die
+// Ruecksetzroutine 0x1D9B9F0 laeuft mit `ecx = 10`. Die Luecke bei 3 ist echt.
+//
+// ACHTUNG: die Konsumenten 0x1D8AC00 / 0x1D8AC90 schreiben UNGEPRUEFT nach
+// `tabelle[ModIndex * 128 + ClassIndex]`. Ein ModIndex >= 10 ueberschreibt Client-Speicher hinter
+// der Tabelle - der Server MUSS den Bereich pruefen, bevor er sendet.
 enum class SpellPvpModifier : uint8
 {
     HealingAndDamage            = 0,
@@ -209,6 +217,43 @@ enum class SpellPvpModifier : uint8
     PointsIndex3                = 8,
     PointsIndex4                = 9,
 };
+
+#define MAX_SPELL_PVP_MODIFIER 10
+
+// Welche SpellModOp-Bedeutung hinter einem PvP-Modifikatorindex steckt, ist paarweise aus dem
+// Client-Binary belegt: an jeder Stelle, an der der Client beide Nachschlagefunktionen
+// unmittelbar nacheinander mit konstantem Index aufruft, steht links der Nicht-PvP-Wert
+// (0x1D8B940) und rechts der PvP-Wert (0x1D8B1C0).
+//   0 <-> HealingAndDamage(0)          Helferpaar 0x1D8B860 (`movzx edx, r9b`) gegen
+//   1 <-> PeriodicHealingAndDamage(22) 0x1D8C440 (`neg r9b; sbb edx,edx; and edx,0x16`)
+//   2 <-> BonusCoefficient(24)         0x1D75772 (r8d=0x18 -> 0x1D8C390) / 0x1D75790 -> 0x1D8B820
+//                                      und 0x1D9F87A (0x18) / 0x1D9F8B3 (2)
+//   3 <-> UNVERIFIED                   im Abbild 69382 existiert KEINE Aufrufstelle mit Index 3
+//   4 <-> Points(8)                    0x1D75374 (edx=8) / 0x1D754A6 (edx=4)
+//   5..9 <-> PointsIndex0..4(3,12,23,32,33)
+//                                      Tabellenpaar 0x1D753F8 {3,12,23,32} + 0x1D75400 (33)
+//                                      gegen 0x1D75527 {5,6,7,8} + 0x1D7552F (9)
+// Ein Vollscan des Abbilds nach `call rel32 -> 0x1D8B1C0` findet genau fuenf Aufrufstellen; alle
+// fuenf sind oben aufgefuehrt.
+//
+// Fuer den reinen Transport genuegt der Index; die Zuordnung braucht nur, wer den Modifikator
+// serverseitig anwenden will. Index 3 liefert deshalb nullopt.
+constexpr Optional<SpellModOp> SpellPvpModifierToSpellModOp(SpellPvpModifier op)
+{
+    switch (op)
+    {
+        case SpellPvpModifier::HealingAndDamage:         return SpellModOp::HealingAndDamage;
+        case SpellPvpModifier::PeriodicHealingAndDamage: return SpellModOp::PeriodicHealingAndDamage;
+        case SpellPvpModifier::BonusCoefficient:         return SpellModOp::BonusCoefficient;
+        case SpellPvpModifier::Points:                   return SpellModOp::Points;
+        case SpellPvpModifier::PointsIndex0:             return SpellModOp::PointsIndex0;
+        case SpellPvpModifier::PointsIndex1:             return SpellModOp::PointsIndex1;
+        case SpellPvpModifier::PointsIndex2:             return SpellModOp::PointsIndex2;
+        case SpellPvpModifier::PointsIndex3:             return SpellModOp::PointsIndex3;
+        case SpellPvpModifier::PointsIndex4:             return SpellModOp::PointsIndex4;
+        default:                                         return {};
+    }
+}
 
 enum SpellValueMod : int32
 {
