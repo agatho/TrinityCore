@@ -298,22 +298,14 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
     // ConfirmNumber back. Reuses the same `chat_spam_record` patterns that are shipped to the client
     // with SMSG_EXPECTED_SPAM_RECORDS, so both directions of the mechanism are fed from one table.
     // Off by default: holding player messages is intrusive and is the realm operator's decision.
-    if (!_chatCautionAccepted && sWorld->getBoolConfig(CONFIG_CHAT_CAUTIONARY_ENABLED)
-        && (type == CHAT_MSG_WHISPER || type == CHAT_MSG_CHANNEL) && sObjectMgr->MatchesChatSpamPattern(msg))
-    {
-        if (type == CHAT_MSG_WHISPER)
-        {
-            if (SendCautionaryChatMessage(type, lang, msg, target, targetGuid.value_or(ObjectGuid::Empty)))
-                return ChatMessageResult::CautionaryChatPending;
-            // Too many pending messages already - fall through and deliver rather than lose it.
-        }
-        else
-        {
-            // Channel variant: informative only, the client auto-confirms (K4), so the message is
-            // delivered in the same breath.
-            SendCautionaryChannelMessage(msg);
-        }
-    }
+    //
+    // Only the DECISION is taken here - the pattern has to be matched once, on the untouched line.
+    // Acting on it happens inside the CHAT_MSG_WHISPER and CHAT_MSG_CHANNEL cases below, because
+    // both need their target resolved first: the whisper variant echoes the sender's own chat line
+    // before it holds the message, and echoing that for a target that does not exist would put a
+    // whisper in the frame that SendChatPlayerNotfoundNotice is about to reject.
+    bool const cautionary = !_chatCautionAccepted && sWorld->getBoolConfig(CONFIG_CHAT_CAUTIONARY_ENABLED)
+        && (type == CHAT_MSG_WHISPER || type == CHAT_MSG_CHANNEL) && sObjectMgr->MatchesChatSpamPattern(msg);
 
     switch (type)
     {
@@ -415,6 +407,21 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
             if (receiver->GetLevel() < sWorld->getIntConfig(CONFIG_CHAT_WHISPER_LEVEL_REQ) ||
                 (HasPermission(rbac::RBAC_PERM_CAN_FILTER_WHISPERS) && !sender->isAcceptWhispers() && !sender->IsInWhisperWhiteList(receiver->GetGUID())))
                 sender->AddWhisperWhiteList(receiver->GetGUID());
+
+            // A held message has to leave the player something to act on, and that something is a
+            // chat line he already has. The consumer resolves the Text of SMSG_CAUTIONARY_CHAT_MESSAGE
+            // against the client's own chat line table and fires CAUTIONARY_CHAT_MESSAGE(chatLineID,
+            // confirmNumber) only on a hit; ChatFrameUtil.HandleCautionaryChatMessage
+            // (ChatFrameUtil.lua:796-811) then rewrites exactly that displayed line into
+            // CENSORED_MESSAGE_SENDER with the censoredmessagerewrite / censoredmessageconfirmsend
+            // links. The line it looks for is the sender's own CHAT_MSG_WHISPER_INFORM echo: the
+            // rewrite link takes the whisper target out of that line's own event args (eventArgs[2],
+            // the `sendTo` of censoredmessagerewrite:%d:%d:%s, ItemRefHandlersShared.lua:226-249).
+            // So the echo goes out even though the whisper itself is held - see
+            // SendCautionaryChatMessage, which sends it ahead of the cautionary packet.
+            if (cautionary && SendCautionaryChatMessage(type, lang, msg, receiver))
+                return ChatMessageResult::CautionaryChatPending;
+            // Nothing could be held (too many pending at once) - deliver rather than lose it.
 
             GetPlayer()->Whisper(msg, lang, receiver);
             break;
@@ -534,6 +541,14 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
                         return ChatMessageResult::ChannelIsReadOnly;
 
                 sScriptMgr->OnPlayerChat(sender, type, lang, msg, chn);
+
+                // Channel variant of the cautionary mechanism: informative only. The client
+                // auto-confirms it (K4) and there is no drop path, so nothing is held back and the
+                // message follows in the same breath. It sits here, not before the switch, so that
+                // no notice is produced for a channel the player cannot use at all.
+                if (cautionary)
+                    SendCautionaryChannelMessage(msg);
+
                 chn->Say(sender->GetGUID(), msg, lang);
             }
             break;
@@ -605,6 +620,9 @@ void WorldSession::HandleChatAddonMessage(ChatMsg type, std::string prefix, std:
     if (!CanSpeak())
         return;
 
+    // BEHAVIOUR CHANGE, same one as on the chat path (bestandsbefund B1): UpdateSpeakTime used to
+    // return void, so the addon message that tripped the flood limit was still delivered and only
+    // the NEXT one ran into the mute. It is now dropped, which keeps the two paths consistent.
     // No SMSG_CHAT_RESTRICTED here on purpose: an addon message has no chat surface, and retail
     // answers addon throttling client side with Enum.SendAddonMessageResult.AddonMessageThrottle.
     if (!sender->UpdateSpeakTime(Player::ChatFloodThrottle::ADDON))
@@ -990,8 +1008,12 @@ void WorldSession::SendChatIgnoredAccountMuted()
 
 // SMSG_CHAT_DOWN / SMSG_CHAT_IS_DOWN / SMSG_CHAT_RECONNECT (0x4A0014, 0x4A0015, 0x4A0016).
 // All 0 bytes. Both DOWN opcodes share one consumer (0x20ABAB0) and one effect, so the client does
-// not distinguish them; the names suggest _IS_DOWN is the state at login and _DOWN the event, which
-// is how they are used here.
+// not distinguish them.
+// UNVERIFIED: which of the two is which. The split used here - _IS_DOWN as the state reported at
+// login, _DOWN as the event - follows the two names and nothing else. No consumer, Lua event or
+// GlobalString separates them, and a recording is impossible without a real Blizzard chat service
+// outage. Swapping them would change no observable behaviour, which is precisely why the guess is
+// marked instead of investigated further.
 void WorldSession::SendChatServiceStatus(bool available, bool initial)
 {
     if (available)
@@ -1047,24 +1069,44 @@ void WorldSession::SendChatAutoResponded(bool isDND, std::string_view text)
 // SMSG_CAUTIONARY_CHAT_MESSAGE (0x4A0008) - hold a whisper and ask the player to confirm or drop it.
 // Returns false when nothing could be held (too many pending), in which case the caller should let
 // the message through or drop it on its own terms.
-bool WorldSession::SendCautionaryChatMessage(ChatMsg type, Language lang, std::string const& msg, std::string const& targetName, ObjectGuid targetGuid)
+//
+// Two packets go out, in this order, and the first one is not optional. The client's whole
+// cautionary path runs on top of a chat line it ALREADY has: consumer 0x2667D30 matches the Text
+// field below case insensitively against field +246 of its own chat line table (0x4674E30) and
+// fires CAUTIONARY_CHAT_MESSAGE(chatLineID, confirmNumber) only on a hit, and
+// ChatFrameUtil.HandleCautionaryChatMessage (ChatFrameUtil.lua:796-811) then rewrites that very
+// displayed line into CENSORED_MESSAGE_SENDER. Both links it builds carry the whisper target, which
+// it reads out of that line's event args (eventArgs[2]). The only line that can satisfy all of this
+// is the sender's own CHAT_MSG_WHISPER_INFORM echo - so the message is echoed to its sender even
+// though it is being withheld from its recipient. Without it the player writes a whisper and sees
+// nothing at all: no line, no links, no event, and the message expires silently after
+// ChatCautionMgr::ExpirySeconds.
+bool WorldSession::SendCautionaryChatMessage(ChatMsg type, Language lang, std::string const& msg, Player const* target)
 {
+    std::string targetName = target->GetName();
+
     ChatCautionMgr::PendingMessage pending;
     pending.Type = type;
     pending.Lang = lang;
     pending.Text = msg;
     pending.TargetName = targetName;
-    pending.TargetGuid = targetGuid;
+    pending.TargetGuid = target->GetGUID();
 
     uint32 confirmNumber = _chatCautionMgr->Hold(std::move(pending));
     if (!confirmNumber)
         return false;
 
+    // The sender's echo - byte for byte the packet Player::Whisper would send, so that the confirmed
+    // message does not produce a second one (Player.cpp, Player::Whisper). LANG_UNIVERSAL for the
+    // same reason as there: whispers are always readable, and a translated line would not match the
+    // Text below.
+    WorldPackets::Chat::Chat inform;
+    inform.Initialize(CHAT_MSG_WHISPER_INFORM, LANG_UNIVERSAL, target, target, msg);
+    SendPacket(inform.Write());
+
     WorldPackets::Chat::CautionaryChatMessage cautionary;
-    // The client finds the chat line to rewrite by comparing THIS string case insensitively against
-    // the text of its own chat lines (consumer 0x2667D30 against field +246 of the chat line table
-    // at 0x4674E30). It has to be the message text verbatim, otherwise nothing is found and the
-    // player never sees the confirm/discard links.
+    // Has to be the message text verbatim - this is the string the client matches against its chat
+    // lines. Truncating it below MaxTextLength would already break the match.
     cautionary.Text.assign(std::string_view(msg).substr(0, WorldPackets::Chat::CautionaryChatMessage::MaxTextLength));
     cautionary.TargetName = targetName;             // UNVERIFIED: unread by the 69382 retail consumer
     cautionary.SenderGUID = GetPlayer()->GetGUID(); // UNVERIFIED: unread by the 69382 retail consumer

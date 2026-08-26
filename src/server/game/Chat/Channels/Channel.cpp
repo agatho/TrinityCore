@@ -911,6 +911,13 @@ void Channel::SetOwner(ObjectGuid const& guid, bool exclaim)
 // 0x3C20C40..0x3C20C68 and 0x2C0016 is not among them; a scan of the whole image for the dword
 // 0x002C0016 finds only the serializer (0x748AD9) and the opcode stamp (0x748B82). So no round trip
 // test was possible - see offene Frage O3.
+//
+// UNVERIFIED: that the toggle sets rather than clears (O3 - the source says "target-less toggle",
+// not "switches on"). What a moderated channel is supposed to ALLOW or FORBID is deliberately left
+// without effect: that is server state, so no reader, consumer, DB2 or GlobalString can carry a rule
+// about it, and inventing one would restrict opcodes that are already reachable. The flag is set and
+// announced (0x0F/0x10) and does nothing else - see Channel::SilenceAll for the restriction that was
+// tried here and removed again.
 void Channel::Moderate(Player const* player)
 {
     ObjectGuid const& guid = player->GetGUID();
@@ -956,31 +963,25 @@ void Channel::Moderate(Player const* player)
 // SizedString<9> Name, i.e. a target player, and Channel::SetMute / UnsetMute were sitting unused
 // right next to these stubs.
 //
-// Muting requires a moderated channel; otherwise the answer is CHAT_NOT_MODERATED_NOTICE (0x1C),
-// which is why NotModeratedAppend existed in the tree without a single user.
+// They forward to SetMute / UnsetMute and to nothing else. An earlier version of this unit made
+// them additionally require a moderated channel and answer CHAT_NOT_MODERATED_NOTICE (0x1C)
+// otherwise - that has been removed, because no source says so. The client cannot be one: whether a
+// channel is moderated is server state, so neither the sender body, nor a Lua binding, nor a DB2 can
+// carry that rule; the 12.1 UI source has no mention of silencing a channel at all. The only thing
+// that spoke for it was that NotModeratedAppend sits in the tree without a user, and TrinityCore is
+// rank 4 in the arbiter order - not enough to put a new restriction on two opcodes that were already
+// reachable. NotModeratedAppend therefore stays unused, exactly as it was found.
+//
+// The gates that DO apply are the ones SetMode already enforces and that every other moderator
+// action in this file goes through: member of the channel, moderator (or RBAC override), target
+// present, target not the owner.
 void Channel::SilenceAll(Player const* player, std::string const& name)
 {
-    if (!_moderationEnabled)
-    {
-        NotModeratedAppend appender;
-        ChannelNameBuilder<NotModeratedAppend> builder(this, appender);
-        SendToOne(builder, player->GetGUID());
-        return;
-    }
-
     SetMute(player, name);
 }
 
 void Channel::UnsilenceAll(Player const* player, std::string const& name)
 {
-    if (!_moderationEnabled)
-    {
-        NotModeratedAppend appender;
-        ChannelNameBuilder<NotModeratedAppend> builder(this, appender);
-        SendToOne(builder, player->GetGUID());
-        return;
-    }
-
     UnsetMute(player, name);
 }
 

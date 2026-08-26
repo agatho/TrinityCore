@@ -22363,8 +22363,15 @@ void Player::Whisper(std::string_view text, Language language, Player* target, b
     if (isAddonMessage)
         return;
 
-    packet.Initialize(CHAT_MSG_WHISPER_INFORM, language, target, target, _text);
-    SendDirectMessage(packet.Write());
+    // The sender's own copy of the whisper. A cautionary message that was held and then confirmed
+    // has already had exactly this packet sent when it was held (WorldSession::SendCautionaryChatMessage),
+    // and the client turns that same line into the "message sent" form on confirmation
+    // (ItemRefHandlersShared.lua:251-276) - a second echo would put the whisper in the frame twice.
+    if (!GetSession()->IsCautionaryChatAccepted())
+    {
+        packet.Initialize(CHAT_MSG_WHISPER_INFORM, language, target, target, _text);
+        SendDirectMessage(packet.Write());
+    }
 
     if (!isAcceptWhispers() && !IsGameMaster() && !target->IsGameMaster())
     {

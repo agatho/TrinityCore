@@ -1649,7 +1649,9 @@ class TC_GAME_API WorldSession
         void SendChatRegionalServiceStatus(bool available);
         void SendExpectedSpamRecords();
         void SendChatAutoResponded(bool isDND, std::string_view text);
-        bool SendCautionaryChatMessage(ChatMsg type, Language lang, std::string const& msg, std::string const& targetName, ObjectGuid targetGuid);
+        bool SendCautionaryChatMessage(ChatMsg type, Language lang, std::string const& msg, Player const* target);
+        /// true while a confirmed held whisper is being re-run - its sender already got his echo when it was held
+        bool IsCautionaryChatAccepted() const { return _chatCautionAccepted; }
         void SendCautionaryChannelMessage(std::string const& msg);
         void HandleChatSendCautionaryChatMessage(WorldPackets::Chat::CautionaryAction& packet);
         void HandleChatDropCautionaryChatMessage(WorldPackets::Chat::CautionaryAction& packet);
