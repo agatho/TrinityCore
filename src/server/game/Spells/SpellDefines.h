@@ -255,6 +255,22 @@ constexpr Optional<SpellModOp> SpellPvpModifierToSpellModOp(SpellPvpModifier op)
     }
 }
 
+// Platzhalter-op fuer einen PvP-Modifikator, dessen PvP-Index keine belegte SpellModOp-
+// Entsprechung hat - im Abbild 69382 ist das genau Index 3. Der Wert liegt ABSICHTLICH
+// ausserhalb des gueltigen Bereichs 0..MAX_SPELLMOD-1 und bedeutet: "uebertragen, aber
+// serverseitig nicht anwenden".
+//   uebertragen: der Sendeweg gruppiert ueber pvpOp, nicht ueber op - Player::AddSpellMod
+//     schreibt SpellPvpModifierByClassMask::pvpOp als ModIndex, Player::SendSpellModifiers
+//     sammelt in einer std::map ueber pvpOp.
+//   nicht angewendet: Player::GetSpellModValues wird nur mit echten SpellModOp gerufen und
+//     sucht per lower_bound auf op; ein Modifikator mit diesem op wird von keinem
+//     spellModTypeRange erfasst.
+// ACHTUNG: die Modifikator-Pruefung am Ende von AuraEffect::CalculateSpellMod verwirft jeden
+// op >= MAX_SPELLMOD und LOESCHT m_spellmod. Dieser Platzhalter braucht dort eine
+// ausdrueckliche Ausnahme - ohne sie entsteht kein Modifikator, und der Opcode wird fuer
+// Index 3 NIE gesendet.
+constexpr SpellModOp SPELLMOD_OP_PVP_UNMAPPED = SpellModOp(MAX_SPELLMOD);
+
 enum SpellValueMod : int32
 {
     SPELLVALUE_MAX_TARGETS,

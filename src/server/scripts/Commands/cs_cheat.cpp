@@ -187,6 +187,7 @@ public:
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_CT, player->GetCommandStatus(CHEAT_CASTTIME) ? enabled : disabled);
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_POWER, player->GetCommandStatus(CHEAT_POWER) ? enabled : disabled);
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_WW, player->GetCommandStatus(CHEAT_WATERWALK) ? enabled : disabled);
+        handler->PSendSysMessage(LANG_COMMAND_CHEAT_DR, player->GetCommandStatus(CHEAT_IGNORE_DIMINISHING_RETURNS) ? enabled : disabled);
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_TAXINODES, player->isTaxiCheater() ? enabled : disabled);
         return true;
     }

@@ -2017,6 +2017,10 @@ int32 SpellInfo::IsAffectedBySpellMod(SpellModifier const* mod) const
             return HasLabel(static_cast<SpellFlatModifierByLabel const*>(mod)->value.LabelID) ? 1 : 0;
         case SPELLMOD_LABEL_PCT:
             return HasLabel(static_cast<SpellPctModifierByLabel const*>(mod)->value.LabelID) ? 1 : 0;
+        case SPELLMOD_LABEL_FLAT_PVP:
+            return HasLabel(static_cast<SpellFlatPvpModifierByLabel const*>(mod)->value.LabelID) ? 1 : 0;
+        case SPELLMOD_LABEL_PCT_PVP:
+            return HasLabel(static_cast<SpellPctPvpModifierByLabel const*>(mod)->value.LabelID) ? 1 : 0;
         default:
             break;
     }

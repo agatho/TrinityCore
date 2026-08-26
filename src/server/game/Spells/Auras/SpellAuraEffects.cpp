@@ -718,8 +718,8 @@ NonDefaultConstructible<pAuraEffectHandler> AuraEffectHandler[TOTAL_AURAS]=
     &AuraEffect::HandleNULL,                                      //645
     &AuraEffect::HandleNoImmediateEffect,                         //646 SPELL_AURA_ADD_FLAT_PVP_MODIFIER implemented in AuraEffect::CalculateSpellMod()
     &AuraEffect::HandleNoImmediateEffect,                         //647 SPELL_AURA_ADD_PCT_PVP_MODIFIER implemented in AuraEffect::CalculateSpellMod()
-    &AuraEffect::HandleNULL,                                      //648 SPELL_AURA_ADD_FLAT_PVP_MODIFIER_BY_SPELL_LABEL
-    &AuraEffect::HandleNULL,                                      //649 SPELL_AURA_ADD_PCT_PVP_MODIFIER_BY_SPELL_LABEL
+    &AuraEffect::HandleNoImmediateEffect,                         //648 SPELL_AURA_ADD_FLAT_PVP_MODIFIER_BY_SPELL_LABEL implemented in AuraEffect::CalculateSpellMod()
+    &AuraEffect::HandleNoImmediateEffect,                         //649 SPELL_AURA_ADD_PCT_PVP_MODIFIER_BY_SPELL_LABEL implemented in AuraEffect::CalculateSpellMod()
     &AuraEffect::HandleNULL,                                      //650
     &AuraEffect::HandleNULL,                                      //651 SPELL_AURA_ENABLE_EVENT_TRANSMOG_OUTFIT
     &AuraEffect::HandleNULL,                                      //652
@@ -1068,18 +1068,22 @@ void AuraEffect::CalculateSpellMod()
             }
 
             // Index 3 ist im Client 69382 nirgends aufgerufen und deshalb unbelegt; der
-            // Modifikator kann uebertragen, aber serverseitig nicht angewendet werden.
+            // Modifikator wird uebertragen, aber serverseitig nicht angewendet.
             // UNVERIFIED: welche SpellModOp-Bedeutung hinter PvP-Index 3 steckt. Der Ausweichwert
-            // ist deshalb SpellModOp(MAX_SPELLMOD) - ein Wert AUSSERHALB des gueltigen Bereichs
-            // 0..40. Player::GetSpellModValues wird nur mit echten SpellModOp gerufen und laeuft
-            // ueber spellModTypeRange, dessen Endwaechter auf `(*itr)->op != op` prueft; ein
-            // Modifikator mit op == 41 faellt damit aus JEDEM Bereich heraus und wird serverseitig
-            // nie angewendet. Uebertragen wird er trotzdem: Player::AddSpellMod schreibt
-            // pvpMod->pvpOp auf den Draht, nicht op, und gruppiert ueber (op, type) + pvpOp -
-            // ein eigener op-Wert haelt die Gruppe sogar sauber getrennt.
+            // ist deshalb SPELLMOD_OP_PVP_UNMAPPED - ein Wert AUSSERHALB des gueltigen Bereichs
+            // 0..MAX_SPELLMOD-1. Player::GetSpellModValues wird nur mit echten SpellModOp gerufen
+            // und laeuft ueber spellModTypeRange, dessen Endwaechter auf `(*itr)->op != op`
+            // prueft; ein Modifikator mit diesem op faellt aus JEDEM Bereich heraus und wird
+            // serverseitig nie angewendet. Uebertragen wird er trotzdem, weil der Sendeweg ueber
+            // pvpOp gruppiert und nicht ueber op (Player::AddSpellMod filtert auf
+            // `spellMod->pvpOp == pvpMod->pvpOp`, Player::SendSpellModifiers sammelt in einer
+            // std::map ueber pvpOp).
             // Ein value_or(HealingAndDamage) waere das Gegenteil: der Client wendet aus Index 3
             // nichts an, der Server aber Heilung und Schaden.
-            SpellModOp op = SpellPvpModifierToSpellModOp(pvpOp).value_or(SpellModOp(MAX_SPELLMOD));
+            // Die Modifikator-Pruefung am Ende dieser Funktion laesst diesen Platzhalter
+            // ausdruecklich durch - ohne die Ausnahme dort wuerde m_spellmod geloescht und der
+            // Opcode fuer Index 3 nie gesendet.
+            SpellModOp op = SpellPvpModifierToSpellModOp(pvpOp).value_or(SPELLMOD_OP_PVP_UNMAPPED);
             if (GetAuraType() == SPELL_AURA_ADD_FLAT_PVP_MODIFIER)
             {
                 if (!m_spellmod)
@@ -1091,6 +1095,42 @@ void AuraEffect::CalculateSpellMod()
                 if (!m_spellmod)
                     m_spellmod = new SpellPctPvpModifierByClassMask(op, pvpOp, GetId(), GetBase(), GetSpellEffectInfo().SpellClassMask);
                 static_cast<SpellPctPvpModifierByClassMask*>(m_spellmod)->value = GetAmount();
+            }
+            break;
+        }
+        // Label-Varianten der PvP-Modifikatoren (Auren 648 / 649). Kein eigener Opcode: die
+        // Gegenstelle sind ActivePlayerData::SpellFlatModPVPByLabel und SpellPctModPVPByLabel
+        // (UpdateFields.h), deren Feld PvpModIndex heisst - der MiscValue traegt hier also
+        // wieder das kurze PvP-Enum (SpellPvpModifier, 0..9) und nicht SpellModOp.
+        // UNVERIFIED: dass MiscValue der PvP-Index und MiscValueB die Label-ID ist, ist nur aus
+        // zwei Dingen geschlossen und nicht am Client belegt: der Symmetrie zu den
+        // Nicht-PvP-Zwillingen 218/219 (dort MiscValue = SpellModOp, MiscValueB = Label) und dem
+        // Feldnamen PvpModIndex im Aktualisierungsfeld. Ein Vollscan des Abbilds 69382 findet
+        // keine Leserstelle fuer SpellFlatModPVPByLabel / SpellPctModPVPByLabel, und es gibt
+        // keine Aufnahme mit einem Zauber, der 648 oder 649 benutzt.
+        case SPELL_AURA_ADD_FLAT_PVP_MODIFIER_BY_SPELL_LABEL:
+        case SPELL_AURA_ADD_PCT_PVP_MODIFIER_BY_SPELL_LABEL:
+        {
+            SpellPvpModifier pvpOp = SpellPvpModifier(GetMiscValue());
+            if (uint32(GetMiscValue()) >= MAX_SPELL_PVP_MODIFIER)
+            {
+                TC_LOG_ERROR("spells", "Aura {} effect {} has SpellPvpModifier {} out of range 0..{} - not applied",
+                    GetId(), GetEffIndex(), GetMiscValue(), MAX_SPELL_PVP_MODIFIER - 1);
+                break;
+            }
+
+            SpellModOp op = SpellPvpModifierToSpellModOp(pvpOp).value_or(SPELLMOD_OP_PVP_UNMAPPED);
+            if (GetAuraType() == SPELL_AURA_ADD_FLAT_PVP_MODIFIER_BY_SPELL_LABEL)
+            {
+                if (!m_spellmod)
+                    m_spellmod = new SpellFlatPvpModifierByLabel(op, pvpOp, GetId(), GetBase(), GetMiscValueB());
+                static_cast<SpellFlatPvpModifierByLabel*>(m_spellmod)->value.ModifierValue = GetAmountAsInt();
+            }
+            else
+            {
+                if (!m_spellmod)
+                    m_spellmod = new SpellPctPvpModifierByLabel(op, pvpOp, GetId(), GetBase(), GetMiscValueB());
+                static_cast<SpellPctPvpModifierByLabel*>(m_spellmod)->value.ModifierValue = 1.0f + CalculatePct(1.0f, GetAmount());
             }
             break;
         }
@@ -1114,7 +1154,21 @@ void AuraEffect::CalculateSpellMod()
     {
         bool isValid = true;
         auto logErrors = [&] { return std::ranges::any_of(GetBase()->m_loadedScripts, [](AuraScript const* script) { return script->DoEffectCalcSpellMod.size() > 0; }); };
-        if (AsUnderlyingType(m_spellmod->op) >= MAX_SPELLMOD)
+
+        // Ausnahme fuer die PvP-Modifikatoren (Auren 646-649): ein PvP-Index ohne belegte
+        // SpellModOp-Entsprechung traegt ABSICHTLICH SPELLMOD_OP_PVP_UNMAPPED, also einen op
+        // ausserhalb 0..MAX_SPELLMOD-1. Das ist kein Skriptfehler, sondern die Kennzeichnung
+        // "uebertragen, aber serverseitig nicht anwenden" (Begruendung an der Konstante in
+        // SpellDefines.h). Ohne diese Ausnahme greift der Fehlerzweig unten, m_spellmod wird
+        // geloescht, AuraEffect::ApplySpellMod bricht bei `if (!m_spellmod ...)` ab,
+        // Player::AddSpellMod wird nie gerufen - und SMSG_SET_FLAT_/PCT_SPELL_PVP_MODIFIER
+        // wuerde fuer diesen Index NIE gesendet, ohne dass etwas im Log darauf hinweist
+        // (logErrors() liefert nur bei einem Aura-Skript mit DoEffectCalcSpellMod true).
+        bool const isUnmappedPvpModifier = m_spellmod->op == SPELLMOD_OP_PVP_UNMAPPED
+            && (m_spellmod->type == SPELLMOD_FLAT_PVP || m_spellmod->type == SPELLMOD_PCT_PVP
+                || m_spellmod->type == SPELLMOD_LABEL_FLAT_PVP || m_spellmod->type == SPELLMOD_LABEL_PCT_PVP);
+
+        if (!isUnmappedPvpModifier && AsUnderlyingType(m_spellmod->op) >= MAX_SPELLMOD)
         {
             isValid = false;
             if (logErrors())
@@ -1273,8 +1327,15 @@ void AuraEffect::ApplySpellMod(Unit* target, bool apply, AuraEffect const* trigg
 
     // reapply some passive spells after add/remove related spellmods
     // Warning: it is a dead loop if 2 auras each other amount-shouldn't happen
+    // Hier wird m_spellmod->op befragt und NICHT SpellModOp(GetMiscValue()): fuer die
+    // PvP-Modifikatoren (Auren 646-649) traegt MiscValue das kurze PvP-Enum, dessen Werte sich mit
+    // SpellModOp ueberschneiden, ohne dasselbe zu bedeuten - PvP-Index 3 waere sonst
+    // SpellModOp::PointsIndex0 und wuerde eine Neuberechnung von Effekt 0 ausloesen. Fuer alle
+    // anderen Modifikatortypen ist m_spellmod->op per Konstruktion SpellModOp(GetMiscValue()),
+    // das Verhalten aendert sich dort also nicht; der Platzhalter SPELLMOD_OP_PVP_UNMAPPED faellt
+    // in den default-Zweig und loest keine Neuberechnung aus.
     Optional<SpellEffIndex> recalculateEffectIndex;
-    switch (SpellModOp(GetMiscValue()))
+    switch (m_spellmod->op)
     {
         case SpellModOp::Points:
             break;

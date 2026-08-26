@@ -180,6 +180,8 @@ enum SpellModType : uint8
     SPELLMOD_LABEL_PCT    = 3,                            // SPELL_AURA_ADD_PCT_MODIFIER_BY_SPELL_LABEL
     SPELLMOD_FLAT_PVP     = 4,                            // SPELL_AURA_ADD_FLAT_PVP_MODIFIER
     SPELLMOD_PCT_PVP      = 5,                            // SPELL_AURA_ADD_PCT_PVP_MODIFIER
+    SPELLMOD_LABEL_FLAT_PVP = 6,                          // SPELL_AURA_ADD_FLAT_PVP_MODIFIER_BY_SPELL_LABEL
+    SPELLMOD_LABEL_PCT_PVP  = 7,                          // SPELL_AURA_ADD_PCT_PVP_MODIFIER_BY_SPELL_LABEL
     SPELLMOD_END
 };
 
@@ -326,6 +328,41 @@ struct SpellFlatModifierByLabel : SpellModifier
     }
 
     UF::SpellFlatModByLabel value = { };
+};
+
+// Label-Varianten der PvP-Zaubermodifikatoren (SPELL_AURA_ADD_FLAT_PVP_MODIFIER_BY_SPELL_LABEL /
+// _PCT_, 648 / 649). Sie haben KEINEN eigenen Opcode - Familie 0x67 fuehrt nur die vier
+// Klassenmasken-Varianten 0x670027/28 (nicht-PvP) und 0x670029/2A (PvP). Die Gegenstelle sind die
+// Aktualisierungsfelder ActivePlayerData::SpellFlatModPVPByLabel und SpellPctModPVPByLabel, deren
+// Feld PvpModIndex heisst; der Weg ist damit derselbe wie bei den Nicht-PvP-Zwillingen 218/219.
+// pvpOp ist der Index, der im Feld landet; op ist die daraus abgeleitete SpellModOp-Bedeutung fuer
+// die serverseitige Anwendung (SPELLMOD_OP_PVP_UNMAPPED, wenn der Index unbelegt ist).
+struct SpellFlatPvpModifierByLabel : SpellModifier
+{
+    SpellFlatPvpModifierByLabel(SpellModOp _op, SpellPvpModifier _pvpOp, uint32 _spellId, Aura* _ownerAura, int32 _label)
+        : SpellModifier(_op, SPELLMOD_LABEL_FLAT_PVP, _spellId, _ownerAura), pvpOp(_pvpOp)
+    {
+        value.PvpModIndex = int32(_pvpOp);
+        value.ModifierValue = 0;
+        value.LabelID = _label;
+    }
+
+    SpellPvpModifier pvpOp;
+    UF::SpellFlatPVPModByLabel value = { };
+};
+
+struct SpellPctPvpModifierByLabel : SpellModifier
+{
+    SpellPctPvpModifierByLabel(SpellModOp _op, SpellPvpModifier _pvpOp, uint32 _spellId, Aura* _ownerAura, int32 _label)
+        : SpellModifier(_op, SPELLMOD_LABEL_PCT_PVP, _spellId, _ownerAura), pvpOp(_pvpOp)
+    {
+        value.PvpModIndex = int32(_pvpOp);
+        value.ModifierValue = 1.0f;  // neutrales Element des multiplikativen Modifikators; wird in CalculateSpellMod sofort ueberschrieben
+        value.LabelID = _label;
+    }
+
+    SpellPvpModifier pvpOp;
+    UF::SpellPctPVPModByLabel value = { };
 };
 
 struct SpellPctModifierByLabel : SpellModifier

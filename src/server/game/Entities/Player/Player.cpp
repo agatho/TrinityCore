@@ -22917,6 +22917,39 @@ void Player::GetSpellModValues(SpellInfo const* spellInfo, SpellModOp op, Spell*
             *pct *= std::pow(1.0f + CalculatePct(1.0f, value), float(applyCount));
             Player::ApplyModToSpell(mod, spell);
         }
+
+        // Label-Varianten (Auren 648 / 649). Dieselbe PvP-Kontextregel wie oben, dieselbe Formel
+        // wie bei den Nicht-PvP-Zwillingen SPELLMOD_LABEL_FLAT / _PCT.
+        for (SpellModifier* mod : spellModTypeRange(SPELLMOD_LABEL_FLAT_PVP))
+        {
+            int32 applyCount = IsAffectedBySpellmod(spellInfo, mod, spell);
+            if (!applyCount)
+                continue;
+
+            int32 value = static_cast<SpellFlatPvpModifierByLabel*>(mod)->value.ModifierValue;
+            if (value == 0)
+                continue;
+
+            *flat += value * applyCount;
+            Player::ApplyModToSpell(mod, spell);
+        }
+
+        for (SpellModifier* mod : spellModTypeRange(SPELLMOD_LABEL_PCT_PVP))
+        {
+            int32 applyCount = IsAffectedBySpellmod(spellInfo, mod, spell);
+            if (!applyCount)
+                continue;
+
+            if (base + *flat == 0)
+                continue;
+
+            float value = static_cast<SpellPctPvpModifierByLabel*>(mod)->value.ModifierValue;
+            if (value == 1.0f)
+                continue;
+
+            *pct *= std::pow(value, float(applyCount));
+            Player::ApplyModToSpell(mod, spell);
+        }
     }
 }
 
@@ -23058,6 +23091,38 @@ void Player::AddSpellMod(SpellModifier* mod, bool apply)
                 }
 
                 SendDirectMessage(packet.Write());
+            }
+            break;
+        case SPELLMOD_LABEL_FLAT_PVP:
+            // Kein Opcode - Familie 0x67 fuehrt keine Label-Variante. Die Gegenstelle ist das
+            // Aktualisierungsfeld ActivePlayerData::SpellFlatModPVPByLabel; der Weg ist
+            // Zeile fuer Zeile derselbe wie beim Nicht-PvP-Zwilling SPELLMOD_LABEL_FLAT.
+            if (apply)
+            {
+                AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+                    .ModifyValue(&UF::ActivePlayerData::SpellFlatModPVPByLabel)) = static_cast<SpellFlatPvpModifierByLabel const*>(mod)->value;
+            }
+            else
+            {
+                int32 firstIndex = m_activePlayerData->SpellFlatModPVPByLabel.FindIndex(static_cast<SpellFlatPvpModifierByLabel const*>(mod)->value);
+                if (firstIndex >= 0)
+                    RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+                        .ModifyValue(&UF::ActivePlayerData::SpellFlatModPVPByLabel), firstIndex);
+            }
+            break;
+        case SPELLMOD_LABEL_PCT_PVP:
+            // Gegenstueck zu SPELLMOD_LABEL_FLAT_PVP, Feld SpellPctModPVPByLabel.
+            if (apply)
+            {
+                AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+                    .ModifyValue(&UF::ActivePlayerData::SpellPctModPVPByLabel)) = static_cast<SpellPctPvpModifierByLabel const*>(mod)->value;
+            }
+            else
+            {
+                int32 firstIndex = m_activePlayerData->SpellPctModPVPByLabel.FindIndex(static_cast<SpellPctPvpModifierByLabel const*>(mod)->value);
+                if (firstIndex >= 0)
+                    RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+                        .ModifyValue(&UF::ActivePlayerData::SpellPctModPVPByLabel), firstIndex);
             }
             break;
         case SPELLMOD_LABEL_FLAT:
