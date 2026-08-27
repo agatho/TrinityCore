@@ -429,9 +429,11 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
             // the `sendTo` of censoredmessagerewrite:%d:%d:%s, ItemRefHandlersShared.lua:226-249).
             // So the echo goes out even though the whisper itself is held - see
             // SendCautionaryChatMessage, which sends it ahead of the cautionary packet.
-            if (cautionary && SendCautionaryChatMessage(type, requestedLang, msg, receiver))
+            if (cautionary)
+            {
+                SendCautionaryChatMessage(type, requestedLang, msg, receiver);
                 return ChatMessageResult::CautionaryChatPending;
-            // Nothing could be held (too many pending at once) - deliver rather than lose it.
+            }
 
             GetPlayer()->Whisper(msg, lang, receiver);
             break;
@@ -552,14 +554,26 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
 
                 sScriptMgr->OnPlayerChat(sender, type, lang, msg, chn);
 
+                bool const delivered = chn->Say(sender->GetGUID(), msg, lang);
+
                 // Channel variant of the cautionary mechanism: informative only. The client
                 // auto-confirms it (K4) and there is no drop path, so nothing is held back and the
-                // message follows in the same breath. It sits here, not before the switch, so that
-                // no notice is produced for a channel the player cannot use at all.
-                if (cautionary)
+                // notice merely annotates a line that has already gone out.
+                //
+                // It follows Say() rather than preceding it because Say() is the only place that
+                // knows whether the channel takes the line at all: it refuses a non-member with
+                // ChannelNotify NotMember and a muted member with Muted, and the channel mute is
+                // exactly the state CMSG_CHAT_CHANNEL_SILENCE_ALL sets. Announcing caution for a
+                // message the channel then discards is the same mistake as announcing it for a
+                // channel the player may not use, which the previous placement already avoided.
+                //
+                // The order is free to choose: unlike the whisper variant, whose consumer 0x2667D30
+                // walks the client's own chat line table (stride 0x1888, case insensitive compare
+                // at -0x1792) and fires nothing without a match, the channel consumer 0x2667E30
+                // reads a single dword out of the packet, fires its event with it and answers
+                // 0x2C000B - no lookup, no branch, no dependency on a displayed line.
+                if (cautionary && delivered)
                     SendCautionaryChannelMessage(msg);
-
-                chn->Say(sender->GetGUID(), msg, lang);
             }
             break;
         }
@@ -1077,8 +1091,9 @@ void WorldSession::SendChatAutoResponded(bool isDND, std::string_view text)
 }
 
 // SMSG_CAUTIONARY_CHAT_MESSAGE (0x4A0008) - hold a whisper and ask the player to confirm or drop it.
-// Returns false when nothing could be held (too many pending), in which case the caller should let
-// the message through or drop it on its own terms.
+// Always holds the message: ChatCautionMgr::Hold discards its oldest unanswered entry when the
+// session is at its limit rather than refusing, because a client that never answers must not be
+// able to talk its way past the check - see the UNVERIFIED note there.
 //
 // Two packets go out, in this order, and the first one is not optional. The client's whole
 // cautionary path runs on top of a chat line it ALREADY has: consumer 0x2667D30 matches the Text
@@ -1095,7 +1110,7 @@ void WorldSession::SendChatAutoResponded(bool isDND, std::string_view text)
 // `requestedLang` is the language as it arrived from the client, NOT the resolved one - see the
 // comment on requestedLang in HandleChatMessage. The re-run on confirmation starts at the top of
 // HandleChatMessage and does its own resolution.
-bool WorldSession::SendCautionaryChatMessage(ChatMsg type, Language requestedLang, std::string const& msg, Player const* target)
+void WorldSession::SendCautionaryChatMessage(ChatMsg type, Language requestedLang, std::string const& msg, Player const* target)
 {
     std::string targetName = target->GetName();
 
@@ -1107,8 +1122,6 @@ bool WorldSession::SendCautionaryChatMessage(ChatMsg type, Language requestedLan
     pending.TargetGuid = target->GetGUID();
 
     uint32 confirmNumber = _chatCautionMgr->Hold(std::move(pending));
-    if (!confirmNumber)
-        return false;
 
     // The sender's echo - byte for byte the packet Player::Whisper would send, so that the confirmed
     // message does not produce a second one (Player.cpp, Player::Whisper). LANG_UNIVERSAL for the
@@ -1126,7 +1139,6 @@ bool WorldSession::SendCautionaryChatMessage(ChatMsg type, Language requestedLan
     cautionary.SenderGUID = GetPlayer()->GetGUID(); // UNVERIFIED: unread by the 69382 retail consumer
     cautionary.ConfirmNumber = confirmNumber;
     SendPacket(cautionary.Write());
-    return true;
 }
 
 // SMSG_CAUTIONARY_CHANNEL_MESSAGE (0x4A0009) - the channel variant. Informative only: consumer

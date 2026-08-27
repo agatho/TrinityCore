@@ -67,7 +67,8 @@ public:
     ChatCautionMgr& operator=(ChatCautionMgr&&) = delete;
 
     // Stores the message and returns the ConfirmNumber to put into SMSG_CAUTIONARY_CHAT_MESSAGE.
-    // Returns 0 when the session already has MaxPending live entries.
+    // Never 0: a session that already holds MaxPending live entries loses its oldest one instead of
+    // being refused, so the check cannot be switched off by simply not answering - see Hold().
     uint32 Hold(PendingMessage&& message);
 
     // Removes and returns the entry, or nothing if the number is unknown or expired.

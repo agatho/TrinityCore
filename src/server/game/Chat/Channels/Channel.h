@@ -219,7 +219,10 @@ class TC_GAME_API Channel
         void List(Player const* player) const;
         void Announce(Player const* player);
         void Moderate(Player const* player);
-        void Say(ObjectGuid const& guid, std::string const& what, uint32 lang) const;
+        /// @return true when the line was actually broadcast; false when the channel refused it
+        /// (empty, not a member, muted). The cautionary channel notice keys on this - see
+        /// WorldSession::HandleChatMessage, CHAT_MSG_CHANNEL.
+        bool Say(ObjectGuid const& guid, std::string const& what, uint32 lang) const;
         void AddonSay(ObjectGuid const& guid, std::string const& prefix, std::string const& what, bool isLogged) const;
         void DeclineInvite(Player const* player);
         void Invite(Player const* player, std::string const& newp);
@@ -259,6 +262,8 @@ class TC_GAME_API Channel
         time_t _nextActivityUpdateTime;
 
         void SendNPEJoinedBatch(uint32 joinedCount) const;
+        /// _playersStore minus the GMs who joined with .gm visible off - what a player can see
+        uint32 GetNumVisiblePlayers() const;
 
         bool _announceEnabled;          //< Whether we should broadcast a packet whenever a player joins/exits the channel
         bool _moderationEnabled;        //< Whether the channel is moderated, @see CMSG_CHAT_CHANNEL_MODERATE - not persisted

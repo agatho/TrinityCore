@@ -18,7 +18,9 @@
 #include "ChatCaution.h"
 #include "Containers.h"
 #include "GameTime.h"
+#include "Log.h"
 #include "WorldSession.h"
+#include <algorithm>
 
 ChatCautionMgr::ChatCautionMgr(WorldSession* owner) : _owner(owner), _nextConfirmNumber(1)
 {
@@ -30,8 +32,32 @@ uint32 ChatCautionMgr::Hold(PendingMessage&& message)
 {
     RemoveExpired();
 
-    if (_pending.size() >= MaxPending)
-        return 0;
+    // The limit must not become a way out of the check. Whether an entry is held is decided by the
+    // SERVER, but whether it is ever answered is decided by the CLIENT - so refusing to hold once
+    // the list is full, and letting the message through unheld, hands any client that simply never
+    // answers a permanent bypass: ten unanswered messages keep every slot occupied for
+    // ExpirySeconds and can be renewed indefinitely. The oldest entry gives way instead.
+    //
+    // UNVERIFIED: what retail does at this limit, or that it has one. The pending list is pure
+    // server state - the client only ever hands a ConfirmNumber back and cannot tell a held message
+    // from a delivered one - so nothing in the binary or the UI source can decide it and only a
+    // recording could. Discarding the oldest applies the one rule this mechanism already has: an
+    // unanswered message is thrown away (RemoveExpired), here merely earlier. The player sees the
+    // same outcome as an expiry - the rewrite links on the echoed line stop working - and the
+    // check itself stays in force for every message.
+    while (_pending.size() >= MaxPending)
+    {
+        // Expiry is Hold time + a constant, so the smallest Expiry is the entry held longest ago.
+        auto oldest = std::min_element(_pending.begin(), _pending.end(),
+            [](std::pair<uint32 const, PendingMessage> const& left, std::pair<uint32 const, PendingMessage> const& right)
+            {
+                return left.second.Expiry < right.second.Expiry;
+            });
+
+        TC_LOG_DEBUG("network", "ChatCautionMgr: {} reached {} pending cautionary messages, discarding confirmNumber {} unanswered",
+            _owner->GetPlayerInfo(), MaxPending, oldest->first);
+        _pending.erase(oldest);
+    }
 
     message.Expiry = GameTime::GetGameTime() + ExpirySeconds;
 

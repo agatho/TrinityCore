@@ -33,6 +33,7 @@
 #include "StringConvert.h"
 #include "World.h"
 #include "WorldSession.h"
+#include <algorithm>
 #include <sstream>
 
 Channel::Channel(ObjectGuid const& guid, uint32 channelId, uint32 team /*= 0*/, AreaTableEntry const* zoneEntry /*= nullptr*/) :
@@ -239,7 +240,16 @@ void Channel::JoinChannel(Player* player, std::string const& pass)
     // only row in 69382 with Ruleset == Mentor, and it is the one channel that summarises newcomer
     // joins instead of announcing them one by one - built-in channels have _announceEnabled == false
     // and therefore no per-join text of their own.
-    if (IsConstant())
+    //
+    // This IS a join announcement, so it takes the same two considerations every other one in this
+    // file takes (JoinedAppend above, and Channel.cpp at SetOwner/LeaveChannel): a GM who joins
+    // silently must not produce a join line - neither by RBAC_PERM_SILENTLY_JOIN_CHANNEL nor with
+    // .gm visible off, which is what playerInfo.IsInvisible() was just set from.
+    //
+    // _announceEnabled is deliberately NOT part of the gate, unlike at JoinedAppend: a Mentor
+    // channel is a constant channel and those have _announceEnabled == false throughout, so
+    // including it would switch this opcode off altogether rather than make it quieter.
+    if (IsConstant() && !playerInfo.IsInvisible() && !player->GetSession()->HasPermission(rbac::RBAC_PERM_SILENTLY_JOIN_CHANNEL))
         if (ChatChannelsEntry const* channelEntry = sChatChannelsStore.LookupEntry(_channelId))
             if (channelEntry->GetRuleset() == ChatChannelRuleset::Mentor)
                 SendNPEJoinedBatch(1);
@@ -709,10 +719,14 @@ void Channel::Announce(Player const* player)
     _isDirty = true;
 }
 
-void Channel::Say(ObjectGuid const& guid, std::string const& what, uint32 lang) const
+// Returns whether the line was broadcast. The three early exits are the channel's own refusals and
+// the caller has to be able to tell them apart from delivery - the cautionary channel notice must
+// not go out for a line the channel is about to throw away (see the CHAT_MSG_CHANNEL case in
+// WorldSession::HandleChatMessage).
+bool Channel::Say(ObjectGuid const& guid, std::string const& what, uint32 lang) const
 {
     if (what.empty())
-        return;
+        return false;
 
     // TODO: Add proper RBAC check
     if (sWorld->getBoolConfig(CONFIG_ALLOW_TWO_SIDE_INTERACTION_CHANNEL))
@@ -723,7 +737,7 @@ void Channel::Say(ObjectGuid const& guid, std::string const& what, uint32 lang) 
         NotMemberAppend appender;
         ChannelNameBuilder<NotMemberAppend> builder(this, appender);
         SendToOne(builder, guid);
-        return;
+        return false;
     }
 
     PlayerInfo const& playerInfo = _playersStore.at(guid);
@@ -732,7 +746,7 @@ void Channel::Say(ObjectGuid const& guid, std::string const& what, uint32 lang) 
         MutedAppend appender;
         ChannelNameBuilder<MutedAppend> builder(this, appender);
         SendToOne(builder, guid);
-        return;
+        return false;
     }
 
     Player* player = ObjectAccessor::FindConnectedPlayer(guid);
@@ -759,6 +773,7 @@ void Channel::Say(ObjectGuid const& guid, std::string const& what, uint32 lang) 
 
     SendToAll(builder, !playerInfo.IsModerator() ? guid : ObjectGuid::Empty,
         !playerInfo.IsModerator() && player ? player->GetSession()->GetAccountGUID() : ObjectGuid::Empty);
+    return true;
 }
 
 void Channel::AddonSay(ObjectGuid const& guid, std::string const& prefix, std::string const& what, bool isLogged) const
@@ -1000,7 +1015,14 @@ void Channel::DeclineInvite(Player const* /*player*/)
 void Channel::SendNPEJoinedBatch(uint32 joinedCount) const
 {
     uint32 channelId = _channelId;
-    uint32 totalCount = GetNumPlayers();
+    // Not GetNumPlayers(): that counts the GMs who joined with .gm visible off, and this number is
+    // put in front of the players. The same consideration that suppresses their join line
+    // (JoinChannel) and hands ownership past them (_isOwnerInvisible) applies to a headcount.
+    //
+    // This is only the count carried by THIS opcode. Channel::JoinNotify announces an invisible
+    // joiner in the userlist like any other, and ChannelMgr's list does too - that is existing
+    // TrinityCore behaviour across every channel packet and is not touched here.
+    uint32 totalCount = GetNumVisiblePlayers();
 
     auto builder = [channelId, joinedCount, totalCount](LocaleConstant /*locale*/)
     {
@@ -1017,6 +1039,14 @@ void Channel::SendNPEJoinedBatch(uint32 joinedCount) const
     };
 
     SendToAll(builder);
+}
+
+uint32 Channel::GetNumVisiblePlayers() const
+{
+    return uint32(std::count_if(_playersStore.begin(), _playersStore.end(), [](PlayerContainer::value_type const& entry)
+    {
+        return !entry.second.IsInvisible();
+    }));
 }
 
 void Channel::JoinNotify(ObjectGuid const& guid) const
