@@ -9,8 +9,15 @@
 -- Seed suggestion: SpamMessages.db2 has 135 goldseller patterns in 12.1.0.69382. This tree does not
 -- load that DB2, and the useful set is realm specific anyway, which is why the data lives here.
 --
-DROP TABLE IF EXISTS `chat_spam_record`;
-CREATE TABLE `chat_spam_record` (
+-- CREATE TABLE IF NOT EXISTS, deliberately NOT `DROP TABLE` + `CREATE TABLE`. UpdateFetcher
+-- reapplies an update file of its own accord once its hash changes
+-- (src/server/database/Updater/UpdateFetcher.cpp:276-279, "Reapplying update ... (it changed)"),
+-- and this file has already been edited in place once. A DROP here would silently wipe the realm's
+-- own pattern list on the next startup - the only data source for both SMSG_EXPECTED_SPAM_RECORDS
+-- and the server side cautionary check. The table carries realm data, not TDB structure, so it is
+-- created once and never redefined from here; a later column change needs its own ALTER TABLE
+-- update file.
+CREATE TABLE IF NOT EXISTS `chat_spam_record` (
   `ID` int unsigned NOT NULL,
   `Text` varchar(511) NOT NULL,
   PRIMARY KEY (`ID`)

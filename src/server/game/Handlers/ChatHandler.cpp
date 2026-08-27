@@ -314,8 +314,10 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
     // both need their target resolved first: the whisper variant echoes the sender's own chat line
     // before it holds the message, and echoing that for a target that does not exist would put a
     // whisper in the frame that SendChatPlayerNotfoundNotice is about to reject.
+    bool const spamPattern = (type == CHAT_MSG_WHISPER || type == CHAT_MSG_CHANNEL)
+        && sObjectMgr->MatchesChatSpamPattern(msg);
     bool const cautionary = !_chatCautionAccepted && sWorld->getBoolConfig(CONFIG_CHAT_CAUTIONARY_ENABLED)
-        && (type == CHAT_MSG_WHISPER || type == CHAT_MSG_CHANNEL) && sObjectMgr->MatchesChatSpamPattern(msg);
+        && spamPattern;
 
     switch (type)
     {
@@ -436,6 +438,12 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
             }
 
             GetPlayer()->Whisper(msg, lang, receiver);
+
+            // The receiving client filters this line against the patterns we shipped it with
+            // SMSG_EXPECTED_SPAM_RECORDS and answers a hit with CMSG_CHAT_REPORT_FILTERED. Record
+            // the delivery so that report has something to be checked against - see
+            // WorldSession::HandleChatReportFiltered, which counts nothing without it.
+            NoteFilterableWhisper(receiver->GetGUID());
             break;
         }
         case CHAT_MSG_PARTY:

@@ -2154,6 +2154,21 @@ Chat.CautionaryChat.Enabled = 0
 #                     messages as spam (CMSG_CHAT_REPORT_FILTERED) before that character is muted
 #                     for ChatFlood.MuteTime seconds. Reports are always counted and logged
 #                     (logger chat.spam); this only controls enforcement.
+#
+#                     A report is only counted if this server actually delivered a whisper from the
+#                     reported character to the reporting one in the preceding five minutes, and
+#                     each such whisper backs at most one report; counted reports themselves stop
+#                     counting after fifteen minutes. Without those two conditions the mute would
+#                     be reachable by anyone who knows a GUID, because the whole trigger of the
+#                     opcode lives in the client and the server is only told the result.
+#
+#                     Nothing happens at all while `chat_spam_record` is empty: the client filters
+#                     against the patterns this server ships it, so with no patterns there is
+#                     nothing to report.
+#
+#                     WARNING: what retail does with such a report is not known and cannot be
+#                     recorded - it is answered with nothing on the wire. Muting is this server's
+#                     own policy. Leave at 0 unless you accept that.
 #        Default:     0 - (Disabled, log only)
 
 Chat.SpamFilterReport.MuteThreshold = 0

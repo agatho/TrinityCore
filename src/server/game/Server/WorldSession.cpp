@@ -595,6 +595,7 @@ void WorldSession::LogoutPlayer(bool save)
         // Held back chat messages are session state and must not survive the character
         _chatCautionMgr->Clear();
         _chatSpamFilterReporters.clear();
+        _filterableWhispers.clear();
 
         //drop a flag if player is carrying it
         if (Battleground* bg = _player->GetBattleground())
