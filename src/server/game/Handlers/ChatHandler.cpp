@@ -646,13 +646,27 @@ void WorldSession::HandleChatAddonMessage(ChatMsg type, std::string prefix, std:
 
     // BEHAVIOUR CHANGE, same one as on the chat path (bestandsbefund B1): UpdateSpeakTime used to
     // return void, so the addon message that tripped the flood limit was still delivered and only
-    // the NEXT one ran into the mute. It is now dropped, which keeps the two paths consistent.
+    // the NEXT one ran into the mute. It is now dropped.
+    //
+    // The brake is evaluated HERE but decided BEHIND ParseCommands, exactly as on the chat path
+    // (see the comment on floodLimitTripped there). AddonChannelCommandHandler runs the same
+    // server commands as ChatHandler::ParseCommands, so the same argument applies: a command line
+    // must not be swallowed by the flood brake, and here it weighs heavier still, because this
+    // path deliberately sends no answer - the line would vanish without any feedback at all.
+    // The counter and m_muteTime move unchanged either way: UpdateSpeakTime applies both itself
+    // (Player.cpp:21759-21785), only the drop is deferred. Nothing sits between the two points
+    // that could change meaning by it - the length check follows ParseCommands already.
+    // Letting one command line past opens no spam gap: UpdateSpeakTime has just set m_muteTime,
+    // so every following addon line stops at CanSpeak() above.
+    //
     // No SMSG_CHAT_RESTRICTED here on purpose: an addon message has no chat surface, and retail
     // answers addon throttling client side with Enum.SendAddonMessageResult.AddonMessageThrottle.
-    if (!sender->UpdateSpeakTime(Player::ChatFloodThrottle::ADDON))
-        return;
+    bool const floodLimitTripped = !sender->UpdateSpeakTime(Player::ChatFloodThrottle::ADDON);
 
     if (prefix == AddonChannelCommandHandler::PREFIX && AddonChannelCommandHandler(this).ParseCommands(text.c_str()))
+        return;
+
+    if (floodLimitTripped)
         return;
 
     if (text.length() > 255)
