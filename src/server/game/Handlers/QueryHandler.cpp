@@ -99,10 +99,17 @@ void WorldSession::SendPlayerNameByCommunityId(WorldPackets::Query::BNetAccountA
             response.Result = WorldPackets::Query::QueryPlayerNameByCommunityIdResponse::Success;
         else
         {
-            // The cache entry existed a moment ago and Initialize still failed, so this is a transient state and
-            // NOT a permanent negative. Result 1 here would brand the member negative in the client's cache and
-            // leave that player nameless for the rest of the session; Result 2 only clears the pending bit and
-            // lets the client ask again (consumer 0x3498F0).
+            // Unreachable as this function stands, and said so rather than dressed up as a transient state:
+            // PlayerGuidLookupData::Initialize has exactly one `return false` (QueryPackets.cpp:144-148) and its
+            // condition is the same sCharacterCache->GetCharacterCacheByGuid(guid) that the else-if above just
+            // found non-null - same synchronous function, nothing in between that could evict the entry. Result 2
+            // therefore never goes out today: of the three result values this opcode defines, the server reaches
+            // two. The third is written correctly and read correctly by the client, but there is no server state in
+            // which it is the right answer, and inventing one would be worse than recording the gap.
+            // The branch stays as a guard because if Initialize ever grows a second failure condition,
+            // TemporaryFailure remains the correct answer here: Result 1 would brand the member negative in the
+            // client's cache and leave that player nameless for the rest of the session, while Result 2 only clears
+            // the pending bit and lets the client ask again (consumer 0x3498F0).
             response.Data.reset();
             response.Result = WorldPackets::Query::QueryPlayerNameByCommunityIdResponse::TemporaryFailure;
         }

@@ -652,6 +652,13 @@ uint32 WorldSocket::CompressPacket(uint8* buffer, WorldPacket const& packet)
 // this opcode, exactly as with SMSG_COMPRESSED_PACKET: it is an opcode substitution in the write path and never
 // travels through WorldSession::SendPacket. The client has no message class for it either - the factory stub scan
 // over .text finds stubs for 0x4C0000..0x4C000C and none for 0x4C000D.
+//
+// UNVERIFIED: no client has ever parsed a bundle produced by this code, and there are no reference bytes for the
+// opcode to round-trip against. The framing above is read out of the client's own framing function, so the field
+// order is measured - what is not measured is that a frame this function writes is accepted. Step 2 of the
+// verification loop is impossible here (the sniffer hooks behind the transport decapsulation, so a bundle never
+// appears in any recording) and step 3 has not run. That is what keeps bundling off by default
+// (WorldSocketMgr::StartNetwork) and what the debug line at the end of this function is for.
 void WorldSocket::WriteBundleToBuffer(std::span<EncryptablePacket* const> packets, MessageBuffer& buffer)
 {
     uint32 opcode = SMSG_MULTIPLE_PACKETS;

@@ -89,6 +89,10 @@ class TC_GAME_API WorldSocket final : public Trinity::Net::Socket<>
     // Limits for SMSG_MULTIPLE_PACKETS bundles. Neither is a client limit - the client's framing loop
     // (0x18C0490) stops when fewer than 4 bytes remain and its only hard bound is the uint16 inner length.
     // These keep one frame from growing without bound; bundling is only worthwhile for small packets anyway.
+    // UNVERIFIED: the two values themselves. 0x2000 bytes and 64 entries are CHOSEN, not measured - no client
+    // limit constrains them (see above) and no retail bundle is available to compare against, because the
+    // sniffer hooks behind the transport decapsulation and never records one. A measurement needs a retail
+    // capture taken below that layer.
     static uint32 const MaxBundlePayloadSize;
     static uint32 const MaxBundleEntries;
 
