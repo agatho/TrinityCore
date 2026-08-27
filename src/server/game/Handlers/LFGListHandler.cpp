@@ -70,31 +70,11 @@ namespace
     // the apply-result snapshot and the live SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE push all serialize a listing
     // through the exact same code.
 
-    // Push the full applicant list of a listing to every connected member of the listed group (sniff: the
-    // packet goes to all members, not only the leader; solo listings notify just the leader).
+    // Moved to LFGListMgr so that the logout cleanup and the application-timeout sweep - which live there -
+    // reach the same recipients as the handler paths. See the contract on the declaration.
     void SendApplicantList(LFGList::Listing const& listing)
     {
-        WorldPackets::LFGList::LFGListApplicantListUpdate packet;
-        FillListingTicket(packet.ListingTicket, listing);
-        for (LFGList::Application const& app : listing.Applications)
-            LFGListMgr::FillApplicantInfo(packet.Applicants.emplace_back(), app);
-        WorldPacket const* data = packet.Write();
-
-        bool leaderNotified = false;
-        if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
-        {
-            for (Group::MemberSlot const& slot : group->GetMemberSlots())
-            {
-                if (Player* member = ObjectAccessor::FindConnectedPlayer(slot.guid))
-                {
-                    member->SendDirectMessage(data);
-                    leaderNotified = leaderNotified || slot.guid == listing.LeaderGuid;
-                }
-            }
-        }
-        if (!leaderNotified)
-            if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
-                leader->SendDirectMessage(data);
+        LFGListMgr::SendApplicantList(listing);
     }
 
     // Answer a REFUSED application.
@@ -193,6 +173,24 @@ namespace
         else
             packet.UnkResult = 8;
         applicant->SendDirectMessage(packet.Write());
+    }
+
+    // The same message with the wire state given directly instead of derived from Application::State.
+    //
+    // It exists because the accept half of the invite flow can end in states the SERVER-side enum does not
+    // have a member for: the party filled up between invite and accept, the leader logged out, the join
+    // itself failed. Application::State has six values and none of them says "declined because full", but
+    // the CLIENT has that state - nibble 6 "declined_full" of the state->string mapper @ RVA 0x24DADA0 -
+    // and the UI reacts to it (LFGList.lua:1962-1968 groups the three decline strings). Without this, every
+    // one of those endings was a bare `return`: the applicant pressed Accept and received nothing at all.
+    // Same defect class as the four silent refusals in HandleLFGListApplyToGroup, on the sister handler.
+    //
+    // UnkResult 8, as on every non-invite path: the 60 of the invite branch is the invite-response window,
+    // and after a failed accept there is no window left to count down.
+    // Lives in LFGListMgr for the same reason SendApplicantList does: the delist path needs it too.
+    void SendApplicationStatusBits(LFGList::Listing const& listing, LFGList::Application const& app, uint8 stateBits)
+    {
+        LFGListMgr::SendApplicationStatusBits(listing, app, stateBits);
     }
 }
 
@@ -660,13 +658,27 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
 
     // Accept is only valid for an application the leader actually invited. Without this an applicant could send
     // CMSG_LFG_LIST_INVITE_RESPONSE{Accept} for its own still-pending (Applied) application and force-join a group
-    // that never invited it.
+    // that never invited it. This is the one ending here that stays silent on purpose: no legitimate client
+    // can reach it - the Accept button only exists on an invited application - so anything arriving here is
+    // forged, and answering it would confirm to the sender that the application id it guessed exists.
     if (app->State != LFGList::ApplicationState::Invited)
         return;
 
+    // Every ending below this line answers the applicant. It pressed Accept; a bare `return` here means a
+    // button that does nothing, which is the exact defect Runde 9 closed on HandleLFGListApplyToGroup.
+    // `app` is a pointer into listing->Applications and RemoveApplication invalidates it, so the record the
+    // answers are built from is copied out first.
+    LFGList::Application const application = *app;
+
     Player* leader = ObjectAccessor::FindConnectedPlayer(listing->LeaderGuid);
     if (!leader)
+    {
+        // The inviting leader went offline between invite and accept. "failed" (nibble 3), not one of the
+        // three decline states: nobody declined anything, the group is simply not reachable. The
+        // application stays - the leader may come back, and the leader's own list is unchanged by this.
+        SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::Failed);
         return;
+    }
 
     // Join (or form) the leader's party.
     Group* group = leader->GetGroup();
@@ -676,6 +688,7 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
         if (!group->Create(leader))
         {
             delete group;
+            SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::Failed);
             return;
         }
         sGroupMgr->AddGroup(group);
@@ -685,15 +698,43 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
         listing->GroupGuid = group->GetGUID();
     }
 
-    if (group->IsFull() || applicant->GetGroup())
+    if (group->IsFull())
+    {
+        // The party filled up between the invite and this accept - reachable in ordinary play the moment
+        // two invited applicants accept the same last seat. "declined_full" (nibble 6) is the client's own
+        // word for it; the constant was measured and had no caller until now, which is what made this
+        // ending silent. The application is dropped with it: the seat it was invited to no longer exists,
+        // and leaving the row standing would give the leader an Invite button that cannot succeed.
+        SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::DeclinedFull);
+        sLFGListMgr.RemoveApplication(applicationId);
+        SendApplicantList(*listing);
         return;
+    }
+
+    if (applicant->GetGroup())
+    {
+        // The applicant joined some other party in the meantime. Its own doing, not a decline by the
+        // leader, so "failed" - and the application goes, because it can never be honoured from here.
+        SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::Failed);
+        sLFGListMgr.RemoveApplication(applicationId);
+        SendApplicantList(*listing);
+        return;
+    }
 
     // Sniff-confirmed retail flow: accepting the invite adds the applicant to the party directly (no
     // SMSG_PARTY_INVITE dialog), the accepted state (0xA0) is echoed, and the joining member receives the
     // listing status (0x19).
-    group->AddMember(applicant);
+    //
+    // The return value is checked: AddMember refuses on its own account (a full or converted group, a
+    // failed member row) and the acceptance plus the 0x19 listing status used to go out regardless, so the
+    // applicant was told it had joined a party it was not in.
+    if (!group->AddMember(applicant))
+    {
+        SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::Failed);
+        return;
+    }
 
-    LFGList::Application accepted = *app;
+    LFGList::Application accepted = application;
     accepted.State = LFGList::ApplicationState::Accepted;
     SendApplicationStatus(*listing, accepted);
     SendLFGListUpdateStatus(listing->Id, 0x19);
@@ -742,11 +783,19 @@ namespace
     //   reason 18 - 143 rows in ALL FOUR captures, identical set: legacy content permanently off the group
     //               finder (MoP/WoD zones and the 10-man raid tiers - "The Jade Forest", "Mogu'shan Vaults
     //               (10 Heroic)"). Constant, therefore derivable, but the deriving field is not yet found.
-    //   reason  3 - the PvP brackets (activities 14/15/351-355/389-394, PlayerConditionID 86425..86430, one
-    //               per level bracket). Varies per character, so this is PlayerCondition evaluation.
     //   reason  2/10/19 - condition-gated as well (880 of the 900 activities carrying a PlayerConditionID are
     //               blacklisted for this character); the reason -> cause mapping is NOT established.
-    // UNVERIFIED: reasons 2, 3, 10, 18 and 19 are served from this snapshot instead of being computed from
+    //   reason  3 - DOES NOT OCCUR IN THIS TABLE, and it is worth saying why, because it occurs in the other
+    //               two captures. Counted over the shipped 1137 rows the reasons are exactly
+    //               {1: 205, 2: 171, 10: 9, 18: 143, 19: 609}. Reason 3 is the PvP level brackets
+    //               (activities 14/15/351-355/389-394, PlayerConditionID 86425..86430, one per bracket): in
+    //               69273 all thirteen of them carry reason 3, in 69404 only 15/393/394 do - and 15/393/394
+    //               are precisely the three that are ABSENT from the 69382 table, i.e. not blacklisted for
+    //               this character at all. What the 69382 character does get is reason 2 on the other ten
+    //               (14, 351-355, 389-392). So reason 3 is a per-character bracket verdict that this
+    //               particular snapshot happens not to contain, and a server serving this array never emits
+    //               it. Do not read the table as evidence that reason 3 is gone in 12.1.
+    // UNVERIFIED: reasons 2, 10, 18 and 19 are served from this snapshot instead of being computed from
     // the requesting player. A character that differs from the 69382 tester sees at most ~40 wrong rows out
     // of 1137, and the 26 rows that moved 2 -> 19 mid-session show the reason itself can be wrong. Deriving
     // them needs the reason -> PlayerCondition mapping out of the client, which no capture gives.

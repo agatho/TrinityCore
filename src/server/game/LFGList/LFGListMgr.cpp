@@ -87,17 +87,10 @@ void LFGListMgr::Update(uint32 diff)
                     ++appItr;
             }
 
+            // Through the shared producer, like every other path. Hand-built here, it reached the LEADER
+            // ONLY, so a timeout left the expired applicant standing in every other group member's list.
             if (changed)
-            {
-                if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
-                {
-                    WorldPackets::LFGList::LFGListApplicantListUpdate applicantList;
-                    FillListingTicket(applicantList.ListingTicket, listing);
-                    for (LFGList::Application const& app : listing.Applications)
-                        FillApplicantInfo(applicantList.Applicants.emplace_back(), app);
-                    leader->SendDirectMessage(applicantList.Write());
-                }
-            }
+                SendApplicantList(listing);
         }
     }
 
@@ -254,6 +247,24 @@ void LFGListMgr::DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 stat
                 recipient->SendDirectMessage(built);
     }
 
+    // The addressees above are the holders of an ACTIVE ENTRY. A player whose application is still pending
+    // never received a Listed payload and is not among them, yet its application dies here with the listing -
+    // and used to die in silence, so the applicant kept a live-looking application row for a listing that no
+    // longer existed, until relog. Third flank of the same defect class as the silent RemoveListingsBy and
+    // the silent RemoveApplicationsBy; this closes it. The notification has to go out before RemoveListing,
+    // for the same reason the delist above does: the ticket cannot be built once the listing is gone.
+    //
+    // "declined_delisted" (nibble 7) is the client's own word for exactly this situation and is already what
+    // HandleLFGListApplyToGroup answers when the listing vanished before the application arrived; LFGList.lua
+    // :388 maps it to LFG_LIST_APP_DECLINED_DELISTED_MESSAGE and :243 counts it as a decline.
+    // UNVERIFIED: that retail sends this message at delist time at all. The STATE is measured (mapper @ RVA
+    // 0x24DADA0) and so is the UI's handling of it; what no capture in c:\dumps\wpp_work\lfg_ref shows is a
+    // listing being delisted while an application is pending, because none of them contains an application.
+    // See aufnahme_noetig in the status file. Silence is the one answer that is certainly wrong: the client
+    // has no other way to learn that the application is over.
+    for (LFGList::Application const& app : listing->Applications)
+        SendApplicationStatusBits(*listing, app, WorldPackets::LFGList::ApplicationStateBits::DeclinedDelisted);
+
     RemoveListing(listingId, leader);
 }
 
@@ -403,20 +414,33 @@ void LFGListMgr::RemoveApplication(uint32 applicationId)
     _applicationIndex.erase(applicationId);
 }
 
+// Withdraw everything this player applied for - logout cleanup. Every OTHER removal path announces the new
+// applicant list (cancel, decline, invite response, and the timeout sweep in Update); this one erased in
+// silence, so a leader kept a ghost row for a player who had already logged out, and the Invite button on
+// that row ran HandleLFGListInviteApplicant into GetApplication == nullptr and returned without a packet -
+// a dead button with no error text. Same defect class RemoveListingsBy had on the listing side.
 void LFGListMgr::RemoveApplicationsBy(ObjectGuid applicant)
 {
     for (auto& [listingId, listing] : _listings)
     {
+        bool changed = false;
         for (auto itr = listing.Applications.begin(); itr != listing.Applications.end(); )
         {
             if (itr->ApplicantGuid == applicant)
             {
                 _applicationIndex.erase(itr->Id);
                 itr = listing.Applications.erase(itr);
+                changed = true;
             }
             else
                 ++itr;
         }
+
+        // After the erase, so the list that goes out is the one that remains. The departing applicant is
+        // logging out and gets nothing: its own SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE would race the
+        // session teardown, and the client discards the state of a character it is leaving anyway.
+        if (changed)
+            SendApplicantList(listing);
     }
 }
 
@@ -604,6 +628,51 @@ void LFGListMgr::FillApplicantInfo(WorldPackets::LFGList::ApplicantInfo& info, L
     info.PlayerGuid = app.ApplicantGuid;
     info.StateBits = ApplicationStateToBits(app.State);
     info.Comment = app.Comment;
+}
+
+// See the contract on the declaration for why this is the only producer of the message and why the
+// recipient circle is the whole group rather than the leader.
+void LFGListMgr::SendApplicantList(LFGList::Listing const& listing)
+{
+    WorldPackets::LFGList::LFGListApplicantListUpdate packet;
+    FillListingTicket(packet.ListingTicket, listing);
+    for (LFGList::Application const& app : listing.Applications)
+        FillApplicantInfo(packet.Applicants.emplace_back(), app);
+    WorldPacket const* data = packet.Write();
+
+    bool leaderNotified = false;
+    if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
+    {
+        for (Group::MemberSlot const& slot : group->GetMemberSlots())
+        {
+            if (Player* member = ObjectAccessor::FindConnectedPlayer(slot.guid))
+            {
+                member->SendDirectMessage(data);
+                leaderNotified = leaderNotified || slot.guid == listing.LeaderGuid;
+            }
+        }
+    }
+    if (!leaderNotified)
+        if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
+            leader->SendDirectMessage(data);
+}
+
+// See the contract on the declaration. UnkResult goes out as 8, the value every non-invite path carries:
+// the 60 of the invite branch is the invite-response window, and none of the endings this serves has a
+// window left to count down.
+void LFGListMgr::SendApplicationStatusBits(LFGList::Listing const& listing, LFGList::Application const& app, uint8 stateBits)
+{
+    Player* applicant = ObjectAccessor::FindConnectedPlayer(app.ApplicantGuid);
+    if (!applicant)
+        return;
+
+    WorldPackets::LFGList::LFGListApplicationStatusUpdate packet;
+    FillApplicationTicket(packet.Ticket, app);
+    FillListingTicket(packet.ListingTicket, listing);
+    packet.StateBits = stateBits;
+    packet.UnkResult = 8;
+    packet.RoleGranted = 0;
+    applicant->SendDirectMessage(packet.Write());
 }
 
 void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing) const

@@ -677,8 +677,6 @@ namespace WorldPackets
             Optional<uint8> CensorCode;
         };
 
-        // Wire state bits for application status (sniff MSB-first): 0x40 applied/pending, 0x20 invited,
-        // 0xA0 invite accepted. Declined/cancelled bytes were not captured (best-effort 0x10).
         // Application state, as it travels in the TOP FOUR BITS of the trailing state byte of both
         // SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE and SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT. The client stores
         // `wireByte >> 4` as an int (0x755DA9 and 0x755EB6, both `shr eax, 4`) and hands that int to the

@@ -207,6 +207,21 @@ public:
     static uint8 ApplicationStateToBits(LFGList::ApplicationState state);
     static void FillApplicantInfo(WorldPackets::LFGList::ApplicantInfo& info, LFGList::Application const& app);
 
+    // Push the full applicant list of a listing to every connected member of the listed group (sniff: the
+    // packet goes to all members, not only the leader; solo listings notify just the leader). THE one
+    // producer of SMSG_LFG_LIST_APPLICANT_LIST_UPDATE - it lived in the handler's anonymous namespace while
+    // the timeout sweep in Update() had a hand-built copy that addressed the LEADER ALONE, so after every
+    // application timeout the non-leader members of a listed group kept the expired applicant in their list
+    // until relog. Same defect class as the four drifted copies of the delist message, and the same fix.
+    static void SendApplicantList(LFGList::Listing const& listing);
+
+    // SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE with the wire state given DIRECTLY instead of derived from
+    // Application::State. It exists because an application can end in states the server-side enum has no
+    // member for - "declined because the party filled up", "declined because the listing is gone" - which
+    // the CLIENT does have (nibbles 6 and 7 of the state->string mapper @ RVA 0x24DADA0). Without it those
+    // endings were bare returns and the applicant was told nothing at all.
+    static void SendApplicationStatusBits(LFGList::Listing const& listing, LFGList::Application const& app, uint8 stateBits);
+
     // The descriptor as it must go out to a client. Identical to the stored one, except that a listing
     // whose text was flagged and not yet resolved goes out WITHOUT its name and comment: retail withholds
     // them (that is why the edit dialog has to ask the server via C_LFGList.DoesCensoredTextMatch instead
