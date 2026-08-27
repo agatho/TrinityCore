@@ -276,13 +276,34 @@ void WorldSession::HandleLFGListConfirmCensoredActiveEntry(WorldPackets::LFGList
     if (!sLFGListMgr.ConfirmCensoredListing(packet.Ticket.Id, player->GetGUID()))
         return;
 
-    // No answer, on purpose. The confirmation is client-local by construction: C_LFGList.ConfirmCensoredActiveEntry
-    // (RVA 0x117E560) writes the resolution state 2 itself before sending, and the only opcode that can write
-    // that state again is SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE - whose consumer (RVA 0x24DEAA0) stores
+    // No CENSOR message in reply, on purpose - and ONLY that one. The censor state itself is client-local by
+    // construction: C_LFGList.ConfirmCensoredActiveEntry (RVA 0x117E560) writes the resolution state 2 itself
+    // before sending, and the only opcode that can write that state again is
+    // SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE - whose consumer (RVA 0x24DEAA0) stores
     // `HasCensorCode && CensorCode != 0`, a bool that can only produce 0 or 1. Answering the confirmation with
     // that message would therefore push the client from 2 straight back to 1 and re-open the very dialog the
     // player just dismissed. The wire has no way to say "flagged and confirmed"; the state we keep here only
     // stops the server from nagging again (see HandleLFGListGetStatus).
+    //
+    // The DESCRIPTOR is a different matter, and leaving it unsent was a live defect. Confirmation is the third
+    // mutation of the publicly visible descriptor after CreateListing and UpdateListing, and it was the only
+    // one without a push. IsTextWithheld() goes false here, so from this line on GetPublicDescriptor stops
+    // clearing Name and Comment and MatchesKeywords stops returning a hard false for this listing - the two
+    // readers of that state. Both of the messages that carry a descriptor are unaffected by the censor
+    // restriction above, because neither touches the client's censor state:
+    //
+    //   * the OWNER. His client set its own resolution state to 2 on send, so CENSORED_LFG_GROUP_NAME is gone
+    //     from his header - but the last descriptor he actually received was the withheld one, with Name and
+    //     Comment empty. Without this send he sits on a BLANK title until something else makes him ask
+    //     (CMSG_LFG_LIST_GET_STATUS on a UI reload, HandleLFGListGetStatus). That is verbatim the damage the
+    //     reload path was fixed for; this is the same damage on the confirmation path itself. Status 0x38 is
+    //     the "listing you already know, nothing to pop up" value the edit path uses, which is what this is.
+    //   * THIRD PARTIES with the browser open. Their subscribed rows still carry the withheld descriptor and
+    //     would keep it until their next own search. NotifyListingChanged re-pushes the row through the same
+    //     Matches() test Search() uses, so the listing also (re)appears for searchers whose keyword filter
+    //     MatchesKeywords was rejecting while the text was withheld.
+    SendLFGListUpdateStatus(packet.Ticket.Id);
+    sLFGListMgr.NotifyListingChanged(packet.Ticket.Id);
 }
 
 void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
@@ -298,7 +319,9 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
         {
             WorldPackets::LFGList::LFGListJoinResult result;
             FillRejectedListingTicket(result.Ticket, player);
-            result.Result = 1; // not the leader (exact enum value NEEDS-SNIFF)
+            // UNVERIFIED: the value 1. "Rejected" is certain, the enum member is guessed - see
+            // LFGListJoinResult::Result for why no consumer could settle it.
+            result.Result = 1; // not the leader
             SendPacket(result.Write());
             return;
         }
@@ -313,7 +336,8 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
         {
             WorldPackets::LFGList::LFGListJoinResult result;
             FillRejectedListingTicket(result.Ticket, player);
-            result.Result = 1; // invalid activity (exact enum value NEEDS-SNIFF)
+            // UNVERIFIED: the value 1, same guess as above (LFGListJoinResult::Result).
+            result.Result = 1; // invalid activity
             SendPacket(result.Write());
             return;
         }
@@ -364,7 +388,8 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
     {
         WorldPackets::LFGList::LFGListJoinResult result;
         FillRejectedListingTicket(result.Ticket, player);
-        result.Result = 1; // create failed (exact enum value NEEDS-SNIFF)
+        // UNVERIFIED: the value 1, same guess as above (LFGListJoinResult::Result).
+        result.Result = 1; // create failed
         SendPacket(result.Write());
     }
 }

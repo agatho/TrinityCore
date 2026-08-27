@@ -547,6 +547,9 @@ namespace WorldPackets
 
             LFG::RideTicket Ticket;
             uint64 ExpirationTime = 0;      // UNVERIFIED: position measured, meaning inferred from the name
+            // UNVERIFIED: the enum of this field. Its own hook slot (RVA 0x55FECF0, dispatcher case
+            // 5898251) is NULL in the retail image, so no consumer could be decoded; the one producer
+            // sends the STATUS code for a timeout so the two messages cannot disagree (LFGListMgr.cpp).
             uint8 Reason = 0;
         };
 
@@ -907,7 +910,10 @@ namespace WorldPackets
         struct LFGListBlacklistEntry
         {
             uint32 ActivityID = 0;
-            uint32 Reason = 0;      // exact semantics (cooldown reason/timestamp) NEEDS-SNIFF
+            // UNVERIFIED: what the value MEANS. The four bytes and their position are measured, and the
+            // values themselves come from the captures (1137 rows, plus the derived reason 1), but no
+            // consumer that interprets the field was decoded - cooldown reason and timestamp both fit.
+            uint32 Reason = 0;
         };
 
         class LFGListUpdateBlacklist final : public ServerPacket

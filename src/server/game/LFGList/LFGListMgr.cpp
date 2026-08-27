@@ -780,9 +780,13 @@ WorldPackets::LFGList::ListingDescriptor LFGListMgr::GetPublicDescriptor(LFGList
         // flagged it draws CENSORED_LFG_GROUP_NAME in the header and CENSORED_LFG_GROUP_HEADER_WARNNG (sic)
         // instead of the description, in the search row, the context menu, the tooltip and the queue status
         // alike. A CONFIRMED listing gets its text back, and testing IsCensored() here instead was a defect:
-        // the confirmation is deliberately never answered and never repeated (the wire can only carry 0 or
-        // 1), so the client's local 2 is all that keeps the placeholder on screen. Lose it to a UI reload
-        // and a still-withheld listing shows an empty title with nothing left to explain it.
+        // the confirmation is deliberately never answered WITH THE CENSOR MESSAGE and that message is never
+        // repeated (the wire can only carry 0 or 1), so the client's local 2 is all that keeps the
+        // placeholder on screen. Lose it to a UI reload and a still-withheld listing shows an empty title
+        // with nothing left to explain it. The confirmation IS answered with the descriptor-carrying
+        // messages - SMSG_LFG_LIST_UPDATE_STATUS to the owner and SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE to
+        // open browsers - because otherwise the text this function just stopped withholding would reach
+        // nobody until the next request; see WorldSession::HandleLFGListConfirmCensoredActiveEntry.
         descriptor.Name.clear();
         descriptor.Comment.clear();
     }

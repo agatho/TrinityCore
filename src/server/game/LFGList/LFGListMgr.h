@@ -241,6 +241,11 @@ public:
     // the state changed, i.e. if SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE has to go out.
     bool EvaluateCensorship(LFGList::Listing& listing);
     // CMSG_LFG_LIST_CONFIRM_CENSORED_ACTIVE_ENTRY: the player keeps the flagged listing as it is.
+    // Returns true when the state actually moved to Confirmed, and a true return OBLIGES the caller to push
+    // the descriptor: this is the third mutation of the publicly visible descriptor (IsTextWithheld goes
+    // false, so GetPublicDescriptor stops clearing Name/Comment and MatchesKeywords stops rejecting), and
+    // unlike CreateListing and UpdateListing it does not notify by itself - the handler owns the two sends
+    // because only it has the owner's session. See WorldSession::HandleLFGListConfirmCensoredActiveEntry.
     bool ConfirmCensoredListing(uint32 listingId, ObjectGuid leader);
 
     // Live search updates. While a player has the Premade Groups browser open, retail keeps pushing
