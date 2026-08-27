@@ -635,9 +635,14 @@ namespace WorldPackets
         };
 
         // Server -> observers of a mover. Tells them that the mover's remote time base can no longer
-        // be trusted; the consumer (0x1F14820) clears bit 0 of the mover's movement flag word, which
-        // is the RemoteTimeValid bit of MovementInfo. Wire: one packed guid, nothing else
-        // (client case 0x75CFAA - a single read call).
+        // be trusted; the consumer (0x1F14820) clears bit 0 of the flag word at offset 0x378 of the
+        // mover's move component. That bit is client-only state and is NOT the RemoteTimeValid bit of
+        // MovementInfo: its only setter in the whole binary is the "|= 1" in the reconciliation
+        // routine 0x18A00D0, and the wire's RemoteTimeValid never clears it - it only takes part in
+        // deciding whether the bit is raised again. No value of the wire bit can therefore do what
+        // this message does; see Unit::SendMoveMarkRemoteTimeInvalid for the full derivation and the
+        // RemoteTimeValid block in MovementPackets.cpp for the other half.
+        // Wire: one packed guid, nothing else (client case 0x75CFAA - a single read call).
         class MoveMarkRemoteTimeInvalid final : public ServerPacket
         {
         public:

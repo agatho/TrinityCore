@@ -922,15 +922,28 @@ void WorldSession::HandleMoveInitialObjectUpdateCompleteAck(WorldPackets::Moveme
     if (!ValidateMovementInfo(mover, &initialObjectUpdateCompleteAck.Ack.Status))
         return;
 
-    // The client mirrors the sequence index byte for byte - 18 of 18 recorded pairs - so a value we
-    // did not send belongs to an earlier world entry or is made up. Either way it says nothing about
-    // the current one.
+    // The client mirrors the sequence index byte for byte - 18 of 18 recorded pairs - so this rejects
+    // a fabricated or garbled index. It does NOT tell world entries apart, and cannot: what we send
+    // on this path is invariably 0. Player::SendInitialPacketsBeforeAddToMap sets m_movementCounter
+    // to 0 for every non-seamless teleport (Player.cpp, top of the function) and the handshake line a
+    // few statements later is the counter's first consumer; nothing in between draws from it. An ack
+    // of an earlier world entry therefore carries the same 0 as the current one and passes here.
+    // Keeping the draw as m_movementCounter++ is still right - it is what the counter is for, it
+    // keeps the following SetCompoundState draws in sequence, and Retail sends 0 in 11 of the 18
+    // recorded entries, which is exactly what a just-reset counter yields.
     if (uint32(initialObjectUpdateCompleteAck.Ack.AckIndex) != _player->m_initialObjectUpdateCompleteIndex)
     {
         TC_LOG_DEBUG("network", "CMSG_MOVE_INITIAL_OBJECT_UPDATE_COMPLETE_ACK: {} acked index {} but {} was sent, ignoring",
             GetPlayerInfo(), initialObjectUpdateCompleteAck.Ack.AckIndex, _player->m_initialObjectUpdateCompleteIndex);
         return;
     }
+
+    // Since the index cannot do it, this is what actually keeps a foreign MovementInfo out of the
+    // assignment below: the same guard every other position bearing client message gets in
+    // HandleMovementOpcode above. An ack that arrives while a teleport is in flight describes the
+    // world the mover is leaving, not the one it is entering.
+    if (Player* plrMover = mover->ToPlayer(); plrMover && plrMover->IsBeingTeleported())
+        return;
 
     initialObjectUpdateCompleteAck.Ack.Status.time = AdjustClientMovementTime(initialObjectUpdateCompleteAck.Ack.Status.time);
     mover->m_movementInfo = initialObjectUpdateCompleteAck.Ack.Status;
@@ -994,6 +1007,11 @@ void WorldSession::HandleMoveRemoveMovementForces(WorldPackets::Movement::Client
     // AreaTrigger::UpdateTargetList do not have to agree on the boundary to the millimetre - so the
     // repair is damped as well. Unit::ResendMovementForce carries no counter, no lock and no memory
     // of what it already re-applied to whom; its only stop condition is the server losing the force.
+    // UNVERIFIED: the burst limit and the window length are a server choice with no Retail model.
+    // The sniff of this opcode holds 0 packets, so neither how often Retail tolerates the message nor
+    // whether it damps at all is observable. 5 per 1000 ms is picked to be far above any legitimate
+    // rate - the client sends this on leaving a trigger, not per frame - and low enough that a
+    // looping client cannot trade packets indefinitely.
     TimePoint const now = GameTime::Now();
     if (now - _movementForceRepairWindowStart >= MOVEMENT_FORCE_REPAIR_WINDOW)
     {
@@ -1023,6 +1041,12 @@ void WorldSession::HandleMoveRemoveMovementForces(WorldPackets::Movement::Client
         // request would let a client shrug off a boss mechanic. Repair the client instead of
         // trusting it. The usual case is that the force is already gone and this merely confirms it -
         // that case sends nothing and therefore costs no budget.
+        // UNVERIFIED: that Retail answers a disagreement with SMSG_MOVE_APPLY_MOVEMENT_FORCE. What is
+        // established is only the client half - the writer at 0x6997C0 and the sender at 0x18A1870,
+        // which fills removeAreaTriggerGUIDs from the client's own collision layer. The server half is
+        // unobserved for the same reason as in the handshake twin above: 0 packets of this opcode in
+        // the recordings, and no Lua event or error code that would show the reaction. Not obeying a
+        // client that claims to have left a mechanic is the conservative reading, not a measured one.
         if (mover->ResendMovementForce(removeForcesID))
         {
             ++_movementForceRepairCount;
