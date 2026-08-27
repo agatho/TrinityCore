@@ -226,9 +226,13 @@ namespace WorldPackets
             // member left unanswered stays pending in the client's community name cache and keeps the whole member
             // list spinning - the failure this opcode exists to avoid; see HandleQueryPlayerNamesForCommunity.
             // The response count is therefore bounded by the wire alone: one 65 519 byte request yields
-            // MaxMembers = 6551 responses and ~0.36 MB, and with the AntiDOS entry of 3 requests/s
-            // (WorldSession.cpp, GetMaxPacketCounterAllowed) that is up to ~19 650 response packets/s and
-            // ~1.1 MB/s per session. The opcode is reachable from STATUS_AUTHED.
+            // MaxMembers = 6551 responses and ~0.36 MB. The AntiDOS entry of 20 requests/s (WorldSession.cpp,
+            // GetMaxPacketCounterAllowed) does NOT extend that into a sustained rate cap, and must not be read as
+            // one: exceeding it drops the packet unread and, at the default PacketSpoof.Policy, closes the session.
+            // So the worst case an account can extract is a ONE-SHOT ~131 000 responses and ~7.2 MB before it is
+            // disconnected, per session and not per second. The entry is written up in full at the case label in
+            // WorldSession.cpp, including why a smaller figure would cost honest sessions without buying much.
+            // The opcode is reachable from STATUS_AUTHED.
             //
             // A SECOND BUDGET INSIDE THE HANDLER WAS TRIED AND REMOVED - it resolved the first 1000 members and
             // refused the rest with ResultCode::PermanentFailure. It bought almost nothing and paid for it with a

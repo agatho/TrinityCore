@@ -913,9 +913,7 @@ void OpcodeTable::InitializeClientOpcodes()
     // there is no observation of the situation either way, and the client's senders are reached through vtables.
     // The choice above is therefore argued from this server's dispatch semantics, which is a fact, and not from
     // retail's admission rule, which is unknown. It is an EXPANSION over the sibling line: if the reservation is
-    // ever resolved against retail and retail turns out to gate them on world entry, this is the line to change -
-    // and HandleQueryPlayerNamesForCommunity's note on why a club membership check cannot run at STATUS_AUTHED
-    // becomes moot with it.
+    // ever resolved against retail and retail turns out to gate them on world entry, this is the line to change.
     DEFINE_HANDLER(CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY,                   STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleQueryPlayerNamesForCommunity);
     DEFINE_HANDLER(CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID,                  STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleQueryPlayerNameByCommunityId);
     DEFINE_HANDLER(CMSG_QUERY_QUEST_COMPLETION_NPCS,                        STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleQueryQuestCompletionNPCs);

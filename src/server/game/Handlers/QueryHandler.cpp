@@ -164,10 +164,10 @@ void WorldSession::HandleQueryPlayerNamesForCommunity(WorldPackets::Query::Query
     // here would withhold nothing that is not already available for the asking one opcode over.
     //
     // What IS this unit's doing, and is bounded rather than argued away, is the AMPLIFICATION: 6551 answers per
-    // request against the sibling's 50. That is bounded by the wire (QueryPlayerNamesForCommunity::MaxMembers) and
-    // by the AntiDOS entry below, at a point where the request can still be answered in full. A membership check
-    // would not have bounded it either, and for a structural reason worth recording: the opcode is registered
-    // STATUS_AUTHED, where _player is null, so the check could not run in the very window it would have to guard.
+    // request against the sibling's 50. A membership check would not have bounded it, and the reason is worth
+    // recording because it is the reason no gate of that shape can: such a check decides WHO may ask, not HOW MANY
+    // answers one request costs, and the largest request that exists - a whole cold guild roster - is precisely the
+    // one a member is entitled to make. What does bound it is written out at the end of this comment.
     //
     // EVERY requested member gets an answer, and every answer is a resolved one. That is not a nicety: a member the
     // server answers with nothing at all stays pending in the client's community name cache,
@@ -182,9 +182,16 @@ void WorldSession::HandleQueryPlayerNamesForCommunity(WorldPackets::Query::Query
     // only measurable effect was 500 permanently nameless players. The full accounting, including why the figure
     // 1000 did not carry its own weight, is on QueryPlayerNamesForCommunity in QueryPackets.h.
     //
-    // What bounds this request instead: the wire, through QueryPlayerNamesForCommunity::MaxMembers, and the AntiDOS
-    // entry of 3 requests/s in WorldSession::DosProtection::GetMaxPacketCounterAllowed. Both bound the request at a
-    // point where it can still be answered in full, which a resolve budget cannot.
+    // WHAT BOUNDS THIS REQUEST INSTEAD - two bounds of different kind, and they must not be described as one:
+    //   * the wire, through QueryPlayerNamesForCommunity::MaxMembers. This one bounds a request at a point where it
+    //     is still answered in full, which is what a resolve budget cannot do.
+    //   * the AntiDOS entry in WorldSession::DosProtection::GetMaxPacketCounterAllowed. This one does NOT truncate
+    //     anything: on overflow EvaluateOpcode returns false (WorldSession.cpp, DosProtection::EvaluateOpcode),
+    //     WorldSession::Update discards the whole packet unread, and under the default PacketSpoof.Policy =
+    //     POLICY_KICK (World.cpp) KickPlayer closes every socket of the session. The overflowing request is not
+    //     answered at all, and the session is gone with it.
+    // That failure mode is why the rate is set where a deliberate flood reaches it and a real client cannot, rather
+    // than at the tightest value clicking around survives - see the entry itself for the figure and its reasoning.
     for (WorldPackets::Query::BNetAccountAndCommunityID const& member : queryPlayerNamesForCommunity.Members)
         SendPlayerNameByCommunityId(member);
 }
