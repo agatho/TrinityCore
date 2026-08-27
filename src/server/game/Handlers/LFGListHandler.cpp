@@ -66,6 +66,56 @@ namespace
         return LFGListMgr::ApplicationStateToBits(state);
     }
 
+    // The one rejection answer both descriptor-writing paths owe the client, and the reason this is a
+    // function: CMSG_LFG_LIST_JOIN and CMSG_LFG_LIST_UPDATE_REQUEST are the same dialog with the same two
+    // outcomes, and the client waits for exactly one of two events after either of them -
+    // LFG_LIST_ACTIVE_ENTRY_UPDATE (from SMSG_LFG_LIST_UPDATE_STATUS) or LFG_LIST_ENTRY_CREATION_FAILED
+    // (from SMSG_LFG_LIST_JOIN_RESULT, see LFGListJoinResult in LFGListPackets.h). Returning without
+    // sending either one leaves the dialog standing. Duplicating the send at each call site is what let the
+    // edit path fall silent while the create path answered all three of its rejections.
+    // `echo` is the ticket the client sent, where it sent one. UNVERIFIED: that echoing is what retail does -
+    // the hook slot of SMSG_LFG_LIST_JOIN_RESULT is NULL, so its consumer could not be decoded. It is the
+    // safer of the two options rather than a measurement: the one consumer of this family whose ticket
+    // handling IS decoded (SMSG_LFG_LIST_UPDATE_STATUS, RVA 0x24DE410) compares the incoming ticket against
+    // its stored active entry field for field and silently drops a mismatch, so on a rejection that names an
+    // existing listing an echo can match where a zeroed ticket cannot. Where the client sent no ticket
+    // (CMSG_LFG_LIST_JOIN), FillRejectedListingTicket applies and there is nothing to echo.
+    void SendListingRejected(WorldSession* session, Player const* player, uint8 result,
+        WorldPackets::LFG::RideTicket const* echo = nullptr)
+    {
+        WorldPackets::LFGList::LFGListJoinResult packet;
+        if (echo)
+            packet.Ticket = *echo;
+        else
+            FillRejectedListingTicket(packet.Ticket, player);
+        packet.Result = result;
+        session->SendPacket(packet.Write());
+    }
+
+    // Reject a descriptor naming an activity the client made up. 68974: the real GroupFinderActivity ids
+    // ride in the descriptor's trailing vector (JOIN vec=[1974]); the u32 @0x38 is the GroupFinderCategory
+    // id (1 in the capture) and must NOT be looked up in GroupFinderActivity.db2 (the previous code did,
+    // wrongly). Shared by create and edit: the ids set here are what every open browser is served
+    // (LFGListMgr::NotifyListingChanged -> FillSearchRow) and the comparison value HandleLFGListApplyToGroup
+    // checks an application against, so a check on only one of the two writers is a check that is bypassed
+    // in one step - publish valid, then edit.
+    bool ValidateListingActivities(WorldSession* session, Player const* player,
+        WorldPackets::LFGList::ListingDescriptor const& descriptor, WorldPackets::LFG::RideTicket const* echo = nullptr)
+    {
+        for (uint32 activityId : descriptor.ActivityIDs)
+        {
+            if (activityId && !sGroupFinderActivityStore.LookupEntry(activityId))
+            {
+                // UNVERIFIED: the value 1, the same guess the other rejections make - see
+                // LFGListJoinResult::Result for why no consumer could settle the enum.
+                SendListingRejected(session, player, 1, echo); // invalid activity
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     // NOTE: the search-result row builder lives in LFGListMgr (LFGListMgr::FillSearchRow) so the search reply,
     // the apply-result snapshot and the live SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE push all serialize a listing
     // through the exact same code.
@@ -317,31 +367,15 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
     {
         if (group->GetLeaderGUID() != player->GetGUID())
         {
-            WorldPackets::LFGList::LFGListJoinResult result;
-            FillRejectedListingTicket(result.Ticket, player);
             // UNVERIFIED: the value 1. "Rejected" is certain, the enum member is guessed - see
             // LFGListJoinResult::Result for why no consumer could settle it.
-            result.Result = 1; // not the leader
-            SendPacket(result.Write());
+            SendListingRejected(this, player, 1); // not the leader
             return;
         }
     }
 
-    // Reject listings for an activity the client made up. 68974: the real GroupFinderActivity ids ride in the
-    // descriptor's trailing vector (JOIN vec=[1974]); the u32 @0x38 is the GroupFinderCategory id (1 in the
-    // capture) and must NOT be looked up in GroupFinderActivity.db2 (the previous code did, wrongly).
-    for (uint32 activityId : packet.Listing.ActivityIDs)
-    {
-        if (activityId && !sGroupFinderActivityStore.LookupEntry(activityId))
-        {
-            WorldPackets::LFGList::LFGListJoinResult result;
-            FillRejectedListingTicket(result.Ticket, player);
-            // UNVERIFIED: the value 1, same guess as above (LFGListJoinResult::Result).
-            result.Result = 1; // invalid activity
-            SendPacket(result.Write());
-            return;
-        }
-    }
+    if (!ValidateListingActivities(this, player, packet.Listing))
+        return;
 
     // Retail puts a solo lister into a real party at listing time (sniff: PARTY_UPDATE burst precedes the
     // create UPDATE_STATUS) - applicants later join this group.
@@ -386,11 +420,8 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
     }
     else
     {
-        WorldPackets::LFGList::LFGListJoinResult result;
-        FillRejectedListingTicket(result.Ticket, player);
         // UNVERIFIED: the value 1, same guess as above (LFGListJoinResult::Result).
-        result.Result = 1; // create failed
-        SendPacket(result.Write());
+        SendListingRejected(this, player, 1); // create failed
     }
 }
 
@@ -400,12 +431,30 @@ void WorldSession::HandleLFGListUpdateRequest(WorldPackets::LFGList::LFGListUpda
     if (!player)
         return;
 
+    // Same check as the create path, and it has to be here too: LFGListMgr::UpdateListing overwrites the
+    // descriptor wholesale (listing->Descriptor = descriptor), so without this an edit could write any
+    // uint32 as a GroupFinderActivity into a listing that was published with a valid one.
+    if (!ValidateListingActivities(this, player, packet.Listing, &packet.Ticket))
+        return;
+
     if (sLFGListMgr.UpdateListing(packet.Ticket.Id, player->GetGUID(), packet.Listing))
     {
         SendLFGListUpdateStatus(packet.Ticket.Id);
         // Editing is how a player clears a flag, so the new state has to go out either way - including the
         // "no longer flagged" case, which is what takes the warning off the client's listing.
         SendLFGListCensoredActiveEntryUpdate(packet.Ticket.Id);
+    }
+    else
+    {
+        // UpdateListing has exactly two rejections (LFGListMgr::UpdateListing): the listing is gone, or the
+        // sender is not its leader. "Gone" is reachable in normal play - the expiry sweep in
+        // LFGListMgr::Update delists after LFGList.ListingExpiryMinutes (default 30) while the edit dialog
+        // is still open - so this is not a can't-happen branch. Silence here left the player who pressed
+        // "Update" with a dialog that never resolved: the client waits for LFG_LIST_ACTIVE_ENTRY_UPDATE or
+        // LFG_LIST_ENTRY_CREATION_FAILED and gets neither.
+        // UNVERIFIED: the value 1, the same guess the create path's rejections make - see
+        // LFGListJoinResult::Result. What is certain is that an answer has to go out.
+        SendListingRejected(this, player, 1, &packet.Ticket); // update failed
     }
 }
 

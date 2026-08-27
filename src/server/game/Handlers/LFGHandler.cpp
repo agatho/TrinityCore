@@ -128,8 +128,12 @@ void WorldSession::HandleDFConfirmExpandSearch(WorldPackets::LFG::DFConfirmExpan
     TC_LOG_DEBUG("lfg", "CMSG_DF_CONFIRM_EXPAND_SEARCH {} accepted: {}", GetPlayerInfo(), dfConfirmExpandSearch.Accepted);
 
     // A decline never reaches us - the client's LFG_QUEUE_EXPAND popup wires only its accept button to
-    // C_LFGInfo.ConfirmLfgExpandSearch. Honour the bit anyway rather than assuming it, and do nothing on
-    // a false: the prompt is one-shot per queue entry, so a decline simply leaves the queue as it was.
+    // C_LFGInfo.ConfirmLfgExpandSearch (LFGFrame.lua:88-97). Honour the bit anyway rather than assuming it,
+    // and do nothing on a false: the prompt is one-shot per queue entry, so a decline simply leaves the
+    // queue as it was.
+    // UNVERIFIED: "one-shot per queue entry" is this server's send policy, not a measured one - see the
+    // docblock of LFGMgr::UpdateExpandSearchPrompts. Reading the bit is not affected by that; the bit is on
+    // the wire either way (client serializer RVA 0x6A40E0).
     if (!dfConfirmExpandSearch.Accepted)
         return;
 

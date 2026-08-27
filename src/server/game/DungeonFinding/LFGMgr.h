@@ -60,6 +60,11 @@ enum LFGMgrEnum
     // Seconds a queue entry must have been waiting before its leader is offered the "expand your
     // search?" prompt (SMSG_LFG_EXPAND_SEARCH_PROMPT). Evaluated on the existing queue-status sweep,
     // so the effective granularity is LFG_QUEUEUPDATE_INTERVAL.
+    // UNVERIFIED: the number itself. Retail's threshold is server-side and nothing in the client carries
+    // it - SHOW_LFG_EXPAND_SEARCH_PROMPT is payloadless (LFGFrame.lua:265-266) and the popup has no timer
+    // (StaticPopupDialogs["LFG_QUEUE_EXPAND"].timeout = 0, LFGFrame.lua:88-97). 120 is chosen to match
+    // LFG_TIME_BOOT, the family's other two-minute wait, not measured. Needs the recording named under
+    // aufnahme_noetig / "expand your search" in orchestrierung/status/lfg_5A.json.
     LFG_TIME_EXPAND_SEARCH_PROMPT                = 120,
     LFG_QUEUEUPDATE_INTERVAL                     = 15 * IN_MILLISECONDS,
     LFG_SPELL_DUNGEON_COOLDOWN                   = 71328,

@@ -467,10 +467,22 @@ static LfgSlotInvalidReason LockStatusToSlotInvalidReason(LfgLockInfoData const&
 /**
     Builds the dungeon set an already queued entry would be widened to.
 
-    Expanding the search is not a free-form widening: it is the set the same queue would have covered had
-    it been joined as a random for the same LFGDungeons group, minus anything the requester cannot enter
-    right now. Both halves are data TC already owns - CachedDungeonMapStore, which LoadLFGDungeons fills
-    per dungeon group, and GetLockedDungeons, which is recomputed live.
+    UNVERIFIED - and this is the load-bearing guess of the whole expand-search path: WHICH dungeons retail
+    adds is a pure server rule, and no source above TrinityCore in the arbiter order carries it. The client
+    contributes exactly two things and nothing else: a payloadless prompt event
+    (SHOW_LFG_EXPAND_SEARCH_PROMPT -> StaticPopup_Show("LFG_QUEUE_EXPAND"), LFGFrame.lua:88-97, :265-266)
+    and an argumentless confirmation (C_LFGInfo.ConfirmLfgExpandSearch, LFGInfoDocumentation.lua:86). The
+    12.1 binary holds no other trace of the feature - the only match for "ExpandSearch" in the image is that
+    API name. So the rule below is a construction, not a reading:
+
+        the widened set is the set the same queue would have covered had it been joined as a random for the
+        same LFGDungeons group, minus anything the requester cannot enter right now
+
+    It is built from data TC already owns and from behaviour TC already has, which is why it was chosen -
+    CachedDungeonMapStore, which LoadLFGDungeons fills per dungeon group and which JoinLfg already uses to
+    expand a random, and GetLockedDungeons, which is recomputed live. That makes it consistent with this
+    server, not with retail. A recording of a real prompt-and-accept would show what retail actually adds;
+    see aufnahme_noetig / "expand your search" in orchestrierung/status/lfg_5A.json.
 
     Randoms are already expanded to their whole group by JoinLfg, so they have nothing to gain here; this
     is for a specific-dungeon queue.
@@ -512,6 +524,17 @@ LfgDungeonSet LFGMgr::BuildExpandedDungeons(ObjectGuid pguid, LfgDungeonSet cons
     than LFG_TIME_EXPAND_SEARCH_PROMPT and that would actually gain dungeons by being widened. Prompted
     owners are remembered so the popup is offered once per queue entry rather than once per sweep, and
     that memory is pruned in the same pass against the set of owners still queued.
+
+    UNVERIFIED: the send policy - both halves of it. "Once per queue entry" (ExpandSearchPromptedStore) and
+    "only when the widening would actually gain a dungeon" (the wouldGain test) are decisions taken here,
+    not read anywhere. Retail may well re-offer on an interval, or offer unconditionally and let the client
+    dismiss it; the popup is `exclusive = 1` with `timeout = 0` (LFGFrame.lua:88-97), so a repeat send would
+    not stack, which means the client cannot rule either policy out. What IS established is the direction
+    and the payload: the message carries only a RideTicket (case RVA 0x756878) and its event is payloadless,
+    so the client learns nothing from it except that it should ask. Only the leader is asked because a
+    non-leader cannot change a group's queue in this server at all - that half follows TrinityCore's own
+    contract (LFGMgr::JoinLfg, LFGMgr::LeaveLfg), arbiter rank 4, and is not a guess.
+    Settled by the recording under aufnahme_noetig / "expand your search" in status/lfg_5A.json.
 */
 void LFGMgr::UpdateExpandSearchPrompts(time_t currTime)
 {
@@ -581,6 +604,20 @@ void LFGMgr::UpdateExpandSearchPrompts(time_t currTime)
     the entry was already queued for that has since become unenterable is reported through
     SMSG_LFG_SLOT_INVALID before the swap, so the player is told why his selection shrank rather than
     silently losing slots.
+
+    UNVERIFIED: everything in that paragraph is this server's choice. CMSG_DF_CONFIRM_EXPAND_SEARCH carries
+    a ticket and a bit and nothing else (client writer RVA 0x6A40E0), and C_LFGInfo.ConfirmLfgExpandSearch
+    takes no arguments (LFGInfoDocumentation.lua:86), so the client states only THAT the player accepted -
+    never what the server owes him afterwards. Specifically unsourced:
+      * keeping the original join time (retail could just as well restart the wait),
+      * sending SMSG_LFG_SLOT_INVALID for dungeons that went stale. The message itself is not the guess -
+        its layout comes off the 68275 deferred handler (RVA 0x2301A40, three dwords; see LFGSlotInvalid in
+        LFGPackets.h), its event is LFG_INVALID_ERROR_MESSAGE(reason, subReason1, subReason2)
+        (LFGFrame.lua:261-264), and its reason enum matches lfg::LfgSlotInvalidReason position for position.
+        What is guessed is that retail sends it at THIS moment. Note also that the 69382 dispatcher only
+        hands the case a raw pointer and that build's consumer is outside the cfunc cache, so the layout is
+        carried by 68275 alone (AGENT_BRIEF_LFG_5A.md 7.9 I, question 7).
+    Settled by the recording under aufnahme_noetig / "expand your search" in status/lfg_5A.json.
 
    @param[in]     player Player that accepted the prompt (must be the queue owner or the group leader)
    @param[in]     ticket Ticket echoed back by the client; must match the one we issued
@@ -660,6 +697,13 @@ void LFGMgr::ConfirmExpandSearch(Player* player, WorldPackets::LFG::RideTicket c
     {
         // Everything we could have offered is locked. Leaving the entry queued for nothing would be a lie;
         // the SMSG_LFG_SLOT_INVALID lines above have already told the player why.
+        // UNVERIFIED: that dropping the WHOLE queue entry is retail's answer here. It is the only outcome
+        // this server can represent - a queue entry with an empty dungeon set is not a state LFGQueue has -
+        // but retail might instead keep the pre-expansion selection and merely refuse the widening. Nothing
+        // in the client decides it: the popup is already gone by then and no message reports the outcome of
+        // a confirmation. Accepting a prompt should not normally reach this branch at all, because
+        // UpdateExpandSearchPrompts only offers entries that would gain something; it is reachable when the
+        // player's locks change between the prompt and the answer.
         TC_LOG_DEBUG("lfg.queue.expand", "Search expansion for owner {} left no valid dungeon - leaving queue", owner.ToString());
         LeaveLfg(owner);
         return;
@@ -669,6 +713,9 @@ void LFGMgr::ConfirmExpandSearch(Player* player, WorldPackets::LFG::RideTicket c
     {
         // Nothing left to widen into (the queue can move between prompt and answer). Restate the queue so
         // the client's popup closes against the real selection rather than against nothing.
+        // UNVERIFIED: the restate. No message reports "your expansion changed nothing", so this re-sends the
+        // selection the entry already had. Harmless if retail stays silent, and it keeps the client from
+        // sitting on a selection it thinks is about to change.
         for (GuidSet::const_iterator it = players.begin(); it != players.end(); ++it)
             SendLfgUpdateStatus(*it, LfgUpdateData(LFG_UPDATETYPE_ADDED_TO_QUEUE, queued), !gguid.IsEmpty());
         return;
