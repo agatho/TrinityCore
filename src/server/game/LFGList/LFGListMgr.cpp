@@ -22,9 +22,11 @@
 #include "GameTime.h"
 #include "LFGListPackets.h"
 #include "ObjectAccessor.h"
+#include "ObjectMgr.h"
 #include "Player.h"
 #include "Group.h"
 #include "GroupMgr.h"
+#include <cctype>
 
 namespace
 {
@@ -158,6 +160,7 @@ uint32 LFGListMgr::CreateListing(Player* leader, WorldPackets::LFGList::ListingD
     listing.Descriptor = descriptor;
     listing.CreatedTime = GameTime::GetGameTime();
     listing.ExpireTime = expireMinutes ? listing.CreatedTime + expireMinutes * MINUTE : 0;
+    EvaluateCensorship(listing);
 
     _listingByLeader[leader->GetGUID()] = id;
 
@@ -173,6 +176,8 @@ bool LFGListMgr::UpdateListing(uint32 listingId, ObjectGuid leader, WorldPackets
         return false;
 
     listing->Descriptor = descriptor;
+    // Editing is exactly how a player clears a flag: re-run the check on the new text.
+    EvaluateCensorship(*listing);
     TouchListing(*listing);
 
     // Edited listings are pushed so open browsers show the new title/activity without re-searching.
@@ -377,7 +382,8 @@ void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, 
     row.ListingId = listing.Id;
     row.PostTime = listing.CreatedTime;
     row.LeaderGuid = listing.LeaderGuid;
-    row.RawDescriptor = listing.Descriptor.RawBytes;    // verbatim echo of the client's descriptor bytes
+    row.Age = 3;                                        // 68974: every observed row carried 3 or 4
+    row.Listing = GetPublicDescriptor(listing);
 
     row.Members.clear();
     auto addMember = [&row, &listing](ObjectGuid guid)
@@ -400,6 +406,108 @@ void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, 
             addMember(slot.guid);
     if (row.Members.empty())
         addMember(listing.LeaderGuid);                  // solo listing: the leader is the only member
+}
+
+WorldPackets::LFGList::ListingDescriptor LFGListMgr::GetPublicDescriptor(LFGList::Listing const& listing) const
+{
+    WorldPackets::LFGList::ListingDescriptor descriptor = listing.Descriptor;
+
+    // The client zeroes the score block on the way in (both CreateListing and UpdateListing explicitly
+    // clear it), so what a leader published carries nothing here and filling it is the server's job. This
+    // is what puts a Mythic+ rating on the listing in the group browser.
+    if (Player const* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
+        descriptor.LeaderScore = *leader->m_playerData->DungeonScore;
+    else
+        descriptor.LeaderScore = { };
+
+    if (listing.IsCensored())
+    {
+        // Withhold the flagged text. The client expects exactly this: with the entry flagged it draws
+        // CENSORED_LFG_GROUP_NAME in the header and CENSORED_LFG_GROUP_HEADER_WARNNG (sic) instead of the
+        // description, in the search row, the context menu, the tooltip and the queue status alike.
+        descriptor.Name.clear();
+        descriptor.Comment.clear();
+    }
+    return descriptor;
+}
+
+namespace
+{
+    // A listing name or comment is free text, while ObjectMgr::IsReservedName is an EXACT lookup built for
+    // single character names - handing it a whole sentence would make the check unreachable in practice.
+    // So test the whole string and every word in it. Tokenising on anything that is not a letter or digit
+    // also defeats the obvious "bad.word" / "bad-word" dodges.
+    bool ContainsReservedWord(std::string const& text)
+    {
+        if (text.empty())
+            return false;
+
+        if (sObjectMgr->IsReservedName(text))
+            return true;
+
+        std::size_t start = std::string::npos;
+        for (std::size_t i = 0; i <= text.length(); ++i)
+        {
+            bool const isWordChar = i < text.length()
+                && (std::isalnum(static_cast<unsigned char>(text[i])) != 0 || static_cast<unsigned char>(text[i]) >= 0x80);
+            if (isWordChar)
+            {
+                if (start == std::string::npos)
+                    start = i;
+                continue;
+            }
+
+            if (start != std::string::npos)
+            {
+                if (sObjectMgr->IsReservedName(std::string_view(text).substr(start, i - start)))
+                    return true;
+                start = std::string::npos;
+            }
+        }
+        return false;
+    }
+}
+
+bool LFGListMgr::EvaluateCensorship(LFGList::Listing& listing)
+{
+    LFGList::CensorState const previous = listing.Censor;
+    uint8 const previousCode = listing.CensorCode;
+
+    // Server-side text check. TrinityCore has no listing-text blacklist of its own; the reserved-name
+    // table is the only curated word list in the tree, and it is already the one an admin fills to keep
+    // words off the realm, so that is what this applies.
+    // UNVERIFIED: retail's actual criteria. The wire only ever exposes a single "code" byte and the client
+    // does nothing with its value beyond testing it against zero, so no client evidence exists either way.
+    bool const flagged = ContainsReservedWord(listing.Descriptor.Name)
+        || ContainsReservedWord(listing.Descriptor.Comment);
+
+    if (flagged)
+    {
+        // Re-flagging an edited listing resets the decision: the player has to deal with it again.
+        if (listing.Censor == LFGList::CensorState::None)
+            listing.Censor = LFGList::CensorState::Unresolved;
+        listing.CensorCode = 1;
+    }
+    else
+    {
+        listing.Censor = LFGList::CensorState::None;
+        listing.CensorCode = 0;
+    }
+
+    return listing.Censor != previous || listing.CensorCode != previousCode;
+}
+
+bool LFGListMgr::ConfirmCensoredListing(uint32 listingId, ObjectGuid leader)
+{
+    LFGList::Listing* listing = GetListing(listingId);
+    if (!listing || listing->LeaderGuid != leader)
+        return false;
+
+    if (listing->Censor != LFGList::CensorState::Unresolved)
+        return false;
+
+    listing->Censor = LFGList::CensorState::Confirmed;
+    return true;
 }
 
 void LFGListMgr::RegisterSearch(ObjectGuid player, uint32 category, uint32 activityGroup, std::string const& keyword)

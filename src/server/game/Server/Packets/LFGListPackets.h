@@ -20,6 +20,7 @@
 
 #include "Packet.h"
 #include "LFGPacketsCommon.h"       // WorldPackets::LFG::RideTicket (reused as the listing/application id)
+#include "MythicPlusPacketsCommon.h"// WorldPackets::MythicPlus::DungeonScoreSummary (embedded in the descriptor)
 #include "ObjectGuid.h"
 #include "Optional.h"
 #include <array>
@@ -34,73 +35,98 @@ namespace WorldPackets
         enum class LFGEntryPlaystyle : uint8 { None = 0, Standard = 1, Casual = 2, Hardcore = 3 };
         enum class LFGEntryGeneralPlaystyle : uint8 { None = 0, Learning = 1, FunRelaxed = 2, FunSerious = 3, Expert = 4 };
 
-        // One required-member score entry inside a listing (nested block, client serializer sub_7FF729167840).
-        struct ListingMemberRequirement
-        {
-            uint32 Field0 = 0;
-            float Field1 = 0.0f;
-            uint32 Field2 = 0;
-            uint32 Field3 = 0;
-            uint8 Field4 = 0;
-            bool Flag = false;
-        };
-
-        // The parameters a leader sets when publishing (JOIN) or editing (UPDATE_REQUEST) a premade listing.
-        // RESOLVED against the 12.0.7.68275 premade-groups sniff + the client JOIN serializer (sub_7FF72914ABE0) +
-        // the generated Lua API doc (LfgListingCreateData / LfgEntryData). The descriptor is BIT-PACKED, not byte-
-        // aligned: a bit-packed header (activity group 5b, three bit-packed string lengths, member-requirement count,
-        // and the boolean/optional presence bits) is flushed, then the member-requirement block, the fixed activity/
-        // criteria fields, the string data, and the conditional (nilable) numeric fields follow. Full layout:
-        // c:\dumps\LFG_LIST_WIRE_68275.md. Field names are authoritative (Lua); only ActivityID + RequiredItemLevel
-        // drive server-side filtering, the rest are pass-through echo to searchers.
+        // ---------------------------------------------------------------------------------------------
+        // ListingDescriptor - the shared core of six messages. Get it wrong and six messages are wrong.
+        //
+        // Client 12.1.0.69382: reader @ RVA 0x7572C0 (SMSG side), writer @ RVA 0x757660 (CMSG side). Both
+        // directions were decoded independently and agree field for field, which is what makes a faithful
+        // re-serialization (rather than the byte replay this used to do) safe.
+        //
+        // It rides in SMSG_LFG_LIST_UPDATE_STATUS (0x5A000A), every SMSG_LFG_LIST_SEARCH_RESULTS row
+        // (0x5A0002), every SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE row (0x5A0010),
+        // SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT (0x5A000D, inside the embedded row),
+        // SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE (0x5A0022), and on the client side in
+        // CMSG_LFG_LIST_JOIN (0x3D0257) / CMSG_LFG_LIST_UPDATE_REQUEST (0x3D0258).
+        //
+        // Wire layout:
+        //   bit header, MSB-first, 43 bits = 6 bytes, no explicit flush (the 5 spare bits are simply unread):
+        //     bits<5>  ActivityIDs.Count
+        //     bits<10> len(Name)        client buffer @desc+32   capacity 513
+        //     bits<11> len(Comment)     client buffer @desc+545  capacity 1025
+        //     bits<8>  len(VoiceChat)   client buffer @desc+1570 capacity 129
+        //     bit IsAutoAccept(+1699) bit IsPrivateGroup(+1700) bit IsWarMode(+1701)
+        //     bit IsCrossFactionListing(+1702)
+        //     bit has(QuestID @+1704, flag @+1708)              bit has(RequiredDungeonScore @+1744, flag @+1748)
+        //     bit has(RequiredPvpRating @+1752, flag @+1756)    bit has(Playstyle @+1760 (u8), flag @+1761)
+        //     bit NewPlayerFriendly(+1763)
+        //   byte aligned:
+        //     uint32 CategoryID (@+24) ; uint32 RequiredItemLevel (@+28) ;
+        //     DungeonScoreSummary LeaderScore (@+1712, sub-reader 0x6EC830) ; uint8 GeneralPlaystyle (@+1762)
+        //   deferred:
+        //     ActivityIDs[] (uint32 each) ; Name bytes ; Comment bytes ; VoiceChat bytes ;
+        //     then the present optionals in order QuestID, RequiredDungeonScore, RequiredPvpRating, Playstyle
+        //
+        // Minimum size 27 bytes (6 header + 4 + 4 + 12 empty summary + 1). That is exactly the length of the
+        // all-zero filler this file used to emit for an empty listing - the size was right, the position was not.
+        //
+        // The names below are NOT inferred. They come from the two request builders the obfuscated Lua stubs
+        // tail-call into: CreateListing @ RVA 0x24E5830 (from stub 0x117F7E0) and UpdateListing @ RVA
+        // 0x24E5D80 (from stub 0x119A7C0). Both assemble the descriptor on the stack, so the three character
+        // arrays appear literally as _BYTE[513] / _BYTE[1025] / _BYTE[129] at stack deltas 0x20 / 0x221 /
+        // 0x622 = 32 / 545 / 1570, and every store is fed straight from a named field of the Lua createData
+        // struct parsed at 0x117A2A0 (activityIDs +0/+8, questID +88/+92, isAutoAccept +96,
+        // isCrossFactionListing +97, isPrivateGroup +98, newPlayerFriendly +99, playstyle +100,
+        // generalPlaystyle +101, requiredDungeonScore +104, requiredItemLevel +108, requiredPvpRating +112).
+        // Cross-checked from the other direction through the active-entry mirror at manager+40
+        // (copy-assign 0x757080 in 0x24DBE70): desc+32 -> manager+1808/2321 -> the name the creation UI
+        // refills, desc+545 -> manager+2834 -> LFGListCreationDescription, desc+1570 -> manager+4884 ->
+        // LFGListCreationVoiceChat. This settles the two questions the family brief carried as its biggest
+        // open items, and it refutes the comment this file used to carry (Name / VoiceChat / Comment in
+        // buffer order).
+        //
+        // Two results worth spelling out because they are not on anyone's candidate list:
+        //  * +1701 is isWarMode, not privateGroup. It is fed by 0x21C6890, which reads bit 11 of the local
+        //    player's field +0x2208 - the same bit the "ToggleWarMode" binding flips. It matches
+        //    LfgSearchResultData.isWarMode.
+        //  * `censored` is NOT in this descriptor at all. The client keeps raw and censored copies of the
+        //    three strings side by side in its manager (raw at +2321/+3859, censored at +1808/+2834/+4884)
+        //    and C_LFGList.RevealCensoredSearchResult just clears a byte at searchResult+2257. The censor
+        //    state travels in its own opcode (SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE), not in here.
+        //
+        // Also not in the descriptor although LfgEntryData exposes them: requiredHonorLevel and duration
+        // (duration comes from manager+5016, see 0x24DE410).
+        //
+        // LeaderScore is INBOUND-ONLY-EMPTY: both builders explicitly zero it before sending, so a CMSG
+        // always carries an empty summary and it is the SERVER's job to fill it on the way out. That is
+        // what puts a Mythic+ rating next to a listing in the group browser.
         struct ListingDescriptor
         {
-            float HeaderFloat0 = 0.0f;          // nested block leading floats (sub_7FF729167840)
-            float HeaderFloat1 = 0.0f;
-            std::vector<ListingMemberRequirement> MemberRequirements;
-            // 68974 capture (2026-08-07): the u32 @0x38 is the GroupFinderCategory id, NOT a GroupFinderActivity
-            // id — the tester's JOIN carried 1 (questing) here and the follow-up CMSG_LFG_LIST_SEARCH echoed the
-            // same 1 as Filters[0]; the 68275 custom-category sniff carried 6 in both places. The real
-            // GroupFinderActivity ids ride in the trailing vector (JOIN vec=[1974], browse rows vec=[1943]).
-            uint32 CategoryID = 0;              // GroupFinderCategory.db2 id (u32 @0x38; search key)
-            float RequiredDungeonScore = 0.0f;  // float @0x3c
-            uint8 TrailingByte = 0;             // u8 @0x702
-            std::vector<uint32> ActivityIDs;    // trailing uint32 vector: the selected GroupFinderActivity ids
-            bool IsAutoAccept = false;          // presence bits (client offsets 0x6c3..0x6c6)
-            bool IsCrossFactionListing = false;
-            bool IsPrivateGroup = false;
-            bool NewPlayerFriendly = false;
-            std::string Name;                   // bit-length-prefixed strings (client offsets 0x40 / 0x241 / 0x642)
-            std::string VoiceChat;
-            std::string Comment;                // listing title / comment ("crate" in the sniff)
-            Optional<uint32> QuestID;           // nilable numeric fields, written only when their presence bit is set
-            Optional<uint32> OptionalValue1;
-            Optional<uint32> OptionalValue2;
-            Optional<uint8> OptionalValue3;
-
-            // Exact bytes consumed while reading this descriptor. The server echoes a listing back verbatim in
-            // SMSG_LFG_LIST_UPDATE_STATUS (proven by sniff), so we replay these rather than re-serialize the
-            // bit-packed descriptor (which is error-prone and was previously malformed).
-            std::vector<uint8> RawBytes;
+            std::vector<uint32> ActivityIDs;    // bits<5> count; the selected GroupFinderActivity ids
+            std::string Name;                   // bits<10> length, client capacity 513
+            std::string Comment;                // bits<11> length, client capacity 1025
+            std::string VoiceChat;              // bits<8>  length, client capacity 129
+            bool IsAutoAccept = false;          // +1699
+            bool IsPrivateGroup = false;        // +1700
+            bool IsWarMode = false;             // +1701
+            bool IsCrossFactionListing = false; // +1702
+            bool NewPlayerFriendly = false;     // +1763
+            Optional<uint32> QuestID;           // +1704
+            Optional<uint32> RequiredDungeonScore;  // +1744 - raw dword, pass-through (see below)
+            Optional<uint32> RequiredPvpRating;     // +1752 - raw dword, pass-through
+            Optional<uint8> Playstyle;              // +1760, Enum.LFGEntryPlaystyle
+            uint32 CategoryID = 0;              // +24, GroupFinderCategory.db2 id - the search key. The client
+                                                // derives it from GroupFinderActivity[field 2] of every
+                                                // selected activity and refuses a listing whose activities
+                                                // disagree; UpdateListing echoes the active entry's value back
+                                                // rather than recomputing it.
+            uint32 RequiredItemLevel = 0;       // +28 - raw dword, pass-through
+            MythicPlus::DungeonScoreSummary LeaderScore;    // +1712, the ADVERTISER's score, not an applicant's
+            uint8 GeneralPlaystyle = 0;         // +1762, Enum.LFGEntryGeneralPlaystyle
         };
-
-        // The listing snapshot the server echoes to clients (UPDATE_STATUS / search rows). Mirrors ListingDescriptor
-        // plus server-owned fields (leader name strings, member counts). Wire: u8x6 u32 u32 u8 u32 str str str u32 u32 u32 u8.
-        struct ListingInfo
-        {
-            std::array<uint8, 6> Params = { };
-            uint32 ActivityID = 0;
-            uint32 Field1 = 0;
-            uint8 Field2 = 0;
-            uint32 RequiredItemLevel = 0;
-            std::string Comment;
-            std::string LeaderName;
-            std::string VoiceChat;
-            uint32 Field3 = 0;
-            uint32 Field4 = 0;
-            uint32 Field5 = 0;
-            uint8 Field6 = 0;
-        };
+        // The three numeric fields marked "raw dword, pass-through" are carried as uint32 on purpose. The
+        // client reads all three through the same 4-byte slot it uses for floats, and the server neither
+        // interprets nor derives them - it stores what a leader published and hands it back to searchers
+        // unchanged. A raw dword preserves the exact bits whichever way the client meant them.
 
         // ---- CMSG (client -> server) ----
 
@@ -136,39 +162,79 @@ namespace WorldPackets
         {
         public:
             explicit LFGListGetStatus(WorldPacket&& packet) : ClientPacket(CMSG_LFG_LIST_GET_STATUS, std::move(packet)) { }
-            // Sniff-verified (premandegroups 68275): empty payload — the client requests its own status blind.
+            // Sniff-verified (premadegroups 68275): empty payload - the client requests its own status blind.
             void Read() override { }
         };
 
-        // Sniff-exact 43B/56B: bits(5) term count + presence bit (flushed); when terms follow, an 8-byte block
-        // of ten bits(5) per-term lengths + the term characters; then 9 fixed u32 filters (filter[0] =
-        // GroupFinderCategory id, filter[3] = language mask), u8 0xFF, u8 0x05, u32 guid-list count (+ guids).
+        // One JamLFGSearchTerm of CMSG_LFG_LIST_SEARCH. Client 12.1.0.69382 writer @ RVA 0x757D00,
+        // in-memory stride 330 = 10 string slots of 32 bytes + 10 flag bytes at +320.
+        // Wire: ten INTERLEAVED pairs of (bits<5> length, one presence bit) = 60 bits, then FlushBits,
+        // then the ten strings back to back (empty slots contribute nothing).
+        // The old reader here took ten bare bits<5> followed by 14 padding bits - same byte count, but
+        // everything from the second slot on was shifted by one bit.
+        struct LFGListSearchTerm
+        {
+            static constexpr std::size_t MAX_VALUES = 10;
+            static constexpr std::size_t MAX_VALUE_LENGTH = 32;
+
+            std::array<std::string, MAX_VALUES> Values;
+            std::array<bool, MAX_VALUES> Flags = { };
+        };
+
+        // CMSG_LFG_LIST_SEARCH (0x43003A) - Client 12.1.0.69382, writer @ RVA 0x6A4570 -> 0x757EC0.
+        //   bits<5> Terms.Count ; bit Flag ; FlushBits
+        //   u32 CategoryID(+24) u32 Filter1(+28) u32 Filter2(+32) u32 LanguageMask(+36)
+        //   u32 Size(Vec1)(+48) u32 Filter5(+68) u32 Size(Vec2)(+80) u32 Size(Vec3)(+104) u32 Filter8(+120)
+        //   u8 FilterByte1(+124) ; u8 FilterByte2(+125) ; u32 Size(Guids)(+136)
+        //   Terms[] ; Vec1[] (u32) ; Vec2[] (u32) ; Vec3[] (u32) ; Guids[] (PackedGuid)
+        // Three separate defects were fixed here against the old nine-scalar model:
+        //   - the term blocks are written AFTER all fixed scalars, not right behind the 5-bit count;
+        //   - each term slot carries a presence bit next to its 5-bit length;
+        //   - three of the nine "filters" (indices 4, 6 and 7 of the old array) are ARRAY COUNTS. Reading
+        //     them as scalars made the guid list come out of the wrong bytes as soon as one was non-zero.
+        // All three were invisible in the 143-byte sniff because that search had zero terms and empty lists.
         class LFGListSearch final : public ClientPacket
         {
         public:
             explicit LFGListSearch(WorldPacket&& packet) : ClientPacket(CMSG_LFG_LIST_SEARCH, std::move(packet)) { }
             void Read() override;
 
-            std::vector<std::string> SearchTerms;
-            std::array<uint32, 9> Filters = { };
-            uint8 FilterByte1 = 0;
-            uint8 FilterByte2 = 0;
+            std::vector<LFGListSearchTerm> Terms;
+            bool Flag = false;
+            uint32 CategoryID = 0;              // GroupFinderCategory id (68974: JOIN carried 1 = questing
+                                                // and the follow-up SEARCH echoed the same 1 here)
+            uint32 Filter1 = 0;
+            uint32 Filter2 = 0;
+            uint32 LanguageMask = 0;
+            uint32 Filter5 = 0;
+            uint32 Filter8 = 0;
+            uint8 FilterByte1 = 0;              // observed 0xFF
+            uint8 FilterByte2 = 0;              // observed 0x05
+            std::vector<uint32> Values1;
+            std::vector<uint32> Values2;
+            std::vector<uint32> Values3;
             std::vector<ObjectGuid> Guids;
 
-            uint32 GetCategoryId() const { return Filters[0]; }
+            uint32 GetCategoryId() const { return CategoryID; }
+            // First non-empty search term, or an empty string. The server filters listings by keyword with it.
+            std::string const& GetKeyword() const;
         };
 
+        // CMSG_LFG_LIST_APPLY_TO_GROUP (0x43003B) - Client 12.1.0.69382, writer @ RVA 0x6A46A0:
+        //   RideTicket ; u32 ActivityID ; u8 RoleMask ; u8 len(Comment) ; FlushBits ; Comment bytes
+        // The byte after RoleMask is a length prefix (client buffer capacity 256, so ceil(log2(256)) = 8
+        // bits, which the compiler emits as a whole byte), NOT a scalar. With an empty comment both models
+        // produce the same 33 bytes, which is why the sniff never caught it.
         class LFGListApplyToGroup final : public ClientPacket
         {
         public:
             explicit LFGListApplyToGroup(WorldPacket&& packet) : ClientPacket(CMSG_LFG_LIST_APPLY_TO_GROUP, std::move(packet)) { }
             void Read() override;
 
-            // Sniff-verified 33B fixed: Ticket{groupGuid, ListingID, type 4, applyTime} + ActivityID + roles.
             LFG::RideTicket Ticket;         // the listing being applied to
-            uint32 ActivityID = 0;          // GroupFinderActivity of the listing (was mislabeled ListingId)
+            uint32 ActivityID = 0;
             uint8 RoleMask = 0;
-            uint8 Field2 = 0;
+            std::string Comment;            // the applicant's note to the group leader
         };
 
         class LFGListCancelApplication final : public ClientPacket
@@ -190,6 +256,18 @@ namespace WorldPackets
             LFG::RideTicket ApplicantTicket;
         };
 
+        struct LFGListInvitee
+        {
+            ObjectGuid Guid;
+            uint8 RoleMask = 0;
+        };
+
+        // CMSG_LFG_LIST_INVITE_APPLICANT (0x43003E) - Client 12.1.0.69382, writer @ RVA 0x6A4A30:
+        //   RideTicket Ticket ; RideTicket ApplicantTicket ; u32 Size(Invitees) ;
+        //   Invitees[] { PackedGuid ; u8 RoleMask }        (in-memory stride 24)
+        // The two tickets are ADJACENT. The old model read a u32 and a bare PackedGuid out of the second
+        // ticket's first bytes, so everything after the first ticket was garbage on every single invite -
+        // this was not a latent defect, it was always wrong.
         class LFGListInviteApplicant final : public ClientPacket
         {
         public:
@@ -197,10 +275,8 @@ namespace WorldPackets
             void Read() override;
 
             LFG::RideTicket Ticket;         // the listing
-            uint32 ListingId = 0;
-            ObjectGuid ApplicantGuid;
-            uint8 RoleMask = 0;
             LFG::RideTicket ApplicantTicket;
+            std::vector<LFGListInvitee> Invitees;
         };
 
         class LFGListInviteResponse final : public ClientPacket
@@ -213,6 +289,22 @@ namespace WorldPackets
             bool Accept = false;
         };
 
+        // CMSG_LFG_LIST_CONFIRM_CENSORED_ACTIVE_ENTRY (0x4301AB) - 12.1 newcomer.
+        // Client 12.1.0.69382 writer @ RVA 0x6B3370: opcode, then exactly one RideTicket body and nothing
+        // else. Sender: C_LFGList.ConfirmCensoredActiveEntry (RVA 0x117E560), which also sets the local
+        // resolution state to 2 ("confirmed") before sending.
+        // Meaning: "I keep my flagged listing as it is and decline to edit it."
+        // There is deliberately NO reveal opcode - C_LFGList.RevealCensoredActiveEntry (0x11964F0) and
+        // RevealCensoredSearchResult (0x1196940) only touch client state and fire a local event.
+        class LFGListConfirmCensoredActiveEntry final : public ClientPacket
+        {
+        public:
+            explicit LFGListConfirmCensoredActiveEntry(WorldPacket&& packet) : ClientPacket(CMSG_LFG_LIST_CONFIRM_CENSORED_ACTIVE_ENTRY, std::move(packet)) { }
+            void Read() override;
+
+            LFG::RideTicket Ticket;
+        };
+
         class RequestLFGListBlacklist final : public ClientPacket
         {
         public:
@@ -222,73 +314,126 @@ namespace WorldPackets
 
         // ---- SMSG (server -> client) ----
 
+        // SMSG_LFG_LIST_JOIN_RESULT (0x5A0001) - Client 12.1.0.69382, dispatcher case @ RVA 0x75557D:
+        //   RideTicket ; u32 Status ; u8 Result ; u8 ResultDetail
+        // The ticket was missing entirely (a stock defect, not 12.1 drift - 68275 read it too), so the
+        // client filled its ticket from the Status/Result bytes, ran off the end of the packet and zeroed
+        // every field. A rejected listing creation then showed no error, or the wrong one.
+        // The trailing u8 is genuinely new in 12.1 (68275 read Ticket, u32, u8).
         class LFGListJoinResult final : public ServerPacket
         {
         public:
-            explicit LFGListJoinResult() : ServerPacket(SMSG_LFG_LIST_JOIN_RESULT, 5) { }
+            explicit LFGListJoinResult() : ServerPacket(SMSG_LFG_LIST_JOIN_RESULT, 16 + 4 + 4 + 8 + 1 + 4 + 1 + 1) { }
             WorldPacket const* Write() override;
 
+            LFG::RideTicket Ticket;
             uint32 Status = 0;
-            uint8 Result = 0;               // 0 = ok (exact enum needs a sniff)
+            uint8 Result = 0;               // UNVERIFIED: the exact enum. There is no Enum.LfgEntryResult in
+                                            // the client, and LFG_LIST_ENTRY_CREATION_FAILED has no payload.
+            uint8 ResultDetail = 0;         // UNVERIFIED: new in 12.1, no consumer evidence
         };
 
+        // SMSG_LFG_LIST_UPDATE_STATUS (0x5A000A) - Client 12.1.0.69382, reader @ RVA 0x754910:
+        //   RideTicket ; ListingDescriptor ; u64 ExpirationTime ; u8 Status ;
+        //   one byte: bit7 Listed, bit6 has(Guid), bit5 has(u8) ; [PackedGuid] ; [u8]
+        // 12.1 drift, and the worst one in the family: 68275 read Ticket, u64, u8, descriptor, bit - which
+        // is what this used to write. With the old order the client parses the descriptor's bit header out
+        // of the expiration timestamp's bytes, so the three string lengths (10/11/8 bits, copied by a
+        // ReadBytes that bounds-checks only against the packet, never against the 513/1025/129-byte target
+        // buffers) come out of effectively random data. On a large enough packet that overruns client memory.
+        // The two trailing optionals are new in 12.1 and were missing completely. They are not guesses: the
+        // three captured 12.1 payloads (69273, 81/74/81 bytes) round-trip byte-identically through the
+        // layout below, and the first optional decodes to a HighGuid::Player guid that stays constant
+        // across two different listings while the ticket's own guid is a HighGuid::Party guid that changes
+        // with each one - so the ticket keys the party and this field names the leader.
+        // The second optional appeared only in the delist payload (Status 0x08, Listed = 0) with value 0.
         class LFGListUpdateStatus final : public ServerPacket
         {
         public:
-            explicit LFGListUpdateStatus() : ServerPacket(SMSG_LFG_LIST_UPDATE_STATUS, 64) { }
+            explicit LFGListUpdateStatus() : ServerPacket(SMSG_LFG_LIST_UPDATE_STATUS, 96) { }
             WorldPacket const* Write() override;
 
             LFG::RideTicket Ticket;
-            uint64 ExpirationTime = 0;          // unix seconds the listing expires (sniff: post + 1800); 0 = not listed
-            uint8 Status = 0;                   // sniff codes: 0x06+0x38 create (twice), 0x38 steady, 0x19 member join, 0x08 delist, 0x01 left group
-            std::vector<uint8> RawDescriptor;   // the listing's descriptor bytes, echoed verbatim (empty when not listed)
+            ListingDescriptor Listing;
+            uint64 ExpirationTime = 0;      // unix seconds the listing expires (sniff: post + 1800); 0 = not listed
+            uint8 Status = 0;               // sniff codes: 0x06+0x38 create (twice), 0x38 steady, 0x19 member
+                                            // join, 0x08 delist, 0x01 left group
             bool Listed = true;
+            Optional<ObjectGuid> LeaderGuid;    // new in 12.1; sniff-decoded as the leader's player guid
+            Optional<uint8> UnkByte;            // UNVERIFIED: new in 12.1, only seen on the delist payload,
+                                                // value 0, and no consumer evidence for its meaning
         };
 
+        // SMSG_LFG_LIST_UPDATE_EXPIRATION (0x5A000B) - dispatcher case @ RVA 0x755C5A:
+        //   RideTicket ; u64 ; u8 Reason
+        // Stock defect (68275 read the same): the u64 was missing, so the packet was 8 bytes short, the
+        // client hit its overflow marker and dropped it - the expiry reason never arrived.
         class LFGListUpdateExpiration final : public ServerPacket
         {
         public:
-            explicit LFGListUpdateExpiration() : ServerPacket(SMSG_LFG_LIST_UPDATE_EXPIRATION, 24) { }
+            explicit LFGListUpdateExpiration() : ServerPacket(SMSG_LFG_LIST_UPDATE_EXPIRATION, 16 + 4 + 4 + 8 + 1 + 8 + 1) { }
             WorldPacket const* Write() override;
 
             LFG::RideTicket Ticket;
+            uint64 ExpirationTime = 0;      // UNVERIFIED: position measured, meaning inferred from the name
             uint8 Reason = 0;
         };
 
+        // SMSG_LFG_LIST_SEARCH_STATUS (0x5A0003) - dispatcher case @ RVA 0x75568B:
+        //   RideTicket ; u8 Status ; one byte with bit7 Complete
+        // Stock defect: the ticket was missing (68275 read it too).
+        // Note this class still has no sender, on purpose: the 68974 capture shows retail answering a
+        // search with results only and never with a status message.
         class LFGListSearchStatus final : public ServerPacket
         {
         public:
-            explicit LFGListSearchStatus() : ServerPacket(SMSG_LFG_LIST_SEARCH_STATUS, 2) { }
+            explicit LFGListSearchStatus() : ServerPacket(SMSG_LFG_LIST_SEARCH_STATUS, 16 + 4 + 4 + 8 + 1 + 1 + 1) { }
             WorldPacket const* Write() override;
 
+            LFG::RideTicket Ticket;
             uint8 Status = 0;
             bool Complete = true;
         };
 
-        // One row of a search result (2008-byte element): the listing + leader/member info.
-        // Exact SMSG_LFG_LIST_SEARCH_RESULTS (0x560002) row. Layout reverse-engineered from the client
-        // deserializers and validated byte-exact against a real 12.0.7.68275 sniff (see
-        // c:\dumps\lfg_search_results_layout.md). The embedded descriptor is echoed verbatim from the bytes
-        // the client sent in CMSG_LFG_LIST_JOIN (same replay strategy proven for SMSG_LFG_LIST_UPDATE_STATUS).
+        // One member record of a search-result row. Client 12.1.0.69382 reader @ RVA 0x7580F0
+        // (in-memory stride 96), tail block reader @ RVA 0x6E7EA0.
+        //   PackedGuid ; u8 Level ; u8 ClassID ; u8 Role ; u32 SpecID ; u8 ;
+        //   tail { PackedGuid ; u32 x5 ; u64 ; u64 ; u32 ; one byte bit7 } ;
+        //   one byte bit7 IsLeader
+        // 12.1 drift: the head flag byte moved from BEFORE the tail block to AFTER it. Emitting it early
+        // shifted the whole 45-byte tail by one byte.
         struct SearchResultMember
         {
             ObjectGuid Guid;
-            uint8 Level = 0;                      // sniff-decoded MemberDetail head: guid, level, class, role, spec
+            uint8 Level = 0;
             uint8 ClassID = 0;
-            uint8 Role = 0;                       // 0 tank / 1 healer / 2 dps (68974: Outlaw-260 rogue = 2, Brewmaster-268 monk = 0)
+            uint8 Role = 0;                       // 0 tank / 1 healer / 2 dps
             uint32 SpecID = 0;
-            bool IsLeader = false;                // head flag bit: set on both retail members (each was the listing leader)
+            bool IsLeader = false;
         };
 
+        // One row of SMSG_LFG_LIST_SEARCH_RESULTS. Client 12.1.0.69382 reader @ RVA 0x758320,
+        // in-memory stride 2168. Read order:
+        //   RideTicket ; u32 Age(+40) ; ListingDescriptor(+48) ; u8(+1816) ; 5x PackedGuid(+1824..+1888) ;
+        //   u32(+1904) u32(+1908) u32(+1912) ;
+        //   u32 Count1 ; u32 Count2 ; u32 Count3 ; u32 MemberCount ;
+        //   u32(+2016) ; u64 PostTime(+2024) ; u8(+2032) ; PackedGuid(+2040) ;
+        //   DungeonScoreSummary(+2056) ; 9 x { u32, u8 } (+2088, reader 0x740020) ; u8(+2160) ; u8(+2161) ;
+        //   Count1 x PackedGuid ; Count2 x PackedGuid ; Count3 x PackedGuid ; MemberCount x member ;
+        //   one byte with bit7(+1916)
+        // 12.1 drift, and the second dangerous one: in 68275 the descriptor sat at position 15, the score
+        // block at 17 and the trailing bit before the members. With the old order the client reads
+        // Count1..MemberCount out of descriptor bytes - four unchecked uint32 that go straight into vector
+        // resizes. Practical effect ranges from an empty group browser to a client crash.
         struct SearchResultListing
         {
-            ObjectGuid GroupGuid;                 // party/group guid (also echoed as LeaderGuidEcho)
+            ObjectGuid GroupGuid;                 // party/group guid (also echoed as the trailing guid)
             uint32 ListingId = 0;                 // stable id the client sends back in APPLY_TO_GROUP
             uint64 PostTime = 0;                  // listing creation unix seconds (emitted twice)
-            uint32 Age = 0;                       // slow refresh/age counter (68974 rows: 3, later update rows: 3/4)
-            ObjectGuid LeaderGuid;                // fills Guid_A..E
-            std::vector<SearchResultMember> Members;  // group roster -> MemberCount + MemberDetail records
-            std::vector<uint8> RawDescriptor;     // verbatim ListingDescriptor bytes
+            uint32 Age = 0;                       // slow refresh/age counter
+            ObjectGuid LeaderGuid;                // fills the five-guid block
+            std::vector<SearchResultMember> Members;
+            ListingDescriptor Listing;
         };
 
         class LFGListSearchResults final : public ServerPacket
@@ -300,9 +445,20 @@ namespace WorldPackets
             std::vector<SearchResultListing> Listings;
         };
 
-        // Live refresh push for previously returned rows. 68974 capture: NOT the full search-result row —
-        // a compact 65/132-byte row (see LFGLIST_68974_FIX.md): header block + age + member records only.
-        // Retail pushes it unsolicited when a listed group changes (member level-up, delist).
+        // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE (0x5A0010) - live refresh push for rows already returned.
+        // Client 12.1.0.69382: u32 RowCount, then RowCount rows through reader 0x758640 (stride 2008):
+        //   RideTicket ; u32 Age(+40) ; u32 MemberCount ; ListingDescriptor(+224) ; u8(+2002) ;
+        //   MemberCount x member(0x7580F0) ;
+        //   three bit bytes carrying 21 bits (7 optional-presence flags + 12 bools + 1 conditional value bit,
+        //   3 padding) ;
+        //   then the present optionals in order: PackedGuid, u32, u32, PackedGuid, PackedGuid, PackedGuid,
+        //   PackedGuid.
+        // 12.1 drift: 68275 read Ticket, Age, MemberCount, u8, three bit bytes, descriptor, optionals,
+        // members. The old writer emitted `u8 0, u32 8, 26 zero bytes` which happens to be exactly the 68275
+        // shape (three bit bytes 08 00 00 plus a 27-byte zero descriptor) and is wrong for 12.1.
+        // We emit all 21 bits as zero and therefore no optionals. The 0x08 bit the 68275 writer carried is
+        // NOT reproduced: in 12.1 that bit position belongs to a different field of a re-laid-out struct, so
+        // copying it forward would assert something we cannot support. UNVERIFIED: the meaning of all 21 bits.
         class LFGListSearchResultsUpdate final : public ServerPacket
         {
         public:
@@ -310,6 +466,31 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             std::vector<SearchResultListing> Listings;
+        };
+
+        // SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE (0x5A0022) - 12.1 newcomer.
+        // Client 12.1.0.69382, dispatcher case @ RVA 0x75699F, consumer @ RVA 0x24DEAA0 (registered by the
+        // LFG-list registrar pair 0x2086FB0 / 0x24DF000, which owns every LFG_LIST slot and no classic one -
+        // that is what places this opcode in the premade group finder rather than in Mythic+ scoring).
+        //   ListingDescriptor Listing ; one byte with bit7 has(CensorCode) ; [u8 CensorCode]
+        // Structurally this is SMSG_LFG_LIST_UPDATE_STATUS without the ticket and without the status tail:
+        // both cases call the same descriptor reader.
+        // Effect: the consumer stores {CensorCode, HasCensorCode} into the LFG-list manager at +0x13C1/+0x13C2,
+        // sets the resolution state at +0x13E0 to (HasCensorCode && CensorCode != 0) and fires
+        // LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE(isCensored) with that bool. The state is tri-valued:
+        // 1 = flagged and unresolved (C_LFGList.IsCensoredActiveEntryUnresolved, 0x1194870),
+        // 2 = the player confirmed it (C_LFGList.ConfirmCensoredActiveEntry),
+        // 0 = revealed/cleared (C_LFGList.RevealCensoredActiveEntry).
+        // So marking a listing as flagged needs BOTH the presence bit AND a non-zero code.
+        // UNVERIFIED: the value range of CensorCode. The client only ever tests it against zero.
+        class LFGListCensoredActiveEntryUpdate final : public ServerPacket
+        {
+        public:
+            explicit LFGListCensoredActiveEntryUpdate() : ServerPacket(SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE, 32) { }
+            WorldPacket const* Write() override;
+
+            ListingDescriptor Listing;
+            Optional<uint8> CensorCode;
         };
 
         // Wire state bits for application status (sniff MSB-first): 0x40 applied/pending, 0x20 invited,
@@ -322,20 +503,27 @@ namespace WorldPackets
             constexpr uint8 Declined = 0x10;    // UNVERIFIED (not in the capture)
         }
 
-        // One applicant entry of SMSG_LFG_LIST_APPLICANT_LIST_UPDATE (sniff-exact, status-only form:
-        // HasInfo=0). The full snapshot form (HasInfo=1, level/ilvl/slot table) is documented in
-        // c:\dumps\LFGLIST_SNIFF_DEEP_68275.md but several scalars are unresolved - status-only parses fine.
+        // One applicant entry of SMSG_LFG_LIST_APPLICANT_LIST_UPDATE. Client 12.1.0.69382 reader @ RVA
+        // 0x754CF0 (in-memory stride 352):
+        //   RideTicket ; PackedGuid ; u32 MemberCount ; MemberCount x <member block, stride 248> ;
+        //   bits<4> StateBits ; bit ; bits<8> len(Comment) ; FlushBits ; Comment bytes
+        // 12.1 drift, currently latent: in 68275 the 13-bit block sat BEFORE the member array. We always
+        // send MemberCount == 0, so the two orders coincide and the wire is identical today. It stops being
+        // identical the moment anyone fills the member array - which is why the bits are now written
+        // explicitly instead of as two hand-packed bytes.
         struct ApplicantInfo
         {
             LFG::RideTicket Ticket;             // application ticket (type 6, Id = ApplicationId)
             ObjectGuid PlayerGuid;
-            uint8 StateBits = 0;
+            uint8 StateBits = 0;                // occupies the top 4 bits of the wire
+            bool Flag = false;
+            std::string Comment;                // the applicant's note, bits<8> length
         };
 
         class LFGListApplicantListUpdate final : public ServerPacket
         {
         public:
-            explicit LFGListApplicantListUpdate() : ServerPacket(SMSG_LFG_LIST_APPLICANT_LIST_UPDATE, 16) { }
+            explicit LFGListApplicantListUpdate() : ServerPacket(SMSG_LFG_LIST_APPLICANT_LIST_UPDATE, 48) { }
             WorldPacket const* Write() override;
 
             LFG::RideTicket ListingTicket;      // listing ticket (type 4, Id = ListingId)
@@ -343,35 +531,49 @@ namespace WorldPackets
             std::vector<ApplicantInfo> Applicants;
         };
 
-        // Sniff-exact 67/68B: Ticket(app) + u64 0 + u32 UnkResult (8 applied / 60 invited - possibly the 60s
-        // invite window) + u8 RoleGranted + Ticket(listing) + u8 StateBits.
+        // SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE (0x5A000C) - dispatcher case @ RVA 0x755CE8:
+        //   RideTicket Ticket ; RideTicket ListingTicket ; u64 ; u32 UnkResult ; u8 RoleGranted ;
+        //   one byte whose top 4 bits are StateBits
+        // 12.1 drift: 68275 had the second ticket after the three scalars. Total length is unchanged, so
+        // nothing overflows - but the client read the listing ticket out of {u64, u32, u8, ...} and the
+        // scalars out of the ticket's interior, i.e. application id, listing id and granted role were all
+        // garbage on every status change.
+        // StateBits is correctly modelled as an already-shifted value: the client keeps only bits 7..4.
         class LFGListApplicationStatusUpdate final : public ServerPacket
         {
         public:
-            explicit LFGListApplicationStatusUpdate() : ServerPacket(SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE, 68) { }
+            explicit LFGListApplicationStatusUpdate() : ServerPacket(SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE, 80) { }
             WorldPacket const* Write() override;
 
             LFG::RideTicket Ticket;             // application ticket (type 6)
-            uint32 UnkResult = 8;
-            uint8 RoleGranted = 0;
             LFG::RideTicket ListingTicket;      // listing ticket (type 4)
+            uint64 Unknown = 0;
+            uint32 UnkResult = 8;               // 8 while pending, 60 on invite (likely the invite window)
+            uint8 RoleGranted = 0;
             uint8 StateBits = 0;
         };
 
+        // SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT (0x5A000D) - dispatcher case @ RVA 0x755DCC:
+        //   RideTicket Ticket ; RideTicket ListingTicket ; <full search row, reader 0x758320> ;
+        //   u64 ApplicationExpiration ; u8 Status ; u8 ; one byte whose top 4 bits are StateBits
+        // 12.1 drift: the whole 14-byte scalar tail moved BEHIND the row and the second ticket moved 14
+        // bytes forward. Inherits the search-row defect as well, so before this fix the embedded row put
+        // unchecked counters into the client's allocator.
+        // The row is written as a complete row (its header block IS a RideTicket in disguise: group guid,
+        // listing id, type 4, post time, one bit), which is why the listing ticket appears to be sent twice.
         class LFGListApplyToGroupResult final : public ServerPacket
         {
         public:
-            explicit LFGListApplyToGroupResult() : ServerPacket(SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT, 64) { }
+            explicit LFGListApplyToGroupResult() : ServerPacket(SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT, 128) { }
             WorldPacket const* Write() override;
 
-            // Sniff-exact: Ticket(app) + u64 ApplicationExpiration (now+300) + u8 Status(6) + u8 0 +
-            // Ticket(listing) + u8 0x10 + Ticket(listing again) + full search-row body from the age counter
-            // onward - the client renders the "applied" card from the embedded row without a re-search.
             LFG::RideTicket Ticket;             // application ticket (type 6)
+            LFG::RideTicket ListingTicket;      // listing ticket (type 4)
+            SearchResultListing Row;
             uint64 ApplicationExpiration = 0;
             uint8 Status = 6;
-            LFG::RideTicket ListingTicket;      // listing ticket (type 4), written twice
-            SearchResultListing Row;
+            uint8 Unknown = 0;
+            uint8 StateBits = 0x10;             // observed constant
         };
 
         struct LFGListBlacklistEntry
@@ -388,8 +590,6 @@ namespace WorldPackets
 
             std::vector<LFGListBlacklistEntry> Entries;
         };
-
-        ByteBuffer& operator<<(ByteBuffer& data, ListingInfo const& listing);
     }
 }
 

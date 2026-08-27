@@ -55,6 +55,23 @@ void DFSetRoles::Read()
         _worldPacket >> *PartyIndex;
 }
 
+void DFReadyCheckResponse::Read()
+{
+    // Client 12.1.0.69382 serializer 0x6A5240: presence bit, then IsReady, then FlushBits, then the
+    // conditional uint8. Calibrated against CMSG_SET_EVERYONE_IS_ASSISTANT (0x430046, serializer 0x6A5080),
+    // whose byte-for-byte identical body TrinityCore already reads in this order.
+    _worldPacket >> OptionalInit(PartyIndex);
+    _worldPacket >> Bits<1>(IsReady);
+    _worldPacket.ResetBitPos();
+    if (PartyIndex)
+        _worldPacket >> *PartyIndex;
+}
+
+void LFGLorewalkingUpdateRequest::Read()
+{
+    _worldPacket >> MapID;
+}
+
 void DFBootPlayerVote::Read()
 {
     _worldPacket >> Bits<1>(Vote);
@@ -281,6 +298,68 @@ WorldPacket const* LFGRoleCheckUpdate::Write()
     return &_worldPacket;
 }
 
+ByteBuffer& operator<<(ByteBuffer& data, LFGReadyCheckUpdateMember const& member)
+{
+    data << member.Guid;
+    data << Bits<1>(member.IsReady);        // client: bit 7 of this member's own byte
+    data << Bits<1>(member.Unk1);           // client: bit 6 of the same byte; no reader in the image
+    data.FlushBits();                       // every member ends on a byte boundary (no shared bit block)
+
+    return data;
+}
+
+WorldPacket const* LFGReadyCheckUpdate::Write()
+{
+    _worldPacket << uint8(PartyIndex);
+    _worldPacket << uint8(ReadyCheckStatus);
+    _worldPacket << Size<uint32>(BgQueueIDs);
+    _worldPacket << Size<uint32>(Members);
+
+    for (uint64 bgQueueID : BgQueueIDs)
+        _worldPacket << uint64(bgQueueID);
+
+    for (LFGReadyCheckUpdateMember const& member : Members)
+        _worldPacket << member;
+
+    _worldPacket << Bits<1>(IsRequeue);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LFGReadyCheckResult::Write()
+{
+    _worldPacket << Player;
+    _worldPacket << Bits<1>(Ready);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LFGInstanceShutdownCountdown::Write()
+{
+    _worldPacket << Ticket;
+    _worldPacket << uint32(TimeLeft);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LFGSuspendLorewalking::Write()
+{
+    _worldPacket << Bits<1>(Suspend);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* SetDFFastLaunchResult::Write()
+{
+    _worldPacket << Bits<1>(LfgFastLaunch);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
 WorldPacket const* LFGJoinResult::Write()
 {
     _worldPacket << Ticket;
@@ -396,13 +475,20 @@ WorldPacket const* LFGProposalUpdate::Write()
     _worldPacket << uint32(EncounterMask);
     _worldPacket << Size<uint32>(Players);
     _worldPacket << uint8(PromisedShortageRolePriority);
+
+    for (LFGProposalUpdatePlayer const& player : Players)
+        _worldPacket << player;
+
+    // 12.1 drift: the three-bit trailing byte moved BEHIND the player array. Client 12.1.0.69382 reader
+    // 0x754FD0 reads `u32 PlayerCount, u8 PromisedShortageRolePriority, Players[Count], one byte with
+    // bits 7/6/5`; 12.0.7.68275 (0x738FB0) read the bit byte before the array, which is what this writer
+    // used to do. The two are identical only while Players is empty - and a proposal always has at least
+    // one player, so the old order put ValidCompletedMask/ProposalSilent/FailedByMyParty into the first
+    // player's role byte and let the last player entry eat the trailing byte.
     _worldPacket << Bits<1>(ValidCompletedMask);
     _worldPacket << Bits<1>(ProposalSilent);
     _worldPacket << Bits<1>(FailedByMyParty);
     _worldPacket.FlushBits();
-
-    for (LFGProposalUpdatePlayer const& player : Players)
-        _worldPacket << player;
 
     return &_worldPacket;
 }

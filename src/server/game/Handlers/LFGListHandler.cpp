@@ -28,10 +28,14 @@
 
 namespace
 {
-    // Fill the RideTicket that keys a listing on the client (sniff: type 4, Id = listing id, Time = post time).
+    // Fill the RideTicket that keys a listing on the client (sniff: type 4, Id = listing id, Time = post
+    // time). RequesterGuid is the listed PARTY, not the leader: decoding the 69273 SMSG_LFG_LIST_UPDATE_STATUS
+    // payloads gives a HighGuid::Party guid here that changes from one listing to the next, while the
+    // leader's HighGuid::Player guid stays constant and rides in the message's own optional field. A
+    // solo listing has no group yet, so fall back to the leader.
     void FillListingTicket(WorldPackets::LFG::RideTicket& ticket, LFGList::Listing const& listing)
     {
-        ticket.RequesterGuid = listing.LeaderGuid;
+        ticket.RequesterGuid = !listing.GroupGuid.IsEmpty() ? listing.GroupGuid : listing.LeaderGuid;
         ticket.Id = listing.Id;
         ticket.Type = WorldPackets::LFG::RideType::LfgListListing;
         ticket.Time = int32(listing.CreatedTime);
@@ -76,6 +80,7 @@ namespace
             FillApplicationTicket(info.Ticket, app);
             info.PlayerGuid = app.ApplicantGuid;
             info.StateBits = ApplicationStateToBits(app.State);
+            info.Comment = app.Comment;
         }
         WorldPacket const* data = packet.Write();
 
@@ -129,16 +134,58 @@ void WorldSession::SendLFGListUpdateStatus(uint32 listingId, uint8 status /*= 0x
     {
         FillListingTicket(packet.Ticket, *listing);
         packet.ExpirationTime = listing->ExpireTime;
-        packet.RawDescriptor = listing->Descriptor.RawBytes;   // echo the client's descriptor verbatim
+        packet.Listing = sLFGListMgr.GetPublicDescriptor(*listing);
         packet.Listed = true;
+        packet.LeaderGuid = listing->LeaderGuid;    // present in every captured payload, listed or not
     }
     else
     {
         packet.Ticket.Id = listingId;
         packet.Ticket.RequesterGuid = _player ? _player->GetGUID() : ObjectGuid::Empty;
         packet.Listed = false;
+        if (_player)
+            packet.LeaderGuid = _player->GetGUID();
     }
     SendPacket(packet.Write());
+}
+
+// SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE (0x5A0022). Tells the owner of a listing that its text was
+// flagged. The client only treats the entry as flagged when BOTH the presence bit is set AND the code is
+// non-zero (consumer RVA 0x24DEAA0: state = HasCensorCode && CensorCode != 0), so an unflagged listing is
+// signalled by omitting the code entirely.
+void WorldSession::SendLFGListCensoredActiveEntryUpdate(uint32 listingId)
+{
+    LFGList::Listing const* listing = sLFGListMgr.GetListing(listingId);
+    if (!listing)
+        return;
+
+    WorldPackets::LFGList::LFGListCensoredActiveEntryUpdate packet;
+    // The censored entry carries the listing WITHOUT its flagged text - the same descriptor every other
+    // client sees. That is what forces the edit dialog to compare server-side
+    // (C_LFGList.DoesCensoredTextMatch) instead of against a local copy.
+    packet.Listing = sLFGListMgr.GetPublicDescriptor(*listing);
+    if (listing->IsCensored())
+        packet.CensorCode = listing->CensorCode;
+
+    SendPacket(packet.Write());
+}
+
+// CMSG_LFG_LIST_CONFIRM_CENSORED_ACTIVE_ENTRY (0x4301AB) - the player chose to keep the flagged listing
+// rather than edit it. There is deliberately no reveal counterpart: C_LFGList.RevealCensoredActiveEntry
+// and RevealCensoredSearchResult are purely client-side and send nothing.
+void WorldSession::HandleLFGListConfirmCensoredActiveEntry(WorldPackets::LFGList::LFGListConfirmCensoredActiveEntry& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    if (!sLFGListMgr.ConfirmCensoredListing(packet.Ticket.Id, player->GetGUID()))
+        return;
+
+    // Confirming does not lift the flag - the text stays withheld from searchers. Re-send so the client's
+    // own state matches ours; it moves its resolution state to "confirmed" locally when it sends, and this
+    // keeps the two in step after a reload.
+    SendLFGListCensoredActiveEntryUpdate(packet.Ticket.Id);
 }
 
 void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
@@ -192,6 +239,12 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
         SendLFGListUpdateStatus(id, 0x06);
         SendLFGListUpdateStatus(id, 0x38);
         SendLFGListUpdateStatus(id, 0x38);
+
+        // A freshly published listing whose text was flagged raises LFG_LIST_CREATE_CENSOR_WARNING on the
+        // client; an unflagged one clears any leftover state. Only send when there is something to say.
+        if (LFGList::Listing const* listing = sLFGListMgr.GetListing(id))
+            if (listing->IsCensored())
+                SendLFGListCensoredActiveEntryUpdate(id);
     }
     else
     {
@@ -208,7 +261,12 @@ void WorldSession::HandleLFGListUpdateRequest(WorldPackets::LFGList::LFGListUpda
         return;
 
     if (sLFGListMgr.UpdateListing(packet.Ticket.Id, player->GetGUID(), packet.Listing))
+    {
         SendLFGListUpdateStatus(packet.Ticket.Id);
+        // Editing is how a player clears a flag, so the new state has to go out either way - including the
+        // "no longer flagged" case, which is what takes the warning off the client's listing.
+        SendLFGListCensoredActiveEntryUpdate(packet.Ticket.Id);
+    }
 }
 
 void WorldSession::HandleLFGListLeave(WorldPackets::LFGList::LFGListLeave& packet)
@@ -225,6 +283,7 @@ void WorldSession::HandleLFGListLeave(WorldPackets::LFGList::LFGListLeave& packe
     status.Ticket = packet.Ticket;
     status.Status = 0x08;
     status.Listed = false;
+    status.LeaderGuid = player->GetGUID();   // the 69273 delist payload carries it too
     SendPacket(status.Write());
 }
 
@@ -234,8 +293,17 @@ void WorldSession::HandleLFGListGetStatus(WorldPackets::LFGList::LFGListGetStatu
     // unlisted tester's GET_STATUS (idx 2938) received NO response — retail stays silent instead of pushing
     // a "not listed" UPDATE_STATUS, so only answer when a listing actually exists.
     LFGList::Listing const* listing = GetPlayer() ? sLFGListMgr.GetListingByLeader(GetPlayer()->GetGUID()) : nullptr;
-    if (listing)
-        SendLFGListUpdateStatus(listing->Id);
+    if (!listing)
+        return;
+
+    SendLFGListUpdateStatus(listing->Id);
+
+    // The reload path. A UI reload throws away the client's censor state, and LFGList.lua:236-239 relies on
+    // the server re-announcing it - without this the player sits on an invisibly flagged listing whose text
+    // nobody can see and which no dialog ever mentions again. CMSG_LFG_LIST_GET_STATUS is the request the
+    // client makes when the group finder comes back up, so this is the moment to repeat it.
+    if (listing->IsCensored())
+        SendLFGListCensoredActiveEntryUpdate(listing->Id);
 }
 
 void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& packet)
@@ -243,7 +311,7 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     if (!GetPlayer())
         return;
 
-    std::string const keyword = !packet.SearchTerms.empty() ? packet.SearchTerms.front() : std::string();
+    std::string const keyword = packet.GetKeyword();
 
     // Keep this browser subscribed so listings published/edited from now on are pushed live via
     // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE instead of the player having to re-search. The filters recorded are
@@ -286,7 +354,7 @@ void WorldSession::HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApply
         return;
 
     LFGList::Application* app = sLFGListMgr.AddApplication(listing->Id, player->GetGUID(), packet.RoleMask,
-        uint32(player->GetPrimarySpecialization()), uint32(player->GetAverageItemLevel()), std::string());
+        uint32(player->GetPrimarySpecialization()), uint32(player->GetAverageItemLevel()), packet.Comment);
     if (!app)
         return;
 

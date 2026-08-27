@@ -314,6 +314,17 @@ void LFGMgr::Update(uint32 diff)
         RoleChecksStore.erase(itRoleCheck);
     }
 
+    // Remove obsolete readiness checks. A timeout is status 3, which the client turns into
+    // ERR_LFG_READY_CHECK_FAILED_TIMEOUT (804) and closes LFGReadyCheckPopup with.
+    for (LfgReadyCheckContainer::iterator it = ReadyChecksStore.begin(); it != ReadyChecksStore.end();)
+    {
+        LfgReadyCheckContainer::iterator itReadyCheck = it++;
+        if (currTime < itReadyCheck->second.cancelTime)
+            continue;
+
+        FinishReadyCheck(itReadyCheck, LFG_READYCHECK_MISSING_ANSWER);
+    }
+
     // Remove obsolete proposals
     for (LfgProposalContainer::iterator it = ProposalsStore.begin(); it != ProposalsStore.end();)
     {
@@ -1090,6 +1101,158 @@ void LFGMgr::UpdateRoleCheck(ObjectGuid gguid, ObjectGuid guid /* = ObjectGuid::
         RestoreState(gguid, "Rolecheck Failed");
         RoleChecksStore.erase(itRoleCheck);
     }
+}
+
+/**
+   Starts an LFG readiness check for a group.
+
+   Wire contract (client 12.1.0.69382): SMSG_LFG_READY_CHECK_UPDATE (0x5A0006) drives LFGReadyCheckPopup.
+   The consumer @ RVA 0x24C2920 shows the dialog only while ReadyCheckStatus == 2 AND the receiver's own
+   member entry still has IsReady == 0; every other combination hides it. The four terminal states each
+   carry their own GameError (829 / 804 / 844 / 803), so a check must always be closed out explicitly -
+   dropping it silently would leave the popup on screen.
+
+   UNVERIFIED - THE RETAIL TRIGGER. What starts a readiness check in retail is not derivable from the
+   client image. The evidence points at the battleground / PvP queue: the UI only resolves a real queue
+   name when readyCheckIsBattleground is true (Blizzard_GroupFinder/Shared/LFGReadyCheck.lua:13-17),
+   QueueStatusFrame.lua:671-680 creates its status entry only then, and readyCheckIsBattleground is
+   exactly "BgQueueIDs is not empty" (GetLFGReadyCheckUpdate @ RVA 0x24CF010). That call site lives in
+   the battleground invite path, which is not part of this unit's files, and no capture of a live
+   readiness check exists. This function is therefore the documented entry point and currently has no
+   caller in-tree. See orchestrierung/status/lfg_5A.json, aufnahme_noetig.
+
+   @param[in]     gguid Group guid to start the readycheck for
+   @param[in]     bgQueueIDs Battleground queue ids; non-empty selects the battleground dialog variant
+   @param[in]     isRequeue Payload of LFG_READY_CHECK_SHOW(isRequeue)
+   @param[in]     partyIndex Value the client echoes back in CMSG_DF_READY_CHECK_RESPONSE
+   @return true if a check was started
+*/
+bool LFGMgr::StartReadyCheck(ObjectGuid gguid, std::vector<uint64> bgQueueIDs /*= {}*/, bool isRequeue /*= false*/, uint8 partyIndex /*= 127*/)
+{
+    if (!gguid.IsParty())
+        return false;
+
+    if (ReadyChecksStore.find(gguid) != ReadyChecksStore.end())
+        return false;
+
+    Group const* group = sGroupMgr->GetGroupByGUID(gguid);
+    if (!group)
+        return false;
+
+    LfgReadyCheck& readyCheck = ReadyChecksStore[gguid];
+    readyCheck.cancelTime = GameTime::GetGameTime() + LFG_TIME_ROLECHECK;
+    readyCheck.state = LFG_READYCHECK_INITIALITING;
+    readyCheck.leader = group->GetLeaderGUID();
+    readyCheck.bgQueueIDs = std::move(bgQueueIDs);
+    readyCheck.partyIndex = partyIndex;
+    readyCheck.isRequeue = isRequeue;
+
+    for (Group::MemberSlot const& slot : group->GetMemberSlots())
+        readyCheck.answers[slot.guid] = LFG_ANSWER_PENDING;
+
+    if (readyCheck.answers.empty())
+    {
+        ReadyChecksStore.erase(gguid);
+        return false;
+    }
+
+    SendReadyCheckUpdate(readyCheck);
+    return true;
+}
+
+bool LFGMgr::HasReadyCheck(ObjectGuid gguid) const
+{
+    return ReadyChecksStore.find(gguid) != ReadyChecksStore.end();
+}
+
+/**
+   Records one player's answer to a running readiness check (CMSG_DF_READY_CHECK_RESPONSE, 0x430048).
+
+   Every answer is broadcast as SMSG_LFG_READY_CHECK_RESULT, and BOTH flanks matter (D3):
+     Ready == true  -> LFG_READY_CHECK_PLAYER_IS_READY(name)
+     Ready == false -> GameError 831 ERR_LFG_PLAYER_DECLINED_READY_CHECK *and* LFG_READY_CHECK_DECLINED(name)
+   A decline fails the whole check (status 5), mirroring how a refused role fails a role check.
+
+   @param[in]     gguid Group guid the check belongs to
+   @param[in]     guid Player that answered
+   @param[in]     isReady The answer
+*/
+void LFGMgr::UpdateReadyCheck(ObjectGuid gguid, ObjectGuid guid, bool isReady)
+{
+    LfgReadyCheckContainer::iterator itReadyCheck = ReadyChecksStore.find(gguid);
+    if (itReadyCheck == ReadyChecksStore.end())
+        return;
+
+    LfgReadyCheck& readyCheck = itReadyCheck->second;
+    LfgAnswerContainer::iterator itAnswer = readyCheck.answers.find(guid);
+    if (itAnswer == readyCheck.answers.end())
+        return;
+
+    // An answer is final - a second CMSG for the same player must not restart the state machine.
+    if (itAnswer->second != LFG_ANSWER_PENDING)
+        return;
+
+    itAnswer->second = isReady ? LFG_ANSWER_AGREE : LFG_ANSWER_DENY;
+
+    // SMSG_LFG_READY_CHECK_RESULT goes to everyone in the check, including the answering player -
+    // the consumer needs it to print the "<name> is ready" / "<name> declined" line.
+    SendReadyCheckResult(readyCheck, guid, isReady);
+
+    if (!isReady)
+    {
+        FinishReadyCheck(itReadyCheck, LFG_READYCHECK_FAILED);
+        return;
+    }
+
+    bool const allReady = std::all_of(readyCheck.answers.begin(), readyCheck.answers.end(),
+        [](LfgAnswerContainer::value_type const& answer) { return answer.second == LFG_ANSWER_AGREE; });
+
+    if (allReady)
+    {
+        FinishReadyCheck(itReadyCheck, LFG_READYCHECK_FINISHED);
+        return;
+    }
+
+    // Still running: refresh everyone's dialog so members who already answered see their own popup
+    // disappear (the consumer hides it as soon as the receiver's own IsReady flag is set).
+    SendReadyCheckUpdate(readyCheck);
+}
+
+/**
+   Aborts a running readiness check -> status 4, ERR_LFG_READY_CHECK_ABORTED (844).
+*/
+void LFGMgr::AbortReadyCheck(ObjectGuid gguid)
+{
+    LfgReadyCheckContainer::iterator itReadyCheck = ReadyChecksStore.find(gguid);
+    if (itReadyCheck == ReadyChecksStore.end())
+        return;
+
+    FinishReadyCheck(itReadyCheck, LFG_READYCHECK_ABORTED);
+}
+
+/// Sends the current state of a readiness check to every member still in it.
+void LFGMgr::SendReadyCheckUpdate(LfgReadyCheck const& readyCheck) const
+{
+    for (LfgAnswerContainer::value_type const& answer : readyCheck.answers)
+        if (Player* player = ObjectAccessor::FindConnectedPlayer(answer.first))
+            player->GetSession()->SendLfgReadyCheckUpdate(readyCheck);
+}
+
+/// Sends one player's answer to every member of the check.
+void LFGMgr::SendReadyCheckResult(LfgReadyCheck const& readyCheck, ObjectGuid guid, bool isReady) const
+{
+    for (LfgAnswerContainer::value_type const& answer : readyCheck.answers)
+        if (Player* player = ObjectAccessor::FindConnectedPlayer(answer.first))
+            player->GetSession()->SendLfgReadyCheckResult(guid, isReady);
+}
+
+/// Pushes the terminal state out and drops the check. Erasing without sending would leave
+/// LFGReadyCheckPopup open on every client - only an update ever closes that dialog.
+void LFGMgr::FinishReadyCheck(LfgReadyCheckContainer::iterator itReadyCheck, LfgReadyCheckState state)
+{
+    itReadyCheck->second.state = state;
+    SendReadyCheckUpdate(itReadyCheck->second);
+    ReadyChecksStore.erase(itReadyCheck);
 }
 
 /**
@@ -2189,6 +2352,11 @@ void LFGMgr::RemovePlayerData(ObjectGuid guid)
 void LFGMgr::RemoveGroupData(ObjectGuid guid)
 {
     TC_LOG_TRACE("lfg.data.group.remove", "Group: {}", guid.ToString());
+
+    // A readiness check must never outlive its group: the dialog is only ever closed by an update, so
+    // dropping the check silently would leave LFGReadyCheckPopup stuck on every member's screen.
+    AbortReadyCheck(guid);
+
     LfgGroupDataContainer::iterator it = GroupsStore.find(guid);
     if (it == GroupsStore.end())
         return;

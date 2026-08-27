@@ -20,94 +20,155 @@
 
 namespace WorldPackets::LFGList
 {
-// The published-listing parameters. RESOLVED from the 12.0.7.68275 premade-groups sniff + the client JOIN
-// serializer (sub_7FF72914ABE0) + the generated Lua API doc (LfgListingCreateData). The descriptor is BIT-PACKED:
-// a bit-packed header (5-bit trailing-vector count; three bit-packed string lengths of 10/11/8 bits; four boolean
-// flags; and presence bits for the nilable numeric fields), then FlushBits, then the member-requirement block, the
-// fixed activity fields, the trailing uint32 vector, the three strings, and the present optional fields. Only
-// CategoryID + the activity vector + item-level drive server filtering; the rest are pass-through echo. Reads are guarded against
-// over-run (the descriptor is variable-length and pass-through, so a malformed tail is tolerated, never fatal).
-// Full layout + bit-widths: c:\dumps\LFG_LIST_WIRE_68275.md.
+namespace
+{
+    // Client buffer capacities of the three descriptor strings; they decide the bit width of each length
+    // prefix (N = ceil(log2(capacity))) and, because the client appends its own NUL at buf[len], the
+    // largest string that still fits.
+    constexpr std::size_t DESCRIPTOR_NAME_CAPACITY = 513;        // bits<10>
+    constexpr std::size_t DESCRIPTOR_COMMENT_CAPACITY = 1025;    // bits<11>
+    constexpr std::size_t DESCRIPTOR_VOICECHAT_CAPACITY = 129;   // bits<8>
+
+    // The trailing uint32 vector's count is a 5-bit field, so it can never legitimately exceed 31.
+    constexpr uint32 DESCRIPTOR_MAX_ACTIVITY_IDS = 31;
+
+    std::string const EmptyString;
+}
+
+// The embedded DungeonScoreSummary. MythicPlusPacketsCommon already provides operator<< for both this and
+// its element type and both are byte-identical to the client's reader 0x6EC830 / writer 0x6EC980
+// ({u32,u32,u32 count} then count x {i32, float, i32, i32, u8, one bit + flush}); only the read direction
+// is missing there, so it lives here.
+static ByteBuffer& operator>>(ByteBuffer& data, MythicPlus::DungeonScoreMapSummary& run)
+{
+    data >> run.ChallengeModeID;
+    data >> run.MapScore;
+    data >> run.BestRunLevel;
+    data >> run.BestRunDurationMS;
+    data >> run.Unknown1110;
+    data >> Bits<1>(run.FinishedSuccess);
+    data.ResetBitPos();
+    return data;
+}
+
+static ByteBuffer& operator>>(ByteBuffer& data, MythicPlus::DungeonScoreSummary& summary)
+{
+    data >> summary.OverallScoreCurrentSeason;
+    data >> summary.LadderScoreCurrentSeason;
+
+    uint32 runCount = 0;
+    data >> runCount;
+    // 18 wire bytes per run; refuse a count the packet cannot possibly contain rather than trusting it.
+    if (runCount <= (data.size() - data.rpos()) / 18)
+    {
+        summary.Runs.resize(runCount);
+        for (MythicPlus::DungeonScoreMapSummary& run : summary.Runs)
+            data >> run;
+    }
+    return data;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// ListingDescriptor. See the header for the full layout and for what is measured vs. inferred.
+// Reads are size-guarded throughout: the descriptor is variable-length and largely pass-through, so a
+// malformed tail must be tolerated, never fatal.
 static ByteBuffer& operator>>(ByteBuffer& data, ListingDescriptor& d)
 {
     auto remaining = [&]() -> std::size_t { return data.size() - data.rpos(); };
 
-    // --- bit-packed header (client bit-writer, MSB-first) ---
-    uint32 vectorCount = data.ReadBits(5);      // sub_7FF729064C20: count of the trailing uint32 vector
-    uint32 str0Len = data.ReadBits(10);         // string @0x40 length
-    uint32 str1Len = data.ReadBits(11);         // string @0x241 length
-    uint32 str2Len = data.ReadBits(8);          // string @0x642 length ("crate" in the sniff)
-    d.IsAutoAccept = data.ReadBits(1) != 0;     // presence/flag bits (client offsets 0x6c3..0x703)
-    d.IsCrossFactionListing = data.ReadBits(1) != 0;
-    d.IsPrivateGroup = data.ReadBits(1) != 0;
-    d.NewPlayerFriendly = data.ReadBits(1) != 0;
-    bool hasQuestId = data.ReadBits(1) != 0;    // 0x6cc -> uint32 @0x6c8
-    bool hasOpt1 = data.ReadBits(1) != 0;       // 0x6f4 -> uint32 @0x6f0
-    bool hasOpt2 = data.ReadBits(1) != 0;       // 0x6fc -> uint32 @0x6f8
-    bool hasOpt3 = data.ReadBits(1) != 0;       // 0x701 -> uint8  @0x700
-    data.ReadBits(1);                           // 0x703 standalone flag (unused server-side)
-    data.ResetBitPos();                         // FlushBits (sub_7FF729064E60)
+    // --- bit header, MSB-first, 43 bits (client reader 0x7572C0 / writer 0x757660) ---
+    uint32 const activityCount = data.ReadBits(5);
+    uint32 const nameLength = data.ReadBits(10);
+    uint32 const commentLength = data.ReadBits(11);
+    uint32 const voiceChatLength = data.ReadBits(8);
+    d.IsAutoAccept = data.ReadBits(1) != 0;             // +1699
+    d.IsPrivateGroup = data.ReadBits(1) != 0;           // +1700
+    d.IsWarMode = data.ReadBits(1) != 0;                // +1701
+    d.IsCrossFactionListing = data.ReadBits(1) != 0;    // +1702
+    bool const hasQuestId = data.ReadBits(1) != 0;
+    bool const hasRequiredDungeonScore = data.ReadBits(1) != 0;
+    bool const hasRequiredPvpRating = data.ReadBits(1) != 0;
+    bool const hasPlaystyle = data.ReadBits(1) != 0;
+    d.NewPlayerFriendly = data.ReadBits(1) != 0;        // +1763
+    data.ResetBitPos();                         // 5 spare bits; the client never reads them
 
-    // --- member-requirement block (nested sub_7FF729167840) ---
-    data >> d.HeaderFloat0 >> d.HeaderFloat1;
-    uint32 memberCount = 0;
-    data >> memberCount;
-    if (memberCount <= remaining() / 0x11)      // 0x11 = min bytes per entry; guard against a bad count
+    // --- byte-aligned body ---
+    data >> d.CategoryID;
+    data >> d.RequiredItemLevel;
+    // The client zeroes this block on every CreateListing / UpdateListing, so an inbound descriptor always
+    // carries an empty summary. Read it anyway - it is 12 bytes of wire either way.
+    data >> d.LeaderScore;
+    data >> d.GeneralPlaystyle;
+
+    // --- deferred: the uint32 vector, then the three strings ---
+    if (activityCount <= DESCRIPTOR_MAX_ACTIVITY_IDS && activityCount <= remaining() / 4)
     {
-        d.MemberRequirements.resize(memberCount);
-        for (ListingMemberRequirement& m : d.MemberRequirements)
-        {
-            data >> m.Field0 >> m.Field1 >> m.Field2 >> m.Field3 >> m.Field4;
-            m.Flag = data.ReadBits(1) != 0;
-            data.ResetBitPos();
-        }
+        d.ActivityIDs.resize(activityCount);
+        for (uint32& activityId : d.ActivityIDs)
+            data >> activityId;
     }
 
-    // --- fixed activity fields ---
-    data >> d.CategoryID;               // uint32 @0x38: GroupFinderCategory id (68974: 1; the activities ride in the vector below)
-    data >> d.RequiredDungeonScore;     // float  @0x3c
-    data >> d.TrailingByte;             // uint8  @0x702
+    if (nameLength <= remaining() && nameLength < DESCRIPTOR_NAME_CAPACITY)
+        d.Name.assign(data.ReadString(nameLength));
+    if (commentLength <= remaining() && commentLength < DESCRIPTOR_COMMENT_CAPACITY)
+        d.Comment.assign(data.ReadString(commentLength));
+    if (voiceChatLength <= remaining() && voiceChatLength < DESCRIPTOR_VOICECHAT_CAPACITY)
+        d.VoiceChat.assign(data.ReadString(voiceChatLength));
 
-    // --- trailing uint32 vector ---
-    if (vectorCount <= remaining() / 4)
-    {
-        d.ActivityIDs.resize(vectorCount);
-        for (uint32& v : d.ActivityIDs)
-            data >> v;
-    }
-
-    // --- string data (order matches the serializer: @0x40, @0x241, @0x642) ---
-    if (str0Len <= remaining()) d.Name.assign(data.ReadString(str0Len));
-    if (str1Len <= remaining()) d.VoiceChat.assign(data.ReadString(str1Len));
-    if (str2Len <= remaining()) d.Comment.assign(data.ReadString(str2Len));
-
-    // --- present optional (nilable) numeric fields ---
-    if (hasQuestId && remaining() >= 4) { uint32 v; data >> v; d.QuestID = v; }
-    if (hasOpt1 && remaining() >= 4)    { uint32 v; data >> v; d.OptionalValue1 = v; }
-    if (hasOpt2 && remaining() >= 4)    { uint32 v; data >> v; d.OptionalValue2 = v; }
-    if (hasOpt3 && remaining() >= 1)    { uint8 v;  data >> v; d.OptionalValue3 = v; }
+    // --- deferred: the present optionals ---
+    if (hasQuestId && remaining() >= 4)              { uint32 v; data >> v; d.QuestID = v; }
+    if (hasRequiredDungeonScore && remaining() >= 4) { uint32 v; data >> v; d.RequiredDungeonScore = v; }
+    if (hasRequiredPvpRating && remaining() >= 4)    { uint32 v; data >> v; d.RequiredPvpRating = v; }
+    if (hasPlaystyle && remaining() >= 1)            { uint8 v;  data >> v; d.Playstyle = v; }
     return data;
 }
 
-ByteBuffer& operator<<(ByteBuffer& data, ListingInfo const& listing)
+static ByteBuffer& operator<<(ByteBuffer& data, ListingDescriptor const& d)
 {
-    for (uint8 param : listing.Params)
-        data << param;
-    data << uint32(listing.ActivityID);
-    data << uint32(listing.Field1);
-    data << uint8(listing.Field2);
-    data << uint32(listing.RequiredItemLevel);
-    data << SizedString::BitsSize<10>(listing.Comment);
-    data << SizedString::BitsSize<7>(listing.LeaderName);
-    data << SizedString::BitsSize<7>(listing.VoiceChat);
+    // The client copies each string into a fixed-size buffer and writes its own NUL at buf[len], so
+    // capacity-1 is the largest length it can survive. ReadBytes on that side bounds-checks against the
+    // remaining packet only, never against the target buffer - an over-long string is a client-side
+    // memory overrun, so clamp here.
+    std::size_t const nameLength = std::min<std::size_t>(d.Name.length(), DESCRIPTOR_NAME_CAPACITY - 1);
+    std::size_t const commentLength = std::min<std::size_t>(d.Comment.length(), DESCRIPTOR_COMMENT_CAPACITY - 1);
+    std::size_t const voiceChatLength = std::min<std::size_t>(d.VoiceChat.length(), DESCRIPTOR_VOICECHAT_CAPACITY - 1);
+    std::size_t const activityCount = std::min<std::size_t>(d.ActivityIDs.size(), DESCRIPTOR_MAX_ACTIVITY_IDS);
+
+    data.WriteBits(activityCount, 5);
+    data.WriteBits(nameLength, 10);
+    data.WriteBits(commentLength, 11);
+    data.WriteBits(voiceChatLength, 8);
+    data << Bits<1>(d.IsAutoAccept);                    // +1699
+    data << Bits<1>(d.IsPrivateGroup);                  // +1700
+    data << Bits<1>(d.IsWarMode);                       // +1701
+    data << Bits<1>(d.IsCrossFactionListing);           // +1702
+    data << OptionalInit(d.QuestID);
+    data << OptionalInit(d.RequiredDungeonScore);
+    data << OptionalInit(d.RequiredPvpRating);
+    data << OptionalInit(d.Playstyle);
+    data << Bits<1>(d.NewPlayerFriendly);               // +1763
     data.FlushBits();
-    data << SizedString::Data(listing.Comment);
-    data << SizedString::Data(listing.LeaderName);
-    data << SizedString::Data(listing.VoiceChat);
-    data << uint32(listing.Field3);
-    data << uint32(listing.Field4);
-    data << uint32(listing.Field5);
-    data << uint8(listing.Field6);
+
+    data << uint32(d.CategoryID);
+    data << uint32(d.RequiredItemLevel);
+    data << d.LeaderScore;
+    data << uint8(d.GeneralPlaystyle);
+
+    for (std::size_t i = 0; i < activityCount; ++i)
+        data << uint32(d.ActivityIDs[i]);
+
+    data.WriteString(d.Name.c_str(), nameLength);
+    data.WriteString(d.Comment.c_str(), commentLength);
+    data.WriteString(d.VoiceChat.c_str(), voiceChatLength);
+
+    if (d.QuestID)
+        data << uint32(*d.QuestID);
+    if (d.RequiredDungeonScore)
+        data << uint32(*d.RequiredDungeonScore);
+    if (d.RequiredPvpRating)
+        data << uint32(*d.RequiredPvpRating);
+    if (d.Playstyle)
+        data << uint8(*d.Playstyle);
     return data;
 }
 
@@ -115,17 +176,13 @@ ByteBuffer& operator<<(ByteBuffer& data, ListingInfo const& listing)
 
 void LFGListJoin::Read()
 {
-    std::size_t const start = _worldPacket.rpos();
     _worldPacket >> Listing;
-    Listing.RawBytes.assign(_worldPacket.data() + start, _worldPacket.data() + _worldPacket.rpos());
 }
 
 void LFGListUpdateRequest::Read()
 {
     _worldPacket >> Ticket;
-    std::size_t const start = _worldPacket.rpos();
     _worldPacket >> Listing;
-    Listing.RawBytes.assign(_worldPacket.data() + start, _worldPacket.data() + _worldPacket.rpos());
 }
 
 void LFGListLeave::Read()
@@ -133,35 +190,76 @@ void LFGListLeave::Read()
     _worldPacket >> Ticket;
 }
 
+std::string const& LFGListSearch::GetKeyword() const
+{
+    for (LFGListSearchTerm const& term : Terms)
+        for (std::string const& value : term.Values)
+            if (!value.empty())
+                return value;
+
+    return EmptyString;
+}
+
 void LFGListSearch::Read()
 {
-    // Sniff-exact (43B no keyword / 56B with one): see header comment. All reads size-guarded.
+    // Client writer 0x757EC0; term blocks 0x757D00. See the header for the three defects this replaces.
     uint32 const termCount = _worldPacket.ReadBits(5);
-    _worldPacket.ReadBit();                             // presence/flag bit (semantics approximate)
+    _worldPacket >> Bits<1>(Flag);
     _worldPacket.ResetBitPos();
 
-    if (termCount)
-    {
-        std::array<uint32, 10> lengths = { };
-        for (uint32& len : lengths)
-            len = _worldPacket.ReadBits(5);             // ten bits(5) lengths packed into the 8-byte block
-        _worldPacket.ReadBits(64 - 10 * 5);             // padding to the full 8 bytes
-        _worldPacket.ResetBitPos();
-
-        SearchTerms.resize(std::min<uint32>(termCount, 10));
-        for (std::size_t i = 0; i < SearchTerms.size(); ++i)
-            if (lengths[i] && _worldPacket.rpos() + lengths[i] <= _worldPacket.size())
-                SearchTerms[i] = _worldPacket.ReadString(lengths[i]);
-    }
-
-    for (uint32& f : Filters)
-        _worldPacket >> f;
-    _worldPacket >> FilterByte1;                        // observed 0xFF
-    _worldPacket >> FilterByte2;                        // observed 0x05
-
+    _worldPacket >> CategoryID;
+    _worldPacket >> Filter1;
+    _worldPacket >> Filter2;
+    _worldPacket >> LanguageMask;
+    uint32 valueCount1 = 0;
+    _worldPacket >> valueCount1;
+    _worldPacket >> Filter5;
+    uint32 valueCount2 = 0;
+    _worldPacket >> valueCount2;
+    uint32 valueCount3 = 0;
+    _worldPacket >> valueCount3;
+    _worldPacket >> Filter8;
+    _worldPacket >> FilterByte1;
+    _worldPacket >> FilterByte2;
     uint32 guidCount = 0;
     _worldPacket >> guidCount;
-    if (guidCount <= 50)
+
+    // A term block is at least 8 bytes (the interleaved 60-bit header) - refuse counts the packet cannot
+    // hold before allocating.
+    auto remaining = [&]() -> std::size_t { return _worldPacket.size() - _worldPacket.rpos(); };
+    if (termCount && termCount <= remaining() / 8)
+    {
+        Terms.resize(termCount);
+        for (LFGListSearchTerm& term : Terms)
+        {
+            std::array<uint32, LFGListSearchTerm::MAX_VALUES> lengths = { };
+            for (std::size_t i = 0; i < LFGListSearchTerm::MAX_VALUES; ++i)
+            {
+                lengths[i] = _worldPacket.ReadBits(5);      // client buffer 32 -> ceil(log2(32)) = 5
+                term.Flags[i] = _worldPacket.ReadBit();     // one presence bit per slot, interleaved
+            }
+            _worldPacket.ResetBitPos();                     // 60 bits used, 4 padding -> 8 bytes
+
+            for (std::size_t i = 0; i < LFGListSearchTerm::MAX_VALUES; ++i)
+                if (lengths[i] && lengths[i] < LFGListSearchTerm::MAX_VALUE_LENGTH && lengths[i] <= remaining())
+                    term.Values[i] = _worldPacket.ReadString(lengths[i]);
+        }
+    }
+
+    auto readValues = [&](std::vector<uint32>& out, uint32 count)
+    {
+        if (!count || count > remaining() / 4)
+            return;
+
+        out.resize(count);
+        for (uint32& value : out)
+            _worldPacket >> value;
+    };
+    readValues(Values1, valueCount1);
+    readValues(Values2, valueCount2);
+    readValues(Values3, valueCount3);
+
+    if (guidCount && guidCount <= remaining() / 2)   // a PackedGuid is at least its 2-byte mask
     {
         Guids.resize(guidCount);
         for (ObjectGuid& guid : Guids)
@@ -174,7 +272,9 @@ void LFGListApplyToGroup::Read()
     _worldPacket >> Ticket;
     _worldPacket >> ActivityID;
     _worldPacket >> RoleMask;
-    _worldPacket >> Field2;
+    _worldPacket >> SizedString::BitsSize<8>(Comment);
+    _worldPacket.ResetBitPos();
+    _worldPacket >> SizedString::Data(Comment);
 }
 
 void LFGListCancelApplication::Read()
@@ -191,10 +291,21 @@ void LFGListDeclineApplicant::Read()
 void LFGListInviteApplicant::Read()
 {
     _worldPacket >> Ticket;
-    _worldPacket >> ListingId;
-    _worldPacket >> ApplicantGuid;
-    _worldPacket >> RoleMask;
     _worldPacket >> ApplicantTicket;
+
+    uint32 inviteeCount = 0;
+    _worldPacket >> inviteeCount;
+    // Each invitee is at least 3 bytes (2-byte guid mask + role); a group cannot exceed MAX_RAID_SIZE
+    // anyway, so a large count is malformed either way.
+    if (inviteeCount && inviteeCount <= (_worldPacket.size() - _worldPacket.rpos()) / 3)
+    {
+        Invitees.resize(inviteeCount);
+        for (LFGListInvitee& invitee : Invitees)
+        {
+            _worldPacket >> invitee.Guid;
+            _worldPacket >> invitee.RoleMask;
+        }
+    }
 }
 
 void LFGListInviteResponse::Read()
@@ -204,232 +315,251 @@ void LFGListInviteResponse::Read()
     _worldPacket.ResetBitPos();
 }
 
+void LFGListConfirmCensoredActiveEntry::Read()
+{
+    _worldPacket >> Ticket;
+}
+
 // ---- SMSG Write ----
 
 WorldPacket const* LFGListJoinResult::Write()
 {
+    _worldPacket << Ticket;
     _worldPacket << uint32(Status);
     _worldPacket << uint8(Result);
+    _worldPacket << uint8(ResultDetail);
+
     return &_worldPacket;
 }
 
 WorldPacket const* LFGListUpdateStatus::Write()
 {
-    // Layout proven from the sniff: Ticket, u64 ExpirationTime, Status byte, the listing descriptor echoed
-    // VERBATIM, then a single Listed bit (flushed). Not listed = expiration 0 + all-zero 27-byte descriptor.
-    static constexpr std::size_t EMPTY_DESCRIPTOR_SIZE = 27;
-
     _worldPacket << Ticket;
+    _worldPacket << Listing;                        // 12.1: directly behind the ticket, not at the end
     _worldPacket << uint64(Listed ? ExpirationTime : 0);
     _worldPacket << uint8(Status);
-    if (Listed && !RawDescriptor.empty())
-        _worldPacket.append(RawDescriptor.data(), RawDescriptor.size());
-    else
-        _worldPacket.append(std::vector<uint8>(EMPTY_DESCRIPTOR_SIZE, 0).data(), EMPTY_DESCRIPTOR_SIZE);
     _worldPacket << Bits<1>(Listed);
+    _worldPacket << OptionalInit(LeaderGuid);
+    _worldPacket << OptionalInit(UnkByte);
     _worldPacket.FlushBits();
+    if (LeaderGuid)
+        _worldPacket << *LeaderGuid;
+    if (UnkByte)
+        _worldPacket << uint8(*UnkByte);
+
     return &_worldPacket;
 }
 
 WorldPacket const* LFGListUpdateExpiration::Write()
 {
     _worldPacket << Ticket;
+    _worldPacket << uint64(ExpirationTime);
     _worldPacket << uint8(Reason);
+
     return &_worldPacket;
 }
 
 WorldPacket const* LFGListSearchStatus::Write()
 {
+    _worldPacket << Ticket;
     _worldPacket << uint8(Status);
     _worldPacket << Bits<1>(Complete);
     _worldPacket.FlushBits();
+
     return &_worldPacket;
 }
 
-// One MemberDetail record (head sub_7FF7291DBF80 + tail sub_7FF729162CC0), shared between the full
-// search-result row and the compact SEARCH_RESULTS_UPDATE row (68974: byte-identical in both).
-// Head decoded from the 68974 capture: guid, level, class, role (0 tank/1 healer/2 dps), spec; the head
-// flag bit was set on both retail members (each was the listing's leader).
+// One member record. Client reader 0x7580F0 + tail 0x6E7EA0; the head flag byte comes AFTER the tail.
 static void WriteSearchResultMember(ByteBuffer& data, SearchResultMember const& member)
 {
-    data << member.Guid;                       // PackedGuid MemberGuid
+    data << member.Guid;
     data << uint8(member.Level);
     data << uint8(member.ClassID);
     data << uint8(member.Role);
     data << uint32(member.SpecID);
-    data << uint8(0);                          // Unk24
-    data << uint8(member.IsLeader ? 0x80 : 0x00);   // head flag (bit-as-byte; 68974: 1 for the leader)
-    // tail (sub_7FF729162CC0)
-    data << member.Guid;                       // PackedGuid MemberGuid2
-    data << uint32(0);                         // T20
-    data << uint32(0);                         // T24 (68974 live values 17; semantics unknown, zero-filled)
-    data << uint32(0);                         // T28
-    data << uint32(0);                         // T32 (68974 live values 18)
-    data << uint32(0);                         // T36 (68974 live values 18)
-    data << uint64(0);                         // T40
-    data << uint64(0);                         // T48
-    data << uint32(0);                         // T56
-    data << uint8(0);                          // T_flag (bit-as-byte)
+    data << uint8(0);                          // +24, zero-filled (no consumer evidence)
+
+    // tail block (0x6E7EA0)
+    data << member.Guid;
+    data << uint32(0);                         // +20
+    data << uint32(0);                         // +24
+    data << uint32(0);                         // +28
+    data << uint32(0);                         // +32
+    data << uint32(0);                         // +36
+    data << uint64(0);                         // +40
+    data << uint64(0);                         // +48
+    data << uint32(0);                         // +56
+    data << Bits<1>(false);                    // tail flag (+16)
+    data.FlushBits();
+
+    // 12.1: the head flag byte is written here, behind the tail. Emitting it before the tail (the 68275
+    // order) shifted every one of the tail's 45 bytes.
+    data << Bits<1>(member.IsLeader);
+    data.FlushBits();
 }
 
-// Emit one SMSG_LFG_LIST_SEARCH_RESULTS row per c:\dumps\lfg_search_results_layout.md, re-verified byte-exact
-// against the 12.0.7.68974 capture (both bodies consume to exact end with the same layout — no structural
-// drift 68275 -> 68974). Row-level "bit" fields are full wire bytes with the boolean in bit 7 (client reads
-// x >> 7); PackedGuid uses the standard TrinityCore ObjectGuid operator<< (u16 mask + data bytes). Unknown
-// scalars are zero-filled (the client parses them fine); observed retail constants are mirrored
-// (Unk_b=4, Unk1816/Unk2160=3 at 68974 — they were 5 at 68275).
-// The row body from the age counter onward — shared verbatim between SEARCH_RESULTS rows and the row
-// snapshot embedded in SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT (sniff: identical bytes in both containers).
-static void WriteSearchResultRowBody(ByteBuffer& data, SearchResultListing const& row)
+// One SMSG_LFG_LIST_SEARCH_RESULTS row, client reader 0x758320. Order per the header comment.
+static ByteBuffer& operator<<(ByteBuffer& data, SearchResultListing const& row)
 {
-    data << uint32(row.Age);                        // Unk40 (age counter; 68974 rows: 3)
-    data << uint8(3);                               // Unk1816 (68974: 3; was 5 at 68275)
-    data << row.LeaderGuid;                         // Guid_A
-    data << row.LeaderGuid;                         // Guid_B
-    data << row.LeaderGuid;                         // Guid_C
-    data << row.LeaderGuid;                         // Guid_D
-    data << row.LeaderGuid;                         // Guid_E
-    data << uint32(0);                              // Unk1904
-    data << uint32(0);                              // Unk1908
-    data << uint32(0);                              // Unk1912
-    data << uint32(0);                              // Count1 (GuidList1 length)
-    data << uint32(0);                              // Count2 (GuidList2 length)
-    data << uint32(0);                              // Count3 (GuidList3 length)
+    // The row header is a RideTicket in disguise: guid, id, type 4, time, one bit.
+    data << row.GroupGuid;
+    data << uint32(row.ListingId);
+    data << uint32(4);                              // RideType::LfgListListing
+    data << uint64(row.PostTime);
+    data << Bits<1>(false);                         // IsCrossFaction
+    data.FlushBits();
+
+    data << uint32(row.Age);                        // +40
+    data << row.Listing;                            // +48, 12.1: position 3, was position 15 in 68275
+    data << uint8(3);                               // +1816 (68974 observed 3, 68275 observed 5)
+    data << row.LeaderGuid;                         // +1824
+    data << row.LeaderGuid;                         // +1840
+    data << row.LeaderGuid;                         // +1856
+    data << row.LeaderGuid;                         // +1872
+    data << row.LeaderGuid;                         // +1888
+    data << uint32(0);                              // +1904
+    data << uint32(0);                              // +1908
+    data << uint32(0);                              // +1912
+    data << uint32(0);                              // GuidList1 count
+    data << uint32(0);                              // GuidList2 count
+    data << uint32(0);                              // GuidList3 count
     data << uint32(uint32(row.Members.size()));     // MemberCount
-    data << uint32(0);                              // Unk2016
-    data << uint64(row.PostTime);                   // PostTime2 (== PostTime)
-    data << uint8(0);                               // Unk2032
-    data << row.GroupGuid;                          // LeaderGuidEcho (== GroupGuid)
-    for (uint32 i = 0; i < 9; ++i)                  // fixed 9-entry {u32,u8} table (sub_7FF729195220)
+    data << uint32(0);                              // +2016
+    data << uint64(row.PostTime);                   // +2024
+    data << uint8(0);                               // +2032
+    data << row.GroupGuid;                          // +2040
+    data << row.Listing.LeaderScore;                // +2056, 12.1: before the 9-entry table, was after it
+
+    for (uint32 i = 0; i < 9; ++i)                  // +2088, fixed 9-entry {u32,u8} table (reader 0x740020)
     {
-        // 68974 capture: every entry is {u32 0, u8 index} — the previous writer emitted {u32 index, u8 0},
-        // which put the index into the wrong client field (same byte count, wrong values).
         data << uint32(0);
         data << uint8(i);
     }
-    data << uint8(3);                               // Unk2160 (68974: 3; was 5 at 68275)
-    data << uint8(0);                               // Unk2161
+    data << uint8(3);                               // +2160 (68974 observed 3)
+    data << uint8(0);                               // +2161
 
-    // === three PackedGuid lists (all empty, Count1/2/3 == 0) -> emit nothing ===
+    // the three PackedGuid lists are empty (counts written as 0 above) -> nothing to emit
 
-    // === embedded ListingDescriptor (echo verbatim) ===
-    if (!row.RawDescriptor.empty())
-        data.append(row.RawDescriptor.data(), row.RawDescriptor.size());
-    else
-        data.append(std::vector<uint8>(27, 0).data(), 27);  // minimal all-zero descriptor fallback
-
-    // === trailing bit ===
-    data << uint8(0);                               // Unk1916 (bit-as-byte, observed 0)
-
-    // === block sub_7FF7291676F0 @2056 (empty) ===
-    data << uint32(0);                              // Blk_f0
-    data << uint32(0);                              // Blk_f1
-    data << uint32(0);                              // Blk_count == 0
-
-    // === member detail list x MemberCount (sub_7FF7291DBF80 + tail sub_7FF729162CC0) ===
     for (SearchResultMember const& member : row.Members)
         WriteSearchResultMember(data, member);
-}
 
-// Emit one full row: header block (sub_7FF7291CCDB0) + body.
-static ByteBuffer& operator<<(ByteBuffer& data, SearchResultListing const& row)
-{
-    data << row.GroupGuid;                          // PackedGuid GroupGuid
-    data << uint32(row.ListingId);                  // ListingId (APPLY_TO_GROUP key)
-    data << uint32(4);                              // Unk_b   (observed constant 4)
-    data << uint64(row.PostTime);                   // PostTime
-    data << uint8(0);                               // Unk_hdrbit (bit-as-byte, observed 0)
-    WriteSearchResultRowBody(data, row);
+    // 12.1: the trailing bit belongs at the very end, behind the members.
+    data << Bits<1>(false);                         // +1916
+    data.FlushBits();
+
     return data;
 }
 
 WorldPacket const* LFGListSearchResults::Write()
 {
-    _worldPacket << uint16(Listings.size());        // Unk32 (duplicate row-count hint; == RowCount in sniffs)
-    _worldPacket << uint32(Listings.size());        // RowCount (array length)
+    _worldPacket << uint16(Listings.size());        // duplicate row-count hint (== RowCount in every sniff)
+    _worldPacket << uint32(Listings.size());
     for (SearchResultListing const& row : Listings)
         _worldPacket << row;
+
     return &_worldPacket;
 }
 
 WorldPacket const* LFGListSearchResultsUpdate::Write()
 {
-    // 68974 capture (bodies idx 16193 len=69 / idx 18313 len=136): the UPDATE row is NOT the full
-    // search-result row (the previous writer emitted the full ~285B row — wrong wire). Observed compact row:
-    //   PackedGuid GroupGuid, u32 ListingId, u32 4, u64 PostTime, bit(0),
-    //   u32 Age (3 / 4), u32 MemberCount (0 / 1),
-    //   u8 0, u32 8 (constant in both bodies), u8[26] zero,
-    //   MemberDetail x MemberCount (identical 66B record as SEARCH_RESULTS).
     _worldPacket << uint32(Listings.size());
     for (SearchResultListing const& row : Listings)
     {
+        // header block: again a RideTicket in disguise
         _worldPacket << row.GroupGuid;
         _worldPacket << uint32(row.ListingId);
-        _worldPacket << uint32(4);                  // header constant (== full-row Unk_b)
+        _worldPacket << uint32(4);                  // RideType::LfgListListing
         _worldPacket << uint64(row.PostTime);
-        _worldPacket << uint8(0);                   // header bit (bit-as-byte, observed 0)
-        _worldPacket << uint32(row.Age);            // refresh/age counter (matches the row's Unk40)
-        _worldPacket << uint32(row.Members.size());
-        _worldPacket << uint8(0);
-        _worldPacket << uint32(8);                  // observed constant 8 in both 68974 bodies
-        for (uint32 i = 0; i < 26; ++i)
-            _worldPacket << uint8(0);               // zero block (semantics unknown, all-zero in both bodies)
+        _worldPacket << Bits<1>(false);
+        _worldPacket.FlushBits();
+
+        _worldPacket << uint32(row.Age);            // +40
+        _worldPacket << uint32(row.Members.size()); // member count
+        _worldPacket << row.Listing;                // +224
+        _worldPacket << uint8(0);                   // +2002
+
         for (SearchResultMember const& member : row.Members)
             WriteSearchResultMember(_worldPacket, member);
+
+        // 21 bits across three bytes: 7 optional-presence flags, 13 bools, and one conditional value bit
+        // (see the header). All zero -> no optionals follow. UNVERIFIED: the meaning of each bit.
+        for (uint32 i = 0; i < 21; ++i)
+            _worldPacket << Bits<1>(false);
+        _worldPacket.FlushBits();
     }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LFGListCensoredActiveEntryUpdate::Write()
+{
+    _worldPacket << Listing;
+    _worldPacket << OptionalInit(CensorCode);
+    _worldPacket.FlushBits();
+    if (CensorCode)
+        _worldPacket << uint8(*CensorCode);
+
     return &_worldPacket;
 }
 
 WorldPacket const* LFGListApplicantListUpdate::Write()
 {
-    // Sniff-exact: Ticket(listing) + u32 count + u32 unk + entries. Entry (status-only form, HasInfo=0):
-    // Ticket(application) + PackedGuid player + u32 HasInfo(0) + u8 StateBits + u8 pad.
     _worldPacket << ListingTicket;
-    _worldPacket << uint32(Applicants.size());
+    _worldPacket << Size<uint32>(Applicants);
     _worldPacket << uint32(Unknown);
-    for (ApplicantInfo const& a : Applicants)
+    for (ApplicantInfo const& applicant : Applicants)
     {
-        _worldPacket << a.Ticket;
-        _worldPacket << a.PlayerGuid;
-        _worldPacket << uint32(0);          // HasInfo: 0 = status-only entry (full snapshot form documented, unresolved scalars)
-        _worldPacket << uint8(a.StateBits);
-        _worldPacket << uint8(0);           // pad
+        _worldPacket << applicant.Ticket;
+        _worldPacket << applicant.PlayerGuid;
+        // Member snapshot list. Kept empty: the full form carries a 248-byte record per member whose
+        // scalars are not resolved, and the client renders the status-only form fine.
+        _worldPacket << uint32(0);
+        // 12.1: the 13-bit block sits behind the member array. Written out bit by bit rather than as two
+        // hand-packed bytes so it stays correct if the member list is ever filled.
+        _worldPacket.WriteBits(applicant.StateBits >> 4, 4);
+        _worldPacket << Bits<1>(applicant.Flag);
+        _worldPacket << SizedString::BitsSize<8>(applicant.Comment);
+        _worldPacket.FlushBits();
+        _worldPacket << SizedString::Data(applicant.Comment);
     }
+
     return &_worldPacket;
 }
 
 WorldPacket const* LFGListApplicationStatusUpdate::Write()
 {
     _worldPacket << Ticket;
-    _worldPacket << uint64(0);
+    _worldPacket << ListingTicket;                  // 12.1: pulled forward, adjacent to the first ticket
+    _worldPacket << uint64(Unknown);
     _worldPacket << uint32(UnkResult);
     _worldPacket << uint8(RoleGranted);
-    _worldPacket << ListingTicket;
-    _worldPacket << uint8(StateBits);
+    _worldPacket << uint8(StateBits);               // client keeps bits 7..4 only
+
     return &_worldPacket;
 }
 
 WorldPacket const* LFGListApplyToGroupResult::Write()
 {
     _worldPacket << Ticket;
+    _worldPacket << ListingTicket;
+    _worldPacket << Row;                            // 12.1: the row moved in front of the scalar tail
     _worldPacket << uint64(ApplicationExpiration);
     _worldPacket << uint8(Status);
-    _worldPacket << uint8(0);
-    _worldPacket << ListingTicket;
-    _worldPacket << uint8(0x10);            // observed constant
-    _worldPacket << ListingTicket;
-    WriteSearchResultRowBody(_worldPacket, Row);
+    _worldPacket << uint8(Unknown);
+    _worldPacket << uint8(StateBits);               // client keeps bits 7..4 only
+
     return &_worldPacket;
 }
 
 WorldPacket const* LFGListUpdateBlacklist::Write()
 {
-    _worldPacket << uint32(Entries.size());
+    _worldPacket << Size<uint32>(Entries);
     for (LFGListBlacklistEntry const& entry : Entries)
     {
         _worldPacket << uint32(entry.ActivityID);
         _worldPacket << uint32(entry.Reason);
     }
+
     return &_worldPacket;
 }
 }

@@ -84,6 +84,7 @@ namespace lfg
     struct LfgQueueStatusData;
     struct LfgPlayerRewardData;
     struct LfgRoleCheck;
+    struct LfgReadyCheck;
     struct LfgUpdateData;
     enum LfgTeleportResult : uint8;
     enum LfgSlotInvalidReason : uint32;
@@ -479,6 +480,8 @@ namespace WorldPackets
         class DFGetSystemInfo;
         class DFGetJoinStatus;
         class DFConfirmExpandSearch;
+        class DFReadyCheckResponse;
+        class LFGLorewalkingUpdateRequest;
         struct RideTicket;
     }
 
@@ -494,6 +497,7 @@ namespace WorldPackets
         class LFGListDeclineApplicant;
         class LFGListInviteApplicant;
         class LFGListInviteResponse;
+        class LFGListConfirmCensoredActiveEntry;
         class RequestLFGListBlacklist;
     }
 
@@ -1745,6 +1749,10 @@ class TC_GAME_API WorldSession
         void HandleDFGetSystemInfo(WorldPackets::LFG::DFGetSystemInfo& dfGetSystemInfo);
         void HandleDFGetJoinStatus(WorldPackets::LFG::DFGetJoinStatus& dfGetJoinStatus);
         void HandleDFConfirmExpandSearch(WorldPackets::LFG::DFConfirmExpandSearch& dfConfirmExpandSearch);
+        void HandleDFReadyCheckResponse(WorldPackets::LFG::DFReadyCheckResponse& dfReadyCheckResponse);
+        void HandleLFGLorewalkingUpdateRequest(WorldPackets::LFG::LFGLorewalkingUpdateRequest& lfgLorewalkingUpdateRequest);
+        void SendLfgSuspendLorewalking(bool suspend);
+        void SendSetDFFastLaunchResult(bool lfgFastLaunch);
 
         // Premade Group Finder (LFG List)
         void HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet);
@@ -1757,12 +1765,17 @@ class TC_GAME_API WorldSession
         void HandleLFGListDeclineApplicant(WorldPackets::LFGList::LFGListDeclineApplicant& packet);
         void HandleLFGListInviteApplicant(WorldPackets::LFGList::LFGListInviteApplicant& packet);
         void HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInviteResponse& packet);
+        void HandleLFGListConfirmCensoredActiveEntry(WorldPackets::LFGList::LFGListConfirmCensoredActiveEntry& packet);
         void HandleRequestLFGListBlacklist(WorldPackets::LFGList::RequestLFGListBlacklist& packet);
         void SendLFGListUpdateStatus(uint32 listingId, uint8 status = 0x38);
+        void SendLFGListCensoredActiveEntryUpdate(uint32 listingId);
 
         void SendLfgUpdateStatus(lfg::LfgUpdateData const& updateData, bool party);
         void SendLfgRoleChosen(ObjectGuid guid, uint8 roles);
         void SendLfgRoleCheckUpdate(lfg::LfgRoleCheck const& pRoleCheck);
+        void SendLfgReadyCheckUpdate(lfg::LfgReadyCheck const& readyCheck);
+        void SendLfgReadyCheckResult(ObjectGuid guid, bool ready);
+        void SendLfgInstanceShutdownCountdown(WorldPackets::LFG::RideTicket const& ticket, uint32 timeLeftSeconds);
         void SendLfgJoinResult(lfg::LfgJoinResultData const& joinData);
         void SendLfgQueueStatus(lfg::LfgQueueStatusData const& queueData);
         void SendLfgPlayerReward(lfg::LfgPlayerRewardData const& lfgPlayerRewardData);

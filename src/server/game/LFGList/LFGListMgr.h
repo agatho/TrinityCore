@@ -54,6 +54,16 @@ namespace LFGList
         uint32 AppliedTime = 0;             // drives the retail 300s application timeout (sniff-verified)
     };
 
+    // How the player has dealt with a flagged (censored) listing. Mirrors the tri-state the client keeps
+    // at LFG-list manager offset +0x13E0: 1 = flagged and undecided, 2 = the player confirmed it as is,
+    // 0 = not flagged / cleared. C_LFGList.IsCensoredActiveEntryUnresolved tests for exactly the 1.
+    enum class CensorState : uint8
+    {
+        None        = 0,
+        Unresolved  = 1,
+        Confirmed   = 2,
+    };
+
     // One published group listing.
     struct Listing
     {
@@ -64,8 +74,11 @@ namespace LFGList
         uint32 CreatedTime = 0;
         uint32 ExpireTime = 0;
         std::vector<Application> Applications;
+        CensorState Censor = CensorState::None;
+        uint8 CensorCode = 0;               // non-zero is what makes the client treat the entry as flagged
 
         uint32 GetCategoryID() const { return Descriptor.CategoryID; }
+        bool IsCensored() const { return Censor != CensorState::None && CensorCode != 0; }
     };
 }
 
@@ -92,6 +105,18 @@ public:
     // Fills one search-result row for a listing. Shared by the search reply, the apply-result snapshot and the
     // live update push so all three serialize a listing identically.
     void FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing) const;
+
+    // The descriptor as it must go out to a client. Identical to the stored one, except that a listing
+    // whose text was flagged and not yet resolved goes out WITHOUT its name and comment: retail withholds
+    // them (that is why the edit dialog has to ask the server via C_LFGList.DoesCensoredTextMatch instead
+    // of comparing locally), and the client renders CENSORED_LFG_GROUP_NAME in their place.
+    WorldPackets::LFGList::ListingDescriptor GetPublicDescriptor(LFGList::Listing const& listing) const;
+
+    // Runs the listing's text through the server-side check and updates its censor state. Returns true if
+    // the state changed, i.e. if SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE has to go out.
+    bool EvaluateCensorship(LFGList::Listing& listing);
+    // CMSG_LFG_LIST_CONFIRM_CENSORED_ACTIVE_ENTRY: the player keeps the flagged listing as it is.
+    bool ConfirmCensoredListing(uint32 listingId, ObjectGuid leader);
 
     // Live search updates. While a player has the Premade Groups browser open, retail keeps pushing
     // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE as listings appear/change. A search registers the player's filters

@@ -1397,6 +1397,18 @@ Command.LookupMaxResults = 0
 DungeonFinder.OptionsMask = 1
 
 #
+#     DungeonFinder.FastLaunch
+#        Description: Pushes SMSG_SET_DF_FAST_LAUNCH_RESULT (client flag "lfgFastLaunch") when a client
+#                     requests the dungeon finder system info. The flag makes the client skip an unlock
+#                     gate on LFG activity entries; with it off the server stays silent, which is what the
+#                     client already assumes (its own global defaults to false).
+#                     Retail's own trigger for this unsolicited push is unknown - see the lfg_5A notes.
+#        Default:     0 - (Disabled)
+#                     1 - (Enabled)
+
+DungeonFinder.FastLaunch = 0
+
+#
 #     LFGList.ListingExpiryMinutes
 #        Description: Minutes a premade group finder listing stays active before it auto-expires.
 #                     0 disables expiry.
