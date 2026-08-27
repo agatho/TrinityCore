@@ -257,17 +257,31 @@ void LFGListMgr::DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 stat
     RemoveListing(listingId, leader);
 }
 
+// The leader's listing goes away for a reason that is nobody's fault - they logged out, or they published
+// a new listing over the old one. Both are still DELISTS, and both used to erase the three maps in silence.
+// That broke the promise DelistAndNotify and Listing::StatusRecipients exist to keep: an applicant who had
+// accepted an invite was handed a Listed payload (WorldSession::SendLFGListUpdateStatus, status 0x19) and
+// the consumer at RVA 0x24DE410 built an active entry from it. With no delist reaching that player, the
+// entry stood in their group finder until they relogged - the exact damage the header of this class
+// describes, and it survived on the two flanks that did not go through DelistAndNotify.
+//
+// Status 0x08 is the no-popup arm of that consumer's switch (only 0x2C, 0x3B and 0x4B raise anything; see
+// the Update() sweep above for the decoded switch). That is the right choice for both callers: the entry
+// has to disappear, but neither a logout nor a re-publish is an expiry or an error the recipients need to
+// be told about - the same reasoning as HandleLFGListLeave, which sends 0x08 for the deliberate delist.
 void LFGListMgr::RemoveListingsBy(ObjectGuid leader)
 {
     auto itr = _listingByLeader.find(leader);
     if (itr == _listingByLeader.end())
         return;
 
-    if (LFGList::Listing const* listing = GetListing(itr->second))
-        for (LFGList::Application const& app : listing->Applications)
-            _applicationIndex.erase(app.Id);
-    _listings.erase(itr->second);
-    _listingByLeader.erase(itr);
+    // Copied out before the call: DelistAndNotify erases the very entry this iterator points at.
+    uint32 const listingId = itr->second;
+    DelistAndNotify(listingId, leader, 0x08);
+    // DelistAndNotify bails out if the listing is already gone from _listings, which would leave this index
+    // entry behind; the erase this function used to do unconditionally is kept for that case. A no-op on
+    // the normal path, because RemoveListing has already removed it.
+    _listingByLeader.erase(leader);
 }
 
 LFGList::Listing* LFGListMgr::GetListing(uint32 listingId)
@@ -445,36 +459,76 @@ bool LFGListMgr::MatchesKeywords(LFGList::Listing const& listing, LFGList::Searc
     return true;
 }
 
-std::vector<LFGList::Listing const*> LFGListMgr::Search(uint32 category, uint32 activityGroup, uint32 activityId,
-    LFGList::SearchKeywords const& keywords) const
+// Does the listing offer at least one of the requested GroupFinderActivity ids? An empty request is a
+// wildcard. A listing that names no activity at all can satisfy no activity filter, which is why the loop
+// and not a separate empty-listing case decides it.
+static bool OffersAnyActivity(std::vector<uint32> const& listedActivities, std::vector<uint32> const& wanted)
+{
+    if (wanted.empty())
+        return true;
+
+    for (uint32 listed : listedActivities)
+        if (std::find(wanted.begin(), wanted.end(), listed) != wanted.end())
+            return true;
+    return false;
+}
+
+bool LFGListMgr::Matches(LFGList::Listing const& listing, LFGList::SearchFilter const& filter)
+{
+    WorldPackets::LFGList::ListingDescriptor const& d = listing.Descriptor;
+
+    // 68974 capture: the descriptor u32 @0x38 is the GroupFinderCategory id itself (JOIN carried 1 and the
+    // search echoed 1 as Filters[0]); the selected GroupFinderActivity ids ride in the trailing vector.
+    // The previous code looked the category value up in GroupFinderActivity.db2 and compared that entry's
+    // GroupFinderCategoryID against the search category - that excluded every listing (empty browse pane).
+    if (filter.CategoryId && d.CategoryID != filter.CategoryId)
+        return false;
+
+    // The advanced filter's activity GROUPS: resolve each id of the listing's activity vector in
+    // GroupFinderActivity.db2 and match if ANY of them sits in one of the requested groups. Ids that do not
+    // resolve are skipped rather than treated as a mismatch.
+    if (!filter.ActivityGroupIds.empty())
+    {
+        bool inGroup = false;
+        for (uint32 listedActivity : d.ActivityIDs)
+            if (GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(listedActivity))
+                inGroup = inGroup || std::find(filter.ActivityGroupIds.begin(), filter.ActivityGroupIds.end(),
+                    uint32(activity->GroupFinderActivityGrpID)) != filter.ActivityGroupIds.end();
+        if (!inGroup)
+            return false;
+    }
+
+    // C_LFGList.Search's activityIDsFilter - an explicit narrowing the player asked for, so it ANDs.
+    if (!OffersAnyActivity(d.ActivityIDs, filter.ActivityIds))
+        return false;
+
+    // The client's own resolution of the search box against GroupFinderActivity, ORed with the title match.
+    // Both halves come out of the SAME typed words: the client turns them into an activity set (it alone has
+    // the activity names) and the server matches them against the listing title (it alone has the titles).
+    // Retail shows a group whose activity is what you typed even when its title says something else, and a
+    // group whose title says what you typed even when its activity is called otherwise, so the union is the
+    // only reading that does not silently drop one of the two halves. With an empty search box the client
+    // sends every activity of the category and there are no keywords, so both sides are wildcards anyway.
+    //
+    // UNVERIFIED: that retail unions them rather than intersecting. Only the server can decide it and there
+    // is no retail server to read; what IS measured is that the client sends both halves for one query
+    // (69273_s69273_a_43003A_{0,1,2}.bin: Terms "the"/"nexus-captain" AND 17 resolved activity ids). The
+    // union is also the non-regressive choice - intersecting would empty the browse pane for every listing
+    // whose title does not repeat the dungeon name.
+    bool const keywordHit = MatchesKeywords(listing, filter.Keywords);
+    bool const activityHit = !filter.ResolvedActivityIds.empty()
+        && OffersAnyActivity(d.ActivityIDs, filter.ResolvedActivityIds);
+    return keywordHit || activityHit;
+}
+
+std::vector<LFGList::Listing const*> LFGListMgr::Search(LFGList::SearchFilter const& filter) const
 {
     uint32 const maxResults = uint32(sConfigMgr->GetIntDefault("LFGList.MaxSearchResults", 100));
 
     std::vector<LFGList::Listing const*> results;
     for (auto const& [id, listing] : _listings)
     {
-        WorldPackets::LFGList::ListingDescriptor const& d = listing.Descriptor;
-        // 68974 capture: the descriptor u32 @0x38 is the GroupFinderCategory id itself (JOIN carried 1 and the
-        // search echoed 1 as Filters[0]); the selected GroupFinderActivity ids ride in the trailing vector.
-        // The previous code looked the category value up in GroupFinderActivity.db2 and compared that entry's
-        // GroupFinderCategoryID against the search category — that excluded every listing (empty browse pane).
-        if (category && d.CategoryID != category)
-            continue;
-        if (activityGroup)
-        {
-            bool inGroup = false;
-            for (uint32 listedActivity : d.ActivityIDs)
-                if (GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(listedActivity))
-                    inGroup = inGroup || uint32(activity->GroupFinderActivityGrpID) == activityGroup;
-            if (!inGroup)
-                continue;
-        }
-        if (activityId && std::find(d.ActivityIDs.begin(), d.ActivityIDs.end(), activityId) == d.ActivityIDs.end())
-            continue;
-
-        // Keyword search matches the listing title (case-insensitive substring, retail behaviour) - through
-        // MatchesKeywords, which is also what the live push uses, so the two can never disagree.
-        if (!MatchesKeywords(listing, keywords))
+        if (!Matches(listing, filter))
             continue;
 
         results.push_back(&listing);
@@ -742,12 +796,10 @@ bool LFGListMgr::ConfirmCensoredListing(uint32 listingId, ObjectGuid leader)
     return true;
 }
 
-void LFGListMgr::RegisterSearch(ObjectGuid player, uint32 category, uint32 activityGroup, LFGList::SearchKeywords keywords)
+void LFGListMgr::RegisterSearch(ObjectGuid player, LFGList::SearchFilter filter)
 {
     SearchSubscription& sub = _searchSubscriptions[player];
-    sub.CategoryId = category;
-    sub.ActivityGroupId = activityGroup;
-    sub.Keywords = std::move(keywords);
+    sub.Filter = std::move(filter);
     sub.ExpireTime = uint32(GameTime::GetGameTime()) + SEARCH_SUBSCRIPTION_TTL_SECONDS;
 }
 
@@ -765,22 +817,9 @@ void LFGListMgr::NotifyListingChanged(uint32 listingId)
     if (!listing)
         return;
 
-    WorldPackets::LFGList::ListingDescriptor const& d = listing->Descriptor;
-
-    // The filter test below mirrors Search() field for field, so a pushed row can never reach a browser whose
-    // filters would have excluded it from the search reply:
-    //  - category: the descriptor u32 @0x38 IS the GroupFinderCategory id, compared directly. It must NOT be
-    //    looked up in GroupFinderActivity.db2 (that was the empty-browse-pane bug fixed by the 68974 pass).
-    //  - activity group: resolve each id of the descriptor's trailing activity vector in GroupFinderActivity.db2
-    //    and match if ANY of them sits in the requested group. Unresolvable ids are skipped, as in Search().
-    //  - keyword: MatchesKeywords, the same call Search() makes - all term blocks, and a withheld listing
-    //    matched against an empty name so the push cannot leak what the search reply withholds either.
-    std::vector<uint32> listingActivityGroups;
-    listingActivityGroups.reserve(d.ActivityIDs.size());
-    for (uint32 listedActivity : d.ActivityIDs)
-        if (GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(listedActivity))
-            listingActivityGroups.push_back(uint32(activity->GroupFinderActivityGrpID));
-
+    // The filter test is LFGListMgr::Matches - the same call Search() makes, not a second copy of the
+    // conditions - so a pushed row can never reach a browser whose filters would have excluded it from the
+    // search reply. Keeping the two in step by hand is exactly what this used to get wrong.
     WorldPackets::LFGList::LFGListSearchResultsUpdate update;
     WorldPackets::LFGList::SearchResultListing row;
     FillSearchRow(row, *listing);
@@ -804,11 +843,7 @@ void LFGListMgr::NotifyListingChanged(uint32 listingId)
             continue;
         }
 
-        bool const matches =
-            (!sub.CategoryId || d.CategoryID == sub.CategoryId) &&
-            (!sub.ActivityGroupId || std::find(listingActivityGroups.begin(), listingActivityGroups.end(), sub.ActivityGroupId) != listingActivityGroups.end()) &&
-            MatchesKeywords(*listing, sub.Keywords);
-        if (matches)
+        if (Matches(*listing, sub.Filter))
             searcher->SendDirectMessage(packet);
 
         ++itr;

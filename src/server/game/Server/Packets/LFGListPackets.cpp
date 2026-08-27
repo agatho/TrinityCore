@@ -211,21 +211,21 @@ void LFGListSearch::Read()
 {
     // Client writer 0x757EC0; term blocks 0x757D00. See the header for the three defects this replaces.
     uint32 const termCount = _worldPacket.ReadBits(5);
-    _worldPacket >> Bits<1>(Flag);
+    _worldPacket >> Bits<1>(CrossFaction);
     _worldPacket.ResetBitPos();
 
     _worldPacket >> CategoryID;
-    _worldPacket >> Filter1;
-    _worldPacket >> Filter2;
+    _worldPacket >> Filter;
+    _worldPacket >> PreferredFilters;
     _worldPacket >> LanguageMask;
-    uint32 valueCount1 = 0;
-    _worldPacket >> valueCount1;
-    _worldPacket >> Filter5;
-    uint32 valueCount2 = 0;
-    _worldPacket >> valueCount2;
-    uint32 valueCount3 = 0;
-    _worldPacket >> valueCount3;
-    _worldPacket >> Filter8;
+    uint32 resolvedActivityCount = 0;
+    _worldPacket >> resolvedActivityCount;
+    _worldPacket >> AdvancedFilterMask;
+    uint32 activityGroupCount = 0;
+    _worldPacket >> activityGroupCount;
+    uint32 activityCount = 0;
+    _worldPacket >> activityCount;
+    _worldPacket >> MinimumRating;
     _worldPacket >> FilterByte1;
     _worldPacket >> FilterByte2;
     uint32 guidCount = 0;
@@ -262,9 +262,12 @@ void LFGListSearch::Read()
         for (uint32& value : out)
             _worldPacket >> value;
     };
-    readValues(Values1, valueCount1);
-    readValues(Values2, valueCount2);
-    readValues(Values3, valueCount3);
+    // Order on the wire is fixed by the client writer and is NOT the order the counts appear in: the
+    // count of the first list sits at struct +48, i.e. between LanguageMask and AdvancedFilterMask,
+    // while the list itself follows the term blocks. See the header for what each one carries.
+    readValues(ResolvedActivityIDs, resolvedActivityCount);
+    readValues(ActivityGroupIDs, activityGroupCount);
+    readValues(ActivityIDs, activityCount);
 
     if (guidCount && guidCount <= remaining() / 2)   // a PackedGuid is at least its 2-byte mask
     {
@@ -439,6 +442,12 @@ static ByteBuffer& operator<<(ByteBuffer& data, SearchResultListing const& row)
     data << row.GroupGuid;                          // +2040
     data << row.Listing.LeaderScore;                // +2056, 12.1: before the 9-entry table, was after it
 
+    // Source for the VALUES, not just the shape - it was dropped when this block was rewritten for 12.1 and
+    // is restored here verbatim: the 12.0.7.68974 capture carries every entry as {u32 0, u8 index}. An
+    // earlier writer emitted {u32 index, u8 0}, which has the same byte count and put the running index into
+    // the wrong client field. There is no 12.1 capture of this opcode (c:\dumps\wpp_work\lfg_ref holds none
+    // for 0x3D0259), so 68974 remains the only measurement; what 12.1 changed is the POSITION of the table
+    // relative to LeaderScore, which is read from the reader at RVA 0x740020, not from the capture.
     for (uint32 i = 0; i < 9; ++i)                  // +2088, fixed 9-entry {u32,u8} table (reader 0x740020)
     {
         data << uint32(0);

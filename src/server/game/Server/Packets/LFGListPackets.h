@@ -182,11 +182,47 @@ namespace WorldPackets
         };
 
         // CMSG_LFG_LIST_SEARCH (0x43003A) - Client 12.1.0.69382, writer @ RVA 0x6A4570 -> 0x757EC0.
-        //   bits<5> Terms.Count ; bit Flag ; FlushBits
-        //   u32 CategoryID(+24) u32 Filter1(+28) u32 Filter2(+32) u32 LanguageMask(+36)
-        //   u32 Size(Vec1)(+48) u32 Filter5(+68) u32 Size(Vec2)(+80) u32 Size(Vec3)(+104) u32 Filter8(+120)
+        //   bits<5> Terms.Count ; bit CrossFaction ; FlushBits
+        //   u32 CategoryID(+24) u32 Filter(+28) u32 PreferredFilters(+32) u32 LanguageMask(+36)
+        //   u32 Size(ResolvedActivityIDs)(+48) u32 AdvancedFilterMask(+68)
+        //   u32 Size(ActivityGroupIDs)(+80) u32 Size(ActivityIDs)(+104) u32 MinimumRating(+120)
         //   u8 FilterByte1(+124) ; u8 FilterByte2(+125) ; u32 Size(Guids)(+136)
-        //   Terms[] ; Vec1[] (u32) ; Vec2[] (u32) ; Vec3[] (u32) ; Guids[] (PackedGuid)
+        //   Terms[] ; ResolvedActivityIDs[] (u32) ; ActivityGroupIDs[] (u32) ; ActivityIDs[] (u32) ;
+        //   Guids[] (PackedGuid)
+        //
+        // WHAT THE FIELDS MEAN. Decided in Runde 8 against the client, after the three u32 lists had stood
+        // as Values1/Values2/Values3 with no source at all. The chain, in arbiter order:
+        //   UI-Lua (Blizzard_APIDocumentationGenerated/LFGListInfoDocumentation.lua of the 69382 client)
+        //     C_LFGList.Search(categoryID, filter, preferredFilters, languageFilter,
+        //                      searchCrossFactionListings, advancedFilter, activityIDsFilter)
+        //     activityIDsFilter    : table<number>   "Activity IDs to filter by."
+        //     advancedFilter       : AdvancedFilterOptions - 6 role/class bools, activities
+        //                            (table<number>, "Activity group IDs to filter by."), minimumRating,
+        //                            4 difficulty bools, 4 generalPlaystyle bools.
+        //   Binary: the Lua binding is C_LFGList.Search @ RVA 0x1198390 (identified by its own usage
+        //     string). It hands its arguments to the C++ search @ RVA 0x24E1030, which builds exactly the
+        //     struct the writer above serialises. Anchoring that function's frame on its message vtable
+        //     (rbp-0xA0; the writer's base is that +32, i.e. rbp-0x80) binds every field:
+        //       +24 CategoryID = categoryID              +28 Filter = filter
+        //       +32 PreferredFilters = preferredFilters  +36 LanguageMask = 12-bit mask from languageFilter
+        //       +64 CrossFaction bit  +68 AdvancedFilterMask  +72 ActivityGroupIDs  +96 ActivityIDs
+        //       +120 MinimumRating    +124/+125 the two bytes  +128 Guids
+        //     The anchor is not taken on trust: it predicts FilterByte1 == 0xFF as a hard constant and
+        //     AdvancedFilterMask/MinimumRating/ActivityGroupIDs/ActivityIDs all empty when no advanced
+        //     filter is saved - and that is exactly what the three captures carry.
+        //   DB2 (WoWDBDefs + wago.tools GroupFinderActivity @ 12.1.0.69382): all 17 ids of the captured
+        //     ResolvedActivityIDs list exist in GroupFinderActivity, and every one carries
+        //     GroupFinderCategoryID == 3 - the CategoryID of that same packet. Independent confirmation
+        //     that this list holds GroupFinderActivity ids and is category-consistent.
+        //
+        // The one that is NOT a Lua argument: ResolvedActivityIDs (+40/+48). The C++ search fills it by
+        // calling RVA 0x24E26D0 with (categoryID, filter, terms, &out). That function walks
+        // GroupFinderActivity, drops every record whose GroupFinderCategoryID != CategoryID and every
+        // record whose Flags do not carry all bits of Filter, matches the remainder's names against the
+        // typed terms, and emits the surviving ids (directly for a name hit, one per difficulty for records
+        // reached through the second store). So the client resolves the SEARCH BOX against the activity
+        // table itself and tells the server which activities it wants - the server does not have to
+        // reproduce that predicate, only honour the set.
         // Three separate defects were fixed here against the old nine-scalar model:
         //   - the term blocks are written AFTER all fixed scalars, not right behind the 5-bit count;
         //   - each term slot carries a presence bit next to its 5-bit length;
@@ -194,16 +230,19 @@ namespace WorldPackets
         //     them as scalars made the guid list come out of the wrong bytes as soon as one was non-zero.
         // All three defects were live in the only capture of this opcode there is, which is what makes them
         // defects and not refinements: 69273_s69273_a_43003A_{0,1,2}.bin (143 bytes each, build 69273 =
-        // 12.1) carry Terms.Count = 2 ("the", "nexus-captain") and Values1 with 17 entries (723, 2003, 398,
-        // 1773, 1774, 1780, 1779, 2005, 1778, 1957, 1772, 1955, 458, 1289, 1674, 2004, 1956); Values2,
-        // Values3 and Guids are empty. The model below consumes all 143 bytes with nothing left over, so
+        // 12.1) carry Terms.Count = 2 ("the", "nexus-captain") and ResolvedActivityIDs with 17 entries
+        // (723, 2003, 398, 1773, 1774, 1780, 1779, 2005, 1778, 1957, 1772, 1955, 458, 1289, 1674, 2004,
+        // 1956); ActivityGroupIDs, ActivityIDs and Guids are empty. The model below consumes all 143 bytes with nothing left over, so
         // this is a 12.1 round-trip source for the opcode. The old nine-scalar model misread this very
         // capture - an earlier revision of this comment claimed the capture had zero terms and empty lists,
         // which its own bytes disprove.
-        // Measured scalars in those three captures: CategoryID 3, Filter1 1, Filter2 4, LanguageMask 0xFFF,
-        // Filter5 0, Filter8 0, FilterByte1 0xFF, FilterByte2 0x03. Note the per-slot presence bits are all
-        // ZERO while the lengths are non-zero, so the bit is not a "string present" flag - the length alone
-        // gates the string, which is how the reader below treats it.
+        // Measured scalars in those three captures: CategoryID 3, Filter 1, PreferredFilters 4,
+        // LanguageMask 0xFFF, AdvancedFilterMask 0, MinimumRating 0, FilterByte1 0xFF, FilterByte2 0x03,
+        // CrossFaction 1, ActivityGroupIDs and ActivityIDs both EMPTY - so the only populated list is the
+        // one the client resolves itself.
+        // Note the per-slot presence bits are all ZERO while the lengths are non-zero, so the bit is not a
+        // "string present" flag - the length alone gates the string, which is how the reader below treats
+        // it.
         class LFGListSearch final : public ClientPacket
         {
         public:
@@ -211,19 +250,68 @@ namespace WorldPackets
             void Read() override;
 
             std::vector<LFGListSearchTerm> Terms;
-            bool Flag = false;
-            uint32 CategoryID = 0;              // GroupFinderCategory id (68974: JOIN carried 1 = questing
-                                                // and the follow-up SEARCH echoed the same 1 here)
-            uint32 Filter1 = 0;
-            uint32 Filter2 = 0;
-            uint32 LanguageMask = 0;
-            uint32 Filter5 = 0;
-            uint32 Filter8 = 0;
-            uint8 FilterByte1 = 0;              // observed 0xFF
-            uint8 FilterByte2 = 0;              // measured 0x03 in all three 12.1 captures (69273_s69273_a_43003A_{0,1,2}.bin)
-            std::vector<uint32> Values1;
-            std::vector<uint32> Values2;
-            std::vector<uint32> Values3;
+            // C_LFGList.Search argument 5, searchCrossFactionListings. Measured 1 in all three captures.
+            // Read but not acted on: TrinityCore has no cross-faction listing rule to relax, every listing
+            // is already visible to both factions.
+            // UNVERIFIED: that the bit IS that argument. The C++ search sets it from a call of its own
+            // (RVA 0x1DC32B0) rather than from the Lua argument slot, so the binding is by elimination -
+            // it is the only bool in the message and the only bool argument of the API.
+            bool CrossFaction = false;
+            uint32 CategoryID = 0;              // GroupFinderCategory id - C_LFGList.Search arg 1. (68974:
+                                                // JOIN carried 1 = questing and the SEARCH echoed the 1)
+            uint32 Filter = 0;                  // C_LFGList.Search arg 2. Consumed CLIENT-side: RVA
+                                                // 0x24E26D0 drops every GroupFinderActivity whose Flags do
+                                                // not carry all of these bits before it builds
+                                                // ResolvedActivityIDs. Nothing left for the server to do.
+            uint32 PreferredFilters = 0;        // C_LFGList.Search arg 3.
+                                                // UNVERIFIED: what "preferred" changes. It reaches the
+                                                // message unexamined (+32 = argument 3 verbatim) and no
+                                                // client consumer reads it back; the deciding side is the
+                                                // server and there is no retail server to read.
+            uint32 LanguageMask = 0;            // 12-bit WowLocale mask, built at RVA 0x24E1030 from the
+                                                // languageFilter argument (one bool per locale) OR'ed with
+                                                // the client's own locale bit. Measured 0xFFF = all.
+                                                // UNVERIFIED: not acted on. TrinityCore carries no
+                                                // per-listing locale, so there is nothing to filter on.
+            uint32 AdvancedFilterMask = 0;      // The 14 bools of AdvancedFilterOptions, LSB first in the
+                                                // order the UI-Lua structure declares them:
+                                                //   0 needsTank       1 needsHealer   2 needsDamage
+                                                //   3 needsMyClass    4 hasTank       5 hasHealer
+                                                //   6 difficultyNormal    7 difficultyHeroic
+                                                //   8 difficultyMythic    9 difficultyMythicPlus
+                                                //  10..13 generalPlaystyle1..4
+                                                // Packed at RVA 0x24E1030 (the |1,|2,|4,...,|0x2000 chain
+                                                // over the struct bytes +0..+5 and +36..+43), and left 0
+                                                // when no advanced filter is saved - hence 0 in all three
+                                                // captures.
+                                                // UNVERIFIED: not acted on. Honouring it needs per-listing
+                                                // role slots and a difficulty per activity, neither of
+                                                // which this unit's listing model carries.
+            uint32 MinimumRating = 0;           // AdvancedFilterOptions.minimumRating (struct +32).
+                                                // UNVERIFIED: not acted on - a listing carries a leader
+                                                // score, but which rating retail compares is undecided.
+            uint8 FilterByte1 = 0;              // Hard-coded 0xFF in the client: RVA 0x24E1030 initialises
+                                                // the u16 at +124 to 255 and never writes the low byte
+                                                // again. Measured 0xFF, as it must be. Carries nothing.
+            uint8 FilterByte2 = 0;              // Copied from a byte of the client's LFG-list manager
+                                                // (RVA 0x24E1030: HIBYTE(+124) = *(mgr + 7197)).
+                                                // Measured 0x03 in all three 12.1 captures.
+                                                // UNVERIFIED: what that manager byte holds.
+            // The activity ids the CLIENT resolved from CategoryID + Filter + Terms (RVA 0x24E26D0). The
+            // list that is always populated, and the one the server can act on: the client is asking for
+            // listings that offer at least one of these GroupFinderActivity ids.
+            std::vector<uint32> ResolvedActivityIDs;
+            // AdvancedFilterOptions.activities - "Activity group IDs to filter by" (UI-Lua). Copied into
+            // the message at RVA 0x24E1030 only when an advanced filter is saved, which is why it is empty
+            // in every capture. GroupFinderActivityGrp ids, NOT activity ids.
+            std::vector<uint32> ActivityGroupIDs;
+            // C_LFGList.Search argument 7, activityIDsFilter - "Activity IDs to filter by" (UI-Lua).
+            // GroupFinderActivity ids, an explicit narrowing on top of ResolvedActivityIDs. Empty in every
+            // capture, because the Lua callers in those three passed nothing for it.
+            std::vector<uint32> ActivityIDs;
+            // UNVERIFIED: the trailing PackedGuid list. Empty in every capture, and the C++ search at
+            // 0x24E1030 leaves the vector at +128 untouched, so no path in the 12.1 client fills it and
+            // there is nothing to decode. Read so the message consumes to its end.
             std::vector<ObjectGuid> Guids;
 
             uint32 GetCategoryId() const { return CategoryID; }

@@ -333,17 +333,34 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     if (!GetPlayer())
         return;
 
+    // Every filter the message carries that this server can act on, in one object. What each field means
+    // and where that meaning comes from is documented on WorldPackets::LFGList::LFGListSearch; the three
+    // activity lists used to be read into Values1/Values2/Values3 and thrown away, which made the search
+    // ignore the only part of the query the client had already done the work for.
+    //
     // ALL the terms the client sent, not just the first one. See LFGListSearch::GetKeywords for the shape
     // and for the AND/OR decision; the previous single-keyword form reduced the two-block reference payload
     // ("the", "nexus-captain") to a search for "the".
-    LFGList::SearchKeywords const keywords = packet.GetKeywords();
+    LFGList::SearchFilter filter;
+    filter.CategoryId = packet.GetCategoryId();
+    filter.ResolvedActivityIds = packet.ResolvedActivityIDs;
+    filter.ActivityIds = packet.ActivityIDs;
+    filter.ActivityGroupIds = packet.ActivityGroupIDs;
+    filter.Keywords = packet.GetKeywords();
+    // Deliberately NOT acted on, each for a reason recorded at its declaration: Filter (already consumed
+    // client-side before ResolvedActivityIDs was built), PreferredFilters and FilterByte2 (meaning
+    // undecided), LanguageMask (no per-listing locale exists here), AdvancedFilterMask and MinimumRating
+    // (the listing model carries neither role slots nor a per-activity difficulty), CrossFaction (nothing
+    // to relax - every listing is already visible to both factions), FilterByte1 (a client constant) and
+    // Guids (no client path fills it).
 
     // Keep this browser subscribed so listings published/edited from now on are pushed live via
-    // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE instead of the player having to re-search. The filters recorded are
-    // exactly the ones handed to Search() below, so the push can only carry rows this reply would have carried.
-    sLFGListMgr.RegisterSearch(GetPlayer()->GetGUID(), packet.GetCategoryId(), 0, keywords);
+    // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE instead of the player having to re-search. It records the SAME
+    // filter object the reply below is built from, and both run it through LFGListMgr::Matches, so the push
+    // can only ever carry rows this reply would have carried.
+    sLFGListMgr.RegisterSearch(GetPlayer()->GetGUID(), filter);
 
-    std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(packet.GetCategoryId(), 0, 0, keywords);
+    std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(filter);
 
     // 68974 capture: one CMSG_LFG_LIST_SEARCH (idx 8197) is answered by TWO SMSG_LFG_LIST_SEARCH_RESULTS —
     // an empty one first (idx 8215: u16 0 + u32 0) and then the populated one (idx 8224: 2 rows). No

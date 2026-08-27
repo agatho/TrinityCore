@@ -76,6 +76,21 @@ namespace LFGList
     // see LFGListSearch::GetKeywords, which owns that decision and marks it.
     using SearchKeywords = std::vector<std::vector<std::string>>;
 
+    // Everything one CMSG_LFG_LIST_SEARCH asks for, in one object, so the search reply and the live push
+    // cannot drift apart: both run it through LFGListMgr::Matches and there is no second copy of the rule.
+    // Field meanings and their sources are documented on WorldPackets::LFGList::LFGListSearch; in short,
+    // ResolvedActivityIds is the set the CLIENT derived from category + filter + search box, while
+    // ActivityIds and ActivityGroupIds are the explicit narrowings from the advanced filter. Every member
+    // left empty / 0 is a wildcard.
+    struct SearchFilter
+    {
+        uint32 CategoryId = 0;
+        std::vector<uint32> ResolvedActivityIds;    // GroupFinderActivity ids, client-resolved
+        std::vector<uint32> ActivityIds;            // GroupFinderActivity ids, C_LFGList.Search arg 7
+        std::vector<uint32> ActivityGroupIds;       // GroupFinderActivityGrp ids, advancedFilter.activities
+        SearchKeywords Keywords;
+    };
+
     // One published group listing.
     struct Listing
     {
@@ -135,7 +150,10 @@ public:
     uint32 CreateListing(Player* leader, WorldPackets::LFGList::ListingDescriptor const& descriptor);
     bool UpdateListing(uint32 listingId, ObjectGuid leader, WorldPackets::LFGList::ListingDescriptor const& descriptor);
     void RemoveListing(uint32 listingId, ObjectGuid leader);
-    void RemoveListingsBy(ObjectGuid leader); // logout cleanup
+    // Delist whatever this leader has listed - logout cleanup, and the replace step of a re-publish.
+    // Goes through DelistAndNotify like every other server-initiated delist; see its definition for why
+    // erasing the maps in silence was wrong on both paths.
+    void RemoveListingsBy(ObjectGuid leader);
     // Delist AND tell everyone holding an active entry for the listing, in that order, from one place. The
     // notification has to be built while the listing still exists: the client only accepts a delist whose
     // ticket matches its stored active entry field for field (see FillListingTicket below), and a ticket
@@ -153,10 +171,15 @@ public:
     LFGList::Listing const* GetListing(uint32 listingId) const;
     LFGList::Listing* GetListingByLeader(ObjectGuid leader);
 
-    // Search the registry. Any argument left 0 acts as a wildcard, an empty keyword list matches every
-    // listing. Results are capped by config.
-    std::vector<LFGList::Listing const*> Search(uint32 category, uint32 activityGroup, uint32 activityId,
-        LFGList::SearchKeywords const& keywords = LFGList::SearchKeywords()) const;
+    // Search the registry. Every empty / zero member of the filter is a wildcard. Results are capped by
+    // config. The per-listing test is Matches(), which the live push uses too.
+    std::vector<LFGList::Listing const*> Search(LFGList::SearchFilter const& filter) const;
+
+    // Does this listing satisfy a search filter? THE one place that answers it - the search reply and the
+    // live SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE push both call it, so a pushed row can never reach a browser
+    // whose filters would have excluded it from the reply. That agreement used to be a promise kept by two
+    // hand-maintained copies of the same conditions.
+    static bool Matches(LFGList::Listing const& listing, LFGList::SearchFilter const& filter);
 
     // Does this listing satisfy the keyword part of a search? The ONE place that answers it, because the
     // search reply and the live push have to agree - and because it has to agree with what
@@ -199,7 +222,7 @@ public:
     // Live search updates. While a player has the Premade Groups browser open, retail keeps pushing
     // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE as listings appear/change. A search registers the player's filters
     // here; listing mutations then push the affected row to every subscriber whose filters still match.
-    void RegisterSearch(ObjectGuid player, uint32 category, uint32 activityGroup, LFGList::SearchKeywords keywords);
+    void RegisterSearch(ObjectGuid player, LFGList::SearchFilter filter);
     void UnregisterSearch(ObjectGuid player);
     void NotifyListingChanged(uint32 listingId);
 
@@ -224,9 +247,7 @@ private:
     // searching" opcode) stops receiving pushes.
     struct SearchSubscription
     {
-        uint32 CategoryId = 0;
-        uint32 ActivityGroupId = 0;
-        LFGList::SearchKeywords Keywords;
+        LFGList::SearchFilter Filter;
         uint32 ExpireTime = 0;
     };
 
