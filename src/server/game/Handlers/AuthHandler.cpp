@@ -203,20 +203,33 @@ void WorldSession::HandleLatencyReport(WorldPackets::Auth::LatencyReport const& 
         // 4522 packets, 31 650 entries, 9052 of them with Frame == 0 - not one Frame == 0 entry has
         // TimestampMS == 0, so there is nothing here to guard against.
         // A maximum rather than "the last one written", because the entries of one packet are NOT in timestamp
-        // order: the entry the sender appends itself (Unknown8 == 33) is regularly OLDER than the entries already
-        // in the report object - 9043 of the 27 128 consecutive within-packet pairs go backwards, which is exactly
-        // the number of Unknown8 == 33 entries. Across packets the per-packet maximum IS monotonic (4498
-        // comparisons, 0 violations), which is what makes this accumulator meaningful at all.
+        // order: the entry the sender appends itself (Unknown8 == 33) is ALWAYS older than the entry before it -
+        // 9043 of the 27 128 consecutive within-packet pairs go backwards, that is exactly the number of
+        // Unknown8 == 33 entries, and in all 9043 the later entry of the pair IS the ==33 one. Across packets
+        // the per-packet maximum IS monotonic (4498 comparisons, 0 violations), which is what makes this
+        // accumulator meaningful at all.
         if (entry.TimestampMS > _clientPerformanceStats.LastTimestampMS)
             _clientPerformanceStats.LastTimestampMS = entry.TimestampMS;
 
         // Frame == 0 means this entry carries no frame rate. It happens: in the decoded reference triple entry 0
-        // has Frame 0 while entries 1 and 2 have 21 and 33. Only the last entry of a packet is written by the
-        // sender we decoded (0x20E6F0, which always stores at least 1); who fills the earlier entries of the same
-        // report object is not resolved.
-        // UNVERIFIED: the producer of the entries with Frame == 0. Their frame rate is skipped rather than
-        // averaged in, because folding a zero into a frame rate average would understate it. Their timestamp is
-        // NOT skipped - see above.
+        // has Frame 0 while entries 1 and 2 have 21 and 33.
+        // The report is built out of one BLOCK per stage, appended to the cumulative list, and over the corpus the
+        // block has a fixed shape at both ends - measured, without exception: it BEGINS with a Frame == 0 entry and
+        // ENDS with the entry the sender we decoded appends itself (Unknown8 == 33, Server == 0, Unknown4 == 0).
+        // Kind 0 contributes indices 0..2, Kind 1 appends 3..6, Kind 2 appends 7..10, so the corpus holds
+        // 1*1508 + 2*1507 + 3*1507 = 9043 blocks; Unknown8 == 33 occurs 9043 times and only ever at a block's last
+        // index (1508 at index 2 for Kind 0; 1507 each at 2 and 6 for Kind 1; 1507 each at 2, 6 and 10 for Kind 2),
+        // and Frame == 0 occurs at a block's FIRST index 9043 times - once per block.
+        // So an earlier revision's "only the last entry of a packet is written by the sender we decoded" does not
+        // account for the ==33 entries of a multi-stage packet: it covers 4522 of 9043 of them. The rest are the
+        // block-closing entries of the EARLIER stages, carried along because the list is cumulative. Consistently
+        // with 0x20E6F0 always storing at least 1, not one of those 9043 entries has Frame == 0.
+        // UNVERIFIED: which function opens a block, i.e. the producer of the Frame == 0 entry. Its POSITION is
+        // settled by the measurement above, its identity is not. Their frame rate is skipped rather than averaged
+        // in, because folding a zero into a frame rate average would understate it. Their timestamp is NOT skipped
+        // - see above. The 9 remaining Frame == 0 entries (9052 in total against 9043 blocks) sit in a block's
+        // interior, on the Unknown8 == 0 slot: 3 Kind 1 packets carry one at index 4, and 3 Kind 2 packets carry
+        // one at index 4 and one at index 8. The skip covers them the same way.
         if (!entry.Frame)
             continue;
 

@@ -541,8 +541,19 @@ namespace WorldPackets
             // (0 .. 77 035 in the 12.1 window alone).
             uint32 Unknown4 = 0;
             // UNVERIFIED: no name in the reflection descriptor. Over the corpus the values are exactly
-            // {0, 12, 33}, and 33 in exactly 9043 of the 31 650 entries; 33 always comes with Server == 0 &&
-            // Unknown4 == 0 and marks the entry the sender appends itself (0x20E6F0).
+            // {0, 12, 33} - 9043 zeroes, 13 564 twelves, 9043 thirty-threes of the 31 650 entries - and 33 always
+            // comes with Server == 0 && Unknown4 == 0 and marks the entry the sender appends itself (0x20E6F0).
+            // This field is what makes the cumulative BLOCK structure of the list checkable, because its sequence
+            // is fully determined by Kind, with no exception over the corpus's 4522 packets:
+            //   Kind 0: (0, 12, 33)                                             1508 of 1508 packets
+            //   Kind 1: (0, 12, 33, 12, 0, 12, 33)                              1507 of 1507
+            //   Kind 2: (0, 12, 33, 12, 0, 12, 33, 12, 0, 12, 33)               1507 of 1507
+            // Read as blocks that is [0, 12, 33] + [12, 0, 12, 33] + [12, 0, 12, 33]: one block per stage, each
+            // one CLOSED by the 33. So a 33 marks the end of a block and never anything else - it occurs only at
+            // index 2, 6 or 10 - and a Kind 2 packet carries three of them, one per stage, not one per packet.
+            // The count follows: 1*1508 + 2*1507 + 3*1507 = 9043 blocks and 9043 thirty-threes.
+            // Not one of those 9043 entries has Frame == 0; the Frame == 0 entries OPEN the blocks instead, see
+            // HandleLatencyReport.
             uint8 Unknown8 = 0;
             // Named `timestampMS`. Unix time in milliseconds - verified against the capture dates and independently
             // against the PKT record's own optData double. Over the corpus: 0 null values in 31 650 entries, and

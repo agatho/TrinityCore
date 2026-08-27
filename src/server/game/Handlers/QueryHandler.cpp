@@ -164,10 +164,11 @@ void WorldSession::HandleQueryPlayerNamesForCommunity(WorldPackets::Query::Query
     // here would withhold nothing that is not already available for the asking one opcode over.
     //
     // What IS this unit's doing, and is bounded rather than argued away, is the AMPLIFICATION: 6551 answers per
-    // request against the sibling's 50. A membership check would not have bounded it, and the reason is worth
-    // recording because it is the reason no gate of that shape can: such a check decides WHO may ask, not HOW MANY
-    // answers one request costs, and the largest request that exists - a whole cold guild roster - is precisely the
-    // one a member is entitled to make. What does bound it is written out at the end of this comment.
+    // request against the sibling's 50, or ~0.61 MB against ~5 kB. A membership check would not have bounded
+    // it, and the reason is worth recording because it is the reason no gate of that shape can: such a check
+    // decides WHO may ask, not HOW MANY answers one request costs, and the largest request that exists - a
+    // whole cold guild roster - is precisely the one a member is entitled to make. What does bound it is
+    // written out at the end of this comment.
     //
     // EVERY requested member gets an answer, and every answer is a resolved one. That is not a nicety: a member the
     // server answers with nothing at all stays pending in the client's community name cache,
@@ -175,11 +176,12 @@ void WorldSession::HandleQueryPlayerNamesForCommunity(WorldPackets::Query::Query
     // dialog to get out of it - one silent omission keeps the whole member list spinning.
     //
     // There is deliberately NO per request resolve budget. An earlier version resolved the first 1000 members and
-    // refused the rest with PermanentFailure; it was removed because it saved only a cache lookup and ~14 bytes per
-    // surplus member - the packet, the allocation and the EncryptSend are paid either way - while PermanentFailure
-    // makes consumer 0x3498F0 brand that member negative for the rest of the session. With no guild member limit in
-    // this tree, a 1500 member guild with a cold name cache is a legitimate 1500 member request, so the budget's
-    // only measurable effect was 500 permanently nameless players. The full accounting, including why the figure
+    // refused the rest with PermanentFailure; it was removed because it saved only a cache lookup and the
+    // PlayerGuidLookupData block per surplus member - 51..63 bytes, median 57, measured on the corpus; the packet,
+    // the allocation and the EncryptSend are paid either way - while PermanentFailure makes consumer 0x3498F0 brand
+    // that member negative for the rest of the session. With no guild member limit in this tree, a 1500 member
+    // guild with a cold name cache is a legitimate 1500 member request, so the budget bought ~28.5 kB and its only
+    // other measurable effect was 500 permanently nameless players. The full accounting, including why the figure
     // 1000 did not carry its own weight, is on QueryPlayerNamesForCommunity in QueryPackets.h.
     //
     // WHAT BOUNDS THIS REQUEST INSTEAD - two bounds of different kind, and they must not be described as one:
@@ -192,6 +194,10 @@ void WorldSession::HandleQueryPlayerNamesForCommunity(WorldPackets::Query::Query
     //     answered at all, and the session is gone with it.
     // That failure mode is why the rate is set where a deliberate flood reaches it and a real client cannot, rather
     // than at the tightest value clicking around survives - see the entry itself for the figure and its reasoning.
+    // But note what the second bound does NOT do, because an earlier revision of this file got it backwards: it is
+    // a SUSTAINED per-second rate, not a per-session budget. The counter resets every calendar second, so a caller
+    // that stays at the limit is never kicked and keeps drawing limit x 6551 responses per second. The rate caps
+    // the amplification, it does not end it; the residual is carried as an open point at the entry itself.
     for (WorldPackets::Query::BNetAccountAndCommunityID const& member : queryPlayerNamesForCommunity.Members)
         SendPlayerNameByCommunityId(member);
 }

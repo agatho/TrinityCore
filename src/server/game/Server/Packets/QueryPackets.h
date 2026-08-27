@@ -227,26 +227,41 @@ namespace WorldPackets
             // WHAT ONE REQUEST COSTS. Written out because no constant bounds it and this is the open point of the
             // opcode - whoever wants to change it needs the numbers, not a reassurance.
             // There is no batched response opcode, so every answered member costs one SMSG of its own: one
-            // allocation, one EncryptSend, a ~35 byte PlayerGuidLookupData body, hence ~55 bytes on the wire with
-            // the 16 byte PacketHeader and the 4 byte opcode. And EVERY requested member is answered, because a
-            // member left unanswered stays pending in the client's community name cache and keeps the whole member
-            // list spinning - the failure this opcode exists to avoid; see HandleQueryPlayerNamesForCommunity.
-            // The response count is therefore bounded by the wire alone: one 65 519 byte request yields
-            // MaxMembers = 6551 responses and ~0.36 MB. The AntiDOS entry of 20 requests/s (WorldSession.cpp,
-            // GetMaxPacketCounterAllowed) does NOT extend that into a sustained rate cap, and must not be read as
-            // one: exceeding it drops the packet unread and, at the default PacketSpoof.Policy, closes the session.
-            // So the worst case an account can extract is a ONE-SHOT ~131 000 responses and ~7.2 MB before it is
-            // disconnected, per session and not per second. The entry is written up in full at the case label in
-            // WorldSession.cpp, including why a smaller figure would cost honest sessions without buying much.
+            // allocation, one EncryptSend, and a response body of 62..90 bytes, hence 82..110 bytes on the wire
+            // with the 16 byte PacketHeader and the 4 byte opcode - ~93 at the measured typical values. That body
+            // is the 11..27 byte negative shell (uint8 Result, packed guid 2..18, uint64 CommunityID; ~16 with a
+            // 7 byte bnet-account guid) PLUS the PlayerGuidLookupData block. The block is MEASURED, not estimated:
+            // 51..63 bytes, median 57, over the 195 blocks carried by the 132 fully parsed
+            // SMSG_QUERY_PLAYER_NAMES_RESPONSE (0x640027) packets in the 12.1 window of the corpus - the same
+            // struct this response reuses verbatim. Every figure below uses that one accounting. An earlier
+            // revision quoted "~35 byte body, hence ~55 on the wire" here and "~41 against ~55" further down,
+            // which cannot both hold: the first left out Result and Member, the second left out the block.
+            // And EVERY requested member is answered, because a member left unanswered stays pending in the
+            // client's community name cache and keeps the whole member list spinning - the failure this opcode
+            // exists to avoid; see HandleQueryPlayerNamesForCommunity.
+            // The size of ONE request is therefore bounded by the wire alone: one 65 519 byte request yields
+            // MaxMembers = 6551 responses and ~0.61 MB.
+            // The NUMBER of requests is bounded by the AntiDOS entry (WorldSession.cpp, GetMaxPacketCounterAllowed),
+            // and that entry is a SUSTAINED PER-SECOND RATE, not a one-shot allowance: EvaluateOpcode clears
+            // amountCounter once per calendar second and admits the limit's own value, so an account that paces
+            // itself AT the limit is never kicked. At the current value of 10 the sustained draw per account is
+            // 10 x 6551 = 65 510 responses/s and ~6.1 MB/s, for as long as it likes. An earlier revision of this
+            // comment read the entry as a ONE-SHOT ~131 000 responses and ~7.2 MB per session; that was wrong on
+            // both counts - the kick bounds only a flooder that OVERSHOOTS, and the per-response size was
+            // understated.
+            // UNVERIFIED: that residual sustained amplification is bounded by nothing but the AntiDOS value.
+            // Removing it needs a way to answer many members in one frame, or a deferred response budget; neither
+            // exists in the 12.1 opcode set. The value and its trade-off are written up at the case label in
+            // WorldSession.cpp.
             // The opcode is reachable from STATUS_AUTHED.
             //
             // A SECOND BUDGET INSIDE THE HANDLER WAS TRIED AND REMOVED - it resolved the first 1000 members and
             // refused the rest with ResultCode::PermanentFailure. It bought almost nothing and paid for it with a
             // permanent defect:
             //   * saved per surplus member: one sCharacterCache lookup, one ObjectAccessor::FindConnectedPlayer,
-            //     and 14 bytes (a bare negative is ~41 bytes on the wire against ~55). The packet, the allocation
-            //     and the EncryptSend - the whole of the amplification above - are paid either way, because the
-            //     surplus still has to be answered at all.
+            //     and the PlayerGuidLookupData block, i.e. 51..63 bytes, median 57 (a bare negative is ~36 bytes
+            //     on the wire against ~93). The packet, the allocation and the EncryptSend - the whole of the
+            //     amplification above - are paid either way, because the surplus still has to be answered at all.
             //   * cost per surplus member: consumer 0x3498F0 answers any non-zero Result by clearing the pending
             //     bit, and Result 1 additionally marks the entry negative and drops its callbacks, so that player
             //     stays nameless in the UI for the rest of the session.
@@ -254,7 +269,7 @@ namespace WorldPackets
             //     (no MAX_GUILD_MEMBERS in Guild.h/.cpp, no switch in worldserver.conf.dist) and a cold name cache
             //     makes the client ask for the entire roster at once, so a 1500 member guild produces a perfectly
             //     legitimate 1500 member request. The budget would have left 500 of them nameless until relog, in
-            //     exchange for ~7 kB and 500 hash lookups.
+            //     exchange for ~28.5 kB (500 x 57) and 500 hash lookups.
             //   * the budget's figure was not even established for this case. 1000 is the client's own club
             //     capacity - C_Club.GetClubCapacity is a constant-returning Lua binding, 0x7FF781C46B33
             //     `mov [rbp+arg_10], 3E8h` written once into the slot that 0x7FF781C46F2A pushes back to Lua - and

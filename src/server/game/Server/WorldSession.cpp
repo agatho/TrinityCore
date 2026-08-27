@@ -1740,35 +1740,53 @@ uint32 WorldSession::DosProtection::GetMaxPacketCounterAllowed(uint32 opcode) co
         // One request produces up to QueryPlayerNamesForCommunity::MaxMembers = 6551 separate responses, because
         // 12.1 has no batched response opcode for it - by far the highest upload amplification of any client
         // opcode. There is deliberately no per request resolve budget, because refusing the surplus leaves those
-        // players permanently nameless in the client for a saving of ~14 bytes each (the accounting is on
-        // QueryPlayerNamesForCommunity in QueryPackets.h).
+        // players permanently nameless in the client for a saving of the PlayerGuidLookupData block each, 51..63
+        // bytes, median 57 (the accounting is on QueryPlayerNamesForCommunity in QueryPackets.h).
         //
-        // READ WHAT THIS ENTRY ACTUALLY DOES BEFORE LOWERING IT. It is not a throttle that trims a request to
-        // something still serviceable: past the limit EvaluateOpcode returns false, WorldSession::Update drops the
-        // packet unread, and at the default PacketSpoof.Policy = POLICY_KICK (World.cpp) the session is closed.
+        // THIS ENTRY IS A SUSTAINED PER-SECOND RATE, NOT A ONE-SHOT PER-SESSION ALLOWANCE. EvaluateOpcode above
+        // clears amountCounter whenever packetCounter.lastReceiveTime != time - that is, once per calendar second -
+        // and its guard admits the limit's own value, only tripping on the next packet after it. An account that
+        // paces itself AT the limit is therefore NEVER kicked and draws maxPacketCounterAllowed x 6551 responses
+        // every second, indefinitely. Nothing else caps it: MAX_PROCESSED_PACKETS_IN_SAME_WORLDSESSION_UPDATE = 100
+        // is above any workable value here. Revisions of this comment up to round 11 claimed the kick made the
+        // damage "a one-shot burst per SESSION, not a sustained per-second rate", and concluded from that premise
+        // that lowering the value buys close to nothing. Both are wrong: the kick bounds only a flooder that
+        // OVERSHOOTS, and for one that does not the exposure scales linearly with the value.
+        //
+        // WHAT THE VALUE COSTS, per account, sustained, at 10: 65 510 responses/s and ~6.1 MB/s of upload, each
+        // response with a sCharacterCache lookup, an ObjectAccessor::FindConnectedPlayer, an allocation and an
+        // EncryptSend on the world thread. That is NOT harmless and is not presented as such. It is the lowest
+        // figure this tool can buy without reaching into the legitimate side, and it is half of what the previous
+        // value of 20 allowed (131 020 responses/s, ~12.2 MB/s).
+        //
+        // WHY IT IS NOT SET LOWER STILL. Past the limit EvaluateOpcode returns false, WorldSession::Update drops
+        // the packet unread, and at the default PacketSpoof.Policy = POLICY_KICK (World.cpp) the session is closed.
         // The overflow answers nothing and disconnects. A value tuned to the tightest burst a real client is
         // believed to make therefore does not cost bandwidth when it is wrong, it costs the honest player their
         // session - and it fails silently for the operator, because the only trace is the AntiDOS warning that a
-        // real flood produces too. So the number belongs ABOVE any plausible legitimate burst, not at it.
+        // real flood produces too. So the number belongs above any plausible legitimate burst, not at it. That is
+        // the whole trade-off, and it is a real one in both directions: every unit of headroom is another
+        // 6551 responses/s of sustained exposure, every unit removed is closer to kicking a real client.
         //
-        // Which is affordable here, because at any workable value the kick, not the rate, is what ends a flood:
-        // the flooder trips the limit within milliseconds and KickPlayer closes every socket of the session
-        // (WorldSession.cpp, KickPlayer sets forceExit), so the damage is a one-shot burst of
-        // limit x 6551 responses per SESSION, not a sustained per-second rate. Cutting the limit from 20 to 3
-        // would shrink that one-shot burst by a factor under seven, from a figure that is already far past
-        // harmless - it buys close to nothing, and pays for it with the false positive above.
-        //
-        // Why 20 clears the legitimate side: the trigger is a cache MISS in the client's CommunityNameCache, and
-        // C_Club.FocusMembers focuses a whole roster at once, so a club that has been asked about once produces no
-        // further request. Reaching the limit honestly means focusing 20 DISTINCT cold clubs inside one calendar
-        // second, across both known entry points (CommunitiesMemberList.lua:498-511 and ChannelFrame.lua:103) -
-        // and the counter resets per calendar second (see above), so a burst straddling a second boundary gets 40.
-        // UNVERIFIED: the figure 20 is not profiled and no legitimate burst was measured; it is chosen as an order
-        // of magnitude above the largest burst the cache-miss argument admits. If a real client is ever seen to be
-        // kicked here, the fault is this number and nothing else in the opcode.
+        // Why 10 clears the legitimate side: the request goes out only on a MISS in the client's
+        // CommunityNameCache, and one C_Club.FocusMembers covers a WHOLE roster, so a club asked about once
+        // produces no further request. Both call sites focus exactly ONE club per user action and neither loops
+        // over the club list - ChannelFrameMixin:SetFocusedClub (ChannelFrame.lua:92-111) even early-returns when
+        // that club is already focused, and CommunitiesMemberListMixin:OnClubSelected
+        // (CommunitiesMemberList.lua:498-511) runs on a selection change. A legitimate client therefore emits a few
+        // requests around opening a frame with a cold cache, never a stream; reaching 10 honestly means changing
+        // club selection ten times inside one calendar second, and the counter resets per calendar second, so a
+        // burst straddling a boundary gets 20.
+        // UNVERIFIED: the figure 10 is not profiled and no legitimate burst was measured. The client exposes no
+        // club-count limit to anchor it either - ClubLimits carries only maximumNumberOfStreams
+        // (ClubDocumentation.lua:1800-1806) - so it is a judgement above the largest burst the cache-miss argument
+        // admits. If a real client is ever seen to be kicked here, the fault is this number and nothing else in
+        // the opcode.
+        // UNVERIFIED: the sustained draw above is bounded by this value alone. Bounding it properly needs a batched
+        // response opcode or a deferred response budget, and the 12.1 opcode set offers neither; see QueryPackets.h.
         case CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY:     // not profiled                very high upload bandwidth usage
         {
-            maxPacketCounterAllowed = 20;
+            maxPacketCounterAllowed = 10;
             break;
         }
 
