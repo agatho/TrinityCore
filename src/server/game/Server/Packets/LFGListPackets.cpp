@@ -532,7 +532,7 @@ WorldPacket const* LFGListApplicantListUpdate::Write()
 {
     _worldPacket << ListingTicket;
     _worldPacket << Size<uint32>(Applicants);
-    _worldPacket << uint32(Unknown);
+    _worldPacket << uint32(Unknown);            // UNVERIFIED: see the field's note in LFGListPackets.h
     for (ApplicantInfo const& applicant : Applicants)
     {
         _worldPacket << applicant.Ticket;
@@ -556,7 +556,7 @@ WorldPacket const* LFGListApplicationStatusUpdate::Write()
 {
     _worldPacket << Ticket;
     _worldPacket << ListingTicket;                  // 12.1: pulled forward, adjacent to the first ticket
-    _worldPacket << uint64(Unknown);
+    _worldPacket << uint64(ApplicationExpiration);
     _worldPacket << uint32(UnkResult);
     _worldPacket << uint8(RoleGranted);
     _worldPacket << uint8(StateBits);               // client keeps bits 7..4 only

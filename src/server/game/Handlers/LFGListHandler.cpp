@@ -17,7 +17,6 @@
 
 #include "WorldSession.h"
 #include "DB2Stores.h"
-#include "Config.h"
 #include "GameTime.h"
 #include "Group.h"
 #include "GroupMgr.h"
@@ -208,6 +207,12 @@ namespace
         WorldPackets::LFGList::LFGListApplicationStatusUpdate packet;
         FillApplicationTicket(packet.Ticket, app);
         FillListingTicket(packet.ListingTicket, listing);
+        // The applicant's deadline, restated on every status change. It is not decoration: the consumer
+        // @ RVA 0x24DE9A0 passes it to the state setter @ 0x24DD190 as `wire - timebase` and the setter
+        // stores it at applicant record +2248 unconditionally - the SAME slot the apply reply filled
+        // through SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT.ApplicationExpiration. Leaving it at 0 therefore did
+        // not mean "unchanged", it overwrote the fresh deadline with 0 - timebase one packet later.
+        packet.ApplicationExpiration = LFGListMgr::GetApplicationExpiration(app);
         packet.StateBits = ApplicationStateToBits(app.State);
         // UNVERIFIED: UnkResult 8 while pending / 60 on invite is copied from the 12.0.7.68974 capture; the
         // reading "invite-response window in seconds" is a guess, see the field's note in LFGListPackets.h.
@@ -623,7 +628,7 @@ void WorldSession::HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApply
     // the full row snapshot so the client renders the "applied" card without a re-search).
     WorldPackets::LFGList::LFGListApplyToGroupResult result;
     FillApplicationTicket(result.Ticket, *app);
-    result.ApplicationExpiration = uint64(app->AppliedTime + sConfigMgr->GetIntDefault("LFGList.ApplicationTimeoutSeconds", 300));
+    result.ApplicationExpiration = LFGListMgr::GetApplicationExpiration(*app);
     FillListingTicket(result.ListingTicket, *listing);
     sLFGListMgr.FillSearchRow(result.Row, *listing);
     SendPacket(result.Write());

@@ -72,6 +72,11 @@ void LFGListMgr::Update(uint32 diff)
                         // two disagreed on the same listing - the same defect class as the delist paths.
                         FillApplicationTicket(statusUpdate.Ticket, *appItr);
                         FillListingTicket(statusUpdate.ListingTicket, listing);
+                        // The deadline that has just passed - this sweep IS that deadline, so the two
+                        // cannot disagree. The field is not optional: the setter @ RVA 0x24DD190 writes it
+                        // into applicant record +2248 on every status change, so a 0 here would have told
+                        // the applicant its application expired at `0 - timebase`.
+                        statusUpdate.ApplicationExpiration = GetApplicationExpiration(*appItr);
                         statusUpdate.UnkResult = 8;
                         // "timedout", not a generic decline: nibble 8 is a state of its own in the client's
                         // vocabulary (mapper 0x24DADA0) and the UI treats it separately from the three
@@ -638,6 +643,23 @@ void LFGListMgr::FillApplicationTicket(WorldPackets::LFG::RideTicket& ticket, LF
     ticket.IsCrossFaction = false;
 }
 
+// See the contract on the declaration. The formula is the one the timeout sweep in Update() enforces, read
+// from the same configuration key, so the deadline the applicant is shown is the deadline the server acts
+// on rather than a second, independently drifting number.
+// UNVERIFIED: what to send when the sweep is switched off (LFGList.ApplicationTimeoutSeconds = 0). Then no
+// deadline exists on the server, retail has no such setting, and no capture shows the field on an
+// application that cannot expire. 0 is kept for that case - it is what the message carried before this
+// existed - and it is the one value the client will read as "already past". The default configuration never
+// reaches it.
+uint64 LFGListMgr::GetApplicationExpiration(LFGList::Application const& app)
+{
+    uint32 const timeout = uint32(sConfigMgr->GetIntDefault("LFGList.ApplicationTimeoutSeconds", 300));
+    if (!timeout)
+        return 0;
+
+    return uint64(app.AppliedTime) + timeout;
+}
+
 // Wire state bits for an application state. The values are measured off the client's state->string mapper
 // @ RVA 0x24DADA0 (see ApplicationStateBits) - the previous comment here claimed "sniff: 0x40 applied", for
 // which no capture exists: there is no 12.1 recording of 0x5A000C, 0x5A000D or 0x5A000F at all. Nibble 4 is
@@ -715,6 +737,9 @@ void LFGListMgr::SendApplicationStatusBits(LFGList::Listing const& listing, LFGL
     WorldPackets::LFGList::LFGListApplicationStatusUpdate packet;
     FillApplicationTicket(packet.Ticket, app);
     FillListingTicket(packet.ListingTicket, listing);
+    // Restated, not omitted - see GetApplicationExpiration. Every one of these endings goes through the
+    // same setter slot as the apply reply's ApplicationExpiration, so a 0 wipes it.
+    packet.ApplicationExpiration = GetApplicationExpiration(app);
     packet.StateBits = stateBits;
     packet.UnkResult = failureReason;
     packet.RoleGranted = 0;

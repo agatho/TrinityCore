@@ -761,6 +761,11 @@ namespace WorldPackets
             std::string Comment;                // the applicant's note, bits<8> length
         };
 
+        // SMSG_LFG_LIST_APPLICANT_LIST_UPDATE (0x5A000F) - dispatcher case @ RVA 0x755F48:
+        //   RideTicket ListingTicket ; u32 ApplicantCount ; u32 <unread, see below> ;
+        //   ApplicantCount x <applicant, reader 0x754CF0, in-memory stride 352>
+        // The count comes BEFORE the second u32: the case reads the count first (0x755F91), sizes the
+        // applicant vector with it (0x755FA0) and only then reads the second scalar (0x755FB5).
         class LFGListApplicantListUpdate final : public ServerPacket
         {
         public:
@@ -768,12 +773,22 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             LFG::RideTicket ListingTicket;      // listing ticket (type 4, Id = ListingId)
-            uint32 Unknown = 0;                 // sniff values 25/60/6
+            // UNVERIFIED: what this counts. Position and width are measured, and so is the one thing that
+            // makes 0 defensible: the 12.1.0.69382 client DECODES it and never looks at it again. The
+            // dispatcher case @ RVA 0x755FA5 stores it at object +96 (base = the case's local, ticket at
+            // +32, applicant vector at +72, its count at +80), and the whole consumer chain of this opcode -
+            // hook slot RVA 0x55FED60 -> 0x24DEED0, which compares only the ticket at +32..+56, then
+            // 0x24DC020, which walks the applicant vector at +72 with the count at +80 - never touches +96.
+            // So no client behaviour is known to depend on it. What it MEANS is still open: the 12.0.7
+            // captures carry 25, 60 and 6, never 0, and no reading of those three has been established.
+            // A 12.1 recording of the leader's applicant list would settle it - see aufnahme_noetig.
+            uint32 Unknown = 0;
             std::vector<ApplicantInfo> Applicants;
         };
 
         // SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE (0x5A000C) - dispatcher case @ RVA 0x755CE8:
-        //   RideTicket Ticket ; RideTicket ListingTicket ; u64 ; u32 UnkResult ; u8 RoleGranted ;
+        //   RideTicket Ticket ; RideTicket ListingTicket ; u64 ApplicationExpiration ; u32 UnkResult ;
+        //   u8 RoleGranted ;
         //   one byte whose top 4 bits are StateBits
         // 12.1 drift: 68275 had the second ticket after the three scalars. Total length is unchanged, so
         // nothing overflows - but the client read the listing ticket out of {u64, u32, u8, ...} and the
@@ -783,7 +798,11 @@ namespace WorldPackets
         // Field roles measured off the consumer @ RVA 0x24DE9A0, which forwards the decoded object into the
         // state setter @ 0x24DD190 as (ticket, state, time, code, byte):
         //   u64      -> obj+112, passed as an ABSOLUTE TIME (the consumer subtracts the client's time base
-        //               qword_7FF7877C9640 before storing it), not an opaque blob.
+        //               qword_7FF7877C9640 before storing it), not an opaque blob. It is the application's
+        //               expiration, the same slot SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT.ApplicationExpiration
+        //               reaches through the same setter argument - which is why the field is named for it
+        //               and why every producer has to fill it (Runde 16: it went out as a hard 0 and wiped
+        //               the deadline the apply reply had just set).
         //   UnkResult-> obj+120, consumed ONLY when the state resolves to 3 = "failed", where the setter
         //               hands it to the error presenter @ RVA 0x24E25E0 (the address 0x24DB25E0 named here
         //               before does not decompile to anything - it was a transcription slip; the call in the
@@ -849,7 +868,13 @@ namespace WorldPackets
 
             LFG::RideTicket Ticket;             // application ticket (type 6)
             LFG::RideTicket ListingTicket;      // listing ticket (type 4)
-            uint64 Unknown = 0;
+            // The application's deadline, as an ABSOLUTE server timestamp - the SAME value and the SAME
+            // client slot as SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT.ApplicationExpiration: the consumer
+            // @ RVA 0x24DE9A0 hands it to the state setter @ 0x24DD190 as the time argument, and that
+            // setter subtracts the client's time base qword_7FF7877C9640 before storing it. Fill it from
+            // LFGListMgr::GetApplicationExpiration, never by hand - a 0 here does not mean "unchanged",
+            // it OVERWRITES the deadline the apply reply just set with 0 - timebase.
+            uint64 ApplicationExpiration = 0;
             // On StateBits == Failed this is the failure reason and nothing else: it has to be one of
             // ApplicationFailureReason's TABLE values or the presenter drops it and the player is left with
             // no error line - which is why the default is the named non-failure filler and not a bare 8.

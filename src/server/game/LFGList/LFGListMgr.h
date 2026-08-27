@@ -201,6 +201,17 @@ public:
     static void FillListingTicket(WorldPackets::LFG::RideTicket& ticket, LFGList::Listing const& listing);
     static void FillApplicationTicket(WorldPackets::LFG::RideTicket& ticket, LFGList::Application const& app);
 
+    // The absolute deadline of an application, as BOTH messages of the application strand carry it:
+    // SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT.ApplicationExpiration and
+    // SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE.ApplicationExpiration. The two are not two fields that happen
+    // to look alike - they land in the SAME client slot. Both messages are decoded into the state setter
+    // @ RVA 0x24DD190 as (record, state, time, code, byte), and the consumer subtracts the client's time
+    // base qword_7FF7877C9640 before storing it, i.e. the wire value is an absolute server timestamp.
+    // Shared because it MUST be: the apply reply used to compute it inline while every status update sent a
+    // hard 0, so the reply set the applicant's deadline and the status update one line later overwrote it
+    // with 0 - timebase. Same defect class, same fix, as the drifted ticket builders above.
+    static uint64 GetApplicationExpiration(LFGList::Application const& app);
+
     // The wire state bits of an application, and one whole applicant record of SMSG_LFG_LIST_APPLICANT_LIST_UPDATE.
     // Shared for the same reason as the tickets: the message has two producers (the handler's push and the
     // application-timeout sweep) and every field one of them forgets is a field the leader's applicant list loses.
