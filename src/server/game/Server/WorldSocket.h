@@ -180,6 +180,13 @@ private:
     WorldSession* _worldSession;
     bool _authed;
     bool _canRequestHotfixes;
+    // Mirror of the client's per socket suspend flag, the second of the three receive gates every packet - and,
+    // through the recursion in 0x18C0490, every BUNDLED packet - has to pass. True from the moment this socket is
+    // known to be the instance connection, because the client's NetClient constructor already marks slot 1 as
+    // suspended; cleared by SMSG_RESUME_COMMS and set again by SMSG_SUSPEND_COMMS, tracked in send order in
+    // Update(). Read by CanBundle only - the single packet path does not need it, since a lone packet carries its
+    // own opcode into the gate and the gate is the client's business, not ours.
+    bool _clientSuspended;
 
     MessageBuffer _headerBuffer;
     MessageBuffer _packetBuffer;

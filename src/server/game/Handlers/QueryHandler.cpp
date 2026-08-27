@@ -80,8 +80,10 @@ void WorldSession::SendPlayerNameByCommunityId(WorldPackets::Query::BNetAccountA
     ObjectGuid guid = Battlenet::Services::Clubs::GetGuidFromClubMemberId(member.CommunityID);
     if (guid.IsEmpty())
     {
-        // The member id was minted on another realm. Nothing here will ever resolve it, so the permanent answer is
-        // the correct one - the client may burn the entry.
+        // Either the member id belongs to another realm, or it is a value no realm can have minted (bits
+        // CreateClubMemberId leaves at zero are set) - GetGuidFromClubMemberId separates the two cases and rejects
+        // both. Neither will ever resolve here, so the permanent answer is the correct one and the client may burn
+        // the entry.
         response.Result = WorldPackets::Query::QueryPlayerNameByCommunityIdResponse::PermanentFailure;
     }
     else if (!sCharacterCache->GetCharacterCacheByGuid(guid))
@@ -130,8 +132,42 @@ void WorldSession::HandleQueryPlayerNamesForCommunity(WorldPackets::Query::Query
     // The client sorts the answers out through the key each response echoes, so one response per requested member
     // is the only form the 12.1 opcode set allows. The client's bulk observable is CLUB_MEMBERS_UPDATED, which the
     // club subsystem raises once its cache has filled.
-    // ClubID is not needed to answer - every member id already carries its own realm and character counter - but it
-    // is read because it is on the wire.
+    //
+    // MAY THIS SESSION ASK ABOUT THIS CLUB AT ALL? ClubID is read and then not used, and that is a decision with
+    // sources behind it, not an oversight. Three of them, in arbiter order:
+    //
+    // 1. THE WIRE SAYS THE GATE IS NOT HERE (rank 1, and on its own decisive). The single member sibling
+    //    CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID carries NO ClubID - the whole request is one
+    //    { bnetAccount, communityID } pair (client writer 0x5D5C40). A protocol that scoped name resolution to
+    //    club membership could not express that request at all: there would be no club to check it against. The
+    //    key is authorization free by construction, exactly as an ObjectGuid is for CMSG_QUERY_PLAYER_NAMES.
+    // 2. AND THE CLIENT HAS NO PLACE TO PUT SUCH A REFUSAL. The response Result is a three way discriminator and
+    //    all three values are about whether the MEMBER can be resolved - success, gone for good, ask again
+    //    (consumer 0x3498F0; see QueryPlayerNameByCommunityIdResponse::ResultCode). None of them means "you may
+    //    not ask". The same client does carry that code - ClubErrorType.ErrorClubNotMember = 18,
+    //    ClubDocumentation.lua - but on the club RPC surface, not here. Where Blizzard put the error tells us
+    //    where Blizzard put the check.
+    // 3. IN THIS TREE THE GATE IS ALREADY ON THAT RPC SURFACE, one layer up. Battlenet::Services::ClubService is
+    //    what hands out community ids in the first place, and it is membership scoped twice over:
+    //    HandleSubscribe refuses a non member with ERROR_CLUB_NOT_MEMBER (ClubService.cpp:64), and HandleGetMembers
+    //    ignores the requested club id outright and answers from player->GetGuild() alone (ClubService.cpp:132-143),
+    //    so it can only ever return the caller's own roster. Duplicating that check down here would gate the
+    //    lookup, not the disclosure.
+    //
+    // What this deliberately does NOT claim is that the answer is confidential. It is not, and not because of this
+    // handler: PlayerGuidLookupData carries AccountID, BnetAccountID, IsDeleted and GuildClubMemberID for every
+    // player it describes, and CMSG_QUERY_PLAYER_NAMES already serves exactly that struct for 50 ARBITRARY guids
+    // to any logged in session (HandleQueryPlayerNames above, Array<ObjectGuid, 50>). Player guids are as
+    // enumerable as community ids are. The same mapping is published a second time through the player update field
+    // PlayerData::GuildClubMemberID (Player.cpp, LoadFromDB). Community id <-> guid <-> name is therefore public
+    // in both directions in this tree, tree wide, independently of these two opcodes - a club membership check
+    // here would withhold nothing that is not already available for the asking one opcode over.
+    //
+    // What IS this unit's doing, and is bounded rather than argued away, is the AMPLIFICATION: 6551 answers per
+    // request against the sibling's 50. That is bounded by the wire (QueryPlayerNamesForCommunity::MaxMembers) and
+    // by the AntiDOS entry below, at a point where the request can still be answered in full. A membership check
+    // would not have bounded it either, and for a structural reason worth recording: the opcode is registered
+    // STATUS_AUTHED, where _player is null, so the check could not run in the very window it would have to guard.
     //
     // EVERY requested member gets an answer, and every answer is a resolved one. That is not a nicety: a member the
     // server answers with nothing at all stays pending in the client's community name cache,

@@ -68,7 +68,8 @@ std::array<uint8, 32> const WorldSocket::EncryptionKeySeed = { 0x71, 0xC9, 0xED,
 
 WorldSocket::WorldSocket(Trinity::Net::IoContextTcpSocket&& socket) : BaseSocket(std::move(socket)),
     _type(CONNECTION_TYPE_REALM), _key(0), _serverChallenge(), _sessionKey(), _encryptKey(), _overSpeedPings(0),
-    _worldSession(nullptr), _authed(false), _canRequestHotfixes(true), _headerBuffer(sizeof(IncomingPacketHeader)), _sendBufferSize(4096), _compressionStream(nullptr)
+    _worldSession(nullptr), _authed(false), _canRequestHotfixes(true), _clientSuspended(false),
+    _headerBuffer(sizeof(IncomingPacketHeader)), _sendBufferSize(4096), _compressionStream(nullptr)
 {
 }
 
@@ -273,7 +274,21 @@ bool WorldSocket::Update()
 
         do
         {
-            if (bundling && CanBundle(*queued))
+            // CanBundle has to be asked BEFORE this packet is allowed to move the suspend flag, and the order is
+            // load bearing in both directions. SMSG_RESUME_COMMS is asked while the socket still counts as
+            // suspended, so it is refused and travels as a single packet - which is what makes it provably reach
+            // the client ahead of everything its own arrival unblocks. SMSG_SUSPEND_COMMS is asked while the
+            // socket still counts as open, which is correct for the same reason: at the moment it is written the
+            // client has not yet closed the gate.
+            bool const bundleThisPacket = bundling && CanBundle(*queued);
+            switch (queued->GetOpcode())
+            {
+                case SMSG_SUSPEND_COMMS: _clientSuspended = true;  break;
+                case SMSG_RESUME_COMMS:  _clientSuspended = false; break;
+                default:                                           break;
+            }
+
+            if (bundleThisPacket)
             {
                 std::size_t entrySize = sizeof(uint16) /*inner length*/ + sizeof(uint32) /*inner opcode*/ + queued->size();
                 if (bundle.size() >= MaxBundleEntries || bundlePayloadSize + entrySize > MaxBundlePayloadSize)
@@ -642,7 +657,7 @@ uint32 WorldSocket::CompressPacket(uint8* buffer, WorldPacket const& packet)
 //         bytes[innerBodyLen + 4]      // the complete inner packet, its opcode included
 //
 // The client recurses into 0x18C0490 for every inner packet, which means every inner packet passes all three
-// receive gates again. Two consequences that this code depends on:
+// receive gates again. Three consequences that this code depends on:
 //   * the pre-encryption whitelist binds the INNER packets, not the outer frame. Said precisely, because the
 //     obvious reading of it is wrong: bitmask 0x2A1F at RVA 0x389DC00 (quoted in full above
 //     WorldPackets::Auth::SuspendComms) admits 0x4C0000..0x4C0004, 0x4C0009, 0x4C000B, 0x4C000D and
@@ -651,6 +666,10 @@ uint32 WorldSocket::CompressPacket(uint8* buffer, WorldPacket const& packet)
 //     recursion, and none of the handful of opcodes this server sends before SMSG_ENTER_ENCRYPTED_MODE that are
 //     not themselves on the list would survive it. A bundle may therefore only be built once encryption is
 //     active - CanBundle enforces that through NeedsEncryption().
+//   * the suspend gate binds the INNER packets as well, and for the same reason. A suspended socket admits family
+//     0x4C only (check 0x18C0F60), and every instance socket is suspended from the moment the client creates it -
+//     so the enter-world traffic on a fresh instance socket must not be bundled until SMSG_RESUME_COMMS has gone
+//     out. CanBundle enforces that through _clientSuspended; the full argument is there.
 //   * a wrong innerBodyLen is NOT reported: the loop breaks silently when innerBodyLen + 4 exceeds the remaining
 //     bytes and the rest of the frame is discarded without an error. Getting the length arithmetic wrong here
 //     loses packets quietly, which is why bundling is a config switch and off by default.
@@ -718,6 +737,24 @@ bool WorldSocket::CanBundle(EncryptablePacket const& packet) const
     // not. NeedsEncryption() is true from the moment the crypt is initialized, which is exactly the window in
     // which arbitrary opcodes are accepted.
     if (!packet.NeedsEncryption())
+        return false;
+
+    // Gate 2 of the same receive path, and the reason this function may not look at the packet alone. A suspended
+    // socket accepts family 0x4C and NOTHING else - the check is 0x18C0F60, and any other opcode in that window
+    // closes the connection; the full argument sits above WorldPackets::Auth::SuspendComms. Because 0x18C0490
+    // recurses into itself for every inner packet, the inner opcodes face that gate too, so the 0x4C000D frame
+    // being family 0x4C says nothing whatever about its contents.
+    // This is not a theoretical window that only opens after an explicit SMSG_SUSPEND_COMMS - which this server
+    // never sends. Every instance socket starts out suspended (see the _clientSuspended assignment in
+    // HandleAuthContinuedSession), and the enter-world packets HandlePlayerLogin queues onto that socket are
+    // candidates for the very first bundle on it. Without this gate, whether the first frame survives would rest
+    // on nothing but the FIFO order happening to put SMSG_RESUME_COMMS in front - a promise neither made nor
+    // enforced anywhere. Getting it wrong is not a lost packet but a closed connection: that exact gate violation
+    // cost every character its world entry once (88bcee58de, reverted by 5778fe4266).
+    // Refused outright instead of admitting family 0x4C only: the sole 0x4C packets this server sends in that
+    // window are SMSG_RESUME_COMMS (0 bytes) and SMSG_SUSPEND_COMMS (4 bytes), so the most such a bundle could
+    // save is 8 bytes, against giving up the ordering guarantee described in Update().
+    if (_clientSuspended)
         return false;
 
     // Never bundle what WritePacketToBuffer would compress. Compression is stateful and per frame, so a compressed
@@ -1086,6 +1123,13 @@ WorldSocket::ReadDataHandlerResult WorldSocket::HandleAuthContinuedSession(World
         DelayedCloseSocket();
         return ReadDataHandlerResult::Error;
     }
+
+    // The client considers this socket suspended before it has received anything at all: the NetClient constructor
+    // (0x18BEA60, store at 0x18BEF6D `mov word ptr [rbx+0x218], 0x100`) marks slot 1 - the instance slot - as
+    // suspended, which is why this server's unpaired SMSG_RESUME_COMMS works. Mirror that starting state, or
+    // CanBundle would judge the first frame on a fresh instance socket against the wrong gate. See the argument
+    // above WorldPackets::Auth::SuspendComms.
+    _clientSuspended = true;
 
     uint32 accountId = uint32(key.Fields.AccountId);
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_INFO_CONTINUED_SESSION);

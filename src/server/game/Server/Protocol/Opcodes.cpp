@@ -898,6 +898,24 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_QUERY_PETITION,                                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleQueryPetition);
     DEFINE_HANDLER(CMSG_QUERY_PET_NAME,                                     STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleQueryPetName);
     DEFINE_HANDLER(CMSG_QUERY_PLAYER_NAMES,                                 STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleQueryPlayerNames);
+    // STATUS_AUTHED on the next two, against STATUS_LOGGEDIN on the line above, which serves the same
+    // PlayerGuidLookupData. The reason is a property of this dispatcher, not an assumption about the client:
+    // STATUS_AUTHED is the only status in WorldSession::Update that never silently drops and never defers a packet
+    // once the session is past the login queue - it tests neither _player nor IsInWorld (WorldSession.cpp, case
+    // STATUS_AUTHED). STATUS_LOGGEDIN drops when _player exists but is not in world, which is every map transfer;
+    // STATUS_LOGGEDIN_OR_RECENTLY_LOGGOUT drops when there is no player at all. For these two opcodes a drop is
+    // not a lost packet: one unanswered member leaves C_Club.AreMembersReady false and the whole member list
+    // spinning, with no timer, no retry and no error dialog to recover (see HandleQueryPlayerNamesForCommunity).
+    // A status with a silent-drop window is the wrong instrument for that. The one window STATUS_AUTHED does have,
+    // m_inQueue, is before CMSG_ENUM_CHARACTERS and so before any community UI can exist.
+    // UNVERIFIED: whether RETAIL admits these two before world entry. That is not measurable from here - both
+    // opcodes occur 0 times in all 25 captures (0x44000D/0x44000E and their 12.0.7 numbers 0x41000D/0x41000E), so
+    // there is no observation of the situation either way, and the client's senders are reached through vtables.
+    // The choice above is therefore argued from this server's dispatch semantics, which is a fact, and not from
+    // retail's admission rule, which is unknown. It is an EXPANSION over the sibling line: if the reservation is
+    // ever resolved against retail and retail turns out to gate them on world entry, this is the line to change -
+    // and HandleQueryPlayerNamesForCommunity's note on why a club membership check cannot run at STATUS_AUTHED
+    // becomes moot with it.
     DEFINE_HANDLER(CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY,                   STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleQueryPlayerNamesForCommunity);
     DEFINE_HANDLER(CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID,                  STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleQueryPlayerNameByCommunityId);
     DEFINE_HANDLER(CMSG_QUERY_QUEST_COMPLETION_NPCS,                        STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleQueryQuestCompletionNPCs);

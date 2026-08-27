@@ -25,9 +25,28 @@ uint64 Battlenet::Services::Clubs::CreateClubMemberId(ObjectGuid guid)
 
 ObjectGuid Battlenet::Services::Clubs::GetGuidFromClubMemberId(uint64 memberId)
 {
-    // CreateClubMemberId packs the realm id into bits 48..59 and the character counter into bits 0..47.
+    // The layout CreateClubMemberId above actually produces, bit for bit:
+    //   bits  0..39  the character counter - ObjectGuid::GetCounter masks HighGuid::Player with 0xFFFFFFFFFF
+    //                (ObjectGuid.h, GetCounter), so the counter is FORTY bits wide, not forty-eight
+    //   bits 40..47  ALWAYS ZERO. Nothing writes them: the counter cannot reach them and the realm id starts at
+    //                bit 48. A member id with any of them set was therefore not minted by CreateClubMemberId.
+    //   bits 48..59  the realm id, masked to 12 bits
+    //   bits 60..63  always zero
+    // Both of the following rejections matter, and for different reasons. The realm test says "this id belongs to
+    // some other realm"; the reserved-bits test says "no realm minted this id at all". Folding the reserved bits
+    // into the counter instead - which the previous 0x0000FFFFFFFFFFFF mask did - handed them straight to
+    // ObjectGuid::Create<HighGuid::Player>, which stores its argument unmasked (ObjectGuid.cpp, CreatePlayer), so
+    // a crafted member id produced a guid that CreateClubMemberId can never have produced. Harmless in the end
+    // (the character cache misses and the caller answers PermanentFailure) but harmless for the wrong reason, and
+    // this function is documented as the inverse - so it has to actually be one.
+    if (memberId & UI64LIT(0xF000000000000000))
+        return ObjectGuid::Empty;
+
+    if (memberId & UI64LIT(0x0000FF0000000000))
+        return ObjectGuid::Empty;
+
     if (uint32((memberId >> 48) & 0xFFF) != (sRealmList->GetCurrentRealmId().Realm & 0xFFF))
         return ObjectGuid::Empty;
 
-    return ObjectGuid::Create<HighGuid::Player>(memberId & UI64LIT(0x0000FFFFFFFFFFFF));
+    return ObjectGuid::Create<HighGuid::Player>(memberId & UI64LIT(0x000000FFFFFFFFFF));
 }
