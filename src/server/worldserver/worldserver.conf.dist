@@ -4055,6 +4055,39 @@ BlackMarket.UpdatePeriod = 24
 ###################################################################################################
 
 ###################################################################################################
+# TRADING POST (PERKS PROGRAM) SETTINGS
+#
+#    PerksProgram.Enabled
+#       Description: General Enable or Disable of the Trading Post / Perks Program.
+#                    When disabled the server refuses every Trading Post request (listing, purchase,
+#                    refund, cart checkout, freeze) and sends SMSG_PERKS_PROGRAM_DISABLED during the
+#                    login burst, which makes the client show the "disabled" popup and close the
+#                    Trading Post window. The client does not gate anything on its own, so this
+#                    server-side refusal is what actually shuts the system down.
+#       Default:     1 - (Enabled)
+#                    0 - (Disabled)
+#
+
+PerksProgram.Enabled = 1
+
+#
+#    PerksProgram.ResetHour
+#        Description: UTC hour of the 1st of the month at which the Trading Post period rolls over.
+#                     This is the boundary pair the server puts into SMSG_PERKS_PROGRAM_ACTIVITY_UPDATE,
+#                     from which the client draws the "time remaining" countdown.
+#                     It is region-dependent, so it must not be hardcoded. Measured on retail:
+#                     15:00 UTC across the 12.0.x recordings (builds 65940-69273) and 04:00 UTC in
+#                     the two 12.1 recordings (69382/69404); the difference is the region.
+#        Range:       0-23
+#        Default:     4 - (04:00 UTC, the value measured on 12.1)
+
+PerksProgram.ResetHour = 4
+
+#
+#
+###################################################################################################
+
+###################################################################################################
 # LOGGING SYSTEM SETTINGS
 #
 #  Appender config values: Given an appender "name"

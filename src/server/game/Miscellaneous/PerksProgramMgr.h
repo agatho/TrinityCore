@@ -20,6 +20,7 @@
 
 #include "Define.h"
 #include "PerksProgramPacketsCommon.h"
+#include <unordered_map>
 #include <vector>
 
 // Assembles the Trading Post (Perks Program) vendor listing from the perks DB2 stores and
@@ -37,6 +38,12 @@ public:
     // request, or nullptr if the id is not part of the active listing.
     WorldPackets::PerksProgram::PerksVendorItem const* GetVendorItem(int32 vendorItemId);
 
+    // Returns a vendor item from the WHOLE catalogue, regardless of whether it is offered this rotation, or
+    // nullptr if the id does not exist at all. This is what CMSG_PERKS_PROGRAM_ITEMS_REFRESHED needs: the
+    // client asks precisely about items it purchased in an earlier rotation, so a lookup restricted to the
+    // active listing would miss every one of them. Do NOT use it to authorise a purchase.
+    WorldPackets::PerksProgram::PerksVendorItem const* GetCatalogueVendorItem(int32 vendorItemId);
+
     // Fills the current Trading Post period as UTC unix timestamps for the current calendar month
     // [periodStart, periodEnd). The client uses periodEnd to show the "time remaining" countdown.
     void GetCurrentPeriod(uint64& periodStart, uint64& periodEnd) const;
@@ -48,6 +55,7 @@ private:
 
     bool _loaded = false;
     std::vector<WorldPackets::PerksProgram::PerksVendorItem> _vendorItems;
+    std::unordered_map<int32, WorldPackets::PerksProgram::PerksVendorItem> _catalogue;
 };
 
 #define sPerksProgramMgr PerksProgramMgr::instance()

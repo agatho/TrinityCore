@@ -17,9 +17,22 @@
 
 #include "PerksProgramPackets.h"
 #include "PacketOperators.h"
+#include <algorithm>
 
 namespace WorldPackets::PerksProgram
 {
+void PerksProgramItemsRefreshed::Read()
+{
+    uint32 count;
+    _worldPacket >> count;
+
+    // Reserve conservatively so a bogus count cannot force a huge up-front allocation; each read is
+    // bounds-checked by the underlying buffer.
+    RequestedVendorItemIDs.reserve(std::min<uint32>(count, 100));
+    for (uint32 i = 0; i < count; ++i)
+        RequestedVendorItemIDs.push_back(_worldPacket.read<int32>());
+}
+
 void PerksProgramRequestPurchase::Read()
 {
     _worldPacket >> PerksVendorItemID;
@@ -42,13 +55,10 @@ void PerksProgramSetFrozenVendorItem::Read()
 
 WorldPacket const* ResponsePerkRecentPurchases::Write()
 {
-    _worldPacket << uint32(Purchases.size());
-    for (RecentPurchase const& purchase : Purchases)
-    {
-        _worldPacket << int32(purchase.PerksVendorItemID);
-        _worldPacket << uint64(purchase.PurchaseTime);
-        _worldPacket << uint8(purchase.Refundable ? 0x80 : 0x00);   // client reads bit7
-    }
+    _worldPacket << Size<uint32>(Purchases);
+    for (PerksRecentPurchase const& purchase : Purchases)
+        _worldPacket << purchase;
+
     return &_worldPacket;
 }
 
@@ -113,9 +123,74 @@ WorldPacket const* PerksProgramActivityUpdate::Write()
     _worldPacket << uint32(CompletedActivityIDs.size());
     _worldPacket << uint64(PeriodEnd);
     _worldPacket << uint64(PeriodStart);
-    _worldPacket << uint32(Unused);
+    _worldPacket << uint32(PerksUIThemeID);
     for (uint32 activityId : CompletedActivityIDs)
         _worldPacket << uint32(activityId);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* PerksProgramResult::Write()
+{
+    // Header: four bits of type, two of error, the stamp flag, one spare bit, then flush -- exactly one byte.
+    _worldPacket << Bits<4>(Type);
+    _worldPacket << Bits<2>(Err);
+    _worldPacket << OptionalInit(Stamp);
+    _worldPacket << Bits<1>(0);
+    _worldPacket.FlushBits();
+
+    switch (Type)
+    {
+        case ResultTypePurchaseSuccess:
+        case ResultTypeRefundSuccess:
+            _worldPacket << int32(PerksVendorItemID);
+            _worldPacket << Size<uint32>(Purchases);
+            for (PerksRecentPurchase const& purchase : Purchases)
+                _worldPacket << purchase;
+            break;
+        case ResultTypeTenderAwarded:
+            // The first two int32 and the trailing int32 array are on the wire but the consumer never reads
+            // them; the 66220 capture carries 3, 3 and an empty array. Only TenderAwarded is consumed.
+            _worldPacket << int32(0);
+            _worldPacket << int32(0);
+            _worldPacket << int32(TenderAwarded);
+            _worldPacket << uint32(0);
+            break;
+        case ResultTypeVendorOpen:
+            _worldPacket << VendorGUID;
+            _worldPacket << DisplayGUID;
+            // Count BEFORE the seven int32, elements only after them -- see the header comment.
+            _worldPacket << Size<uint32>(VendorItems);
+            // Seven int32 no consumer reads. The 68974 capture carries 28 zero bytes here.
+            for (std::size_t i = 0; i < 7; ++i)
+                _worldPacket << int32(0);
+            for (PerksVendorItem const& vendorItem : VendorItems)
+                _worldPacket << vendorItem;
+            break;
+        case ResultTypeVendorMerge:
+            _worldPacket << Size<uint32>(VendorItems);
+            for (PerksVendorItem const& vendorItem : VendorItems)
+                _worldPacket << vendorItem;
+            break;
+        case ResultTypeTenderGranted:
+            _worldPacket << int32(TenderAwarded);
+            break;
+        case ResultTypeError:
+        default:
+            break;      // empty branch: header byte only
+    }
+
+    // Last field of the message, after the branch arrays -- reader RVA 0x74CE10 ends with this read.
+    if (Stamp)
+        _worldPacket << *Stamp;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* PerksProgramDisabled::Write()
+{
+    _worldPacket << Bits<1>(Disabled);
+    _worldPacket.FlushBits();
 
     return &_worldPacket;
 }

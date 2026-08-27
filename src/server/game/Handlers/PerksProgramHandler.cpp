@@ -26,10 +26,17 @@
 #include "PerksProgramMgr.h"
 #include "PerksProgramPackets.h"
 #include "UnitDefines.h"
+#include "World.h"
 #include <limits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+// Whether the Trading Post is switched on for this realm (worldserver.conf PerksProgram.Enabled).
+static bool IsPerksProgramEnabled()
+{
+    return sWorld->getBoolConfig(CONFIG_PERKS_PROGRAM_ENABLED);
+}
 
 // Every mutating Trading Post request (purchase / refund / cart / freeze) carries the interacted vendor GUID.
 // Validate it against an active PerksProgramVendor interaction the player actually opened, and re-check the NPC
@@ -71,8 +78,32 @@ static void GrantMonthlyPerksCache(WorldSession* session, Player* player)
     session->StoreAccountPerksTender(player->GetCurrencyQuantity(CURRENCY_TYPE_TRADERS_TENDER));
 }
 
+// Sends SMSG_PERKS_PROGRAM_DISABLED. The body is a single bit (family dispatcher RVA 0x67A010 case 6488070
+// reads one byte and takes bit 7). The client's message handler (RVA 0x253D660) fires
+// PERKS_PROGRAM_CLOSE unconditionally and PERKS_PROGRAM_DISABLED only when the bit is set, so this both
+// closes the Trading Post window and, with disabled = true, shows the "disabled" popup.
+//
+// It is the ANSWER to a Trading Post request that the realm refuses, not a broadcast: no capture in the 51
+// available recordings carries this opcode at all, so there is no observed retail send order to copy, and
+// sending it unsolicited with disabled = false would close a window the player never opened.
+void WorldSession::SendPerksProgramDisabled(bool disabled)
+{
+    WorldPackets::PerksProgram::PerksProgramDisabled packet;
+    packet.Disabled = disabled;
+    SendPacket(packet.Write());
+}
+
 void WorldSession::HandlePerksProgramStatusRequest(WorldPackets::PerksProgram::PerksProgramStatusRequest& /*packet*/)
 {
+    // Realm has the Trading Post switched off: answer the status request with the disabled message instead of a
+    // listing. Staying silent is not an option -- the client polls this every 6000 ms while the frame is open and
+    // would keep an empty window up forever.
+    if (!IsPerksProgramEnabled())
+    {
+        SendPerksProgramDisabled(true);
+        return;
+    }
+
     if (Player* player = GetPlayer())
         GrantMonthlyPerksCache(this, player);
 
@@ -83,16 +114,36 @@ void WorldSession::HandlePerksProgramStatusRequest(WorldPackets::PerksProgram::P
     SendPerksProgramActivityUpdate();
 }
 
-// CMSG_PERKS_PROGRAM_ITEMS_REFRESHED: the client asks the server to resend the current Trading Post listing.
-// Resend the vendor + activity update (reusing the same writers as the status request). No monthly-cache grant
-// here -- a listing refresh is not an interaction that should award currency.
-void WorldSession::HandlePerksProgramItemsRefreshed(WorldPackets::PerksProgram::PerksProgramItemsRefreshed& /*packet*/)
+// CMSG_PERKS_PROGRAM_ITEMS_REFRESHED: the client lists PerksVendorItem ids it holds a purchase record for but
+// has no vendor-item data for -- items bought in an earlier Trading Post rotation. It builds that list in
+// PerksProgramMgr::SetRecentPurchases (client RVA 0x253E020) and only sends the message when the list is
+// non-empty, so this is a targeted "fill these gaps", not a request to resend the listing.
+//
+// The answer therefore has to be SMSG_PERKS_PROGRAM_RESULT type 9, which MERGES into the client's vendor map
+// (client RVA 0x253DC00 with flag 1) and additionally records the rows in the map that a later refund consults.
+// Answering with SMSG_PERKS_PROGRAM_VENDOR_UPDATE, as this handler used to, enters the same routine with flag 0
+// and CLEARS the map first -- it would delete data instead of supplying it, and it could not carry the wanted
+// ids anyway because they are by definition outside the current listing.
+//
+// No monthly-cache grant here -- filling in display data is not an interaction that should award currency.
+void WorldSession::HandlePerksProgramItemsRefreshed(WorldPackets::PerksProgram::PerksProgramItemsRefreshed& packet)
 {
-    WorldPackets::PerksProgram::PerksProgramVendorUpdate vendorUpdate;
-    vendorUpdate.VendorItems = sPerksProgramMgr->GetCurrentVendorItems();
-    SendPacket(vendorUpdate.Write());
+    if (!IsPerksProgramEnabled())
+    {
+        SendPerksProgramDisabled(true);
+        return;
+    }
 
-    SendPerksProgramActivityUpdate();
+    WorldPackets::PerksProgram::PerksProgramResult result(WorldPackets::PerksProgram::PerksProgramResult::ResultTypeVendorMerge);
+    for (int32 vendorItemId : packet.RequestedVendorItemIDs)
+        if (WorldPackets::PerksProgram::PerksVendorItem const* item = sPerksProgramMgr->GetCatalogueVendorItem(vendorItemId))
+            result.VendorItems.push_back(*item);
+
+    // Nothing resolvable means every requested id is unknown to the server too. The client imposes no timeout
+    // on this request, so staying silent is correct here -- an empty merge would only trigger a pointless
+    // PERKS_PROGRAM_DATA_REFRESH.
+    if (!result.VendorItems.empty())
+        SendPacket(result.Write());
 }
 
 // Sends SMSG_PERKS_PROGRAM_ACTIVITY_UPDATE: the current Trading Post period plus the player's
@@ -143,6 +194,12 @@ void WorldSession::SendPerksAnimToggleKillSwitch()
 // fill Rewards in here.
 void WorldSession::HandlePerksProgramRequestPendingRewards(WorldPackets::PerksProgram::PerksProgramRequestPendingRewards& /*packet*/)
 {
+    if (!IsPerksProgramEnabled())
+    {
+        SendPerksProgramDisabled(true);
+        return;
+    }
+
     WorldPackets::PerksProgram::ResponsePerkPendingRewards response;
     SendPacket(response.Write());
 }
@@ -214,20 +271,19 @@ static bool PerksProgramPurchaseItem(WorldSession* session, Player* player, int3
     return true;
 }
 
-// Refunds a Trading Post purchase: revokes the granted collectible and returns the Trader's Tender that was paid.
-// A refund is only honoured when we have a purchase record (so a collectible obtained elsewhere cannot be
-// "refunded") and when the reward is cleanly revocable. Appearance/transmog rewards are append-only in the
-// account collection and therefore stay non-refundable rather than returning currency while keeping the look.
-void WorldSession::HandlePerksProgramGetRecentPurchases(WorldPackets::PerksProgram::PerksProgramGetRecentPurchases& /*packet*/)
+// Builds the account's complete current Trading Post purchase list. Both SMSG_RESPONSE_PERK_RECENT_PURCHASES
+// and the type 2 branch of SMSG_PERKS_PROGRAM_RESULT carry exactly this list, and the type 2 branch REPLACES the
+// client's whole purchase map (client RVA 0x253E020), so it has to be complete rather than a delta.
+std::vector<WorldPackets::PerksProgram::PerksRecentPurchase> WorldSession::BuildPerksRecentPurchases() const
 {
-    CollectionMgr* collectionMgr = GetCollectionMgr();
-    Player* player = GetPlayer();
+    std::vector<WorldPackets::PerksProgram::PerksRecentPurchase> purchases;
+
+    Player const* player = _player;
     uint64 playerGuid = player ? player->GetGUID().GetCounter() : 0;
 
-    WorldPackets::PerksProgram::ResponsePerkRecentPurchases response;
-    for (auto const& [vendorItemId, data] : collectionMgr->GetPerksProgramPurchases())
+    for (auto const& [vendorItemId, data] : _collectionMgr->GetPerksProgramPurchases())
     {
-        WorldPackets::PerksProgram::ResponsePerkRecentPurchases::RecentPurchase& entry = response.Purchases.emplace_back();
+        WorldPackets::PerksProgram::PerksRecentPurchase& entry = purchases.emplace_back();
         entry.PerksVendorItemID = vendorItemId;
         entry.PurchaseTime = data.PurchaseTime;
         // A purchase is refundable only for the character that made it (the refund handler enforces the same
@@ -236,35 +292,135 @@ void WorldSession::HandlePerksProgramGetRecentPurchases(WorldPackets::PerksProgr
         entry.Refundable = (data.MountID != 0 || data.ToyID != 0) && data.BuyerGuid == playerGuid;
     }
 
+    return purchases;
+}
+
+// Sends SMSG_PERKS_PROGRAM_RESULT type 5 -- the message that actually opens the Trading Post. It starts
+// PlayerInteractionType::PerksProgramVendor (57) on the client, loads the vendor listing as a full replace and
+// fires PERKS_PROGRAM_OPEN, which is the sole caller of ShowPerksProgramFrame(). Without it the window can
+// never appear, no matter what else the server sends.
+//
+// Retail pushes it unprompted right after CMSG_GOSSIP_SELECT_OPTION, before the client asks for anything --
+// which is also what the UI needs: PerksProgramMixin:OnLoad reads the categories synchronously while the frame
+// builds, and a later PERKS_PROGRAM_DATA_REFRESH does not rebuild the category filter.
+void WorldSession::SendPerksProgramVendorOpen(ObjectGuid const& vendorGuid)
+{
+    if (!IsPerksProgramEnabled())
+    {
+        SendPerksProgramDisabled(true);
+        return;
+    }
+
+    WorldPackets::PerksProgram::PerksProgramResult result(WorldPackets::PerksProgram::PerksProgramResult::ResultTypeVendorOpen);
+    result.VendorGUID = vendorGuid;
+    // UNVERIFIED: the second guid feeds a model/scene setup in the client (RVA 0x253D6C0). Both captures carry
+    // two DIFFERENT creature guids here, so it is not simply the vendor repeated, but nothing names the second
+    // one. Sending the vendor guid keeps it a creature the client already has loaded.
+    result.DisplayGUID = vendorGuid;
+    result.VendorItems = sPerksProgramMgr->GetCurrentVendorItems();
+    SendPacket(result.Write());
+}
+
+// Sends SMSG_PERKS_PROGRAM_RESULT type 2 (purchase) or 3 (refund). Answering is not optional: without it the
+// client spins for 10 seconds, raises PERKS_PROGRAM_SLOW_PURCHASE and then leaves the item marked
+// isPurchasePending forever; the refund path escalates to a global error state after 45 seconds.
+void WorldSession::SendPerksProgramPurchaseResult(int32 perksVendorItemId, bool refund)
+{
+    using WorldPackets::PerksProgram::PerksProgramResult;
+
+    PerksProgramResult result(refund ? PerksProgramResult::ResultTypeRefundSuccess : PerksProgramResult::ResultTypePurchaseSuccess);
+    result.PerksVendorItemID = perksVendorItemId;
+    // Type 3 reads this array and discards it, but it still has to be on the wire; type 2 installs it as the
+    // client's complete purchase map.
+    result.Purchases = BuildPerksRecentPurchases();
+    SendPacket(result.Write());
+}
+
+// Sends a refused Trading Post request back as an empty error carrier. Type 0 with Err 1 resolves to
+// ERR_CANT_DO_THAT_RIGHT_NOW through the client's GameError table and then raises PERKS_PROGRAM_RESULT_ERROR,
+// which puts the frame into its server-error state: the buy and refund controls grey out
+// (Blizzard_PerksProgramElements.lua:805) until the player reopens the window.
+//
+// What it does NOT do is cancel the client's pending-purchase timer -- CancelPurchaseTimer() runs only on
+// PERKS_PROGRAM_PURCHASE_SUCCESS and _REFUND_SUCCESS (Blizzard_PerksProgram.lua:265-270), so a refused purchase
+// still raises the PERKS_PROGRAM_SLOW_PURCHASE popup after 10 seconds. The protocol offers no way to retract a
+// purchase cleanly; the only alternative would be to claim success, which would be a lie. An error is the best
+// honest answer available, and it is strictly better than silence.
+//
+// The type is deliberately fixed to 0: Err != 0 combined with type 8 or 9 makes the client read past the end of
+// that GameError table and crash, so the unsafe combination is not expressible here.
+void WorldSession::SendPerksProgramResultError()
+{
+    WorldPackets::PerksProgram::PerksProgramResult result(WorldPackets::PerksProgram::PerksProgramResult::ResultTypeError);
+    result.Err = WorldPackets::PerksProgram::PerksProgramResult::ResultErrorCantDoThat;
+    SendPacket(result.Write());
+}
+
+void WorldSession::HandlePerksProgramGetRecentPurchases(WorldPackets::PerksProgram::PerksProgramGetRecentPurchases& /*packet*/)
+{
+    if (!IsPerksProgramEnabled())
+    {
+        SendPerksProgramDisabled(true);
+        return;
+    }
+
+    WorldPackets::PerksProgram::ResponsePerkRecentPurchases response;
+    response.Purchases = BuildPerksRecentPurchases();
     SendPacket(response.Write());
 }
 
+// Refunds a Trading Post purchase: revokes the granted collectible and returns the Trader's Tender that was paid.
+// A refund is only honoured when we have a purchase record (so a collectible obtained elsewhere cannot be
+// "refunded") and when the reward is cleanly revocable. Appearance/transmog rewards are append-only in the
+// account collection and therefore stay non-refundable rather than returning currency while keeping the look.
+//
+// Every refusal below answers with SMSG_PERKS_PROGRAM_RESULT type 0 + Err rather than falling silent: the
+// client gives an unanswered refund 45 seconds before it drops into a global error state that only reopening
+// the frame clears, so silence is the worst of the available outcomes.
 void WorldSession::HandlePerksProgramRequestRefund(WorldPackets::PerksProgram::PerksProgramRequestRefund& packet)
 {
+    if (!IsPerksProgramEnabled())
+    {
+        SendPerksProgramDisabled(true);
+        return;
+    }
+
     Player* player = GetPlayer();
     if (!player)
         return;
 
     if (!HasActivePerksProgramVendor(player, packet.VendorGUID))
+    {
+        SendPerksProgramResultError();
         return;
+    }
 
     CollectionMgr* collectionMgr = GetCollectionMgr();
     PerksProgramPurchaseData const* purchase = collectionMgr->GetPerksProgramPurchase(packet.PerksVendorItemID);
     if (!purchase)
+    {
+        SendPerksProgramResultError();
         return;
+    }
 
     // A refund is only honoured for the character that made the purchase. Trader's Tender is account-wide, so a
     // cross-character refund could not duplicate currency anyway, but scoping the refund to the original buyer
     // matches the client's per-character "recent purchases" list and blocks refunding another character's record.
     if (purchase->BuyerGuid != player->GetGUID().GetCounter())
+    {
+        SendPerksProgramResultError();
         return;
+    }
 
     // Enforce the retail 2-hour refund window server-side (the client only shows the countdown). A crafted refund
     // packet, or a record that has outlived the window, is rejected here. The revocable reward types (mount/toy
     // account-collection entries) have no separate "used/consumed" state to gate on beyond ownership, which the
     // confirmed-revoke check below already covers; appearances are non-refundable by policy.
     if (GameTime::GetGameTime() - time_t(purchase->PurchaseTime) > 2 * HOUR)
+    {
+        SendPerksProgramResultError();
         return;
+    }
 
     // Revoke the reward and ONLY credit Trader's Tender when the collectible was actually removed. Gating the
     // credit on a confirmed revoke is what prevents creating currency by "refunding" a collectible that is already
@@ -276,34 +432,63 @@ void WorldSession::HandlePerksProgramRequestRefund(WorldPackets::PerksProgram::P
         revoked = collectionMgr->RemoveToy(uint32(purchase->ToyID));
 
     if (!revoked)
+    {
+        SendPerksProgramResultError();
         return;
+    }
 
     if (purchase->Price > 0)
         player->AddCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(purchase->Price), CurrencyGainSource::ItemRefund);
 
     collectionMgr->RemovePerksProgramPurchase(packet.PerksVendorItemID);
+
+    // Answer AFTER the record is gone so the purchase list in the message is the post-refund state.
+    SendPerksProgramPurchaseResult(packet.PerksVendorItemID, true);
 }
 
 void WorldSession::HandlePerksProgramRequestPurchase(WorldPackets::PerksProgram::PerksProgramRequestPurchase& packet)
 {
+    if (!IsPerksProgramEnabled())
+    {
+        SendPerksProgramDisabled(true);
+        return;
+    }
+
     Player* player = GetPlayer();
     if (!player)
         return;
 
     if (!HasActivePerksProgramVendor(player, packet.VendorGUID))
+    {
+        SendPerksProgramResultError();
         return;
+    }
 
-    PerksProgramPurchaseItem(this, player, packet.PerksVendorItemID);
+    // An unanswered purchase leaves the item marked isPurchasePending in the client for the rest of the
+    // session, so both outcomes have to go back on the wire.
+    if (PerksProgramPurchaseItem(this, player, packet.PerksVendorItemID))
+        SendPerksProgramPurchaseResult(packet.PerksVendorItemID, false);
+    else
+        SendPerksProgramResultError();
 }
 
 void WorldSession::HandlePerksProgramRequestCartCheckout(WorldPackets::PerksProgram::PerksProgramRequestCartCheckout& packet)
 {
+    if (!IsPerksProgramEnabled())
+    {
+        SendPerksProgramDisabled(true);
+        return;
+    }
+
     Player* player = GetPlayer();
     if (!player)
         return;
 
     if (!HasActivePerksProgramVendor(player, packet.VendorGUID))
+    {
+        SendPerksProgramResultError();
         return;
+    }
 
     // Atomic checkout: resolve + validate every item and sum the total up front. If any entry is invalid or
     // duplicated, or the player cannot afford the full total, reject the whole cart -- no per-item silent skip,
@@ -315,31 +500,55 @@ void WorldSession::HandlePerksProgramRequestCartCheckout(WorldPackets::PerksProg
     for (int32 vendorItemId : packet.PerksVendorItemIDs)
     {
         if (!seen.insert(vendorItemId).second)
+        {
+            SendPerksProgramResultError();
             return; // duplicate id in the cart -> reject the whole checkout
+        }
 
         WorldPackets::PerksProgram::PerksVendorItem const* item = ResolvePerksPurchase(vendorItemId);
         if (!item)
+        {
+            SendPerksProgramResultError();
             return;
+        }
 
         if (IsPerksRewardOwned(GetCollectionMgr(), item))
+        {
+            SendPerksProgramResultError();
             return; // already-owned item in the cart -> reject the whole checkout (no charge)
+        }
 
         total += item->Price;
         resolved.emplace_back(vendorItemId, item);
     }
 
     if (total < 0 || total > int64(std::numeric_limits<int32>::max()) || !player->HasCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(total)))
+    {
+        SendPerksProgramResultError();
         return;
+    }
 
     if (total > 0)
         player->RemoveCurrency(CURRENCY_TYPE_TRADERS_TENDER, int32(total), CurrencyDestroyReason::Vendor);
 
     for (auto const& [vendorItemId, item] : resolved)
         GrantPerksPurchase(this, player, vendorItemId, item);
+
+    // isPurchasePending is tracked per item and only PERKS_PROGRAM_PURCHASE_SUCCESS(vendorItemID) clears it,
+    // so a cart needs one answer per item, not one for the cart. Sent after every grant so each message
+    // carries the final purchase list.
+    for (auto const& [vendorItemId, item] : resolved)
+        SendPerksProgramPurchaseResult(vendorItemId, false);
 }
 
 void WorldSession::HandlePerksProgramSetFrozenVendorItem(WorldPackets::PerksProgram::PerksProgramSetFrozenVendorItem& packet)
 {
+    if (!IsPerksProgramEnabled())
+    {
+        SendPerksProgramDisabled(true);
+        return;
+    }
+
     Player* player = GetPlayer();
     if (!player)
         return;

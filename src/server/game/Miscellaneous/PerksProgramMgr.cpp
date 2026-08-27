@@ -23,6 +23,7 @@
 #include "ObjectMgr.h"
 #include "PerksProgramPackets.h"
 #include "Util.h"
+#include "World.h"
 #include <algorithm>
 #include <ctime>
 #include <unordered_map>
@@ -37,6 +38,7 @@ PerksProgramMgr* PerksProgramMgr::instance()
 void PerksProgramMgr::BuildVendorList()
 {
     _vendorItems.clear();
+    _catalogue.clear();
 
     // Spells that teach a mount, so a vendor item's teaching effect can be mapped back to its mount.
     std::unordered_set<int32> mountSpells;
@@ -77,8 +79,10 @@ void PerksProgramMgr::BuildVendorList()
 
     for (PerksVendorItemEntry const* entry : sPerksVendorItemStore)
     {
-        if (!allowedVendorItems.empty() && !allowedVendorItems.count(entry->ID))
-            continue;
+        // Every catalogue row is resolved, not just the ones offered this rotation: the client asks for the
+        // display data of items it bought in EARLIER rotations (CMSG_PERKS_PROGRAM_ITEMS_REFRESHED), and the
+        // expensive lookup tables above are only built once here.
+        bool const offeredNow = allowedVendorItems.empty() || allowedVendorItems.count(entry->ID) != 0;
 
         WorldPackets::PerksProgram::PerksVendorItem vendorItem;
         vendorItem.VendorItemID = int32(entry->ID);
@@ -100,12 +104,14 @@ void PerksProgramMgr::BuildVendorList()
                         vendorItem.MountID = effect->SpellID;
         }
 
-        _vendorItems.push_back(std::move(vendorItem));
+        _catalogue[int32(entry->ID)] = vendorItem;
+        if (offeredNow)
+            _vendorItems.push_back(std::move(vendorItem));
     }
 
     _loaded = true;
-    TC_LOG_INFO("server.loading", ">> Built {} Perks Program vendor items (perks month {}).",
-        _vendorItems.size(), currentMonth);
+    TC_LOG_INFO("server.loading", ">> Built {} Perks Program vendor items (perks month {}), {} in the full catalogue.",
+        _vendorItems.size(), currentMonth, _catalogue.size());
 }
 
 std::vector<WorldPackets::PerksProgram::PerksVendorItem> const& PerksProgramMgr::GetCurrentVendorItems()
@@ -116,18 +122,42 @@ std::vector<WorldPackets::PerksProgram::PerksVendorItem> const& PerksProgramMgr:
     return _vendorItems;
 }
 
+WorldPackets::PerksProgram::PerksVendorItem const* PerksProgramMgr::GetCatalogueVendorItem(int32 vendorItemId)
+{
+    if (!_loaded)
+        BuildVendorList();
+
+    auto itr = _catalogue.find(vendorItemId);
+    return itr != _catalogue.end() ? &itr->second : nullptr;
+}
+
 void PerksProgramMgr::GetCurrentPeriod(uint64& periodStart, uint64& periodEnd) const
 {
-    // The Trading Post period is the current calendar month (UTC). A live retail sniff showed the
-    // boundaries land on midnight of the 1st, e.g. [Oct 1, Nov 1). Without a live rotation calendar
-    // this is the correct, derivable period.
+    // The Trading Post period is the current calendar month, rolling over on the 1st at
+    // PerksProgram.ResetHour UTC -- NOT at midnight. Every captured SMSG_PERKS_PROGRAM_ACTIVITY_UPDATE
+    // carries a non-midnight boundary pair: 15:00 UTC in the 12.0.x recordings (builds 65940-69273)
+    // and 04:00 UTC in the two 12.1 recordings (69382/69404). The hour is a regional property of the
+    // realm, which is why it is a config value here rather than a constant.
+    int32 const resetHour = sWorld->getIntConfig(CONFIG_PERKS_PROGRAM_RESET_HOUR);
+
     time_t now = GameTime::GetGameTime();
     tm date;
     gmtime_r(&now, &date);
     date.tm_mday = 1;
-    date.tm_hour = 0;
+    date.tm_hour = resetHour;
     date.tm_min = 0;
     date.tm_sec = 0;
+
+    // Before the reset hour on the 1st we are still inside the PREVIOUS month's period; stepping the
+    // month back keeps periodStart <= now < periodEnd, which is what the client's countdown assumes.
+    if (now < timegm(&date))
+    {
+        if (--date.tm_mon < 0)
+        {
+            date.tm_mon = 11;
+            --date.tm_year;
+        }
+    }
     periodStart = uint64(timegm(&date));
 
     if (++date.tm_mon > 11)

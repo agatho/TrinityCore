@@ -658,6 +658,9 @@ namespace WorldPackets
         class PerksProgramRequestCartCheckout;
         class PerksProgramItemsRefreshed;
         class PerksProgramRequestPendingRewards;
+        class PerksProgramDisabled;
+        class PerksProgramResult;
+        struct PerksRecentPurchase;
     }
 
     namespace Query
@@ -1490,6 +1493,11 @@ class TC_GAME_API WorldSession
         void HandlePerksProgramRequestPendingRewards(WorldPackets::PerksProgram::PerksProgramRequestPendingRewards& packet);
         void SendPerksProgramActivityUpdate();
         void SendPerksAnimToggleKillSwitch();
+        void SendPerksProgramDisabled(bool disabled);
+        void SendPerksProgramVendorOpen(ObjectGuid const& vendorGuid);
+        void SendPerksProgramPurchaseResult(int32 perksVendorItemId, bool refund);
+        void SendPerksProgramResultError();
+        std::vector<WorldPackets::PerksProgram::PerksRecentPurchase> BuildPerksRecentPurchases() const;
         void HandleGuildSetGuildMaster(WorldPackets::Guild::GuildSetGuildMaster& packet);
         void HandleGuildUpdateMotdText(WorldPackets::Guild::GuildUpdateMotdText& packet);
         void HandleGuildNewsUpdateSticky(WorldPackets::Guild::GuildNewsUpdateSticky& packet);

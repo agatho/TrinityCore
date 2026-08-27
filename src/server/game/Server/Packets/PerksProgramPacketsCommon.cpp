@@ -39,4 +39,14 @@ ByteBuffer& operator<<(ByteBuffer& data, PerksVendorItem const& perksVendorItem)
 
     return data;
 }
+
+ByteBuffer& operator<<(ByteBuffer& data, PerksRecentPurchase const& purchase)
+{
+    data << int32(purchase.PerksVendorItemID);
+    data << uint64(purchase.PurchaseTime);
+    data << Bits<1>(purchase.Refundable);
+    data.FlushBits();
+
+    return data;
+}
 }

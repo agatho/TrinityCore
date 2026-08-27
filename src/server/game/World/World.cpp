@@ -677,6 +677,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Calculate.Creature.Zone.Area.Data"sv, .DefaultValue = false, .Index = CONFIG_CALCULATE_CREATURE_ZONE_AREA_DATA },
         { .Name = "Calculate.Gameoject.Zone.Area.Data"sv, .DefaultValue = false, .Index = CONFIG_CALCULATE_GAMEOBJECT_ZONE_AREA_DATA },
         { .Name = "BlackMarket.Enabled"sv, .DefaultValue = true, .Index = CONFIG_BLACKMARKET_ENABLED },
+        { .Name = "PerksProgram.Enabled"sv, .DefaultValue = true, .Index = CONFIG_PERKS_PROGRAM_ENABLED },
         { .Name = "HotSwap.Enabled"sv, .DefaultValue = true, .Index = CONFIG_HOTSWAP_ENABLED },
         { .Name = "HotSwap.EnableReCompiler"sv, .DefaultValue = true, .Index = CONFIG_HOTSWAP_RECOMPILER_ENABLED },
         { .Name = "HotSwap.EnableEarlyTermination"sv, .DefaultValue = true, .Index = CONFIG_HOTSWAP_EARLY_TERMINATION_ENABLED },
@@ -806,6 +807,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Battleground.Random.ResetHour"sv, .DefaultValue = 6, .Index = CONFIG_RANDOM_BG_RESET_HOUR, .Min = 0, .Max = 23 },
         { .Name = "Calendar.DeleteOldEventsHour"sv, .DefaultValue = 6, .Index = CONFIG_CALENDAR_DELETE_OLD_EVENTS_HOUR, .Min = 0, .Max = 23 },
         { .Name = "Guild.ResetHour"sv, .DefaultValue = 6, .Index = CONFIG_GUILD_RESET_HOUR, .Min = 0, .Max = 23 },
+        { .Name = "PerksProgram.ResetHour"sv, .DefaultValue = 4, .Index = CONFIG_PERKS_PROGRAM_RESET_HOUR, .Min = 0, .Max = 23 },
         { .Name = "TalentsInspecting"sv, .DefaultValue = 1, .Index = CONFIG_TALENTS_INSPECTING },
         { .Name = "ChatStrictLinkChecking.Severity"sv, .DefaultValue = 0, .Index = CONFIG_CHAT_STRICT_LINK_CHECKING_SEVERITY },
         { .Name = "ChatStrictLinkChecking.Kick"sv, .DefaultValue = 0, .Index = CONFIG_CHAT_STRICT_LINK_CHECKING_KICK },
@@ -1207,6 +1209,12 @@ void World::LoadConfigSettings(bool reload)
         { .Rule = ::GameRule::TransmogEnabled, .Value = true },
         { .Rule = ::GameRule::HousingEnabled, .Value = true }
     };
+
+    // Trading Post off: also tell the client through the SMSG_FEATURE_SYSTEM_STATUS game rules, so the UI greys
+    // its entry points out instead of only reacting to SMSG_PERKS_PROGRAM_DISABLED (which merely pops a dialog
+    // and closes the frame). The rule keeps Blizzard's own name -- it is the only Perks rule the client knows.
+    if (!m_bool_configs[CONFIG_PERKS_PROGRAM_ENABLED])
+        _gameRules.push_back({ .Rule = ::GameRule::PerksProgramActivityTrackingDisabled, .Value = true });
 
     if (reload)
     {
