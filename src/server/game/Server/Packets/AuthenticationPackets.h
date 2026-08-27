@@ -578,10 +578,16 @@ namespace WorldPackets
             // UNVERIFIED: that 16 is really the ceiling. It is inferred from the client's latency ring buffer
             // (NetClient + 0x58*(idx+2) + 0x10), which has exactly 16 slots - not measured against a packet that
             // fills it, because the highest Count actually observed over the corpus's 4522 packets is 11.
-            // If the inference is wrong the failure is silent, which is why the marker sits here: Array::resize
-            // calls OnInvalidArraySize for the larger Count, WorldSession::Update swallows the resulting
-            // PacketArrayMaxCapacityException as "Skipped packet", the handler never runs, and this session's
-            // telemetry stops without anything in the log pointing at this number.
+            // If the inference is wrong this session's telemetry stops: Array::resize calls OnInvalidArraySize for
+            // the larger Count, WorldSession::Update catches the resulting PacketArrayMaxCapacityException and the
+            // handler never runs. That failure is NOT silent, and the marker does not sit here because it would
+            // hide - the catch logs bbe.what() together with the opcode name on "network" at ERROR
+            // (WorldSession.cpp, "... occured while parsing a packet (opcode: {}) ... Skipped packet."), and that
+            // what() reads "Attempted to read more array elements from packet <Count> than allowed 16"
+            // (PacketArrayMaxCapacityException, PacketUtilities.cpp). The line therefore names this constant, the
+            // Count that exceeded it and CMSG_LATENCY_REPORT. worldserver.conf.dist declares no Logger.network of
+            // its own, so the line falls to Logger.root=5 and is written in the shipped configuration.
+            // The marker sits here because 16 is inferred and never measured, not because a wrong 16 would be quiet.
             static constexpr std::size_t MaxEntries = 16;
 
             explicit LatencyReport(WorldPacket&& packet) : ClientPacket(CMSG_LATENCY_REPORT, std::move(packet)) { }
