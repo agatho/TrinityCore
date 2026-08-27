@@ -430,10 +430,13 @@ void LatencyReport::Read()
 
 void LogStreamingError::Read()
 {
-    // bits<9> length, then the raw bytes. The message is a vsnprintf result from the client's CASC layer and can
-    // legitimately carry byte sequences that are not valid UTF-8 (embedded [Key %02X..%02X] blobs), so it is read
-    // unvalidated - it is only ever logged, never interpreted.
-    _worldPacket >> SizedString::BitsSize<9>(Message);
+    // bits<MessageLengthBits> length, then the raw bytes. The bit width IS the length bound - 9 bits cannot
+    // express more than MaxMessageLength - so reading through the same constant is what keeps the declared
+    // maximum and the enforced maximum from drifting apart.
+    // The message is a vsnprintf result from the client's CASC layer and can legitimately carry byte sequences
+    // that are not valid UTF-8 (embedded [Key %02X..%02X] blobs), so it is read unvalidated - it is only ever
+    // logged, never interpreted.
+    _worldPacket >> SizedString::BitsSize<LogStreamingError::MessageLengthBits>(Message);
     _worldPacket >> SizedString::Data<Strings::DontValidateUtf8>(Message);
 }
 }

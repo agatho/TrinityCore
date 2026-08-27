@@ -111,6 +111,17 @@ void WorldSession::SendPlayerNameByCommunityId(WorldPackets::Query::BNetAccountA
     SendPacket(response.Write());
 }
 
+// Answer a member with a fixed result and no payload. Used for the members past the per request lookup budget:
+// TemporaryFailure only clears the client's pending bit, so those entries stay askable instead of being branded
+// negative (consumer 0x3498F0), and the client gets an answer for every member it asked about.
+void WorldSession::SendPlayerNameByCommunityIdResult(WorldPackets::Query::BNetAccountAndCommunityID const& member, uint8 result)
+{
+    WorldPackets::Query::QueryPlayerNameByCommunityIdResponse response;
+    response.Member = member;
+    response.Result = result;
+    SendPacket(response.Write());
+}
+
 void WorldSession::HandleQueryPlayerNameByCommunityId(WorldPackets::Query::QueryPlayerNameByCommunityId& queryPlayerNameByCommunityId)
 {
     SendPlayerNameByCommunityId(queryPlayerNameByCommunityId.Member);
@@ -125,8 +136,27 @@ void WorldSession::HandleQueryPlayerNamesForCommunity(WorldPackets::Query::Query
     // club subsystem raises once its cache has filled.
     // ClubID is not needed to answer - every member id already carries its own realm and character counter - but it
     // is read because it is on the wire.
+    //
+    // Every member that was read gets an answer. Only the amount of WORK is capped: past MaxLookupsPerRequest the
+    // answer is TemporaryFailure instead of a cache lookup. That is the difference between a bounded request and a
+    // hung member list - a request the server refuses to answer leaves C_Club.AreMembersReady false forever,
+    // because CommunitiesMemberList.lua has no timer, no retry and no error dialog.
+    std::size_t lookups = 0;
     for (WorldPackets::Query::BNetAccountAndCommunityID const& member : queryPlayerNamesForCommunity.Members)
-        SendPlayerNameByCommunityId(member);
+    {
+        if (lookups < WorldPackets::Query::QueryPlayerNamesForCommunity::MaxLookupsPerRequest)
+        {
+            ++lookups;
+            SendPlayerNameByCommunityId(member);
+        }
+        else
+            SendPlayerNameByCommunityIdResult(member, WorldPackets::Query::QueryPlayerNameByCommunityIdResponse::TemporaryFailure);
+    }
+
+    if (queryPlayerNamesForCommunity.Members.size() > lookups)
+        TC_LOG_DEBUG("network", "WorldSession::HandleQueryPlayerNamesForCommunity: {} asked for {} members of club {}, {} answered from the cache, {} deferred with TemporaryFailure",
+            GetPlayerInfo(), queryPlayerNamesForCommunity.Members.size(), queryPlayerNamesForCommunity.ClubID, lookups,
+            queryPlayerNamesForCommunity.Members.size() - lookups);
 }
 
 void WorldSession::HandleQueryTimeOpcode(WorldPackets::Query::QueryTime& /*queryTime*/)

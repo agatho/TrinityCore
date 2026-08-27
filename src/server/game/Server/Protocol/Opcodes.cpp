@@ -2087,6 +2087,11 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_MOVE_UPDATE_TELEPORT,                                         STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_MOVE_UPDATE_TURN_RATE,                                        STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_MOVE_UPDATE_WALK_SPEED,                                       STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
+    // Framing opcode: produced by WorldSocket::WriteBundleToBuffer, which is a member of WorldSocket and
+    // therefore active on the realm AND on the instance socket. It never travels through
+    // WorldSession::SendPacket, so this connection index is never read - the enum has no "either socket" value
+    // (CONNECTION_TYPE_DEFAULT is -1 and would index m_Socket out of bounds) and REALM is the table default for
+    // everything that is not instance only. The entry is documentary, not a routing decision.
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_MULTIPLE_PACKETS,                                             STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_MULTI_FLOOR_LEAVE_FLOOR,                                      STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_MULTI_FLOOR_NEW_FLOOR,                                        STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
@@ -2325,6 +2330,8 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_REQUEST_CEMETERY_LIST_RESPONSE,                               STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_REQUEST_PVP_REWARDS_RESPONSE,                                 STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE,                          STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    // Same as SMSG_MULTIPLE_PACKETS: produced by WorldSocket::WritePacketToBuffer on whichever socket the
+    // deflate call failed on, never routed through WorldSession::SendPacket. The entry is documentary.
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESET_COMPRESSION_CONTEXT,                                    STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESET_FAILED_NOTIFY,                                          STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESET_LAST_LOADED_CONFIG_CVARS,                               STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);

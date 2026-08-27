@@ -999,7 +999,8 @@ void WorldSession::HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd
 }
 
 // CMSG_SUSPEND_COMMS_ACK (12.1 0x440000). Same shape and the same field order as CMSG_TIME_SYNC_RESPONSE and
-// CMSG_QUEUED_MESSAGES_END, so it is handled the same way: one more clock delta sample.
+// CMSG_QUEUED_MESSAGES_END, so once it is established that the ack is one of ours it yields one more clock delta
+// sample, exactly like those two.
 //
 // What ClientTick is and is not: the client fills it from its own millisecond clock (0x354ED50) while building the
 // ack in consumer 0x18C1610. Over 33 captured pairs, (ClientTick - capture tick) is constant to within a
@@ -1007,13 +1008,37 @@ void WorldSession::HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd
 // 7.7 d). It is therefore an opaque client tick, exactly like the value CMSG_TIME_SYNC_RESPONSE carries - usable
 // for a clock delta, not comparable against server time. HandleTimeSync treats it that way.
 //
-// SerialNumber is echoed from the SMSG_SUSPEND_COMMS we sent (78/78 pairs in the captures). This server has no
-// send site for that packet, so in practice this handler only ever runs for a serial we never issued; it is
-// registered because the acknowledgement is the receiving half of a pair and a half pair is not an implementation.
-// A serial we did not register simply produces no time sync sample.
+// SerialNumber is echoed from the SMSG_SUSPEND_COMMS we sent (78/78 pairs in the captures) and is therefore
+// entirely client controlled on the way back. It must NOT reach HandleTimeSync as a counter: that counter is the
+// key of _pendingTimeSyncRequests, whose entries are all server minted (SendTimeSync, the resume counter, the
+// init-active-mover counter), and a client that echoed the sequence index of a live SMSG_TIME_SYNC_REQUEST would
+// consume that entry - dropping the genuine CMSG_TIME_SYNC_RESPONSE - and inject a clock delta of its own
+// choosing into the six slot _timeSyncClockDeltaQueue, which feeds AdjustClientMovementTime and TransportServerTime.
+//
+// So the serial is checked, not used: it only has to match the one suspend this session actually has outstanding,
+// and the sample is then booked under the reserved counter that WorldSession::SendSuspendComms registered. Since
+// this server has no call site for SendSuspendComms (see the preconditions on WorldPackets::Auth::SuspendComms),
+// nothing is ever outstanding and every ack that arrives is unsolicited and dropped here.
 void WorldSession::HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck const& suspendCommsAck)
 {
-    HandleTimeSync(suspendCommsAck.SerialNumber, suspendCommsAck.ClientTick, suspendCommsAck.GetRawPacket()->GetReceivedTime());
+    if (!_suspendCommsPendingSerial)
+    {
+        TC_LOG_DEBUG("network", "WorldSession::HandleSuspendCommsAck: {} sent an unsolicited acknowledgement (serial {}), ignored",
+            GetPlayerInfo(), suspendCommsAck.SerialNumber);
+        return;
+    }
+
+    if (*_suspendCommsPendingSerial != suspendCommsAck.SerialNumber)
+    {
+        TC_LOG_DEBUG("network", "WorldSession::HandleSuspendCommsAck: {} acknowledged serial {} while serial {} is outstanding, ignored",
+            GetPlayerInfo(), suspendCommsAck.SerialNumber, *_suspendCommsPendingSerial);
+        return;
+    }
+
+    // One suspend, one ack. Clearing first makes a replay of the same serial fall into the branch above.
+    _suspendCommsPendingSerial.reset();
+
+    HandleTimeSync(SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER, suspendCommsAck.ClientTick, suspendCommsAck.GetRawPacket()->GetReceivedTime());
 }
 
 void WorldSession::HandleMoveInitActiveMoverComplete(WorldPackets::Movement::MoveInitActiveMoverComplete const& moveInitActiveMoverComplete)

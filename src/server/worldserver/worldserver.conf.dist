@@ -4161,6 +4161,12 @@ Appender.DBErrors=2,2,0,DBErrors.log
 
 Logger.root=5,Console Server
 Logger.server=3,Console Server
+#    network.telemetry carries what the client reports about itself and nothing else: the per session frame rate
+#    summary built from CMSG_LATENCY_REPORT and the content streaming errors from CMSG_LOG_STREAMING_ERROR.
+#    Both handlers have no protocol effect - the logged line IS the effect - so this logger is enabled at Info
+#    instead of falling through to Logger.root, which discards everything below Error. Set it to 1 (Trace) to
+#    also get one line per latency report; that is several lines a minute per player.
+Logger.network.telemetry=3,Console Server
 Logger.commands.gm=3,Console GM
 Logger.scripts.hotswap=3,Console Server
 Logger.sql.sql=5,Console DBErrors

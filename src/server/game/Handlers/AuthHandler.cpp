@@ -177,6 +177,13 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
 // CVar that gates it, so anything the server sends back would be invented. Decision O3 of unit conn_44_4C: the
 // values are aggregated into per-session statistics and deliberately NOT persisted. A table would take roughly
 // 20000 rows per play session with no retention strategy.
+//
+// The aggregate has exactly one consumer, and it is server side: WorldSession::~WorldSession writes one summary
+// line per session that reported anything, through GetClientPerformanceStats(). That line is visible in the
+// shipped configuration - logger network.telemetry is enabled at Info in worldserver.conf.dist - because a
+// handler whose only effect needs the operator to lower a log level first has no effect. The per report line
+// below stays at Trace: it is detail for someone chasing one session, not something a realm wants every few
+// seconds per player.
 void WorldSession::HandleLatencyReport(WorldPackets::Auth::LatencyReport const& latencyReport)
 {
     // Deduplication. 2 is the last and largest stage of the triple.
@@ -210,7 +217,7 @@ void WorldSession::HandleLatencyReport(WorldPackets::Auth::LatencyReport const& 
             _clientPerformanceStats.LastTimestampMS = entry.TimestampMS;
     }
 
-    TC_LOG_TRACE("network", "WorldSession::HandleLatencyReport: {} reported {} entries (fps last {} min {} max {} avg {}, {} samples over {} reports)",
+    TC_LOG_TRACE("network.telemetry", "WorldSession::HandleLatencyReport: {} reported {} entries (fps last {} min {} max {} avg {}, {} samples over {} reports)",
         GetPlayerInfo(), latencyReport.Entries.size(), _clientPerformanceStats.LastFrameRate, _clientPerformanceStats.MinFrameRate,
         _clientPerformanceStats.MaxFrameRate, _clientPerformanceStats.AverageFrameRate(), _clientPerformanceStats.Samples,
         _clientPerformanceStats.Reports);
@@ -219,7 +226,11 @@ void WorldSession::HandleLatencyReport(WorldPackets::Auth::LatencyReport const& 
 // CMSG_LOG_STREAMING_ERROR (12.1 0x44000B). Free-form English CASC/TACT error text out of the client's streaming
 // logger; only severity >= 4 messages reach the ring this is drained from. There is nothing structured in it - no
 // file name field, no FileDataID field, no error code - and the Streaming Lua API has an empty Events table, so
-// there is no client state to change and no reply to send. Logging it is the whole of the effect (decision O4).
+// there is no client state to change and no reply to send. Logging it is the whole of the effect (decision O4),
+// which is why the line goes to network.telemetry: worldserver.conf.dist enables that logger at Info, so it is
+// actually written in the shipped configuration. On the "network" logger it would fall through to Logger.root=5
+// (Error) and be discarded - the handler would then have no effect at all, which is exactly the empty handler
+// this opcode was implemented to avoid.
 //
 // The message is attacker-controlled and the client keeps a 64 slot error ring it can drain in a burst, so the
 // output is capped per session and control characters are stripped so a crafted message cannot forge log lines.
@@ -240,10 +251,10 @@ void WorldSession::HandleLogStreamingError(WorldPackets::Auth::LogStreamingError
 
     ++_streamingErrorsReported;
 
-    TC_LOG_INFO("network", "WorldSession::HandleLogStreamingError: {} reported a content streaming error ({}/{}): {}",
+    TC_LOG_INFO("network.telemetry", "WorldSession::HandleLogStreamingError: {} reported a content streaming error ({}/{}): {}",
         GetPlayerInfo(), _streamingErrorsReported, MaxReportedPerSession, message);
 
     if (_streamingErrorsReported == MaxReportedPerSession)
-        TC_LOG_INFO("network", "WorldSession::HandleLogStreamingError: {} reached the per session streaming error log cap, further reports are counted but not logged",
+        TC_LOG_INFO("network.telemetry", "WorldSession::HandleLogStreamingError: {} reached the per session streaming error log cap, further reports are counted but not logged",
             GetPlayerInfo());
 }

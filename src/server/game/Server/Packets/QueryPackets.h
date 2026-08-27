@@ -193,10 +193,25 @@ namespace WorldPackets
         class QueryPlayerNamesForCommunity final : public ClientPacket
         {
         public:
-            // UNVERIFIED: the client writer has no upper bound of its own, so this cap is a server side choice, not
-            // a measurement. 200 is above any realistic club roster page and keeps one request from producing an
-            // unbounded number of responses.
-            static constexpr std::size_t MaxMembers = 200;
+            // Reading capacity, and deliberately not a policy number. The socket rejects every packet whose size
+            // is not below 0x10000 (WorldSocket.h, PacketHeader::IsValidSize) and one element cannot be shorter
+            // than 10 bytes on the wire (2 byte packed guid mask for an empty guid, plus the uint64 community id),
+            // so (0xFFFF - 4 opcode - 8 ClubID - 4 Count) / 10 is the largest member count a packet this server
+            // accepts can carry at all.
+            // Bounding the read by the wire instead of by a chosen number is what keeps a large request from being
+            // DROPPED: at the previous value of 200, Array::resize called OnInvalidArraySize and threw
+            // PacketArrayMaxCapacityException, which WorldSession::Update swallows as "Skipped packet" - the
+            // handler never ran, not one response went out, and C_Club.AreMembersReady stayed false forever. That
+            // is precisely the unbounded spinner this opcode was implemented to prevent. How much WORK one
+            // request may cause is limited in the handler instead, where a limit can still be answered.
+            static constexpr std::size_t MaxMembers = (0xFFFF - 4 - 8 - 4) / 10;
+
+            // How many members of a single request get a real name lookup. Everything past that is answered with
+            // QueryPlayerNameByCommunityIdResponse::TemporaryFailure, which clears the client's pending bit and
+            // lets it ask again in a smaller batch - an answer, not silence.
+            // UNVERIFIED: the client writer has no upper bound of its own, so this budget is a server side choice,
+            // not a measurement. 200 is above any roster page the Communities UI focuses at once.
+            static constexpr std::size_t MaxLookupsPerRequest = 200;
 
             explicit QueryPlayerNamesForCommunity(WorldPacket&& packet) : ClientPacket(CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY, std::move(packet)) { }
 

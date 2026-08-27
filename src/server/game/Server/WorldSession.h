@@ -1080,6 +1080,7 @@ class TC_GAME_API WorldSession
 
         void BuildNameQueryData(ObjectGuid guid, WorldPackets::Query::NameCacheLookupResult& lookupData);
         void SendPlayerNameByCommunityId(WorldPackets::Query::BNetAccountAndCommunityID const& member);
+        void SendPlayerNameByCommunityIdResult(WorldPackets::Query::BNetAccountAndCommunityID const& member, uint8 result);
 
         void SendTrainerList(Creature* npc, uint32 trainerId);
         void SendListInventory(ObjectGuid guid);
@@ -1228,10 +1229,22 @@ class TC_GAME_API WorldSession
         void RegisterTimeSync(uint32 counter);
         uint32 AdjustClientMovementTime(uint32 time) const;
 
+        // SMSG_SUSPEND_COMMS - the sending half of the suspend/ack pair, and the ONLY place a suspend serial is
+        // minted. Read the preconditions on WorldPackets::Auth::SuspendComms before adding a call: the client
+        // answers a suspend it did not expect with CMSG_LOG_DISCONNECT(3) and closes the socket.
+        // This server has no call site, because it never redirects an already established socket - retail's only
+        // use for the packet. The entry point exists anyway so that the serial CMSG_SUSPEND_COMMS_ACK echoes has
+        // exactly one issuer; HandleSuspendCommsAck rejects every serial that did not come from here.
+        void SendSuspendComms(ConnectionType connection);
+
         static constexpr uint32 SPECIAL_INIT_ACTIVE_MOVER_TIME_SYNC_COUNTER = 0xFFFFFFFF;
         static constexpr uint32 SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER      = 0xFFFFFFFE;
-        // CMSG_SUSPEND_COMMS_ACK carries the serial we chose, so it gets its own reserved counter instead of
-        // colliding with a real time sync sequence index.
+        // The counter CMSG_SUSPEND_COMMS_ACK is booked under. The serial from the wire is NEVER used as a key:
+        // SendSuspendComms registers this constant, and HandleSuspendCommsAck only looks a sample up under it
+        // after the wire serial matched the one we issued. Keying on the wire value instead would let the client
+        // pick the key - it could consume the slot of a pending SMSG_TIME_SYNC_REQUEST, so the real
+        // CMSG_TIME_SYNC_RESPONSE for that counter is silently dropped, and push a clock delta of its own choice
+        // into _timeSyncClockDeltaQueue, which feeds AdjustClientMovementTime and the transport server time.
         static constexpr uint32 SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER     = 0xFFFFFFFD;
 
         // Client-reported frame rate statistics, fed from CMSG_LATENCY_REPORT. Session lifetime only - see
@@ -2083,6 +2096,10 @@ class TC_GAME_API WorldSession
 
         std::map<uint32, int64> _pendingTimeSyncRequests; // key: counter. value: server time when packet with that counter was sent.
         uint32 _timeSyncNextCounter;
+        // Serial of the SMSG_SUSPEND_COMMS this session is waiting to have acknowledged. Empty means no suspend
+        // is outstanding and every CMSG_SUSPEND_COMMS_ACK is unsolicited.
+        Optional<uint32> _suspendCommsPendingSerial;
+        uint32 _suspendCommsNextSerial = 1;
         uint32 _timeSyncTimer;
 
         // Packets cooldown

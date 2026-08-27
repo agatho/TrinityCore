@@ -179,6 +179,15 @@ WorldSession::~WorldSession()
 
     delete _RBACData;
 
+    ///- the reader of the CMSG_LATENCY_REPORT aggregate. One line per session that reported anything, which is
+    /// the only granularity the data supports: the client sends its reports as cumulative triples several times
+    /// a minute, so anything per report would be noise and anything persisted would be ~20000 rows per session.
+    /// Logger network.telemetry is enabled at Info in worldserver.conf.dist, so this is visible as shipped.
+    if (ClientPerformanceStats const& stats = GetClientPerformanceStats(); stats.Reports)
+        TC_LOG_INFO("network.telemetry", "Client performance for {}: fps min {} max {} avg {} last {} over {} samples in {} reports",
+            GetPlayerInfo(), stats.MinFrameRate, stats.MaxFrameRate, stats.AverageFrameRate(), stats.LastFrameRate,
+            stats.Samples, stats.Reports);
+
     ///- empty incoming packet queue
     WorldPacket* packet = nullptr;
     while (_recvQueue.next(packet))
@@ -1810,6 +1819,9 @@ void WorldSession::ResetTimeSync()
 {
     _timeSyncNextCounter = 0;
     _pendingTimeSyncRequests.clear();
+    // An outstanding suspend cannot survive the reset either - its entry has just been erased above, so keeping
+    // the serial would only mean accepting an ack that can no longer produce a sample.
+    _suspendCommsPendingSerial.reset();
 }
 
 void WorldSession::SendTimeSync()
@@ -1828,4 +1840,21 @@ void WorldSession::SendTimeSync()
 void WorldSession::RegisterTimeSync(uint32 counter)
 {
     _pendingTimeSyncRequests[counter] = getMSTime();
+}
+
+// Sending half of SMSG_SUSPEND_COMMS / CMSG_SUSPEND_COMMS_ACK. Everything the client requires of the moment this
+// may be sent is written out on WorldPackets::Auth::SuspendComms; this function only owns the serial.
+//
+// The serial is server minted and monotonic per session. That is the whole point of routing the send through
+// here: the ack echoes the serial, and HandleSuspendCommsAck accepts the ack only while exactly this value is
+// outstanding. Booking the sample under SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER keeps it out of the sequence
+// index space of SMSG_TIME_SYNC_REQUEST, which the client also gets to echo.
+void WorldSession::SendSuspendComms(ConnectionType connection)
+{
+    WorldPackets::Auth::SuspendComms suspendComms(connection);
+    suspendComms.SerialNumber = _suspendCommsNextSerial++;
+    SendPacket(suspendComms.Write());
+
+    _suspendCommsPendingSerial = suspendComms.SerialNumber;
+    RegisterTimeSync(SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER);
 }

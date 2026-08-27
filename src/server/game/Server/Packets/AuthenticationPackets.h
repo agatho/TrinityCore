@@ -370,8 +370,12 @@ namespace WorldPackets
         //     that exact mistake broke enter-world for every character once (88bcee58de, reverted by 5778fe4266).
         //   * once suspended, ONLY family 0x4C may travel over that socket until SMSG_RESUME_COMMS clears the
         //     flag (gate 0x18C0F60). Any other opcode in that window closes the connection.
-        // Retail only ever does this when redirecting an ALREADY established slot, which this server never does.
-        // There is deliberately no send site - see decision O1 in the conn_44_4C status file.
+        // Retail only ever does this when redirecting an ALREADY established slot, which this server never does,
+        // so there is no call site - see decision O1 in the conn_44_4C status file.
+        // Do NOT construct and send this directly when adding one. WorldSession::SendSuspendComms is the single
+        // issuer of the serial: it mints the value, remembers it and registers the matching time sync counter,
+        // and WorldSession::HandleSuspendCommsAck accepts the acknowledgement only for a serial issued there.
+        // A hand rolled send would hand the serial space back to the client.
         class SuspendComms final : public ServerPacket
         {
         public:
@@ -499,7 +503,13 @@ namespace WorldPackets
         class LogStreamingError final : public ClientPacket
         {
         public:
-            static constexpr std::size_t MaxMessageLength = 511;    ///< 9 bits, and the client buffer is char[512]
+            // The client's message buffer is char[512], so the length field is ceil(log2(512)) = 9 bits wide and
+            // the longest message that fits is 511 bytes. The two are one fact, so MaxMessageLength is derived
+            // from the bit width rather than written out next to it - Read() uses MessageLengthBits, which makes
+            // the declared bound the bound that is actually enforced instead of a second, independent claim.
+            static constexpr uint32 MessageLengthBits = 9;
+            static constexpr std::size_t MaxMessageLength = (std::size_t(1) << MessageLengthBits) - 1;
+            static_assert(MaxMessageLength == 511, "9 bit length field, 512 byte client buffer");
 
             explicit LogStreamingError(WorldPacket&& packet) : ClientPacket(CMSG_LOG_STREAMING_ERROR, std::move(packet)) { }
 

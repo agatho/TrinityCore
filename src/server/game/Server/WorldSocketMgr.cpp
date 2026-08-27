@@ -53,6 +53,10 @@ bool WorldSocketMgr::StartNetwork(Trinity::Asio::IoContext& ioContext, std::stri
     // makes the client discard the rest of the frame WITHOUT reporting an error (client framing loop 0x18C0490).
     // A silent-loss failure mode does not belong in a default-on setting.
     _packetBundling = sConfigMgr->GetBoolDefault("Network.PacketBundling", false);
+    if (_packetBundling)
+        TC_LOG_WARN("server.loading", "Network.PacketBundling is enabled: outgoing packets are combined into "
+            "SMSG_MULTIPLE_PACKETS frames. That framing is derived from the 12.1 client and has not yet been run "
+            "against a live client; a wrong inner length is discarded by the client without any error.");
 
     int const max_connections = TRINITY_MAX_LISTEN_CONNECTIONS;
     TC_LOG_DEBUG("misc", "Max allowed socket connections {}", max_connections);
