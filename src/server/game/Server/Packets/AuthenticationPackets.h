@@ -512,6 +512,10 @@ namespace WorldPackets
         // streaming logger 0x35B6050, wrapped as 'Streaming Error: %s', and only severity >= 4 reaches the error
         // ring (64 slots). It is diagnostics, not structured data: there is nothing to parse and no reply. The
         // Streaming Lua API has an empty Events table, so there is no client-observable effect either.
+        // UNVERIFIED: the structure is unproven at the wire - the opcode occurs in none of the 25 captures (0 raw
+        // occurrences of both 0x44000B and the 12.0.7 number 0x41000B), so no reference bytes exist and no round
+        // trip was possible. What it was checked against is the length rule alone: 2..513 byte body, the 9 bit
+        // length field padded out to two bytes by FlushBits plus 0..511 message bytes.
         class LogStreamingError final : public ClientPacket
         {
         public:
@@ -532,6 +536,7 @@ namespace WorldPackets
 
         ByteBuffer& operator<<(ByteBuffer& data, VirtualRealmInfo const& realmInfo);
         ByteBuffer& operator<<(ByteBuffer& data, VirtualRealmNameInfo const& realmInfo);
+        ByteBuffer& operator>>(ByteBuffer& data, LatencyReportEntry& entry);
     }
 }
 

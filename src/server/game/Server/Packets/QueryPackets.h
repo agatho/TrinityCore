@@ -163,6 +163,13 @@ namespace WorldPackets
             std::vector<NameCacheLookupResult> Players;
         };
 
+        // UNVERIFIED: none of the three community messages below is proven at the wire. All three - the two 0x44
+        // requests and their 0x64 response - occur in NONE of the 25 captures: 0 raw occurrences of 0x44000D,
+        // 0x44000E and 0x64000B, and 0 of their 12.0.7 numbers 0x41000D, 0x41000E and 0x5F000B. No reference bytes
+        // exist, so no round trip was possible for any of them. The field order is the client writers and the
+        // response reader read backwards (arbiter rank 1); the only check it got is the length rule noted at each
+        // class.
+        //
         // The client's community/club member windows identify a member by the pair
         // JamBNetAccountAndCommunityID { ObjectGuid bnetAccount; uint64 communityID; }. The type name is proven,
         // not derived: the destructor of the batch message class (0x5D4830) frees its element buffer tagged
@@ -170,7 +177,7 @@ namespace WorldPackets
         // declares bnetAccount@0x00 and communityID@0x10.
         // communityID is this server's Clubs::CreateClubMemberId value - the same number PlayerGuidLookupData
         // carries as GuildClubMemberID.
-        // Wire verified against the 12.1.0.69382 client writers 0x5D5C40 (single) and 0x5D5EC0 (batch).
+        // Field order taken from the 12.1.0.69382 client writers 0x5D5C40 (single) and 0x5D5EC0 (batch).
         struct BNetAccountAndCommunityID
         {
             ObjectGuid BnetAccountGUID;
@@ -178,6 +185,8 @@ namespace WorldPackets
         };
 
         // CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID (12.1 0x44000D) - { PackedGuid, uint64 }, client object 56 bytes.
+        // No reference bytes (see the note above the member struct); checked against the length rule alone:
+        // 10..26 byte body, packed guid 2..18 plus the uint64.
         class QueryPlayerNameByCommunityId final : public ClientPacket
         {
         public:
@@ -190,6 +199,8 @@ namespace WorldPackets
 
         // CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY (12.1 0x44000E) - { uint64 ClubID, uint32 Count, Count x member },
         // client object 64 bytes, in-memory element stride 24.
+        // No reference bytes (see the note above the member struct); checked against the length rule alone:
+        // 12 + Count * (10..26) byte body.
         class QueryPlayerNamesForCommunity final : public ClientPacket
         {
         public:
@@ -215,14 +226,18 @@ namespace WorldPackets
             // the opcode is reachable from STATUS_AUTHED.
             // The value is the client's own club capacity, not a chosen number: C_Club.GetClubCapacity is a
             // constant-returning Lua binding, 0x7FF781C46B33 `mov [rbp+arg_10], 3E8h` written once into the slot
-            // that 0x7FF781C46F2A pushes back to Lua - 1000. Since C_Club.FocusMembers focuses a WHOLE club roster
-            // (ClubDocumentation.lua: its only argument is clubId), a request from a real client cannot exceed the
-            // capacity of one club, so this budget never truncates a legitimate roster.
-            // UNVERIFIED: that the capacity applies to guild backed clubs too. A guild roster larger than 1000 that
-            // missed the name cache in full would have its surplus members left unanswered, and their entries would
-            // stay pending (C_Club.AreMembersReady false, the member list spinner keeps running). Not reproducible
-            // here - it needs a >1000 member guild on a live client - and the alternative, answering every member
-            // of an arbitrarily large request, is the amplification this bound exists to remove.
+            // that 0x7FF781C46F2A pushes back to Lua - 1000. C_Club.FocusMembers focuses a WHOLE club roster
+            // (ClubDocumentation.lua: its only argument is clubId), so this is the size of request the client is
+            // built to make.
+            // It does NOT follow that a larger request cannot happen here: TrinityCore enforces no guild member
+            // limit at all - no MAX_GUILD_MEMBERS in Guild.h/.cpp, no switch in worldserver.conf.dist - so a 1500
+            // member guild with a cold name cache produces a legitimate 1500 member request on this server. Which
+            // is why the budget caps the LOOKUPS only: every requested member is answered either way, the surplus
+            // with a bare negative, so no entry is ever left pending. See HandleQueryPlayerNamesForCommunity for
+            // the reasoning behind PermanentFailure.
+            // UNVERIFIED: that the client's club capacity is the right place to split resolved from refused. It is
+            // the only figure the client states about itself, but whether it also governs guild backed clubs is not
+            // measurable here - that needs a >1000 member guild on a live client.
             static constexpr std::size_t MaxResponsesPerRequest = 1000;
 
             explicit QueryPlayerNamesForCommunity(WorldPacket&& packet) : ClientPacket(CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY, std::move(packet)) { }
@@ -233,8 +248,11 @@ namespace WorldPackets
             Array<BNetAccountAndCommunityID, MaxMembers> Members;
         };
 
-        // SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE (12.1 0x64000B). Note the family: the response to two
-        // 0x44 opcodes lives in 0x64. Verified against the 12.1 dispatcher case at 0x67C6ED, which reads
+        // SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE (12.1 0x64000B). No reference bytes either (see the note
+        // above the member struct); checked against the length rule alone: 11..27 bytes for a negative answer
+        // (uint8 Result, packed guid 2..18, uint64), plus the PlayerGuidLookupData block on success.
+        // Note the family: the response to two 0x44 opcodes lives in 0x64. Read out of the 12.1 dispatcher case at
+        // 0x67C6ED, which reads
         //   Read<uint8> Result, ReadPackedGuid, Read<uint64>
         // and only then, and only when Result == 0, calls the PlayerGuidLookupData sub reader 0x6E17E0 - the very
         // same function that parses the per player payload of SMSG_QUERY_PLAYER_NAMES_RESPONSE, so the existing
