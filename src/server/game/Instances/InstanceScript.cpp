@@ -24,7 +24,9 @@
 #include "DB2Stores.h"
 #include "GameEventSender.h"
 #include "GameObject.h"
+#include "GameTime.h"
 #include "Group.h"
+#include "InstanceEncounterTimeline.h"
 #include "InstancePackets.h"
 #include "InstanceScenario.h"
 #include "InstanceScriptData.h"
@@ -42,7 +44,9 @@
 #include "World.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
+#include <algorithm>
 #include <cstdarg>
+#include <ranges>
 
 #ifdef TRINITY_API_USE_DYNAMIC_LINKING
 #include "ScriptMgr.h"
@@ -65,7 +69,8 @@ DungeonEncounterEntry const* BossInfo::GetDungeonEncounterForDifficulty(Difficul
 }
 
 InstanceScript::InstanceScript(InstanceMap* map) noexcept : instance(map), _instanceSpawnGroups(sObjectMgr->GetInstanceSpawnGroupsForMap(map->GetId())),
-_entranceId(0), _temporaryEntranceId(0), _combatResurrectionTimer(0), _combatResurrectionCharges(0), _combatResurrectionTimerStarted(false)
+_entranceId(0), _temporaryEntranceId(0), _combatResurrectionTimer(0), _combatResurrectionCharges(0), _combatResurrectionTimerStarted(false),
+_nextEncounterTimelineEventInstanceId(0)
 {
 #ifdef TRINITY_API_USE_DYNAMIC_LINKING
     uint32 scriptId = sObjectMgr->GetInstanceTemplate(map->GetId())->ScriptId;
@@ -418,6 +423,7 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 {
                     ResetCombatResurrections();
                     SendEncounterEnd();
+                    ClearEncounterTimeline();
 
                     instance->DoOnPlayers([](Player* player)
                     {
@@ -429,6 +435,7 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 {
                     ResetCombatResurrections();
                     SendEncounterEnd();
+                    ClearEncounterTimeline();
                     dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
                     if (dungeonEncounter)
                     {
@@ -899,6 +906,216 @@ void InstanceScript::SendBossKillCredit(uint32 encounterId)
     bossKillCreditMessage.DungeonEncounterID = encounterId;
 
     instance->SendToPlayers(bossKillCreditMessage.Write());
+}
+
+// The encounter timeline. Six opcodes share one element type (ClientEncounterEvent); the layout below is the
+// 12.1.0.69382 one, which differs from 12.0.x in the position of the Paused/IsBlockedByCondition bit byte.
+// Everything the wire carries beyond timing comes from EncounterEvent.db2, everything about the order comes
+// from the world table `instance_encounter_timeline` - the client has no timeline table of its own.
+
+void InstanceScript::BuildEncounterTimelineEvents(std::vector<WorldPackets::Instance::EncounterTimelineEvent>& events, bool remainingDelay, std::size_t fromIndex /*= 0*/) const
+{
+    TimePoint now = GameTime::Now();
+
+    events.reserve(_encounterTimeline.size() - std::min(fromIndex, _encounterTimeline.size()));
+    for (std::size_t i = fromIndex; i < _encounterTimeline.size(); ++i)
+    {
+        EncounterTimelineEventState const& state = _encounterTimeline[i];
+        EncounterEventEntry const* encounterEvent = sEncounterEventStore.LookupEntry(state.EncounterEventID);
+        if (!encounterEvent)
+            continue;
+
+        // The late joiner message is converted against the client's own clock, so its delays have to be the
+        // time that is still left, not the original offset (consumer 0x21053C0 drops everything already due).
+        Milliseconds delay = state.Delay;
+        if (remainingDelay)
+        {
+            Milliseconds elapsed = std::chrono::duration_cast<Milliseconds>(now - state.QueuedAt);
+            if (elapsed >= delay)
+                continue;
+
+            delay -= elapsed;
+        }
+
+        WorldPackets::Instance::EncounterTimelineEvent& timelineEvent = events.emplace_back();
+        timelineEvent.EventInstanceID = state.EventInstanceID;
+        timelineEvent.EventID = state.EncounterEventID;
+        timelineEvent.SpellID = uint32(encounterEvent->SpellID);
+        timelineEvent.Flags = state.Flags;
+        timelineEvent.BroadcastTextID = uint32(encounterEvent->BroadcastTextID);
+        timelineEvent.IconFileID = uint32(encounterEvent->IconFileDataID);
+        timelineEvent.CasterGUID = state.CasterGUID;
+        timelineEvent.TimeQueuedMS = uint32(std::chrono::duration_cast<Milliseconds>(state.QueuedAt.time_since_epoch()).count());
+        timelineEvent.Icons = uint32(encounterEvent->Flags);
+        timelineEvent.Duration = state.Duration;
+        // measured invariant in 64 of 64 captured events: MaxQueueDuration == Delay + Duration
+        timelineEvent.MaxQueueDuration = delay + state.Duration;
+        timelineEvent.Severity = uint8(encounterEvent->Severity);
+        timelineEvent.Paused = state.Paused;
+        timelineEvent.IsBlockedByCondition = state.IsBlockedByCondition;
+
+        WorldPackets::Instance::EncounterTimelineEventDelay& delayInfo = timelineEvent.Delays.emplace_back();
+        delayInfo.Delay = delay;
+        delayInfo.IsApproximation = state.IsApproximation;
+    }
+}
+
+EncounterTimelineEventState* InstanceScript::FindEncounterTimelineEvent(uint32 encounterEventId, ObjectGuid casterGuid)
+{
+    // Consumer 0x2105980 matches on EventID *and* CasterGUID, not on EventInstanceID - this lookup mirrors it
+    // so that the server never announces a change the client cannot attribute.
+    auto itr = std::ranges::find_if(_encounterTimeline, [&](EncounterTimelineEventState const& state)
+    {
+        return state.EncounterEventID == encounterEventId && state.CasterGUID == casterGuid;
+    });
+
+    return itr != _encounterTimeline.end() ? &*itr : nullptr;
+}
+
+void InstanceScript::StartEncounterTimeline(uint32 dungeonEncounterId, ObjectGuid casterGuid)
+{
+    _encounterTimeline.clear();
+    // UNVERIFIED: the filter guid of SMSG_INSTANCE_ENCOUNTER_TIMELINE_SYNC is compared against a context the
+    // client resolves from the message itself (0x21053C0). The caster of the timeline is the only encounter
+    // scoped guid the server has, and it is the guid every event of this timeline carries.
+    _encounterTimelineGuid = casterGuid;
+
+    AddEncounterTimelineEvents(sEncounterTimelineMgr->GetEncounterTimeline(dungeonEncounterId), casterGuid);
+
+    WorldPackets::Instance::InstanceEncounterEventSequence sequence;
+    BuildEncounterTimelineEvents(sequence.Events, false);
+    instance->SendToPlayers(sequence.Write());
+}
+
+void InstanceScript::StartEncounterTimelineForBoss(uint32 bossId, ObjectGuid casterGuid)
+{
+    if (bossId >= bosses.size())
+        return;
+
+    DungeonEncounterEntry const* dungeonEncounter = bosses[bossId].GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
+    if (!dungeonEncounter)
+        return;
+
+    StartEncounterTimeline(dungeonEncounter->ID, casterGuid);
+}
+
+void InstanceScript::AppendEncounterTimelineEvents(std::span<EncounterTimelineTemplate const> events, ObjectGuid casterGuid)
+{
+    if (events.empty())
+        return;
+
+    std::size_t firstNew = _encounterTimeline.size();
+    AddEncounterTimelineEvents(events, casterGuid);
+
+    WorldPackets::Instance::InstanceEncounterEventAppend append;
+    BuildEncounterTimelineEvents(append.Events, false, firstNew);
+    instance->SendToPlayers(append.Write());
+}
+
+void InstanceScript::AddEncounterTimelineEvents(std::span<EncounterTimelineTemplate const> events, ObjectGuid casterGuid)
+{
+    TimePoint now = GameTime::Now();
+
+    for (EncounterTimelineTemplate const& timelineTemplate : events)
+    {
+        EncounterTimelineEventState& state = _encounterTimeline.emplace_back();
+        // 0 is ENCOUNTER_TIMELINE_INVALID_EVENT and must never go out on the wire
+        state.EventInstanceID = ++_nextEncounterTimelineEventInstanceId;
+        state.EncounterEventID = timelineTemplate.EncounterEventID;
+        state.CasterGUID = casterGuid;
+        state.Delay = timelineTemplate.Delay;
+        state.Duration = timelineTemplate.Duration;
+        state.IsApproximation = timelineTemplate.IsApproximation;
+        state.Flags = timelineTemplate.Flags;
+        state.QueuedAt = now;
+    }
+}
+
+void InstanceScript::RespawnEncounterTimeline(uint32 dungeonEncounterId, ObjectGuid casterGuid)
+{
+    _encounterTimeline.clear();
+    _encounterTimelineGuid = casterGuid;
+
+    AddEncounterTimelineEvents(sEncounterTimelineMgr->GetEncounterTimeline(dungeonEncounterId), casterGuid);
+
+    // SEQUENCE and RESPAWN share handler 0x2105360 and are indistinguishable for the client; the difference
+    // is purely server side (respawn timers instead of the in-encounter timeline).
+    WorldPackets::Instance::InstanceEncounterEventRespawn respawn;
+    BuildEncounterTimelineEvents(respawn.Events, false);
+    instance->SendToPlayers(respawn.Write());
+}
+
+void InstanceScript::ClearEncounterTimeline()
+{
+    _encounterTimeline.clear();
+    _encounterTimelineGuid.Clear();
+
+    // The empty list is the signal "clear the timeline" and really is sent by retail - eight times in the
+    // capture corpus, three of them on the same tick as SMSG_ENCOUNTER_END. Sending nothing is wrong.
+    WorldPackets::Instance::InstanceEncounterEventSequence sequence;
+    instance->SendToPlayers(sequence.Write());
+}
+
+void InstanceScript::SetEncounterTimelineEventBlocked(uint32 encounterEventId, ObjectGuid casterGuid, bool blocked)
+{
+    EncounterTimelineEventState* state = FindEncounterTimelineEvent(encounterEventId, casterGuid);
+    if (!state || state->IsBlockedByCondition == blocked)
+        return;
+
+    state->IsBlockedByCondition = blocked;
+
+    // Only IsBlockedByCondition is taken over by the client, but the event still has to be complete and
+    // correctly sized or its parser breaks.
+    std::vector<WorldPackets::Instance::EncounterTimelineEvent> events;
+    BuildEncounterTimelineEvents(events, true);
+
+    auto itr = std::ranges::find(events, state->EventInstanceID, &WorldPackets::Instance::EncounterTimelineEvent::EventInstanceID);
+    if (itr == events.end())
+        return;
+
+    WorldPackets::Instance::InstanceEncounterEventBlockedChanged blockedChanged;
+    blockedChanged.Event = std::move(*itr);
+    instance->SendToPlayers(blockedChanged.Write());
+}
+
+void InstanceScript::SetEncounterTimelineEventPaused(uint32 encounterEventId, ObjectGuid casterGuid, bool paused)
+{
+    EncounterTimelineEventState* state = FindEncounterTimelineEvent(encounterEventId, casterGuid);
+    if (!state || state->Paused == paused)
+        return;
+
+    state->Paused = paused;
+
+    EncounterEventEntry const* encounterEvent = sEncounterEventStore.LookupEntry(encounterEventId);
+    if (!encounterEvent)
+        return;
+
+    WorldPackets::Instance::InstanceEncounterEventCastUpdate castUpdate;
+    castUpdate.EventInstanceID = state->EventInstanceID;
+    castUpdate.EventID = state->EncounterEventID;
+    castUpdate.CasterGUID = state->CasterGUID;
+    castUpdate.DungeonEncounterID = uint32(encounterEvent->DungeonEncounterID);
+    castUpdate.CastState = 1;                   // UNVERIFIED: the handler branches on == 1, the corpus shows 1 and 3..5
+    castUpdate.Index = 0;
+    castUpdate.TimeQueuedMS = uint32(std::chrono::duration_cast<Milliseconds>(state->QueuedAt.time_since_epoch()).count());
+    castUpdate.Delay = state->Delay;
+    castUpdate.Paused = state->Paused;
+    castUpdate.IsBlockedByCondition = state->IsBlockedByCondition;
+    instance->SendToPlayers(castUpdate.Write());
+}
+
+void InstanceScript::SendEncounterTimelineTo(Player* player) const
+{
+    if (_encounterTimeline.empty())
+        return;
+
+    WorldPackets::Instance::InstanceEncounterTimelineSync sync;
+    sync.EncounterGUID = _encounterTimelineGuid;
+    BuildEncounterTimelineEvents(sync.Events, true);
+    if (sync.Events.empty())
+        return;
+
+    player->SendDirectMessage(sync.Write());
 }
 
 void InstanceScript::UpdateLfgEncounterState(BossInfo const* bossInfo)

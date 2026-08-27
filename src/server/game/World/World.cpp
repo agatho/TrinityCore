@@ -60,6 +60,7 @@
 #include "GroupMgr.h"
 #include "GuildMgr.h"
 #include "IPLocation.h"
+#include "InstanceEncounterTimeline.h"
 #include "InstanceLockMgr.h"
 #include "ItemBonusMgr.h"
 #include "LFGMgr.h"
@@ -1406,6 +1407,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Instance Template...");
     sObjectMgr->LoadInstanceTemplate();
+
+    TC_LOG_INFO("server.loading", "Loading Instance Encounter Timelines...");
+    sEncounterTimelineMgr->LoadEncounterTimelines();
 
     // Must be called before `respawn` data
     TC_LOG_INFO("server.loading", "Loading instances...");

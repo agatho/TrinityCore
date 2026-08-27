@@ -592,6 +592,7 @@ void BossAI::_JustEngagedWith(Unit* who)
             return;
         }
         instance->SetBossState(_bossId, IN_PROGRESS);
+        instance->StartEncounterTimelineForBoss(_bossId, me->GetGUID());
     }
 
     me->setActive(true);

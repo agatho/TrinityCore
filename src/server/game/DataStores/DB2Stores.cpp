@@ -138,6 +138,7 @@ DB2Storage<DurabilityQualityEntry>              sDurabilityQualityStore("Durabil
 DB2Storage<EmotesEntry>                         sEmotesStore("Emotes.db2", &EmotesLoadInfo::Instance);
 DB2Storage<EmotesTextEntry>                     sEmotesTextStore("EmotesText.db2", &EmotesTextLoadInfo::Instance);
 DB2Storage<EmotesTextSoundEntry>                sEmotesTextSoundStore("EmotesTextSound.db2", &EmotesTextSoundLoadInfo::Instance);
+DB2Storage<EncounterEventEntry>                 sEncounterEventStore("EncounterEvent.db2", &EncounterEventLoadInfo::Instance);
 DB2Storage<ExpectedStatEntry>                   sExpectedStatStore("ExpectedStat.db2", &ExpectedStatLoadInfo::Instance);
 DB2Storage<ExpectedStatModEntry>                sExpectedStatModStore("ExpectedStatMod.db2", &ExpectedStatModLoadInfo::Instance);
 DB2Storage<FactionEntry>                        sFactionStore("Faction.db2", &FactionLoadInfo::Instance);
@@ -509,6 +510,7 @@ namespace
     std::unordered_multimap<uint32, CurrencyContainerEntry const*> _currencyContainers;
     CurvePointsContainer _curvePoints;
     EmotesTextSoundContainer _emoteTextSounds;
+    std::unordered_map<uint32 /*dungeonEncounterId*/, std::vector<EncounterEventEntry const*>> _encounterEvents;
     std::unordered_map<std::pair<uint32 /*level*/, int32 /*expansion*/>, ExpectedStatEntry const*> _expectedStatsByLevel;
     std::unordered_map<uint32 /*contentTuningId*/, std::vector<ContentTuningXExpectedEntry const*>> _expectedStatModsByContentTuning;
     FactionTeamContainer _factionTeams;
@@ -781,6 +783,7 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sEmotesStore);
     LOAD_DB2(sEmotesTextStore);
     LOAD_DB2(sEmotesTextSoundStore);
+    LOAD_DB2(sEncounterEventStore);
     LOAD_DB2(sExpectedStatStore);
     LOAD_DB2(sExpectedStatModStore);
     LOAD_DB2(sFactionStore);
@@ -1317,6 +1320,10 @@ void DB2Manager::IndexLoadedStores()
             std::ranges::transform(curvePoints, points.begin(), &CurvePointEntry::Pos);
         }
     }
+
+    // EncounterEvent has no inline id field, it is indexed by its DungeonEncounterID relation instead
+    for (EncounterEventEntry const* encounterEvent : sEncounterEventStore)
+        _encounterEvents[encounterEvent->DungeonEncounterID].push_back(encounterEvent);
 
     for (EmotesTextSoundEntry const* emoteTextSound : sEmotesTextSoundStore)
         _emoteTextSounds[EmotesTextSoundContainer::key_type(emoteTextSound->EmotesTextID, emoteTextSound->RaceID, emoteTextSound->SexID, emoteTextSound->ClassID)] = emoteTextSound;
@@ -2273,6 +2280,12 @@ std::span<int32 const> DB2Manager::GetCreatureLabels(uint32 creatureDifficultyId
 {
     std::vector<int32> const* labels = Trinity::Containers::MapGetValuePtr(_creatureLabels, creatureDifficultyId);
     return labels ? std::span<int32 const>(*labels) : std::span<int32 const>();
+}
+
+std::span<EncounterEventEntry const* const> DB2Manager::GetEncounterEventsForDungeonEncounter(uint32 dungeonEncounterId) const
+{
+    std::vector<EncounterEventEntry const*> const* events = Trinity::Containers::MapGetValuePtr(_encounterEvents, dungeonEncounterId);
+    return events ? std::span<EncounterEventEntry const* const>(*events) : std::span<EncounterEventEntry const* const>();
 }
 
 CurrencyContainerEntry const* DB2Manager::GetCurrencyContainerForCurrencyQuantity(uint32 currencyId, int32 quantity) const

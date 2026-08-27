@@ -104,6 +104,7 @@ TC_GAME_API extern DB2Storage<DurabilityCostsEntry>                 sDurabilityC
 TC_GAME_API extern DB2Storage<DurabilityQualityEntry>               sDurabilityQualityStore;
 TC_GAME_API extern DB2Storage<EmotesEntry>                          sEmotesStore;
 TC_GAME_API extern DB2Storage<EmotesTextEntry>                      sEmotesTextStore;
+TC_GAME_API extern DB2Storage<EncounterEventEntry>                  sEncounterEventStore;
 TC_GAME_API extern DB2Storage<FactionEntry>                         sFactionStore;
 TC_GAME_API extern DB2Storage<FactionTemplateEntry>                 sFactionTemplateStore;
 TC_GAME_API extern DB2Storage<FlightCapabilityEntry>                sFlightCapabilityStore;
@@ -504,6 +505,7 @@ public:
     float GetCurveValueAt(CurveInterpolationMode mode, std::span<DBCPosition2D const> points, float x) const;
     static std::string_view GetDifficultyName(Difficulty difficulty);
     EmotesTextSoundEntry const* GetTextSoundEmoteFor(uint32 emote, uint8 race, uint8 gender, uint8 class_) const;
+    std::span<EncounterEventEntry const* const> GetEncounterEventsForDungeonEncounter(uint32 dungeonEncounterId) const;
     float EvaluateExpectedStat(ExpectedStatType stat, uint32 level, int32 expansion, uint32 contentTuningId, Classes unitClass, int32 mythicPlusMilestoneSeason) const;
     std::vector<uint32> const* GetFactionTeamList(uint32 faction) const;
     FriendshipRepReactionSet const* GetFriendshipRepReactions(uint32 friendshipRepID) const;

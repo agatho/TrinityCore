@@ -41,6 +41,31 @@ LOCK TABLES `account_data` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `account_challenge_mode_history`
+--
+
+DROP TABLE IF EXISTS `account_challenge_mode_history`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `account_challenge_mode_history` (
+  `accountId` int unsigned NOT NULL,
+  `totalLeaves` int unsigned NOT NULL DEFAULT '0',
+  `lastLeaverPenalty` bigint unsigned NOT NULL DEFAULT '0' COMMENT 'duration of the last penalty in seconds',
+  `leaverPenaltyExpiration` bigint unsigned NOT NULL DEFAULT '0' COMMENT 'unix time the penalty expires, 0 = never flagged',
+  PRIMARY KEY (`accountId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `account_challenge_mode_history`
+--
+
+LOCK TABLES `account_challenge_mode_history` WRITE;
+/*!40000 ALTER TABLE `account_challenge_mode_history` DISABLE KEYS */;
+/*!40000 ALTER TABLE `account_challenge_mode_history` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `account_instance_times`
 --
 

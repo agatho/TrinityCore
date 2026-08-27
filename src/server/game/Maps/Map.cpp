@@ -2982,10 +2982,31 @@ bool InstanceMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
     Map::AddPlayerToMap(player, initPlayer);
 
     if (i_data)
+    {
         i_data->OnPlayerEnter(player);
+
+        // Late joiners get the running timeline with the delays converted to the time that is still left
+        i_data->SendEncounterTimelineTo(player);
+    }
 
     if (i_scenario)
         i_scenario->OnPlayerEnter(player);
+
+    if (Group* group = player->GetGroup())
+    {
+        // SMSG_DIFFERENT_INSTANCE_FROM_PARTY - the group is bound to another instance id of this very map.
+        // Payload-less signal, consumer 0x209AA20 only raises ENTERED_DIFFERENT_INSTANCE_FROM_PARTY, which
+        // no Blizzard addon listens to; it exists for third party addons.
+        uint32 groupInstanceId = group->GetRecentInstanceId(GetId());
+        if (groupInstanceId && groupInstanceId != GetInstanceId())
+            player->SendDirectMessage(WorldPackets::Instance::DifferentInstanceFromParty().Write());
+
+        group->SendInstanceGroupSizeChanged();
+
+        // InstanceAbandon.lua:146-148 re-checks the dialog on PLAYER_ENTERING_WORLD but cannot restore the
+        // state on its own - a vote that is still running has to be replayed to the arriving player.
+        group->SendInstanceAbandonVoteStateTo(player);
+    }
 
     return true;
 }
@@ -3024,7 +3045,18 @@ void InstanceMap::RemovePlayerFromMap(Player* player, bool remove)
     if (i_scenario)
         i_scenario->OnPlayerExit(player);
 
+    Group* group = player->GetGroup();
+    bool wasOwningGroup = group && group == GetOwningGroup();
+
     Map::RemovePlayerFromMap(player, remove);
+
+    if (wasOwningGroup)
+    {
+        // Leaving the instance while a vote is running aborts it - SMSG_INSTANCE_ABANDON_VOTE_PLAYER_LEFT,
+        // which is deliberately not the same as a failed SMSG_INSTANCE_ABANDON_VOTE_COMPLETED.
+        group->CancelInstanceAbandonVoteForLeaver(player->GetGUID());
+        group->SendInstanceGroupSizeChanged();
+    }
 }
 
 void InstanceMap::CreateInstanceData()

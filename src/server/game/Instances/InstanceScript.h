@@ -21,6 +21,7 @@
 #include "ZoneScript.h"
 #include "Common.h"
 #include "Duration.h"
+#include "InstanceEncounterTimeline.h"
 #include "Optional.h"
 #include <array>
 #include <map>
@@ -49,6 +50,12 @@ class Unit;
 struct DungeonEncounterEntry;
 struct InstanceSpawnGroupInfo;
 enum class CriteriaType : int16;
+
+namespace WorldPackets::Instance
+{
+    struct EncounterTimelineEvent;
+}
+
 enum class CriteriaStartEvent : uint8;
 enum Difficulty : int16;
 
@@ -305,6 +312,18 @@ class TC_GAME_API InstanceScript : public ZoneScript
 
         void SendBossKillCredit(uint32 encounterId);
 
+        // Encounter timeline - the SMSG_INSTANCE_ENCOUNTER_EVENT_* family.
+        // Every entry needs an EncounterEvent.db2 row; the client silently drops an event whose id it cannot
+        // resolve, and it keys its own lookups on the server assigned EventInstanceID (never 0).
+        void StartEncounterTimeline(uint32 dungeonEncounterId, ObjectGuid casterGuid);
+        void StartEncounterTimelineForBoss(uint32 bossId, ObjectGuid casterGuid);
+        void AppendEncounterTimelineEvents(std::span<EncounterTimelineTemplate const> events, ObjectGuid casterGuid);
+        void RespawnEncounterTimeline(uint32 dungeonEncounterId, ObjectGuid casterGuid);
+        void ClearEncounterTimeline();
+        void SetEncounterTimelineEventBlocked(uint32 encounterEventId, ObjectGuid casterGuid, bool blocked);
+        void SetEncounterTimelineEventPaused(uint32 encounterEventId, ObjectGuid casterGuid, bool paused);
+        void SendEncounterTimelineTo(Player* player) const;
+
         // ReCheck PhaseTemplate related conditions
         void UpdatePhasing();
 
@@ -369,6 +388,15 @@ class TC_GAME_API InstanceScript : public ZoneScript
         uint32 _combatResurrectionTimer;
         uint8 _combatResurrectionCharges; // the counter for available battle resurrections
         bool _combatResurrectionTimerStarted;
+
+        // Encounter timeline
+        void BuildEncounterTimelineEvents(std::vector<WorldPackets::Instance::EncounterTimelineEvent>& events, bool remainingDelay, std::size_t fromIndex = 0) const;
+        void AddEncounterTimelineEvents(std::span<EncounterTimelineTemplate const> events, ObjectGuid casterGuid);
+        EncounterTimelineEventState* FindEncounterTimelineEvent(uint32 encounterEventId, ObjectGuid casterGuid);
+
+        std::vector<EncounterTimelineEventState> _encounterTimeline;
+        uint32 _nextEncounterTimelineEventInstanceId;
+        ObjectGuid _encounterTimelineGuid;
 
     #ifdef TRINITY_API_USE_DYNAMIC_LINKING
         // Strong reference to the associated script module

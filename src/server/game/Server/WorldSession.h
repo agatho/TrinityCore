@@ -430,9 +430,11 @@ namespace WorldPackets
 
     namespace Instance
     {
+        class InstanceAbandonVoteResponse;
         class InstanceInfo;
         class InstanceLockResponse;
         class ResetInstances;
+        class StartInstanceAbandonVote;
     }
 
     namespace Item
@@ -1119,6 +1121,15 @@ class TC_GAME_API WorldSession
         void AddInstanceEnterTime(uint32 instanceId, SystemTimePoint enterTime);
         void UpdateInstanceEnterTimes();
 
+        // Mythic keystone deserter state, the data behind C_InstanceLeaver.IsPlayerLeaver().
+        // This is NOT the classic LFG deserter aura (spell 71041) - the client keeps the two apart, and only
+        // this one gates the mythic+ entries in the group finder (LFGList.lua:1382, :2965).
+        void LoadChallengeModeHistory(PreparedQueryResult result);
+        void SaveChallengeModeHistory() const;
+        bool IsInstanceLeaver() const;
+        void SetInstanceLeaver(bool apply);
+        void SendInstanceLeaverState();
+
         struct PlayerDataAccount
         {
             struct Element
@@ -1714,6 +1725,8 @@ class TC_GAME_API WorldSession
         void HandleWhoIsOpcode(WorldPackets::Who::WhoIsRequest& packet);
         void HandleResetInstancesOpcode(WorldPackets::Instance::ResetInstances& packet);
         void HandleInstanceLockResponse(WorldPackets::Instance::InstanceLockResponse& packet);
+        void HandleStartInstanceAbandonVote(WorldPackets::Instance::StartInstanceAbandonVote& packet);
+        void HandleInstanceAbandonVoteResponse(WorldPackets::Instance::InstanceAbandonVoteResponse& packet);
 
         // Looking for Dungeon/Raid
         void SendLfgPlayerLockInfo();
@@ -2030,6 +2043,10 @@ class TC_GAME_API WorldSession
         uint8 _tutorialsChanged;
 
         std::unordered_map<uint32 /*instanceId*/, SystemTimePoint/*releaseTime*/> _instanceResetTimes;
+
+        uint32 _challengeModeTotalLeaves;
+        Seconds _challengeModeLastLeaverPenalty;
+        SystemTimePoint _challengeModeLeaverPenaltyExpiration;
 
         PlayerDataAccount _playerDataAccount;
         std::vector<std::string> _registeredAddonPrefixes;

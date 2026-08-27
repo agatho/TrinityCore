@@ -34,6 +34,7 @@
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "Hyperlinks.h"
+#include "InstancePackets.h"
 #include "IpAddress.h"
 #include "Log.h"
 #include "Map.h"
@@ -135,6 +136,8 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     m_latency(0),
     _tutorials(),
     _tutorialsChanged(TUTORIALS_FLAG_NONE),
+    _challengeModeTotalLeaves(0),
+    _challengeModeLastLeaverPenalty(Seconds::zero()),
     _filterAddonMessages(false),
     recruiterId(recruiter),
     isRecruiter(isARecruiter),
@@ -1036,6 +1039,69 @@ void WorldSession::UpdateInstanceEnterTimes()
     });
 }
 
+// UNVERIFIED: no DB2, no CVar and no lua constant carries the deserter duration - the client only asks
+// C_InstanceLeaver.IsPlayerLeaver() and never learns how long the flag lasts. 30 minutes mirrors the
+// established dungeon deserter aura (LFG_SPELL_DUNGEON_DESERTER = 71041), which is a different state but
+// the only comparable number this tree has.
+static constexpr Seconds INSTANCE_LEAVER_PENALTY_DURATION = Minutes(30);
+
+void WorldSession::LoadChallengeModeHistory(PreparedQueryResult result)
+{
+    if (!result)
+        return;
+
+    Field* fields = result->Fetch();
+    _challengeModeTotalLeaves = fields[0].GetUInt32();
+    _challengeModeLastLeaverPenalty = Seconds(fields[1].GetUInt64());
+    _challengeModeLeaverPenaltyExpiration = SystemTimePoint::clock::from_time_t(fields[2].GetUInt64());
+}
+
+void WorldSession::SaveChallengeModeHistory() const
+{
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_ACCOUNT_CHALLENGE_MODE_HISTORY);
+    stmt->setUInt32(0, GetAccountId());
+    stmt->setUInt32(1, _challengeModeTotalLeaves);
+    stmt->setUInt64(2, _challengeModeLastLeaverPenalty.count());
+    stmt->setUInt64(3, SystemTimePoint::clock::to_time_t(_challengeModeLeaverPenaltyExpiration));
+    CharacterDatabase.Execute(stmt);
+}
+
+bool WorldSession::IsInstanceLeaver() const
+{
+    return _challengeModeLeaverPenaltyExpiration > GameTime::GetSystemTime();
+}
+
+void WorldSession::SetInstanceLeaver(bool apply)
+{
+    if (apply == IsInstanceLeaver())
+        return;
+
+    if (apply)
+    {
+        ++_challengeModeTotalLeaves;
+        _challengeModeLastLeaverPenalty = INSTANCE_LEAVER_PENALTY_DURATION;
+        _challengeModeLeaverPenaltyExpiration = GameTime::GetSystemTime() + INSTANCE_LEAVER_PENALTY_DURATION;
+    }
+    else
+    {
+        _challengeModeLastLeaverPenalty = Seconds::zero();
+        _challengeModeLeaverPenaltyExpiration = SystemTimePoint();
+    }
+
+    SaveChallengeModeHistory();
+    SendInstanceLeaverState();
+}
+
+void WorldSession::SendInstanceLeaverState()
+{
+    // Retail sends the clearing message unprompted on every login, between SMSG_TUTORIAL_FLAGS and
+    // SMSG_DISPLAY_PROMOTION - 33 of 33 captured packets sit in exactly that spot and are 0 bytes long.
+    if (IsInstanceLeaver())
+        SendPacket(WorldPackets::Instance::SetInstanceLeaver().Write());
+    else
+        SendPacket(WorldPackets::Instance::UnsetInstanceLeaver().Write());
+}
+
 void WorldSession::LoadPlayerDataAccount(PreparedQueryResult const& elementsResult, PreparedQueryResult const& flagsResult)
 {
     if (elementsResult)
@@ -1278,6 +1344,7 @@ public:
         GLOBAL_ACCOUNT_DATA = 0,
         TUTORIALS,
         INSTANCE_TIMES,
+        CHALLENGE_MODE_HISTORY,
 
         MAX_QUERIES
     };
@@ -1299,6 +1366,10 @@ public:
         stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_ACCOUNT_INSTANCELOCKTIMES);
         stmt->setUInt32(0, accountId);
         ok = SetPreparedQuery(INSTANCE_TIMES, stmt) && ok;
+
+        stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_ACCOUNT_CHALLENGE_MODE_HISTORY);
+        stmt->setUInt32(0, accountId);
+        ok = SetPreparedQuery(CHALLENGE_MODE_HISTORY, stmt) && ok;
 
         return ok;
     }
@@ -1433,6 +1504,7 @@ void WorldSession::InitializeSessionCallback(LoginDatabaseQueryHolder const& hol
     LoadAccountData(realmHolder.GetPreparedResult(AccountInfoQueryHolderPerRealm::GLOBAL_ACCOUNT_DATA), GLOBAL_CACHE_MASK);
     LoadTutorialsData(realmHolder.GetPreparedResult(AccountInfoQueryHolderPerRealm::TUTORIALS));
     LoadInstanceTimeRestrictions(realmHolder.GetPreparedResult(AccountInfoQueryHolderPerRealm::INSTANCE_TIMES));
+    LoadChallengeModeHistory(realmHolder.GetPreparedResult(AccountInfoQueryHolderPerRealm::CHALLENGE_MODE_HISTORY));
     _collectionMgr->LoadAccountToys(holder.GetPreparedResult(AccountInfoQueryHolder::GLOBAL_ACCOUNT_TOYS));
     _collectionMgr->LoadAccountHeirlooms(holder.GetPreparedResult(AccountInfoQueryHolder::GLOBAL_ACCOUNT_HEIRLOOMS));
     _collectionMgr->LoadAccountMounts(holder.GetPreparedResult(AccountInfoQueryHolder::MOUNTS));
@@ -1456,6 +1528,7 @@ void WorldSession::InitializeSessionCallback(LoginDatabaseQueryHolder const& hol
     SendAvailableHotfixes();
     SendAccountDataTimes(ObjectGuid::Empty, GLOBAL_CACHE_MASK);
     SendTutorialsData();
+    SendInstanceLeaverState();
 
     if (PreparedQueryResult characterCountsResult = holder.GetPreparedResult(AccountInfoQueryHolder::GLOBAL_REALM_CHARACTER_COUNTS))
     {
