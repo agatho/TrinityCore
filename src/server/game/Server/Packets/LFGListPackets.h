@@ -680,7 +680,11 @@ namespace WorldPackets
             LFG::RideTicket Ticket;             // application ticket (type 6)
             LFG::RideTicket ListingTicket;      // listing ticket (type 4)
             uint64 Unknown = 0;
-            uint32 UnkResult = 8;               // 8 while pending, 60 on invite (likely the invite window)
+            // UNVERIFIED: the two values are read off the 12.0.7 capture (8 while pending, 60 on invite);
+            // "invite window in seconds" is a guess and nothing in the client was found that reads this
+            // field on a non-failure state. The decoded meaning covers the FAILURE case only - there the
+            // dispatcher hands it to the error presenter @ 0x24DB25E0 as the reason code (see above).
+            uint32 UnkResult = 8;
             uint8 RoleGranted = 0;
             uint8 StateBits = 0;
         };

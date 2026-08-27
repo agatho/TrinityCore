@@ -22,10 +22,10 @@
 #include "GameTime.h"
 #include "LFGListPackets.h"
 #include "ObjectAccessor.h"
-#include "ObjectMgr.h"
 #include "Player.h"
 #include "Group.h"
 #include "GroupMgr.h"
+#include "Util.h"
 #include <cctype>
 #include <utility>
 
@@ -161,6 +161,9 @@ uint32 LFGListMgr::CreateListing(Player* leader, WorldPackets::LFGList::ListingD
     listing.LeaderGuid = leader->GetGUID();
     if (Group* group = leader->GetGroup())
         listing.GroupGuid = group->GetGUID();
+    // The ONLY write to TicketGuid in the tree. Everything the client keys on is decided here, once, and
+    // stays put for the life of the listing - see the field's comment in LFGListMgr.h.
+    listing.TicketGuid = !listing.GroupGuid.IsEmpty() ? listing.GroupGuid : listing.LeaderGuid;
     listing.Descriptor = descriptor;
     listing.CreatedTime = GameTime::GetGameTime();
     listing.ExpireTime = expireMinutes ? listing.CreatedTime + expireMinutes * MINUTE : 0;
@@ -485,13 +488,18 @@ std::vector<LFGList::Listing const*> LFGListMgr::Search(uint32 category, uint32 
 // RequesterGuid is the listed PARTY, not the leader: decoding the 69273 SMSG_LFG_LIST_UPDATE_STATUS payloads
 // gives a HighGuid::Party guid here that changes from one listing to the next, while the leader's
 // HighGuid::Player guid stays constant and rides in the message's own optional field. A solo listing has no
-// group yet, so fall back to the leader.
+// group, so the leader's own guid takes that place.
+// It reads Listing::TicketGuid and NOT the live GroupGuid, and that distinction is the whole point: the
+// choice is made once, in CreateListing, and frozen. Deriving it here from GroupGuid meant a solo listing
+// re-keyed itself the moment an applicant's acceptance created the leader's group, and every later message
+// about that listing - delist, expiry, application status, search-row update - was dropped unseen by the
+// client, whose stored entry still carried the old guid.
 // Every path that names a listing has to come through here. The client stores this ticket when the listing is
 // created and compares the incoming one against it field by field before it will act on a delist; a path that
 // builds the ticket its own way produces a message the client drops without a word.
 void LFGListMgr::FillListingTicket(WorldPackets::LFG::RideTicket& ticket, LFGList::Listing const& listing)
 {
-    ticket.RequesterGuid = !listing.GroupGuid.IsEmpty() ? listing.GroupGuid : listing.LeaderGuid;
+    ticket.RequesterGuid = listing.TicketGuid;
     ticket.Id = listing.Id;
     ticket.Type = WorldPackets::LFG::RideType::LfgListListing;
     ticket.Time = int32(listing.CreatedTime);
@@ -546,11 +554,19 @@ void LFGListMgr::FillApplicantInfo(WorldPackets::LFGList::ApplicantInfo& info, L
 
 void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing) const
 {
-    row.GroupGuid = !listing.GroupGuid.IsEmpty() ? listing.GroupGuid : listing.LeaderGuid;
+    // The frozen ticket guid, not the live GroupGuid: the row header IS a RideTicket (see operator<<
+    // SearchResultListing), so a browser identifies the row by it. Same freeze, same reason as
+    // FillListingTicket - otherwise the push that follows a group being formed reads as a different row.
+    row.GroupGuid = listing.TicketGuid;
     row.ListingId = listing.Id;
     row.PostTime = listing.CreatedTime;
     row.LeaderGuid = listing.LeaderGuid;
-    row.Age = 3;                                        // 68974: every observed row carried 3 or 4
+    // UNVERIFIED: the row's Age field is served as a constant. 3 is what every row of the 12.0.7.68974
+    // capture carried (some carried 4); there is no 12.1 recording of SMSG_LFG_LIST_SEARCH_RESULTS to
+    // check it against, and no client consumer was found that distinguishes its values, so neither the
+    // meaning of the field nor the right way to compute it is established. It is not a real age -
+    // listing.CreatedTime already rides in PostTime one field earlier.
+    row.Age = 3;
     row.Listing = GetPublicDescriptor(listing);
 
     row.Members.clear();
@@ -604,41 +620,81 @@ WorldPackets::LFGList::ListingDescriptor LFGListMgr::GetPublicDescriptor(LFGList
     return descriptor;
 }
 
-namespace
+// The listing-text word list, parsed from LFGList.CensorWords: comma separated, surrounding blanks
+// trimmed, empty entries dropped, stored lower-cased. Re-parsed when the configured string changes so a
+// `reload config` is picked up without a reload hook of this manager's own.
+// This list is deliberately NOT the reserved_name table - see ContainsCensoredWord in LFGListMgr.h for
+// why that table is the wrong policy in both directions.
+std::vector<std::string> const& LFGListMgr::GetCensorWords()
 {
-    // A listing name or comment is free text, while ObjectMgr::IsReservedName is an EXACT lookup built for
-    // single character names - handing it a whole sentence would make the check unreachable in practice.
-    // So test the whole string and every word in it. Tokenising on anything that is not a letter or digit
-    // also defeats the obvious "bad.word" / "bad-word" dodges.
-    bool ContainsReservedWord(std::string const& text)
+    std::string configured = sConfigMgr->GetStringDefault("LFGList.CensorWords", "");
+    if (_censorWordsLoaded && configured == _censorWordsConfig)
+        return _censorWords;
+
+    _censorWordsConfig = std::move(configured);
+    _censorWordsLoaded = true;
+    _censorWords.clear();
+    for (std::string_view token : Trinity::Tokenize(_censorWordsConfig, ',', false))
     {
-        if (text.empty())
-            return false;
+        while (!token.empty() && std::isspace(static_cast<unsigned char>(token.front())) != 0)
+            token.remove_prefix(1);
+        while (!token.empty() && std::isspace(static_cast<unsigned char>(token.back())) != 0)
+            token.remove_suffix(1);
+        if (token.empty())
+            continue;
 
-        if (sObjectMgr->IsReservedName(text))
-            return true;
-
-        std::size_t start = std::string::npos;
-        for (std::size_t i = 0; i <= text.length(); ++i)
-        {
-            bool const isWordChar = i < text.length()
-                && (std::isalnum(static_cast<unsigned char>(text[i])) != 0 || static_cast<unsigned char>(text[i]) >= 0x80);
-            if (isWordChar)
-            {
-                if (start == std::string::npos)
-                    start = i;
-                continue;
-            }
-
-            if (start != std::string::npos)
-            {
-                if (sObjectMgr->IsReservedName(std::string_view(text).substr(start, i - start)))
-                    return true;
-                start = std::string::npos;
-            }
-        }
-        return false;
+        std::string word(token);
+        strToLower(word);
+        _censorWords.push_back(std::move(word));
     }
+    return _censorWords;
+}
+
+// A listing name or comment is free text, so the whole string is tested and so is every word in it.
+// Tokenising on anything that is not a letter or digit also defeats the obvious "bad.word" / "bad-word"
+// dodges. Matching is exact per word rather than substring on purpose: an admin-curated list of whole
+// words must not turn every listing containing that sequence of letters inside a longer, harmless word
+// into a flagged one.
+// UNVERIFIED: retail's actual criteria. The wire only ever exposes a single "code" byte and the client
+// does nothing with its value beyond testing it against zero, so no client evidence exists either way.
+bool LFGListMgr::ContainsCensoredWord(std::string const& text)
+{
+    if (text.empty())
+        return false;
+
+    std::vector<std::string> const& words = GetCensorWords();
+    if (words.empty())
+        return false;
+
+    auto matches = [&words](std::string_view candidate)
+    {
+        return std::any_of(words.begin(), words.end(),
+            [candidate](std::string const& word) { return StringEqualI(candidate, word); });
+    };
+
+    if (matches(text))
+        return true;
+
+    std::size_t start = std::string::npos;
+    for (std::size_t i = 0; i <= text.length(); ++i)
+    {
+        bool const isWordChar = i < text.length()
+            && (std::isalnum(static_cast<unsigned char>(text[i])) != 0 || static_cast<unsigned char>(text[i]) >= 0x80);
+        if (isWordChar)
+        {
+            if (start == std::string::npos)
+                start = i;
+            continue;
+        }
+
+        if (start != std::string::npos)
+        {
+            if (matches(std::string_view(text).substr(start, i - start)))
+                return true;
+            start = std::string::npos;
+        }
+    }
+    return false;
 }
 
 bool LFGListMgr::EvaluateCensorship(LFGList::Listing& listing)
@@ -646,13 +702,13 @@ bool LFGListMgr::EvaluateCensorship(LFGList::Listing& listing)
     LFGList::CensorState const previous = listing.Censor;
     uint8 const previousCode = listing.CensorCode;
 
-    // Server-side text check. TrinityCore has no listing-text blacklist of its own; the reserved-name
-    // table is the only curated word list in the tree, and it is already the one an admin fills to keep
-    // words off the realm, so that is what this applies.
-    // UNVERIFIED: retail's actual criteria. The wire only ever exposes a single "code" byte and the client
-    // does nothing with its value beyond testing it against zero, so no client evidence exists either way.
-    bool const flagged = ContainsReservedWord(listing.Descriptor.Name)
-        || ContainsReservedWord(listing.Descriptor.Comment);
+    // Server-side text check against this system's OWN word list (LFGList.CensorWords), which ships empty.
+    // With an empty list nothing is ever flagged and the censor pair stays silent - a deliberate off state,
+    // recorded as such: SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE and
+    // CMSG_LFG_LIST_CONFIRM_CENSORED_ACTIVE_ENTRY are carried as D2 "teil" in the unit status file for
+    // exactly this reason, the same grade SMSG_SET_DF_FAST_LAUNCH_RESULT carries for the same situation.
+    bool const flagged = ContainsCensoredWord(listing.Descriptor.Name)
+        || ContainsCensoredWord(listing.Descriptor.Comment);
 
     if (flagged)
     {

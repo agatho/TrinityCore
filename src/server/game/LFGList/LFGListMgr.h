@@ -81,7 +81,19 @@ namespace LFGList
     {
         uint32 Id = 0;                      // server-issued listing id (RideTicket.Id)
         ObjectGuid LeaderGuid;
-        ObjectGuid GroupGuid;               // the leader's group (empty = solo listing)
+        ObjectGuid GroupGuid;               // the leader's group (empty = solo listing), LIVE - see TicketGuid
+        // The listing's identity on the wire, frozen at CreateListing and never written again. It is the
+        // group guid if the leader already had a group when publishing, otherwise the leader's own guid.
+        // It exists because GroupGuid is LIVE: a solo leader who publishes and then accepts an applicant
+        // gets a group created for him (LFGListHandler, HandleLFGListInviteResponse), and deriving the
+        // ticket from GroupGuid made the ticket of an already-published listing change underneath the
+        // client. The consumer of SMSG_LFG_LIST_UPDATE_STATUS (RVA 0x24DE410) compares the incoming ticket
+        // against its stored active entry field by field and drops anything that differs, so after that
+        // flip the leader's own delist, the expiry and every application status update were discarded in
+        // silence and the entry stayed on his screen. The row header of a search result is the same ticket
+        // in disguise, so an open browser saw a NEW row instead of an update of the one it had.
+        // GroupGuid stays live on purpose - it is what enumerates the current members.
+        ObjectGuid TicketGuid;
         WorldPackets::LFGList::ListingDescriptor Descriptor;
         uint32 CreatedTime = 0;
         uint32 ExpireTime = 0;
@@ -217,6 +229,24 @@ private:
         LFGList::SearchKeywords Keywords;
         uint32 ExpireTime = 0;
     };
+
+    // Parsed LFGList.CensorWords, lower-cased. Re-parsed whenever the config string changes, which is what
+    // makes `reload config` take effect without a hook of its own.
+    std::vector<std::string> _censorWords;
+    std::string _censorWordsConfig;
+    bool _censorWordsLoaded = false;
+    std::vector<std::string> const& GetCensorWords();
+
+    // Does this listing text hit the configured word list? The list is LFGList.CensorWords and nothing
+    // else. It used to be ObjectMgr::IsReservedName, i.e. the `reserved_name` table, and that was wrong in
+    // both directions: the table ships EMPTY (sql/base/characters_database.sql has not one INSERT for it),
+    // so on any normal realm the check could never fire and the whole censor pair was dead wire; and where
+    // an admin does fill it, he fills it with CHARACTER names he wants kept off the realm - class names,
+    // "gm", "admin" - which would then flag ordinary listing titles, withhold their name and comment from
+    // every searcher and drop them out of keyword search entirely (MatchesKeywords returns false for a
+    // withheld listing). Two unrelated policies on one table. Empty list = censorship off, which is the
+    // shipped default and is an honest off, not an accident.
+    bool ContainsCensoredWord(std::string const& text);
 
     uint32 _nextListingId = 1;
     uint32 _nextApplicationId = 1;

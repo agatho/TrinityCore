@@ -1412,9 +1412,27 @@ DungeonFinder.FastLaunch = 0
 #     LFGList.ListingExpiryMinutes
 #        Description: Minutes a premade group finder listing stays active before it auto-expires.
 #                     0 disables expiry.
-#        Default:     120
+#        Default:     30
 
 LFGList.ListingExpiryMinutes = 30
+
+#
+#     LFGList.CensorWords
+#        Description: Comma separated word list the premade group finder checks a listing's title and
+#                     comment against. A hit flags the listing: the server sends
+#                     SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE, the client shows the censor dialog, and
+#                     the listing's title and comment are withheld from other players until the owner
+#                     confirms or edits it (CMSG_LFG_LIST_CONFIRM_CENSORED_ACTIVE_ENTRY).
+#                     Matching is case-insensitive and per whole word; the full text is tested as well.
+#                     This list is intentionally separate from the `reserved_name` table, which is the
+#                     character-name policy and means something else.
+#                     Empty disables the check, which leaves the two censor opcodes silent.
+#                     Retail's own criteria for flagging a listing are unknown - the wire carries only a
+#                     single code byte and the client only tests it against zero.
+#        Default:     "" - (Disabled)
+#        Example:     LFGList.CensorWords = "gold,boost,wts"
+
+LFGList.CensorWords = ""
 
 #
 #    LFGList.ApplicationTimeoutSeconds / LFGList.MaxApplicationsPerPlayer

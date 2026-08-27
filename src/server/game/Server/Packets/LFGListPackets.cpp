@@ -418,7 +418,9 @@ static ByteBuffer& operator<<(ByteBuffer& data, SearchResultListing const& row)
 
     data << uint32(row.Age);                        // +40
     data << row.Listing;                            // +48, 12.1: position 3, was position 15 in 68275
-    data << uint8(3);                               // +1816 (68974 observed 3, 68275 observed 5)
+    // UNVERIFIED: constant taken from observation, not from a decoded consumer - 68974 carried 3 here,
+    // 68275 carried 5, and no 12.1 capture of this message exists. Its meaning is unknown.
+    data << uint8(3);                               // +1816
     data << row.LeaderGuid;                         // +1824
     data << row.LeaderGuid;                         // +1840
     data << row.LeaderGuid;                         // +1856
@@ -442,7 +444,8 @@ static ByteBuffer& operator<<(ByteBuffer& data, SearchResultListing const& row)
         data << uint32(0);
         data << uint8(i);
     }
-    data << uint8(3);                               // +2160 (68974 observed 3)
+    // UNVERIFIED: same class as +1816 - 68974 carried 3, meaning unknown, no 12.1 capture to confirm it.
+    data << uint8(3);                               // +2160
     data << uint8(0);                               // +2161
 
     // the three PackedGuid lists are empty (counts written as 0 above) -> nothing to emit

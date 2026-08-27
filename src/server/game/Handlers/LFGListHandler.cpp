@@ -106,7 +106,8 @@ namespace
         FillApplicationTicket(packet.Ticket, app);
         FillListingTicket(packet.ListingTicket, listing);
         packet.StateBits = ApplicationStateToBits(app.State);
-        // Sniff: UnkResult 8 while pending, 60 on invite (possibly the invite-response window in seconds).
+        // UNVERIFIED: UnkResult 8 while pending / 60 on invite is copied from the 12.0.7.68974 capture; the
+        // reading "invite-response window in seconds" is a guess, see the field's note in LFGListPackets.h.
         // RoleGranted is the role the LEADER assigned in CMSG_LFG_LIST_INVITE_APPLICANT.Invitees[], not the
         // one the applicant asked for - that is why the invite message carries a per-invitee RoleMask at all
         // (client writer RVA 0x6A4A30). Falls back to the applied mask when the invite named no role for this
@@ -525,6 +526,9 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
             return;
         }
         sGroupMgr->AddGroup(group);
+        // GroupGuid is the LIVE group and is what enumerates members from here on (SendApplicantList,
+        // FillSearchRow). It is deliberately NOT the listing's wire identity: that is Listing::TicketGuid,
+        // frozen at CreateListing, so this assignment cannot re-key a listing the client already holds.
         listing->GroupGuid = group->GetGUID();
     }
 
