@@ -189,6 +189,14 @@ namespace
     // (`lorewalkingCampaignID`, a Campaign.db2 id) against the dungeon's map.
     // UNVERIFIED: retail's actual condition. No client evidence exists for it either - the client only reads
     // the answer bit, it never computes the state itself.
+    //
+    // ACCEPTANCE, held open on purpose (audit 2026-08-27, lfg_5A, D3 gap on SMSG_LFG_SUSPEND_LOREWALKING):
+    // because this predicate returns a constant, only the SUCCESS answer
+    // (Suspend = 1) can currently go out. The refusal (Suspend = 0 -> GameError 832 ERR_LFG_LOREWALKING) is
+    // built and byte-correct but unreachable, and it stays that way until Lorewalking itself exists on this
+    // tree. Do NOT close the gap by inventing a condition here: a wrong predicate would refuse legitimate
+    // queue attempts, which is strictly worse than never refusing. The gap is recorded in
+    // orchestrierung/status/lfg_5A.json under dod_luecken.D3 and must not be dropped at acceptance.
     bool IsLorewalkingActive(Player const* /*player*/, int32 /*mapId*/)
     {
         return false;
@@ -278,17 +286,22 @@ void WorldSession::SendLfgReadyCheckResult(ObjectGuid guid, bool ready)
 
 // SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN (0x5A0009).
 //
-// UNVERIFIED - NO CALLER. The consumer (RVA 0x24C18C0) is fully decoded: it formats TimeLeft with
-// INT_GENERAL_DURATION into the GlobalString INSTANCE_SHUTDOWN_MESSAGE and prints it to the system chat.
-// What is NOT settled is when retail sends it, and the anchor suggested by the family brief -
-// InstanceMap::RemovePlayerFromMap arming m_unloadTimer (Map.cpp) - provably cannot be it: that timer is
-// only armed when the LAST player leaves (`!m_unloadTimer && m_mapRefManager.size() == 1`), so there is
-// nobody left in the map to receive the message. The two other places TrinityCore sets an unload timer
-// are equally empty-map paths (InstanceMap::Reset's else branch, BattlegroundMap::SetUnload from the
-// Battleground destructor), and the occupied-instance expiry case is already served by a different,
-// established message (SMSG_RAID_INSTANCE_MESSAGE / RAID_INSTANCE_EXPIRED).
-// The packet and this sender are therefore correct and complete; the trigger needs a capture of a
-// retail LFG instance winding down while players are still inside. See lfg_5A.json, aufnahme_noetig.
+// The consumer (RVA 0x24C18C0) is fully decoded: it formats TimeLeft with INT_GENERAL_DURATION into the
+// GlobalString INSTANCE_SHUTDOWN_MESSAGE and prints it to the system chat.
+//
+// Caller: LFGMgr::SendInstanceShutdownCountdown, from InstanceMap::Reset(InstanceResetMethod::Expire) on
+// the HavePlayers() branch (Map.cpp) - see the docblock there for why that is the only shutdown this tree
+// reaches with players still inside. The anchor the family brief suggested, InstanceMap::RemovePlayerFromMap
+// arming m_unloadTimer, is NOT it and cannot be: that timer is only armed when the LAST player leaves
+// (`!m_unloadTimer && m_mapRefManager.size() == 1`), so nobody is left in the map to receive the message.
+// The two other places TrinityCore sets an unload timer are equally empty-map paths (InstanceMap::Reset's
+// else branch, BattlegroundMap::SetUnload from the Battleground destructor).
+//
+// UNVERIFIED - the retail trigger. That retail sends this exact message on an expiring, still-occupied LFG
+// instance is inference from the consumer, not from a capture; TrinityCore additionally sends
+// SMSG_RAID_INSTANCE_MESSAGE / RAID_INSTANCE_EXPIRED on the same path, which carries the pending-lock
+// dialog rather than the chat countdown. Settling it needs a capture of a retail LFG instance winding down
+// with players inside. See lfg_5A.json, aufnahme_noetig.
 void WorldSession::SendLfgInstanceShutdownCountdown(WorldPackets::LFG::RideTicket const& ticket, uint32 timeLeftSeconds)
 {
     TC_LOG_DEBUG("lfg", "SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN {} timeLeft: {}", GetPlayerInfo(), timeLeftSeconds);

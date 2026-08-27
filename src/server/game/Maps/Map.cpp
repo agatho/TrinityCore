@@ -3098,7 +3098,7 @@ InstanceResetResult InstanceMap::Reset(InstanceResetMethod method)
             {
                 // An LFG dungeon whose lock expires while people are still inside is the one shutdown
                 // TrinityCore actually reaches with players present, and the dungeon finder has its own
-                // message for it: SMSG_LFG_LIST_INSTANCE_SHUTDOWN_COUNTDOWN (0x5A0009). Its consumer
+                // message for it: SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN (0x5A0009). Its consumer
                 // (RVA 0x24C18C0) formats TimeLeft with INT_GENERAL_DURATION into the GlobalString
                 // INSTANCE_SHUTDOWN_MESSAGE and prints it to the system chat - the same string the client
                 // prints from BATTLEFIELD_SHUTDOWN_TIMER while a battlefield winds down with players in it

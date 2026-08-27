@@ -361,7 +361,10 @@ namespace WorldPackets
             bool Listed = true;
             Optional<ObjectGuid> LeaderGuid;    // new in 12.1; sniff-decoded as the leader's player guid
             Optional<uint8> UnkByte;            // UNVERIFIED: new in 12.1, only seen on the delist payload,
-                                                // value 0, and no consumer evidence for its meaning
+                                                // value 0, and no consumer evidence for its meaning. Set by
+                                                // LFGListMgr::DelistAndNotify (the only delist writer) and
+                                                // deliberately left unset on the listed form, which is what
+                                                // all three reference captures show.
         };
 
         // SMSG_LFG_LIST_UPDATE_EXPIRATION (0x5A000B) - dispatcher case @ RVA 0x755C5A:

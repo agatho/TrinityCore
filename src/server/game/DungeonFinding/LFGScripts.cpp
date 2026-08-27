@@ -206,6 +206,13 @@ void LFGGroupScript::OnRemoveMember(Group* group, ObjectGuid guid, RemoveMethod 
 
 void LFGGroupScript::OnDisband(Group* group)
 {
+    // Ahead of the option gate on purpose: a readiness check does not depend on the dungeon-finder options
+    // (StartReadyCheck never consults them), and it must not outlive its group. LFGReadyCheckPopup is only
+    // ever closed by an update, so a check dropped together with the group would leave the dialog standing
+    // on every member's screen. AbortReadyCheck is a no-op when no check is running - LFGMgr::RemoveGroupData
+    // calls it again, which covers any other caller of that function.
+    sLFGMgr->AbortReadyCheck(group->GetGUID());
+
     if (!sLFGMgr->isOptionEnabled(LFG_OPTION_ENABLE_DUNGEON_FINDER | LFG_OPTION_ENABLE_RAID_BROWSER))
         return;
 

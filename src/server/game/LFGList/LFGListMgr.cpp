@@ -226,6 +226,17 @@ void LFGListMgr::DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 stat
         // zeroed descriptor with Listed = 0 - a delisted entry has no expiry left to report.
         packet.ExpirationTime = 0;
         packet.LeaderGuid = listing->LeaderGuid;     // present in every captured payload, listed or not
+        // The second optional is present on the delist payload and nowhere else. Measured, not guessed:
+        // 69273_s69273_a_5A000A_1.bin (74 bytes, the delist) ends on
+        //   08 60 | 0f e0 88 10 7f 0e 44 16 08 | 00
+        // = Status 0x08, bit byte 0x60 (Listed 0, has(Guid) 1, has(u8) 1), the 9-byte PackedGuid, then the
+        // payload byte 0x00. The two listed payloads _0 and _2 (81 bytes each) carry 0xC0 instead, i.e.
+        // has(u8) 0 - which is why WorldSession::SendLFGListUpdateStatus leaves it unset. Without this line
+        // the delist went out one byte short and with 0x40 in the bit byte, so it did not match the
+        // reference capture this layout is derived from.
+        // UNVERIFIED: the meaning of the byte. Its only observed value is 0 and no consumer reads it in a
+        // way that distinguishes values (see LFGListPackets.h).
+        packet.UnkByte = 0;
         leaderPlayer->SendDirectMessage(packet.Write());
     }
 

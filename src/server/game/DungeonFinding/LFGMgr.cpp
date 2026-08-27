@@ -290,10 +290,28 @@ LFGMgr* LFGMgr::instance()
 
 void LFGMgr::Update(uint32 diff)
 {
+    time_t currTime = GameTime::GetGameTime();
+
+    // Remove obsolete readiness checks. A timeout is status 3, which the client turns into
+    // ERR_LFG_READY_CHECK_FAILED_TIMEOUT (804) and closes LFGReadyCheckPopup with.
+    //
+    // This sweep sits AHEAD of the LFG option gate below, and that is deliberate: a readiness check is not
+    // a dungeon-finder queue, and StartReadyCheck does not consult the option mask either. Behind the gate
+    // the lifecycle would be asymmetric - a check could be created on a realm with the dungeon finder
+    // switched off, but never expire and never be aborted. The popup would then stay open on every
+    // member's screen (only an update ever closes it), the entry would live in ReadyChecksStore until the
+    // next restart, and StartReadyCheck would refuse that group forever because the stale entry blocks it.
+    for (LfgReadyCheckContainer::iterator it = ReadyChecksStore.begin(); it != ReadyChecksStore.end();)
+    {
+        LfgReadyCheckContainer::iterator itReadyCheck = it++;
+        if (currTime < itReadyCheck->second.cancelTime)
+            continue;
+
+        FinishReadyCheck(itReadyCheck, LFG_READYCHECK_MISSING_ANSWER);
+    }
+
     if (!isOptionEnabled(LFG_OPTION_ENABLE_DUNGEON_FINDER | LFG_OPTION_ENABLE_RAID_BROWSER))
         return;
-
-    time_t currTime = GameTime::GetGameTime();
 
     // Remove obsolete role checks
     for (LfgRoleCheckContainer::iterator it = RoleChecksStore.begin(); it != RoleChecksStore.end();)
@@ -315,17 +333,6 @@ void LFGMgr::Update(uint32 diff)
 
         RestoreState(itRoleCheck->first, "Remove Obsolete RoleCheck");
         RoleChecksStore.erase(itRoleCheck);
-    }
-
-    // Remove obsolete readiness checks. A timeout is status 3, which the client turns into
-    // ERR_LFG_READY_CHECK_FAILED_TIMEOUT (804) and closes LFGReadyCheckPopup with.
-    for (LfgReadyCheckContainer::iterator it = ReadyChecksStore.begin(); it != ReadyChecksStore.end();)
-    {
-        LfgReadyCheckContainer::iterator itReadyCheck = it++;
-        if (currTime < itReadyCheck->second.cancelTime)
-            continue;
-
-        FinishReadyCheck(itReadyCheck, LFG_READYCHECK_MISSING_ANSWER);
     }
 
     // Remove obsolete proposals
@@ -1115,14 +1122,32 @@ void LFGMgr::UpdateRoleCheck(ObjectGuid gguid, ObjectGuid guid /* = ObjectGuid::
    carry their own GameError (829 / 804 / 844 / 803), so a check must always be closed out explicitly -
    dropping it silently would leave the popup on screen.
 
-   UNVERIFIED - THE RETAIL TRIGGER. What starts a readiness check in retail is not derivable from the
-   client image. The evidence points at the battleground / PvP queue: the UI only resolves a real queue
-   name when readyCheckIsBattleground is true (Blizzard_GroupFinder/Shared/LFGReadyCheck.lua:13-17),
-   QueueStatusFrame.lua:671-680 creates its status entry only then, and readyCheckIsBattleground is
-   exactly "BgQueueIDs is not empty" (GetLFGReadyCheckUpdate @ RVA 0x24CF010). That call site lives in
-   the battleground invite path, which is not part of this unit's files, and no capture of a live
-   readiness check exists. This function is therefore the documented entry point and currently has no
-   caller in-tree. See orchestrierung/status/lfg_5A.json, aufnahme_noetig.
+   UNVERIFIED - THE RETAIL TRIGGER, and this function HAS NO CALLER IN-TREE. That is a deliberate state,
+   not an oversight, and the next reader is asked not to "fix" it by attaching it to a working path.
+
+   What the client settles: the dialog only resolves a real queue name when readyCheckIsBattleground is
+   true (Blizzard_GroupFinder/Shared/LFGReadyCheck.lua:13-17), QueueStatusFrame.lua:671-680 creates its
+   status entry only then, and readyCheckIsBattleground is exactly "BgQueueIDs is not empty"
+   (GetLFGReadyCheckUpdate @ RVA 0x24CF010). So the check belongs to a PvP queue.
+
+   What the client also settles is WHICH one, and it is not one this tree has: Blizzard_PVPMatch/
+   PVPMatchResults.lua:227-229 gates its requeue button on LFG_READY_CHECK_SHOW / LFG_READY_CHECK_DECLINED,
+   and that button calls RequeueSkirmish() (PVPMatchResults.lua:492) = CMSG_BATTLEMASTER_JOIN_SKIRMISH
+   (0x3E00C1) - an opcode TrinityCore does not handle at all, in family 0x3E, i.e. another unit's work.
+
+   A previous revision of this branch borrowed WorldSession::HandleBattlemasterJoinArena as a stand-in
+   trigger. That was withdrawn on 2026-08-27 (audit finding 1 on lfg_5A) and must stay withdrawn: the
+   substitution is destructive, because FinishReadyCheck calls LeaveReadyCheckQueues for every outcome
+   except LFG_READYCHECK_FINISHED. Attached to a live rated queue that means every group whose members do
+   not all answer within LFG_TIME_ROLECHECK (45 s) is thrown out of the arena queue - a working, entirely
+   server-side path made dependent on client interaction, on a guess. Any future caller has to accept that
+   consequence for the queues it passes in, so only the queue whose OWN retail flow contains the check may
+   ever be wired here.
+
+   Consequence for D2: the message is complete and correct on the wire, and the answer path
+   (CMSG_DF_READY_CHECK_RESPONSE -> UpdateReadyCheck) is complete, but nothing in this tree starts a check.
+   Closing that gap needs a capture of a retail skirmish requeue. See orchestrierung/status/lfg_5A.json,
+   aufnahme_noetig.
 
    @param[in]     gguid Group guid to start the readycheck for
    @param[in]     bgQueueIDs Battleground queue ids; non-empty selects the battleground dialog variant
@@ -2498,8 +2523,9 @@ bool LFGMgr::HasIgnore(ObjectGuid guid1, ObjectGuid guid2)
 }
 
 /**
-   SMSG_LFG_LIST_INSTANCE_SHUTDOWN_COUNTDOWN (0x5A0009) to every player in an LFG instance that is winding
-   down while they are still inside it.
+   SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN (0x5A0009) to every player in an LFG instance that is winding
+   down while they are still inside it. (The opcode belongs to the dungeon finder, not to the premade
+   group finder - there is no SMSG_LFG_LIST_ prefix on it; Opcodes.h is the authority.)
 
    The consumer (RVA 0x24C18C0) formats TimeLeft with INT_GENERAL_DURATION into the GlobalString
    INSTANCE_SHUTDOWN_MESSAGE and prints it to the system chat - no Lua event, no CVar, no UI state. So the

@@ -31,7 +31,6 @@
 #include "GameTime.h"
 #include "Group.h"
 #include "Language.h"
-#include "LFGMgr.h"
 #include "Log.h"
 #include "NPCPackets.h"
 #include "Object.h"
@@ -611,32 +610,6 @@ void WorldSession::HandleBattlemasterJoinArena(WorldPackets::Battleground::Battl
     }
 
     sBattlegroundMgr->ScheduleQueueUpdate(matchmakerRating, bgQueueTypeId, bracketEntry->GetBracketId());
-
-    // The LFG readiness check (SMSG_LFG_READY_CHECK_UPDATE 0x5A0006 / _RESULT 0x5A001E,
-    // CMSG_DF_READY_CHECK_RESPONSE 0x430048). It belongs to a PvP queue, not to the dungeon finder, and
-    // this is the only group PvP queue TrinityCore has:
-    //   - BgQueueIDs is a list of PACKED BattlegroundQueueTypeId - the very value this file already puts on
-    //     the wire as SMSG_BATTLEFIELD_STATUS_*.QueueID (BattlegroundMgr.cpp:167/218). The client reads
-    //     element 0 as a BattlemasterList key (GetLFGReadyCheckUpdateBattlegroundInfo, RVA 0x24CF100) and a
-    //     non-empty list is exactly what turns the dialog into its battleground variant
-    //     (GetLFGReadyCheckUpdate, RVA 0x24CF010 -> readyCheckIsBattleground).
-    //   - Blizzard_QueueStatusFrame/Mainline/QueueStatusFrame.lua:671-680 renders a "ready check in progress"
-    //     queue entry only for readyCheckIsBattleground, right beside the PvP ROLE check entry.
-    //   - Blizzard_GroupFinder/Shared/LFGReadyCheck.lua:11-17 names the queue in the popup, and falls back to
-    //     UNKNOWN when the list is empty.
-    // Only for a real group: a solo queue has nobody to ask.
-    //
-    // UNVERIFIED - the exact retail trigger and the exact consequence of a refusal.
-    // What retail demonstrably uses this for is the arena-skirmish REQUEUE: Blizzard_PVPMatch/
-    // PVPMatchResults.lua:227-229 disables its requeue button on LFG_READY_CHECK_SHOW and re-enables it on
-    // LFG_READY_CHECK_DECLINED, and that button calls RequeueSkirmish() (PVPMatchResults.lua:492), i.e.
-    // CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3E00C1) - an opcode TrinityCore does not handle at all and whose
-    // family is not part of this unit. The Lua does settle what a refusal MEANS there, though: the button
-    // becomes usable again and the group is not queued. That is the consequence implemented below, carried
-    // over to the queue TrinityCore does have. Whether retail also runs the check on a fresh rated queue
-    // (rather than only on a requeue) is not derivable from the client.
-    if (ginfo && grp->GetMembersCount() > 1)
-        sLFGMgr->StartReadyCheck(grp->GetGUID(), { bgQueueTypeId.GetPacked() });
 }
 
 void WorldSession::HandleReportPvPAFK(WorldPackets::Battleground::ReportPvPPlayerAFK& reportPvPPlayerAFK)
