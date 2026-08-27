@@ -136,8 +136,11 @@ void PerksProgramMgr::GetCurrentPeriod(uint64& periodStart, uint64& periodEnd) c
     // The Trading Post period is the current calendar month, rolling over on the 1st at
     // PerksProgram.ResetHour UTC -- NOT at midnight. Every captured SMSG_PERKS_PROGRAM_ACTIVITY_UPDATE
     // carries a non-midnight boundary pair: 15:00 UTC in the 12.0.x recordings (builds 65940-69273)
-    // and 04:00 UTC in the two 12.1 recordings (69382/69404). The hour is a regional property of the
-    // realm, which is why it is a config value here rather than a constant.
+    // and 04:00 UTC in the two 12.1 recordings (69382/69404). That split is all the measurement shows,
+    // and it falls exactly on the build boundary; the default 4 is simply the 12.1 value.
+    // UNVERIFIED: WHY the hour differs. Region is the obvious candidate, but no recording carries a region
+    // marker, so the split cannot be attributed to one -- it is a config value because it is observed to
+    // vary, not because it is proven to be regional.
     int32 const resetHour = sWorld->getIntConfig(CONFIG_PERKS_PROGRAM_RESET_HOUR);
 
     time_t now = GameTime::GetGameTime();

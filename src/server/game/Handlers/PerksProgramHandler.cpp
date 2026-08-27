@@ -28,6 +28,7 @@
 #include "UnitDefines.h"
 #include "World.h"
 #include <limits>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -76,6 +77,10 @@ static void GrantMonthlyPerksCache(WorldSession* session, Player* player)
     session->SetAccountPerksCacheGrantPeriod(periodStart);
     player->AddCurrency(CURRENCY_TYPE_TRADERS_TENDER, PERKS_MONTHLY_CACHE_TENDER, CurrencyGainSource::Script);
     session->StoreAccountPerksTender(player->GetCurrencyQuantity(CURRENCY_TYPE_TRADERS_TENDER));
+    // Announce it like every other Tender the server credits on its own initiative -- same rule as
+    // PerksProgramActivityMgr::AwardThresholds. Without it the stipend appears in the balance with no event and
+    // no toast, and PERKS_PROGRAM_CURRENCY_AWARDED is the only thing that produces one.
+    session->SendPerksProgramTenderAwarded(PERKS_MONTHLY_CACHE_TENDER);
 }
 
 // Sends SMSG_PERKS_PROGRAM_DISABLED. The body is a single bit (family dispatcher RVA 0x67A010 case 6488070
@@ -134,10 +139,31 @@ void WorldSession::HandlePerksProgramItemsRefreshed(WorldPackets::PerksProgram::
         return;
     }
 
+    // Bound the answer. WorldSocket accepts a client packet up to 0x10000 bytes, so a crafted request can carry
+    // ~16380 ids, and each resolvable one appends a 49-byte JamPerksVendorItem -- an unbounded amplification if
+    // every id were answered. Two constraints cut it down, both taken from what the client actually does:
+    //   * ids repeat at most once. The client builds the array by walking its purchase map, whose keys are
+    //     unique, so a repeated id can only come from a forged packet. Same rule as the cart handler, which
+    //     rejects duplicates outright; here skipping is enough because nothing is charged.
+    //   * ids come from the account's OWN purchase records. PerksProgramMgr::SetRecentPurchases (client RVA
+    //     0x253E020) collects exactly the purchase-list entries it cannot resolve locally, and that purchase
+    //     list is the one this server sent. Anything outside it is not a gap the client can have.
+    // Together these cap the response at one element per stored purchase, independent of the request size.
+    std::unordered_map<int32, PerksProgramPurchaseData> const& purchases = GetCollectionMgr()->GetPerksProgramPurchases();
+
     WorldPackets::PerksProgram::PerksProgramResult result(WorldPackets::PerksProgram::PerksProgramResult::ResultTypeVendorMerge);
+    std::unordered_set<int32> seen;
     for (int32 vendorItemId : packet.RequestedVendorItemIDs)
+    {
+        if (!seen.insert(vendorItemId).second)
+            continue;
+
+        if (!purchases.contains(vendorItemId))
+            continue;
+
         if (WorldPackets::PerksProgram::PerksVendorItem const* item = sPerksProgramMgr->GetCatalogueVendorItem(vendorItemId))
             result.VendorItems.push_back(*item);
+    }
 
     // Nothing resolvable means every requested id is unknown to the server too. The client imposes no timeout
     // on this request, so staying silent is correct here -- an empty merge would only trigger a pointless
@@ -349,6 +375,28 @@ void WorldSession::SendPerksProgramPurchaseResult(int32 perksVendorItemId, bool 
 //
 // The type is deliberately fixed to 0: Err != 0 combined with type 8 or 9 makes the client read past the end of
 // that GameError table and crash, so the unsafe combination is not expressible here.
+// Sends SMSG_PERKS_PROGRAM_RESULT type 8 -- "the server just credited you this much Trader's Tender".
+// It is the announcement half of a credit the server makes on its own initiative (a monthly-activity threshold),
+// as opposed to a purchase or refund, which carry their own type 2 / type 3 answer.
+//
+// D2, the consumer chain: client RVA 0x253CFE0 case 6 reads the amount at +240 and, only when it is > 0, fires
+// event slot 12872 with hash 0xCC938319765BD2A9 = PERKS_PROGRAM_CURRENCY_AWARDED. Its documented payload is a
+// single number "value" (PerksProgramDocumentation.lua:269-278). AlertFrames.lua:499 registers the event and
+// :624-629 turns it into LootAlertSystem:AddAlert with lootSource = LOOT_SOURCE_TRADING_POST -- the only place
+// in the UI that produces that toast.
+//
+// Err stays 0 and must: type 8 with Err != 0 indexes past the end of the client's 8-row GameError table.
+// A zero or negative amount is dropped rather than sent, because the consumer would discard it anyway.
+void WorldSession::SendPerksProgramTenderAwarded(int32 amount)
+{
+    if (amount <= 0)
+        return;
+
+    WorldPackets::PerksProgram::PerksProgramResult result(WorldPackets::PerksProgram::PerksProgramResult::ResultTypeTenderGranted);
+    result.TenderAwarded = amount;
+    SendPacket(result.Write());
+}
+
 void WorldSession::SendPerksProgramResultError()
 {
     WorldPackets::PerksProgram::PerksProgramResult result(WorldPackets::PerksProgram::PerksProgramResult::ResultTypeError);

@@ -197,6 +197,11 @@ WorldPacket const* TransmogOutfitSlotsUpdated::Write()
     return &_worldPacket;
 }
 
+void ClearNewAppearance::Read()
+{
+    _worldPacket >> ItemModifiedAppearanceID;
+}
+
 WorldPacket const* AccountTransmogUpdate::Write()
 {
     _worldPacket << Bits<1>(IsFullUpdate);

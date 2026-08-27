@@ -1210,9 +1210,14 @@ void World::LoadConfigSettings(bool reload)
         { .Rule = ::GameRule::HousingEnabled, .Value = true }
     };
 
-    // Trading Post off: also tell the client through the SMSG_FEATURE_SYSTEM_STATUS game rules, so the UI greys
-    // its entry points out instead of only reacting to SMSG_PERKS_PROGRAM_DISABLED (which merely pops a dialog
-    // and closes the frame). The rule keeps Blizzard's own name -- it is the only Perks rule the client knows.
+    // Trading Post off: also state it in the SMSG_FEATURE_SYSTEM_STATUS game rules. The rule keeps Blizzard's
+    // own name and its own meaning -- with the Trading Post switched off PerksProgramActivityMgr stops taking
+    // criteria progress (CanUpdateCriteriaTree), so "activity tracking disabled" is literally true here.
+    // UNVERIFIED: what the 12.1 client DOES with rule 66. No file under Blizzard_PerksProgram/ or
+    // Blizzard_MonthlyActivities.lua reads a game rule at all (12.1.0.69382 UI source), and rule 66 appears in
+    // no generated enum in Blizzard_APIDocumentationGenerated/, so any claim about a UI effect would be a guess.
+    // Sending it is harmless and keeps the realm's own state consistent; it is not a substitute for the
+    // server-side refusal in PerksProgramHandler.cpp, which is what actually shuts the system down.
     if (!m_bool_configs[CONFIG_PERKS_PROGRAM_ENABLED])
         _gameRules.push_back({ .Rule = ::GameRule::PerksProgramActivityTrackingDisabled, .Value = true });
 

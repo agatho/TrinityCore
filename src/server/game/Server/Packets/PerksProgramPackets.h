@@ -406,6 +406,13 @@ class PerksProgramResult final : public ServerPacket
 public:
     // bits4 discriminant. Only the values the server can fill honestly are named; 1, 6 and 7 behave exactly
     // like 0 (empty error carriers) and 10-15 are inert.
+    //
+    // ResultTypeTenderAwarded (4) is modelled but deliberately has no sender: it fires the same
+    // PERKS_PROGRAM_CURRENCY_AWARDED event as type 8 and then forces a CMSG_PERKS_PROGRAM_REQUEST_PENDING_REWARDS
+    // round trip, which on this server can only ever come back Count = 0 because every threshold is paid in the
+    // same call that earns it (PerksProgramActivityMgr::AwardThresholds). Type 8 says the same thing without the
+    // extra request, so that is what WorldSession::SendPerksProgramTenderAwarded sends. Keeping branch 4 on the
+    // writer costs nothing and keeps the union complete for a later deferred-payout model, which would need it.
     enum ResultType : uint8
     {
         ResultTypeError             = 0,

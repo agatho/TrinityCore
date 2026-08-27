@@ -608,6 +608,33 @@ void WorldSession::HandleTransmogOutfitUpdateSlots(WorldPackets::Transmogrificat
     }
 }
 
+// CMSG_CLEAR_NEW_APPEARANCE: the player has looked at a wardrobe entry that carried the NEW label, so its
+// pending badge is dropped from the account state for good.
+//
+// D2/D3, from the client: the label and glow are drawn for every id in the client's "new" set
+// (Blizzard_Wardrobe.lua:1126-1131), and WardrobeItemModelMixin:OnEnter clears the entry locally and calls
+// C_TransmogCollection.ClearNewAppearance(visualID) (Blizzard_Wardrobe.lua:1439-1446; the transmogrifier frame
+// does the same at Blizzard_TransmogTemplates.lua:1010-1011). The client resolves the visual id to a vector of
+// ItemModifiedAppearance ids and sends ONE of these per element (serializer RVA 0x746D30, 8 bytes fixed).
+// There is no answer to send: the client has already hidden the label before the packet leaves, and the message
+// has no *_RESULT counterpart anywhere in family 0x45. An unknown or already-cleared id is a plain no-op --
+// the client sends one packet per resolved source id, so ids the account never collected are normal traffic,
+// not a protocol violation.
+//
+// Note what the server must NOT do: the NewAppearances vector of SMSG_ACCOUNT_TRANSMOG_UPDATE is purely
+// ADDITIVE on the client. The consumer at RVA 0x22D62F0 clears the favourites tree when IsFullUpdate is set,
+// but never touches the "new" set (0x43EEB98) -- it only ever inserts into it, on every branch, deduped by
+// key. There is therefore no packet that unmarks an appearance; this opcode is the only way the set shrinks
+// while the client runs, which is exactly why the server has to remember the clear.
+//
+// D4: persistent. The badge has to survive a relog or it would come back every login, so the pending set is
+// account state in battlenet_item_new_appearances (LoginDB, keyed on the bnet account) and the clear is
+// written out with the rest of the collection on the next account save.
+void WorldSession::HandleClearNewAppearance(WorldPackets::Transmogrification::ClearNewAppearance& clearNewAppearance)
+{
+    GetCollectionMgr()->ClearNewAppearance(clearNewAppearance.ItemModifiedAppearanceID);
+}
+
 void WorldSession::SendOpenTransmogrifier(ObjectGuid const& guid)
 {
     WorldPackets::NPC::NPCInteractionOpenResult npcInteraction;

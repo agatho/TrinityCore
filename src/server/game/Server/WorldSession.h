@@ -837,6 +837,7 @@ namespace WorldPackets
 
     namespace Transmogrification
     {
+        class ClearNewAppearance;
         class TransmogrifyItems;
         class TransmogOutfitNew;
         class TransmogOutfitUpdateInfo;
@@ -1496,6 +1497,7 @@ class TC_GAME_API WorldSession
         void SendPerksProgramDisabled(bool disabled);
         void SendPerksProgramVendorOpen(ObjectGuid const& vendorGuid);
         void SendPerksProgramPurchaseResult(int32 perksVendorItemId, bool refund);
+        void SendPerksProgramTenderAwarded(int32 amount);
         void SendPerksProgramResultError();
         std::vector<WorldPackets::PerksProgram::PerksRecentPurchase> BuildPerksRecentPurchases() const;
         void HandleGuildSetGuildMaster(WorldPackets::Guild::GuildSetGuildMaster& packet);
@@ -1853,6 +1855,7 @@ class TC_GAME_API WorldSession
 
         // Transmogrification
         void HandleTransmogrifyItems(WorldPackets::Transmogrification::TransmogrifyItems& transmogrifyItems);
+        void HandleClearNewAppearance(WorldPackets::Transmogrification::ClearNewAppearance& clearNewAppearance);
         void HandleTransmogOutfitNew(WorldPackets::Transmogrification::TransmogOutfitNew const& transmogOutfitNew);
         void HandleTransmogOutfitUpdateInfo(WorldPackets::Transmogrification::TransmogOutfitUpdateInfo const& transmogOutfitUpdateInfo);
         void HandleTransmogOutfitUpdateSituations(WorldPackets::Transmogrification::TransmogOutfitUpdateSituations const& transmogOutfitUpdateSituations);

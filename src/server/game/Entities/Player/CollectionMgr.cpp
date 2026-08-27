@@ -615,7 +615,7 @@ void CollectionMgr::LoadItemAppearances()
         owner->AddConditionalTransmog(itemModifiedAppearanceId);
 }
 
-void CollectionMgr::LoadAccountItemAppearances(PreparedQueryResult knownAppearances, PreparedQueryResult favoriteAppearances)
+void CollectionMgr::LoadAccountItemAppearances(PreparedQueryResult knownAppearances, PreparedQueryResult favoriteAppearances, PreparedQueryResult newAppearances)
 {
     if (knownAppearances)
     {
@@ -641,6 +641,14 @@ void CollectionMgr::LoadAccountItemAppearances(PreparedQueryResult knownAppearan
         {
             _favoriteAppearances[favoriteAppearances->Fetch()[0].GetUInt32()] = CollectionItemState::Unchanged;
         } while (favoriteAppearances->NextRow());
+    }
+
+    if (newAppearances)
+    {
+        do
+        {
+            _newAppearances[newAppearances->Fetch()[0].GetUInt32()] = CollectionItemState::Unchanged;
+        } while (newAppearances->NextRow());
     }
 
     // Static item appearances known by every player
@@ -712,6 +720,70 @@ void CollectionMgr::SaveAccountItemAppearances(LoginDatabaseTransaction trans)
                 break;
         }
     }
+
+    for (auto itr = _newAppearances.begin(); itr != _newAppearances.end();)
+    {
+        switch (itr->second)
+        {
+            case CollectionItemState::New:
+                stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_BNET_ITEM_NEW_APPEARANCE);
+                stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+                stmt->setUInt32(1, itr->first);
+                trans->Append(stmt);
+                itr->second = CollectionItemState::Unchanged;
+                ++itr;
+                break;
+            case CollectionItemState::Removed:
+                stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_BNET_ITEM_NEW_APPEARANCE);
+                stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+                stmt->setUInt32(1, itr->first);
+                trans->Append(stmt);
+                itr = _newAppearances.erase(itr);
+                break;
+            case CollectionItemState::Unchanged:
+            case CollectionItemState::Changed:
+                ++itr;
+                break;
+        }
+    }
+}
+
+// Records a freshly collected appearance as carrying the wardrobe NEW label.
+//
+// NO PACKET GOES OUT HERE, and that is deliberate. The client maintains the "new" set itself: the descriptor
+// change handler at client RVA 0x22D7BD0 watches the ActivePlayerData Transmog bit array and, for every bit
+// that goes 0 -> 1, computes id = bitIndex + 32 * blockIndex and inserts it (RVA 0x22D8650 with suppressNew = 0,
+// which is chained_hash::insert on the same set at 0x43EEB98 that the packet feeds). AddTransmogFlag above is
+// exactly that 0 -> 1 transition, so the badge already appears in the session that earned it. Re-announcing it
+// would be a duplicate insert -- deduped by the client, but pointless traffic.
+//
+// What the client CANNOT do is remember the badge across a relog: its set is wiped on session teardown
+// (RVA 0x2084F30 -> clear()), and the bulk collection rebuild at login runs with the marking suppressed
+// (byte_7FF785C6B31B = 0 during load, RVA 0x2083040). That is what this account state is for -- it is replayed
+// in the login burst by SendFavoriteAppearances, and it is what CMSG_CLEAR_NEW_APPEARANCE empties.
+void CollectionMgr::AddNewAppearance(uint32 itemModifiedAppearanceId)
+{
+    auto itr = _newAppearances.find(itemModifiedAppearanceId);
+    if (itr == _newAppearances.end())
+        _newAppearances[itemModifiedAppearanceId] = CollectionItemState::New;
+    else if (itr->second == CollectionItemState::Removed)
+        itr->second = CollectionItemState::Unchanged;   // was queued for deletion, keep the stored row instead
+}
+
+// CMSG_CLEAR_NEW_APPEARANCE: the player has looked at the wardrobe entry, so drop its NEW badge for good.
+// No answer goes back -- the client has already hidden the label and removed the id from its own set before
+// sending (Blizzard_Wardrobe.lua:1439-1446), so the packet is a one-way "persist what I just did".
+void CollectionMgr::ClearNewAppearance(uint32 itemModifiedAppearanceId)
+{
+    auto itr = _newAppearances.find(itemModifiedAppearanceId);
+    if (itr == _newAppearances.end())
+        return;
+
+    // Never inserted into the account table yet -> just forget it; otherwise queue the DELETE for the next save.
+    if (itr->second == CollectionItemState::New)
+        _newAppearances.erase(itr);
+    else
+        itr->second = CollectionItemState::Removed;
 }
 
 void CollectionMgr::AddItemAppearance(Item* item)
@@ -854,6 +926,11 @@ bool CollectionMgr::CanAddAppearance(ItemModifiedAppearanceEntry const* itemModi
 void CollectionMgr::AddItemAppearance(ItemModifiedAppearanceEntry const* itemModifiedAppearance)
 {
     Player* owner = _owner->GetPlayer();
+    // Only the transition from "not collected" to "collected" earns the wardrobe NEW badge. This function is
+    // also reached for an appearance the account already owns (equipping a second copy), and re-flagging that
+    // one would put the label back on an entry the player has already seen and cleared.
+    bool const wasCollected = _appearances->size() > itemModifiedAppearance->ID && _appearances->test(itemModifiedAppearance->ID);
+
     if (_appearances->size() <= itemModifiedAppearance->ID)
     {
         std::size_t numBlocks = _appearances->num_blocks();
@@ -873,6 +950,9 @@ void CollectionMgr::AddItemAppearance(ItemModifiedAppearanceEntry const* itemMod
         owner->RemoveConditionalTransmog(itemModifiedAppearance->ID);
         _temporaryAppearances.erase(temporaryAppearance);
     }
+
+    if (!wasCollected)
+        AddNewAppearance(itemModifiedAppearance->ID);
 
     owner->UpdateCriteria(CriteriaType::LearnAnyTransmog, 1);
 
@@ -985,6 +1065,9 @@ void CollectionMgr::SetAppearanceIsFavorite(uint32 itemModifiedAppearanceId, boo
     _owner->SendPacket(accountTransmogUpdate.Write());
 }
 
+// Login burst: the complete account-wide wardrobe overlay in one full update -- the favourite stars and the
+// pending NEW badges. The second vector is what CMSG_CLEAR_NEW_APPEARANCE exists to empty; without it that
+// opcode would have nothing to clear, because nothing else in the tree ever filled NewAppearances.
 void CollectionMgr::SendFavoriteAppearances() const
 {
     WorldPackets::Transmogrification::AccountTransmogUpdate accountTransmogUpdate;
@@ -993,6 +1076,11 @@ void CollectionMgr::SendFavoriteAppearances() const
     for (auto [itemModifiedAppearanceId, state] : _favoriteAppearances)
         if (state != CollectionItemState::Removed)
             accountTransmogUpdate.FavoriteAppearances.push_back(itemModifiedAppearanceId);
+
+    accountTransmogUpdate.NewAppearances.reserve(_newAppearances.size());
+    for (auto [itemModifiedAppearanceId, state] : _newAppearances)
+        if (state != CollectionItemState::Removed)
+            accountTransmogUpdate.NewAppearances.push_back(itemModifiedAppearanceId);
 
     _owner->SendPacket(accountTransmogUpdate.Write());
 }
