@@ -1008,6 +1008,11 @@ void WorldSession::HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd
 // 7.7 d). It is therefore an opaque client tick, exactly like the value CMSG_TIME_SYNC_RESPONSE carries - usable
 // for a clock delta, not comparable against server time. HandleTimeSync treats it that way.
 //
+// The other half of that equal treatment is the receive time, and it does not come for free:
+// WorldPacket::GetReceivedTime is only filled for the opcodes named in WorldSocket::ReadDataHandler, so
+// CMSG_SUSPEND_COMMS_ACK is listed there next to the other three HandleTimeSync opcodes. Without that entry the
+// roundTripDuration below would be computed against a default constructed TimePoint.
+//
 // SerialNumber is echoed from the SMSG_SUSPEND_COMMS we sent (78/78 pairs in the captures) and is therefore
 // entirely client controlled on the way back. It must NOT reach HandleTimeSync as a counter: that counter is the
 // key of _pendingTimeSyncRequests, whose entries are all server minted (SendTimeSync, the resume counter, the

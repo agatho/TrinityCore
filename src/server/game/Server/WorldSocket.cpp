@@ -468,7 +468,12 @@ WorldSocket::ReadDataHandlerResult WorldSocket::ReadDataHandler()
             return HandleEnterEncryptedModeAck();
         default:
         {
-            if (opcode == CMSG_TIME_SYNC_RESPONSE || opcode == CMSG_MOVE_INIT_ACTIVE_MOVER_COMPLETE || opcode == CMSG_QUEUED_MESSAGES_END)
+            // This is the only place the receive time is ever stamped, so the list must name every opcode whose
+            // handler reads WorldPacket::GetReceivedTime - today exactly the callers of WorldSession::HandleTimeSync.
+            // An opcode missing here arrives with a default constructed TimePoint, and getMSTimeDiff then wraps
+            // instead of failing visibly, poisoning _timeSyncClockDeltaQueue with a delta off by ~2.1e9 ms.
+            if (opcode == CMSG_TIME_SYNC_RESPONSE || opcode == CMSG_MOVE_INIT_ACTIVE_MOVER_COMPLETE || opcode == CMSG_QUEUED_MESSAGES_END
+                || opcode == CMSG_SUSPEND_COMMS_ACK)
                 packet.SetReceiveTime(std::chrono::steady_clock::now());
             else if (opcode == CMSG_HOTFIX_REQUEST)
                 _canRequestHotfixes = false;
