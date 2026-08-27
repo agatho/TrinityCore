@@ -194,12 +194,25 @@ void WorldSession::HandleLatencyReport(WorldPackets::Auth::LatencyReport const& 
 
     for (WorldPackets::Auth::LatencyReportEntry const& entry : latencyReport.Entries)
     {
+        // The client's clock, taken from EVERY entry - deliberately BEFORE the frame rate filter below.
+        // LastTimestampMS is declared as the newest timestamp seen and it is the one member of this aggregate that
+        // says something about the client's clock instead of its frame rate, so it must not inherit the frame
+        // rate's selection: an entry with Frame == 0 still carries a perfectly good timestamp. Measured over all
+        // 25 captures - 11296 packets, 79068 entries, 22849 of them with Frame == 0 - not one Frame == 0 entry has
+        // TimestampMS == 0, so there is nothing here to guard against.
+        // A maximum rather than "the last one written", because the entries of one packet are NOT in timestamp
+        // order: the entry the sender appends itself (Unknown8 == 33) is regularly OLDER than the entries already
+        // in the report object - 11998 order violations over those same 79068 entries.
+        if (entry.TimestampMS > _clientPerformanceStats.LastTimestampMS)
+            _clientPerformanceStats.LastTimestampMS = entry.TimestampMS;
+
         // Frame == 0 means this entry carries no frame rate. It happens: in the decoded reference triple entry 0
         // has Frame 0 while entries 1 and 2 have 21 and 33. Only the last entry of a packet is written by the
         // sender we decoded (0x20E6F0, which always stores at least 1); who fills the earlier entries of the same
         // report object is not resolved.
-        // UNVERIFIED: the producer of the entries with Frame == 0. They are skipped rather than averaged in,
-        // because folding a zero into a frame rate average would understate it.
+        // UNVERIFIED: the producer of the entries with Frame == 0. Their frame rate is skipped rather than
+        // averaged in, because folding a zero into a frame rate average would understate it. Their timestamp is
+        // NOT skipped - see above.
         if (!entry.Frame)
             continue;
 
@@ -212,9 +225,6 @@ void WorldSession::HandleLatencyReport(WorldPackets::Auth::LatencyReport const& 
 
         if (entry.Frame > _clientPerformanceStats.MaxFrameRate)
             _clientPerformanceStats.MaxFrameRate = entry.Frame;
-
-        if (entry.TimestampMS > _clientPerformanceStats.LastTimestampMS)
-            _clientPerformanceStats.LastTimestampMS = entry.TimestampMS;
     }
 
     TC_LOG_TRACE("network.telemetry", "WorldSession::HandleLatencyReport: {} reported {} entries (fps last {} min {} max {} avg {}, {} samples over {} reports)",

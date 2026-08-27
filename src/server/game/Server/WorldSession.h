@@ -1257,11 +1257,12 @@ class TC_GAME_API WorldSession
             uint32 MaxFrameRate = 0;
             uint32 LastFrameRate = 0;
             uint64 FrameRateSum = 0;
-            uint64 LastTimestampMS = 0;     ///< client unix time in ms of the newest entry seen; read out in
-                                            ///< ~WorldSession together with the frame rates. It is the client's
-                                            ///< own clock, so a value far from server time on an otherwise
-                                            ///< healthy session is the one thing this aggregate shows that the
-                                            ///< frame rates do not.
+            uint64 LastTimestampMS = 0;     ///< client unix time in ms of the newest entry seen - EVERY entry,
+                                            ///< including the ones with Frame == 0 that Samples excludes. It is
+                                            ///< the client's own clock, so a value far from server time on an
+                                            ///< otherwise healthy session is the one thing this aggregate shows
+                                            ///< that the frame rates do not, and it would not be that if it hung
+                                            ///< on the frame rates' own selection. Read out in ~WorldSession.
             uint32 AverageFrameRate() const { return Samples ? uint32(FrameRateSum / Samples) : 0u; }
         };
 
