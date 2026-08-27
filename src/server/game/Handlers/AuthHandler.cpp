@@ -234,11 +234,11 @@ void WorldSession::HandleLatencyReport(WorldPackets::Auth::LatencyReport const& 
 //
 // The message is attacker-controlled and the client keeps a 64 slot error ring it can drain in a burst, so the
 // output is capped per session and control characters are stripped so a crafted message cannot forge log lines.
+// What the cap suppresses is not lost: the reports keep being counted and ~WorldSession logs the total, so the
+// counter has a reader for every value it can take.
 void WorldSession::HandleLogStreamingError(WorldPackets::Auth::LogStreamingError const& logStreamingError)
 {
-    static constexpr uint32 MaxReportedPerSession = 10;
-
-    if (_streamingErrorsReported >= MaxReportedPerSession)
+    if (_streamingErrorsReported >= MaxStreamingErrorsLoggedPerSession)
     {
         ++_streamingErrorsReported;
         return;
@@ -252,9 +252,9 @@ void WorldSession::HandleLogStreamingError(WorldPackets::Auth::LogStreamingError
     ++_streamingErrorsReported;
 
     TC_LOG_INFO("network.telemetry", "WorldSession::HandleLogStreamingError: {} reported a content streaming error ({}/{}): {}",
-        GetPlayerInfo(), _streamingErrorsReported, MaxReportedPerSession, message);
+        GetPlayerInfo(), _streamingErrorsReported, MaxStreamingErrorsLoggedPerSession, message);
 
-    if (_streamingErrorsReported == MaxReportedPerSession)
-        TC_LOG_INFO("network.telemetry", "WorldSession::HandleLogStreamingError: {} reached the per session streaming error log cap, further reports are counted but not logged",
+    if (_streamingErrorsReported == MaxStreamingErrorsLoggedPerSession)
+        TC_LOG_INFO("network.telemetry", "WorldSession::HandleLogStreamingError: {} reached the per session streaming error log cap, further reports are counted but not logged - ~WorldSession prints the total",
             GetPlayerInfo());
 }

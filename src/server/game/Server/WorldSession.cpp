@@ -184,9 +184,17 @@ WorldSession::~WorldSession()
     /// a minute, so anything per report would be noise and anything persisted would be ~20000 rows per session.
     /// Logger network.telemetry is enabled at Info in worldserver.conf.dist, so this is visible as shipped.
     if (ClientPerformanceStats const& stats = GetClientPerformanceStats(); stats.Reports)
-        TC_LOG_INFO("network.telemetry", "Client performance for {}: fps min {} max {} avg {} last {} over {} samples in {} reports",
+        TC_LOG_INFO("network.telemetry", "Client performance for {}: fps min {} max {} avg {} last {} over {} samples in {} reports, newest client timestamp {} ms",
             GetPlayerInfo(), stats.MinFrameRate, stats.MaxFrameRate, stats.AverageFrameRate(), stats.LastFrameRate,
-            stats.Samples, stats.Reports);
+            stats.Samples, stats.Reports, stats.LastTimestampMS);
+
+    ///- the reader of the CMSG_LOG_STREAMING_ERROR counter. Below the cap every report already has its own line,
+    /// so this says nothing new; above it the reports are counted and not logged, and this is the only place that
+    /// count comes out again.
+    if (_streamingErrorsReported > MaxStreamingErrorsLoggedPerSession)
+        TC_LOG_INFO("network.telemetry", "Client streaming errors for {}: {} reported, {} logged, {} suppressed by the per session cap",
+            GetPlayerInfo(), _streamingErrorsReported, MaxStreamingErrorsLoggedPerSession,
+            _streamingErrorsReported - MaxStreamingErrorsLoggedPerSession);
 
     ///- empty incoming packet queue
     WorldPacket* packet = nullptr;

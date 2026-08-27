@@ -3162,10 +3162,12 @@ Network.TcpNodelay = 1
 #
 #    Network.PacketBundling
 #        Description: Combine consecutive small outgoing packets into one SMSG_MULTIPLE_PACKETS frame.
-#                     Saves 10 bytes per bundled packet (12 byte frame header plus 4 byte opcode become
-#                     2 byte length plus 4 byte opcode) and one encryption call per frame instead of one
-#                     per packet. Only packets that would not be compressed and that travel after the
-#                     connection entered encrypted mode are ever bundled.
+#                     Saves 14 bytes per bundled packet (16 byte frame header plus 4 byte opcode become
+#                     2 byte length plus 4 byte opcode) against the 20 bytes the frame itself costs once,
+#                     so n bundled packets save n * 14 - 20 bytes and bundling pays from two packets on.
+#                     Also one encryption call per frame instead of one per packet. Only packets that
+#                     would not be compressed and that travel after the connection entered encrypted
+#                     mode are ever bundled.
 #                     Off by default: the framing matches the 12.1 client byte for byte on paper, but a
 #                     wrong length would make the client silently discard the rest of a frame instead of
 #                     reporting an error, so this is not enabled without having been run against a client.

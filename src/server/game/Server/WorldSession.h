@@ -1257,7 +1257,11 @@ class TC_GAME_API WorldSession
             uint32 MaxFrameRate = 0;
             uint32 LastFrameRate = 0;
             uint64 FrameRateSum = 0;
-            uint64 LastTimestampMS = 0;     ///< client unix time in ms of the newest entry seen
+            uint64 LastTimestampMS = 0;     ///< client unix time in ms of the newest entry seen; read out in
+                                            ///< ~WorldSession together with the frame rates. It is the client's
+                                            ///< own clock, so a value far from server time on an otherwise
+                                            ///< healthy session is the one thing this aggregate shows that the
+                                            ///< frame rates do not.
             uint32 AverageFrameRate() const { return Samples ? uint32(FrameRateSum / Samples) : 0u; }
         };
 
@@ -2072,6 +2076,10 @@ class TC_GAME_API WorldSession
         ClientPerformanceStats _clientPerformanceStats;
         // CMSG_LOG_STREAMING_ERROR is a free-form string from an authenticated but otherwise untrusted client and
         // the client keeps a 64 slot error ring it can drain in a burst, so the log output is capped per session.
+        // Reports past the cap keep being counted and ~WorldSession prints the total once the cap was reached;
+        // otherwise the operator would see exactly ten lines with no hint that hundreds followed. The cap lives
+        // here rather than in the handler so the handler and its reader cannot drift apart.
+        static constexpr uint32 MaxStreamingErrorsLoggedPerSession = 10;
         uint32 _streamingErrorsReported = 0;
         AccountData _accountData[NUM_ACCOUNT_DATA_TYPES];
         std::array<uint32, MAX_ACCOUNT_TUTORIAL_VALUES> _tutorials;

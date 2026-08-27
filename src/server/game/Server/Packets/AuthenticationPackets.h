@@ -481,8 +481,13 @@ namespace WorldPackets
         class LatencyReport final : public ClientPacket
         {
         public:
-            // The client cannot send more. Its latency ring buffer (NetClient + 0x58*(idx+2) + 0x10) has exactly
-            // 16 slots; the highest Count actually observed in 4522 packets is 11.
+            // UNVERIFIED: that 16 is really the ceiling. It is inferred from the client's latency ring buffer
+            // (NetClient + 0x58*(idx+2) + 0x10), which has exactly 16 slots - not measured against a packet that
+            // fills it, because the highest Count actually observed in 4522 packets is 11.
+            // If the inference is wrong the failure is silent, which is why the marker sits here: Array::resize
+            // calls OnInvalidArraySize for the larger Count, WorldSession::Update swallows the resulting
+            // PacketArrayMaxCapacityException as "Skipped packet", the handler never runs, and this session's
+            // telemetry stops without anything in the log pointing at this number.
             static constexpr std::size_t MaxEntries = 16;
 
             explicit LatencyReport(WorldPacket&& packet) : ClientPacket(CMSG_LATENCY_REPORT, std::move(packet)) { }

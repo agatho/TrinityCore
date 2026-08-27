@@ -246,8 +246,10 @@ bool WorldSocket::Update()
             if (bundle.empty())
                 return;
 
-            // A bundle of one costs 6 bytes of framing to save 12 - correct but pointless, and it adds a layer the
-            // client has to recurse through. Send it plainly.
+            // A bundle of one saves nothing and costs 6 bytes: the outer 16 byte PacketHeader plus 4 byte outer
+            // opcode merely replace the ones the packet would have carried itself, while the 2 byte inner length
+            // and the repeated 4 byte inner opcode are pure addition (n * 14 - 20 is -6 at n == 1). It would also
+            // add a layer the client has to recurse through for nothing. Send it plainly.
             if (bundle.size() == 1)
                 writeSinglePacket(bundle.front());
             else
@@ -642,8 +644,11 @@ uint32 WorldSocket::CompressPacket(uint8* buffer, WorldPacket const& packet)
 //     bytes and the rest of the frame is discarded without an error. Getting the length arithmetic wrong here
 //     loses packets quietly, which is why bundling is a config switch and off by default.
 //
-// The gain per bundled packet is 12 bytes of PacketHeader traded for 2 bytes of length, plus one
-// WorldPacketCrypt::EncryptSend call for the whole frame instead of one per packet. There is no packet class for
+// The gain per bundled packet is the 16 bytes of PacketHeader (uint32 Size + uint8 Tag[12], see WorldSocket.h)
+// traded for a 2 byte length; the 4 byte opcode is paid either way. That is 14 bytes per packet, against the
+// 20 bytes the outer frame costs once, so n bundled packets save n * 14 - 20 bytes - negative for a single
+// packet and positive from two on. On top of that comes one WorldPacketCrypt::EncryptSend call for the whole
+// frame instead of one per packet. There is no packet class for
 // this opcode, exactly as with SMSG_COMPRESSED_PACKET: it is an opcode substitution in the write path and never
 // travels through WorldSession::SendPacket. The client has no message class for it either - the factory stub scan
 // over .text finds stubs for 0x4C0000..0x4C000C and none for 0x4C000D.

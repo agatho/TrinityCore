@@ -208,9 +208,10 @@ namespace WorldPackets
 
             // How many members of a single request are answered at all. This is the number that bounds the WORK,
             // and it has to sit on the response side: there is no batched response opcode, so every answered
-            // member costs one SMSG of its own - one allocation, one EncryptSend, ~35 bytes plus a 12 byte header.
+            // member costs one SMSG of its own - one allocation, one EncryptSend, ~35 bytes of body plus the
+            // 16 byte PacketHeader and a 4 byte opcode, so ~55 bytes on the wire.
             // Capping only the name lookups (which are hash map hits) caps nothing that matters; the packets are
-            // the cost. Unbounded, one 65 519 byte request would produce MaxMembers = 6551 packets / ~230 kB, and
+            // the cost. Unbounded, one 65 519 byte request would produce MaxMembers = 6551 packets / ~360 kB, and
             // the opcode is reachable from STATUS_AUTHED.
             // The value is the client's own club capacity, not a chosen number: C_Club.GetClubCapacity is a
             // constant-returning Lua binding, 0x7FF781C46B33 `mov [rbp+arg_10], 3E8h` written once into the slot
