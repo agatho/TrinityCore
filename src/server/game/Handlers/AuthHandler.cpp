@@ -26,10 +26,13 @@
 #include "ObjectMgr.h"
 #include "RBAC.h"
 #include "RealmList.h"
+#include "StringFormat.h"
 #include "SystemPackets.h"
 #include "Timezone.h"
 #include "Util.h"
 #include "World.h"
+
+#include <utf8.h>
 
 void WorldSession::SendAuthResponse(uint32 code, bool queued, uint32 queuePos)
 {
@@ -250,6 +253,56 @@ void WorldSession::HandleLatencyReport(WorldPackets::Auth::LatencyReport const& 
         _clientPerformanceStats.Reports);
 }
 
+// Makes an arbitrary byte string off the wire safe to hand to TC_LOG_*, for two separate reasons.
+//
+// Control characters collapse to '.' so that a crafted message cannot forge log lines - the message is
+// attacker-controlled and would otherwise reach the log verbatim.
+//
+// Every byte that is not part of a valid UTF-8 sequence is escaped as \xNN, because the log pipeline DOES
+// interpret the text even though nothing in the handler does. On Windows - the platform of this tree - the
+// console appender hands prefix + text + "\n" to WriteWinConsole (AppenderConsole.cpp), which calls Utf8toWStr
+// first and returns without writing a single character as soon as utf8::utf8to16 throws (Util.cpp: the exception
+// is caught, wstr is cleared, false is returned). WriteConsoleW is never reached, so the entire line is lost
+// silently - no prefix, no truncation marker, nothing in the log saying a report was dropped - while the file
+// appender writes the same line raw (AppenderFile.cpp, fwrite). The shipped configuration has both appenders on
+// this logger (worldserver.conf.dist: Logger.network.telemetry=3,Console Server), so half of it would go blind,
+// and since logging IS the whole effect of this opcode (decision O4) that is the effect going missing.
+// It matters here specifically: CMSG_LOG_STREAMING_ERROR is the one client string in this tree that is read with
+// Strings::DontValidateUtf8 (see LogStreamingError::Read) - every other logged client string comes in under the
+// Strings::ValidUtf8 default and cannot carry an invalid sequence at all. Reading it unvalidated stays the right
+// call, a malformed diagnostic must not cost the client its session, but it only holds if the string is made
+// loggable before it is logged, and that is what this function is for.
+//
+// \xNN rather than U+FFFD, and rather than the '.' the control characters get: the payload is a vsnprintf result
+// out of the client's CASC layer that can legitimately carry binary key material, and for a diagnostic the byte
+// value is the interesting part. Collapsing distinct bytes into one glyph would throw away the only content such
+// a report has. utf8::find_invalid returns the first byte of the offending sequence, so a multi-byte sequence
+// truncated at the 511 byte message boundary comes out as one escape per byte instead of swallowing the rest.
+static std::string MakeStreamingErrorMessageLoggable(std::string const& raw)
+{
+    std::string message;
+    message.reserve(raw.length());
+
+    std::string::const_iterator itr = raw.begin();
+    while (itr != raw.end())
+    {
+        std::string::const_iterator invalid = utf8::find_invalid(itr, raw.end());
+        for (; itr != invalid; ++itr)
+        {
+            unsigned char const c = static_cast<unsigned char>(*itr);
+            message += (c < 0x20 || c == 0x7F) ? '.' : *itr;
+        }
+
+        if (itr == raw.end())
+            break;
+
+        message += Trinity::StringFormat(R"(\x{:02X})", static_cast<unsigned char>(*itr));
+        ++itr;
+    }
+
+    return message;
+}
+
 // CMSG_LOG_STREAMING_ERROR (12.1 0x44000B). Free-form English CASC/TACT error text out of the client's streaming
 // logger; only severity >= 4 messages reach the ring this is drained from. There is nothing structured in it - no
 // file name field, no FileDataID field, no error code - and the Streaming Lua API has an empty Events table, so
@@ -260,7 +313,8 @@ void WorldSession::HandleLatencyReport(WorldPackets::Auth::LatencyReport const& 
 // this opcode was implemented to avoid.
 //
 // The message is attacker-controlled and the client keeps a 64 slot error ring it can drain in a burst, so the
-// output is capped per session and control characters are stripped so a crafted message cannot forge log lines.
+// output is capped per session and the text goes through MakeStreamingErrorMessageLoggable above - which both
+// keeps a crafted message from forging log lines and keeps the line from vanishing in the console appender.
 // What the cap suppresses is not lost: the reports keep being counted and ~WorldSession logs the total, so the
 // counter has a reader for every value it can take.
 void WorldSession::HandleLogStreamingError(WorldPackets::Auth::LogStreamingError const& logStreamingError)
@@ -271,10 +325,7 @@ void WorldSession::HandleLogStreamingError(WorldPackets::Auth::LogStreamingError
         return;
     }
 
-    std::string message = logStreamingError.Message;
-    for (char& c : message)
-        if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) == 0x7F)
-            c = '.';
+    std::string const message = MakeStreamingErrorMessageLoggable(logStreamingError.Message);
 
     ++_streamingErrorsReported;
 

@@ -435,8 +435,13 @@ void LogStreamingError::Read()
     // express more than MaxMessageLength - so reading through the same constant is what keeps the declared
     // maximum and the enforced maximum from drifting apart.
     // The message is a vsnprintf result from the client's CASC layer and can legitimately carry byte sequences
-    // that are not valid UTF-8 (embedded [Key %02X..%02X] blobs), so it is read unvalidated - it is only ever
-    // logged, never interpreted.
+    // that are not valid UTF-8 (embedded [Key %02X..%02X] blobs), so it is read unvalidated: the alternative is
+    // a ByteBufferInvalidValueException, i.e. the client losing its session over a diagnostic message.
+    // That shifts a duty onto the consumer and does not remove it. The string is not "never interpreted" - the
+    // log pipeline it ends up in interprets it as UTF-8, and on Windows AppenderConsole silently drops the whole
+    // line when the conversion fails. WorldSession::HandleLogStreamingError therefore runs it through
+    // MakeStreamingErrorMessageLoggable before logging; the reasoning is written out there. Any future consumer
+    // of this field has to do the same, because this Read deliberately does not.
     _worldPacket >> SizedString::BitsSize<LogStreamingError::MessageLengthBits>(Message);
     _worldPacket >> SizedString::Data<Strings::DontValidateUtf8>(Message);
 }
