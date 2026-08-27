@@ -196,6 +196,16 @@ WorldSession::~WorldSession()
             GetPlayerInfo(), _streamingErrorsReported, MaxStreamingErrorsLoggedPerSession,
             _streamingErrorsReported - MaxStreamingErrorsLoggedPerSession);
 
+    ///- the reader of the CMSG_SUSPEND_COMMS_ACK rejection counter. It reports on network.telemetry rather than on
+    /// network because that logger is enabled at Info in worldserver.conf.dist: the per rejection lines in
+    /// HandleSuspendCommsAck are TC_LOG_DEBUG("network") and therefore invisible as shipped, so this line is the
+    /// only trace an operator gets of a client hammering the opcode. Only printed once the cap was exceeded,
+    /// because up to that point every rejection already had its own line wherever the network logger is on.
+    if (_suspendCommsAcksRejected > MaxSuspendCommsAcksLoggedPerSession)
+        TC_LOG_INFO("network.telemetry", "Rejected suspend comms acknowledgements for {}: {} received, {} logged, {} suppressed by the per session cap",
+            GetPlayerInfo(), _suspendCommsAcksRejected, MaxSuspendCommsAcksLoggedPerSession,
+            _suspendCommsAcksRejected - MaxSuspendCommsAcksLoggedPerSession);
+
     ///- empty incoming packet queue
     WorldPacket* packet = nullptr;
     while (_recvQueue.next(packet))
@@ -1709,12 +1719,15 @@ uint32 WorldSession::DosProtection::GetMaxPacketCounterAllowed(uint32 opcode) co
             break;
         }
 
-        // One request produces up to QueryPlayerNamesForCommunity::MaxResponsesPerRequest separate responses,
-        // because 12.1 has no batched response opcode for it - by far the highest upload amplification of any
-        // client opcode. The rate has to be bounded on top of that per request cap, or the default of 100
-        // requests/s would still allow six figures of response packets per second and session. A human selecting
-        // a club in the Communities frame triggers exactly one of these (CommunitiesMemberList:OnClubSelected),
-        // so three per second leaves clicking around untouched.
+        // One request produces up to QueryPlayerNamesForCommunity::MaxMembers = 6551 separate responses, because
+        // 12.1 has no batched response opcode for it - by far the highest upload amplification of any client
+        // opcode. This rate is the ONLY bound on that amplification besides the packet size itself: there is
+        // deliberately no per request resolve budget, because refusing the surplus leaves those players
+        // permanently nameless in the client for a saving of ~14 bytes each (the accounting is on
+        // QueryPlayerNamesForCommunity in QueryPackets.h). At the default of 100 requests/s that would be six
+        // figures of response packets per second and session. A human selecting a club in the Communities frame
+        // triggers exactly one of these (CommunitiesMemberList:OnClubSelected), so three per second leaves
+        // clicking around untouched.
         case CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY:     // not profiled                very high upload bandwidth usage
         {
             maxPacketCounterAllowed = 3;

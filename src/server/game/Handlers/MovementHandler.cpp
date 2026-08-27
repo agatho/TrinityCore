@@ -1026,17 +1026,29 @@ void WorldSession::HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd
 // nothing is ever outstanding and every ack that arrives is unsolicited and dropped here.
 void WorldSession::HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck const& suspendCommsAck)
 {
-    if (!_suspendCommsPendingSerial)
+    // The two rejections are one branch on purpose. Both are triggerable by the client at will, and today the
+    // first one is the ONLY path this handler ever takes, so their log output is what an authenticated client can
+    // drive - capped per session (WorldSession.h, MaxSuspendCommsAcksLoggedPerSession) exactly as the
+    // attacker-controlled text of CMSG_LOG_STREAMING_ERROR is. Deciding it once here is also what keeps the two
+    // reasons from drifting apart, and the counter is incremented before the cap is consulted so that
+    // ~WorldSession can report what the cap swallowed.
+    if (!_suspendCommsPendingSerial || *_suspendCommsPendingSerial != suspendCommsAck.SerialNumber)
     {
-        TC_LOG_DEBUG("network", "WorldSession::HandleSuspendCommsAck: {} sent an unsolicited acknowledgement (serial {}), ignored",
-            GetPlayerInfo(), suspendCommsAck.SerialNumber);
-        return;
-    }
+        ++_suspendCommsAcksRejected;
+        if (_suspendCommsAcksRejected <= MaxSuspendCommsAcksLoggedPerSession)
+        {
+            if (!_suspendCommsPendingSerial)
+                TC_LOG_DEBUG("network", "WorldSession::HandleSuspendCommsAck: {} sent an unsolicited acknowledgement (serial {}), ignored ({}/{})",
+                    GetPlayerInfo(), suspendCommsAck.SerialNumber, _suspendCommsAcksRejected, MaxSuspendCommsAcksLoggedPerSession);
+            else
+                TC_LOG_DEBUG("network", "WorldSession::HandleSuspendCommsAck: {} acknowledged serial {} while serial {} is outstanding, ignored ({}/{})",
+                    GetPlayerInfo(), suspendCommsAck.SerialNumber, *_suspendCommsPendingSerial, _suspendCommsAcksRejected, MaxSuspendCommsAcksLoggedPerSession);
 
-    if (*_suspendCommsPendingSerial != suspendCommsAck.SerialNumber)
-    {
-        TC_LOG_DEBUG("network", "WorldSession::HandleSuspendCommsAck: {} acknowledged serial {} while serial {} is outstanding, ignored",
-            GetPlayerInfo(), suspendCommsAck.SerialNumber, *_suspendCommsPendingSerial);
+            if (_suspendCommsAcksRejected == MaxSuspendCommsAcksLoggedPerSession)
+                TC_LOG_DEBUG("network", "WorldSession::HandleSuspendCommsAck: {} reached the per session cap on rejected acknowledgements, further ones are counted but not logged - ~WorldSession prints the total",
+                    GetPlayerInfo());
+        }
+
         return;
     }
 

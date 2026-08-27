@@ -2108,6 +2108,14 @@ class TC_GAME_API WorldSession
         // is outstanding and every CMSG_SUSPEND_COMMS_ACK is unsolicited.
         Optional<uint32> _suspendCommsPendingSerial;
         uint32 _suspendCommsNextSerial = 1;
+        // Rejected CMSG_SUSPEND_COMMS_ACK packets, and the cap on how many of them get a log line. Same reasoning
+        // as MaxStreamingErrorsLoggedPerSession above: an authenticated client can send this opcode as often as
+        // the shared DosProtection default lets it (it has no entry of its own in GetMaxPacketCounterAllowed), and
+        // because this server has no SendSuspendComms call site, EVERY ack that arrives is a rejection. Without a
+        // cap that is a client controlled tap on the network logger. Rejections past the cap keep being counted
+        // and ~WorldSession prints the total, so the counter has a reader for every value it can take.
+        static constexpr uint32 MaxSuspendCommsAcksLoggedPerSession = 10;
+        uint32 _suspendCommsAcksRejected = 0;
         uint32 _timeSyncTimer;
 
         // Packets cooldown

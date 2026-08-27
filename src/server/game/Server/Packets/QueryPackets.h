@@ -213,42 +213,46 @@ namespace WorldPackets
             // DROPPED: at the previous value of 200, Array::resize called OnInvalidArraySize and threw
             // PacketArrayMaxCapacityException, which WorldSession::Update swallows as "Skipped packet" - the
             // handler never ran, not one response went out, and C_Club.AreMembersReady stayed false forever. That
-            // is precisely the unbounded spinner this opcode was implemented to prevent. How much each requested
-            // member COSTS is limited in the handler instead, where a limit can still be answered.
+            // is precisely the unbounded spinner this opcode was implemented to prevent. It is also the ONLY bound
+            // on the size of one request - see the cost accounting below for why a second, smaller budget inside
+            // the handler was tried and removed again.
             static constexpr std::size_t MaxMembers = (0xFFFF - 4 - 8 - 4) / 10;
 
-            // How many members of a single request are RESOLVED - and that alone. Say plainly what this number
-            // does and does not do, because an earlier version of this comment claimed it bounded the packets:
-            //   * it DOES bound the expensive half per request: that many character cache lookups and that many
-            //     PlayerGuidLookupData payloads (~35 bytes of body, so ~55 bytes on the wire with the 16 byte
-            //     PacketHeader and the 4 byte opcode).
-            //   * it does NOT bound the number of response PACKETS. There is no batched response opcode, so every
-            //     answered member costs one SMSG of its own - one allocation, one EncryptSend - and EVERY requested
-            //     member is answered, the surplus with a bare negative (11..27 byte body, ~41 bytes on the wire).
-            //     A member left unanswered stays pending in the client's community name cache and keeps the whole
-            //     member list spinning, which is the failure this opcode exists to avoid; see
-            //     HandleQueryPlayerNamesForCommunity for that and for the reasoning behind PermanentFailure.
-            // So the response packet count stays bounded by the wire only: one 65 519 byte request yields
-            // MaxMembers = 6551 responses, ~55 kB of resolved answers plus ~0.23 MB of negatives, and with the
-            // AntiDOS entry of 3 requests/s (WorldSession.cpp, GetMaxPacketCounterAllowed) that is up to ~19 650
-            // response packets/s and ~0.8 MB/s per session. The opcode is reachable from STATUS_AUTHED.
-            // That residual amplification is a deliberate trade and the open point of this opcode: dropping the
-            // surplus has a demonstrated cost (the spinner above), answering it has this one, and doing better
-            // would need a way to answer many members in one frame, which the 12.1 opcode set does not offer.
-            // Whoever revisits it should weigh it here, against these numbers.
-            // The value is the client's own club capacity, not a chosen number: C_Club.GetClubCapacity is a
-            // constant-returning Lua binding, 0x7FF781C46B33 `mov [rbp+arg_10], 3E8h` written once into the slot
-            // that 0x7FF781C46F2A pushes back to Lua - 1000. C_Club.FocusMembers focuses a WHOLE club roster
-            // (ClubDocumentation.lua: its only argument is clubId), so this is the size of request the client is
-            // built to make.
-            // It does NOT follow that a larger request cannot happen here: TrinityCore enforces no guild member
-            // limit at all - no MAX_GUILD_MEMBERS in Guild.h/.cpp, no switch in worldserver.conf.dist - so a 1500
-            // member guild with a cold name cache produces a legitimate 1500 member request on this server. That
-            // is why the surplus is refused rather than dropped.
-            // UNVERIFIED: that the client's club capacity is the right place to split resolved from refused. It is
-            // the only figure the client states about itself, but whether it also governs guild backed clubs is not
-            // measurable here - that needs a >1000 member guild on a live client.
-            static constexpr std::size_t MaxResponsesPerRequest = 1000;
+            // WHAT ONE REQUEST COSTS. Written out because no constant bounds it and this is the open point of the
+            // opcode - whoever wants to change it needs the numbers, not a reassurance.
+            // There is no batched response opcode, so every answered member costs one SMSG of its own: one
+            // allocation, one EncryptSend, a ~35 byte PlayerGuidLookupData body, hence ~55 bytes on the wire with
+            // the 16 byte PacketHeader and the 4 byte opcode. And EVERY requested member is answered, because a
+            // member left unanswered stays pending in the client's community name cache and keeps the whole member
+            // list spinning - the failure this opcode exists to avoid; see HandleQueryPlayerNamesForCommunity.
+            // The response count is therefore bounded by the wire alone: one 65 519 byte request yields
+            // MaxMembers = 6551 responses and ~0.36 MB, and with the AntiDOS entry of 3 requests/s
+            // (WorldSession.cpp, GetMaxPacketCounterAllowed) that is up to ~19 650 response packets/s and
+            // ~1.1 MB/s per session. The opcode is reachable from STATUS_AUTHED.
+            //
+            // A SECOND BUDGET INSIDE THE HANDLER WAS TRIED AND REMOVED - it resolved the first 1000 members and
+            // refused the rest with ResultCode::PermanentFailure. It bought almost nothing and paid for it with a
+            // permanent defect:
+            //   * saved per surplus member: one sCharacterCache lookup, one ObjectAccessor::FindConnectedPlayer,
+            //     and 14 bytes (a bare negative is ~41 bytes on the wire against ~55). The packet, the allocation
+            //     and the EncryptSend - the whole of the amplification above - are paid either way, because the
+            //     surplus still has to be answered at all.
+            //   * cost per surplus member: consumer 0x3498F0 answers any non-zero Result by clearing the pending
+            //     bit, and Result 1 additionally marks the entry negative and drops its callbacks, so that player
+            //     stays nameless in the UI for the rest of the session.
+            //   * and the situation is reachable on THIS server: TrinityCore enforces no guild member limit at all
+            //     (no MAX_GUILD_MEMBERS in Guild.h/.cpp, no switch in worldserver.conf.dist) and a cold name cache
+            //     makes the client ask for the entire roster at once, so a 1500 member guild produces a perfectly
+            //     legitimate 1500 member request. The budget would have left 500 of them nameless until relog, in
+            //     exchange for ~7 kB and 500 hash lookups.
+            //   * the budget's figure was not even established for this case. 1000 is the client's own club
+            //     capacity - C_Club.GetClubCapacity is a constant-returning Lua binding, 0x7FF781C46B33
+            //     `mov [rbp+arg_10], 3E8h` written once into the slot that 0x7FF781C46F2A pushes back to Lua - and
+            //     C_Club.FocusMembers focuses a WHOLE roster (ClubDocumentation.lua: its only argument is clubId),
+            //     so 1000 is the size of request the client is built to make. Whether that capacity also governs
+            //     guild backed clubs is not measurable here. An unproven limit against a demonstrated defect.
+            // Doing better than the amplification above needs a way to answer many members in one frame, which the
+            // 12.1 opcode set does not offer. Whoever revisits it should weigh it here, against these numbers.
 
             explicit QueryPlayerNamesForCommunity(WorldPacket&& packet) : ClientPacket(CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY, std::move(packet)) { }
 

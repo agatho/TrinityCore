@@ -643,8 +643,14 @@ uint32 WorldSocket::CompressPacket(uint8* buffer, WorldPacket const& packet)
 //
 // The client recurses into 0x18C0490 for every inner packet, which means every inner packet passes all three
 // receive gates again. Two consequences that this code depends on:
-//   * before SMSG_ENTER_ENCRYPTED_MODE only eight 0x4C ordinals plus SMSG_AUTH_FAILED are accepted, so a bundle
-//     may only be built once encryption is active - CanBundle enforces that through NeedsEncryption().
+//   * the pre-encryption whitelist binds the INNER packets, not the outer frame. Said precisely, because the
+//     obvious reading of it is wrong: bitmask 0x2A1F at RVA 0x389DC00 (quoted in full above
+//     WorldPackets::Auth::SuspendComms) admits 0x4C0000..0x4C0004, 0x4C0009, 0x4C000B, 0x4C000D and
+//     SMSG_AUTH_FAILED - and bit 13 of that mask IS 0x4C000D, so the frame itself would pass the gate before
+//     encryption. What would not pass is its contents: every inner packet re-enters the same gate through the
+//     recursion, and none of the handful of opcodes this server sends before SMSG_ENTER_ENCRYPTED_MODE that are
+//     not themselves on the list would survive it. A bundle may therefore only be built once encryption is
+//     active - CanBundle enforces that through NeedsEncryption().
 //   * a wrong innerBodyLen is NOT reported: the loop breaks silently when innerBodyLen + 4 exceeds the remaining
 //     bytes and the rest of the frame is discarded without an error. Getting the length arithmetic wrong here
 //     loses packets quietly, which is why bundling is a config switch and off by default.
@@ -707,8 +713,10 @@ void WorldSocket::WriteBundleToBuffer(std::span<EncryptablePacket* const> packet
 
 bool WorldSocket::CanBundle(EncryptablePacket const& packet) const
 {
-    // Gate 1 of the client's receive path (see WriteBundleToBuffer). NeedsEncryption() is true from the moment the
-    // crypt is initialized, which is exactly the window in which arbitrary opcodes are accepted.
+    // Gate 1 of the client's receive path (see WriteBundleToBuffer). What this rejects is a bundle whose INNER
+    // packets would be refused - the 0x4C000D frame itself is on the pre-encryption whitelist, its contents are
+    // not. NeedsEncryption() is true from the moment the crypt is initialized, which is exactly the window in
+    // which arbitrary opcodes are accepted.
     if (!packet.NeedsEncryption())
         return false;
 

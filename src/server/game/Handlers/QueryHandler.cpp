@@ -16,6 +16,8 @@
  */
 
 #include "WorldSession.h"
+#include "CharacterCache.h"
+#include "ClubUtils.h"
 #include "Common.h"
 #include "Corpse.h"
 #include "DatabaseEnv.h"
@@ -27,8 +29,6 @@
 #include "NPCHandler.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
-#include "CharacterCache.h"
-#include "ClubUtils.h"
 #include "Player.h"
 #include "QueryPackets.h"
 #include "RealmList.h"
@@ -133,47 +133,24 @@ void WorldSession::HandleQueryPlayerNamesForCommunity(WorldPackets::Query::Query
     // ClubID is not needed to answer - every member id already carries its own realm and character counter - but it
     // is read because it is on the wire.
     //
-    // EVERY requested member gets an answer. That is not a nicety: a member the server answers with nothing at all
-    // stays pending in the client's community name cache, C_Club.AreMembersReady never turns true, and
-    // CommunitiesMemberList.lua has no timer, no retry and no error dialog to get out of it - one silent omission
-    // keeps the whole member list spinning.
+    // EVERY requested member gets an answer, and every answer is a resolved one. That is not a nicety: a member the
+    // server answers with nothing at all stays pending in the client's community name cache,
+    // C_Club.AreMembersReady never turns true, and CommunitiesMemberList.lua has no timer, no retry and no error
+    // dialog to get out of it - one silent omission keeps the whole member list spinning.
     //
-    // Bounded is only the expensive half. MaxResponsesPerRequest members are resolved and answered in full; beyond
-    // that the answer is a bare negative - 11..27 bytes, Result plus the echoed key, no PlayerGuidLookupData - and
-    // that is enough, because clearing the pending bit is what consumer 0x3498F0 does for any non-zero Result.
-    // PermanentFailure and deliberately not TemporaryFailure: Result 2 invites the client to ask again, so the
-    // surplus of an unchanged roster would be refused again on every retry - that retry loop is why the previous
-    // TemporaryFailure overflow path was removed. Result 1 terminates: those members render nameless, and the list
-    // becomes ready. A nameless entry is a visible, bounded degradation; a pending entry blocks the entire list.
+    // There is deliberately NO per request resolve budget. An earlier version resolved the first 1000 members and
+    // refused the rest with PermanentFailure; it was removed because it saved only a cache lookup and ~14 bytes per
+    // surplus member - the packet, the allocation and the EncryptSend are paid either way - while PermanentFailure
+    // makes consumer 0x3498F0 brand that member negative for the rest of the session. With no guild member limit in
+    // this tree, a 1500 member guild with a cold name cache is a legitimate 1500 member request, so the budget's
+    // only measurable effect was 500 permanently nameless players. The full accounting, including why the figure
+    // 1000 did not carry its own weight, is on QueryPlayerNamesForCommunity in QueryPackets.h.
     //
-    // The surplus is reachable on THIS server, which is why it is answered instead of dropped: the budget is the
-    // client's club capacity (1000), but TrinityCore enforces no guild member limit whatsoever - no
-    // MAX_GUILD_MEMBERS in Guild.h/.cpp, no switch in worldserver.conf.dist - and a cold name cache makes the
-    // client ask for the entire roster in one message. A 1500 member guild therefore produces a perfectly
-    // legitimate 1500 member request.
-    std::size_t const budget = WorldPackets::Query::QueryPlayerNamesForCommunity::MaxResponsesPerRequest;
-    std::size_t resolved = 0;
+    // What bounds this request instead: the wire, through QueryPlayerNamesForCommunity::MaxMembers, and the AntiDOS
+    // entry of 3 requests/s in WorldSession::DosProtection::GetMaxPacketCounterAllowed. Both bound the request at a
+    // point where it can still be answered in full, which a resolve budget cannot.
     for (WorldPackets::Query::BNetAccountAndCommunityID const& member : queryPlayerNamesForCommunity.Members)
-    {
-        if (resolved < budget)
-        {
-            ++resolved;
-            SendPlayerNameByCommunityId(member);
-        }
-        else
-        {
-            WorldPackets::Query::QueryPlayerNameByCommunityIdResponse response;
-            response.Member = member;
-            response.Result = WorldPackets::Query::QueryPlayerNameByCommunityIdResponse::PermanentFailure;
-            SendPacket(response.Write());
-        }
-    }
-
-    if (queryPlayerNamesForCommunity.Members.size() > resolved)
-        TC_LOG_WARN("network", "WorldSession::HandleQueryPlayerNamesForCommunity: {} asked for {} members of club {}, "
-            "more than the client's own club capacity - resolved {}, answered the remaining {} as permanently unresolvable",
-            GetPlayerInfo(), queryPlayerNamesForCommunity.Members.size(), queryPlayerNamesForCommunity.ClubID, resolved,
-            queryPlayerNamesForCommunity.Members.size() - resolved);
+        SendPlayerNameByCommunityId(member);
 }
 
 void WorldSession::HandleQueryTimeOpcode(WorldPackets::Query::QueryTime& /*queryTime*/)
