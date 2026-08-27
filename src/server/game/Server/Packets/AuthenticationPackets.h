@@ -404,10 +404,17 @@ namespace WorldPackets
         };
 
         // SMSG_DROP_NEW_CONNECTION (12.1 0x4C0007) - empty.
-        // Measured: consumer 0x18C1500 never touches msg+0x20. Effect: the client tears down the PENDING socket of
-        // the slot it arrives on (slot idx|2), delivers CMSG_LOG_DISCONNECT(11) to that pending socket, releases its
-        // compression context and clears the slot. It is the counterpart of SMSG_CONNECT_TO and has to be sent on
-        // the ESTABLISHED socket, not on the pending one. If the pending slot is empty the consumer does nothing.
+        // Measured: consumer 0x18C1500 never touches msg+0x20. It resolves its target slot from the RECEIVING
+        // socket, not from the payload: it searches NetClient+0x1A0[0..3] for the socket the message arrived on,
+        // returns if it is not among the four, and otherwise tears down the PENDING socket at idx|2 - delivering
+        // CMSG_LOG_DISCONNECT(11) to it, releasing its compression context and clearing the slot. If that pending
+        // slot is empty it does nothing. So the packet is the counterpart of SMSG_CONNECT_TO, it must be sent on
+        // the ESTABLISHED socket, and it can only ever clear the pending slot BELONGING TO that socket's index:
+        // over the realm socket (index 0) only slot 2, never slot 3, which is where the instance handover pends.
+        // NO SENDER. This class exists so the opcode is registered and typed; the one situation where a server
+        // would want it - clearing a stale pending socket before retrying an instance handover - is unreachable
+        // from the realm socket for exactly the reason above, and inventing another caller would be guessing.
+        // See WorldSocket::HandleConnectToFailed for the full argument.
         // UNVERIFIED: zero length is what the consumer reads, not what retail puts on the wire - the opcode occurs
         // in none of the 25 captures (0 raw occurrences of both 0x4C0007 and 0x490007), so no reference bytes exist.
         // For a server that produces the packet, empty is the only defensible choice.

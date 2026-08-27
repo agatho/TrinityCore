@@ -1701,6 +1701,18 @@ uint32 WorldSession::DosProtection::GetMaxPacketCounterAllowed(uint32 opcode) co
             break;
         }
 
+        // One request produces up to QueryPlayerNamesForCommunity::MaxResponsesPerRequest separate responses,
+        // because 12.1 has no batched response opcode for it - by far the highest upload amplification of any
+        // client opcode. The rate has to be bounded on top of that per request cap, or the default of 100
+        // requests/s would still allow six figures of response packets per second and session. A human selecting
+        // a club in the Communities frame triggers exactly one of these (CommunitiesMemberList:OnClubSelected),
+        // so three per second leaves clicking around untouched.
+        case CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY:     // not profiled                very high upload bandwidth usage
+        {
+            maxPacketCounterAllowed = 3;
+            break;
+        }
+
         case CMSG_SPELL_CLICK:                          // not profiled
         case CMSG_MOVE_DISMISS_VEHICLE:                 // not profiled
         {

@@ -206,12 +206,23 @@ namespace WorldPackets
             // request may cause is limited in the handler instead, where a limit can still be answered.
             static constexpr std::size_t MaxMembers = (0xFFFF - 4 - 8 - 4) / 10;
 
-            // How many members of a single request get a real name lookup. Everything past that is answered with
-            // QueryPlayerNameByCommunityIdResponse::TemporaryFailure, which clears the client's pending bit and
-            // lets it ask again in a smaller batch - an answer, not silence.
-            // UNVERIFIED: the client writer has no upper bound of its own, so this budget is a server side choice,
-            // not a measurement. 200 is above any roster page the Communities UI focuses at once.
-            static constexpr std::size_t MaxLookupsPerRequest = 200;
+            // How many members of a single request are answered at all. This is the number that bounds the WORK,
+            // and it has to sit on the response side: there is no batched response opcode, so every answered
+            // member costs one SMSG of its own - one allocation, one EncryptSend, ~35 bytes plus a 12 byte header.
+            // Capping only the name lookups (which are hash map hits) caps nothing that matters; the packets are
+            // the cost. Unbounded, one 65 519 byte request would produce MaxMembers = 6551 packets / ~230 kB, and
+            // the opcode is reachable from STATUS_AUTHED.
+            // The value is the client's own club capacity, not a chosen number: C_Club.GetClubCapacity is a
+            // constant-returning Lua binding, 0x7FF781C46B33 `mov [rbp+arg_10], 3E8h` written once into the slot
+            // that 0x7FF781C46F2A pushes back to Lua - 1000. Since C_Club.FocusMembers focuses a WHOLE club roster
+            // (ClubDocumentation.lua: its only argument is clubId), a request from a real client cannot exceed the
+            // capacity of one club, so this budget never truncates a legitimate roster.
+            // UNVERIFIED: that the capacity applies to guild backed clubs too. A guild roster larger than 1000 that
+            // missed the name cache in full would have its surplus members left unanswered, and their entries would
+            // stay pending (C_Club.AreMembersReady false, the member list spinner keeps running). Not reproducible
+            // here - it needs a >1000 member guild on a live client - and the alternative, answering every member
+            // of an arbitrarily large request, is the amplification this bound exists to remove.
+            static constexpr std::size_t MaxResponsesPerRequest = 1000;
 
             explicit QueryPlayerNamesForCommunity(WorldPacket&& packet) : ClientPacket(CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY, std::move(packet)) { }
 

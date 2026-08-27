@@ -1080,7 +1080,6 @@ class TC_GAME_API WorldSession
 
         void BuildNameQueryData(ObjectGuid guid, WorldPackets::Query::NameCacheLookupResult& lookupData);
         void SendPlayerNameByCommunityId(WorldPackets::Query::BNetAccountAndCommunityID const& member);
-        void SendPlayerNameByCommunityIdResult(WorldPackets::Query::BNetAccountAndCommunityID const& member, uint8 result);
 
         void SendTrainerList(Creature* npc, uint32 trainerId);
         void SendListInventory(ObjectGuid guid);

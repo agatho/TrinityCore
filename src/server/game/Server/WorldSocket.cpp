@@ -1165,29 +1165,21 @@ WorldSocket::ReadDataHandlerResult WorldSocket::HandleConnectToFailed(WorldPacke
     {
         if (_worldSession->PlayerLoading())
         {
-            // The client does not only send CMSG_CONNECT_TO_FAILED when its connect attempt failed - it also sends
-            // it when it REFUSED the order. Consumer 0x18C0FF0 bails out before touching the payload if the
-            // pending slot Con|2 is already taken:
+            // Do NOT send SMSG_DROP_NEW_CONNECTION here, however tempting it looks. The client does not only send
+            // CMSG_CONNECT_TO_FAILED when its connect attempt failed - it also sends it when it REFUSED the order,
+            // because consumer 0x18C0FF0 bails out before touching the payload if the pending slot Con|2 is already
+            // taken:
             //     018C1156  cmp qword [rsi + rax*8 + 0x1A0], 0   ; rax = Con|2
             //     018C115F  jne  018C14B0                        ; -> CMSG_CONNECT_TO_FAILED
-            // A pending socket left over from an earlier attempt therefore makes every retry fail in exactly the
-            // same way. SMSG_DROP_NEW_CONNECTION clears precisely that slot: consumer 0x18C1500 takes down slot
-            // idx|2, delivers CMSG_LOG_DISCONNECT(11) to it, releases its compression context and empties the
-            // slot - and does nothing at all when the slot is already empty, so it is safe to send before every
-            // retry. It has to go to the ESTABLISHED socket, which for the instance handover is the realm one;
-            // all 103 captured SMSG_CONNECT_TO packets of both build windows sit on connection index 0.
-            switch (connectToFailed.Serial)
-            {
-                case WorldPackets::Auth::ConnectToSerial::WorldAttempt1:
-                case WorldPackets::Auth::ConnectToSerial::WorldAttempt2:
-                case WorldPackets::Auth::ConnectToSerial::WorldAttempt3:
-                case WorldPackets::Auth::ConnectToSerial::WorldAttempt4:
-                    _worldSession->SendPacket(WorldPackets::Auth::DropNewConnection(CONNECTION_TYPE_REALM).Write());
-                    break;
-                default:
-                    break;
-            }
-
+            // A pending socket left over from an earlier attempt therefore makes every retry fail the same way, and
+            // SMSG_DROP_NEW_CONNECTION is the opcode that clears a pending slot - but it cannot clear THIS one.
+            // Consumer 0x18C1500 does not take the slot from the payload (there is none); it looks the RECEIVING
+            // socket up in NetClient+0x1A0[0..3] and clears idx|2 of the index it finds. Sent over the realm socket
+            // (index 0) it clears slot 2, the pending REALM slot, which this server never fills because it never
+            // issues a CONNECT_TO with Con = 0. The pending slot of the instance handover is Con|2 = 3 (WorldSession
+            // sets connectTo.Con = CONNECTION_TYPE_INSTANCE), and slot 3 is only reachable over the ESTABLISHED
+            // instance socket at index 1 - which by definition does not exist while the handover to it is failing.
+            // A send from here is a packet the client answers with nothing at all.
             switch (connectToFailed.Serial)
             {
                 case WorldPackets::Auth::ConnectToSerial::WorldAttempt1:
