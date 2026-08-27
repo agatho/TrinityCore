@@ -529,11 +529,16 @@ WorldPackets::LFGList::ListingDescriptor LFGListMgr::GetPublicDescriptor(LFGList
     else
         descriptor.LeaderScore = { };
 
-    if (listing.IsCensored())
+    if (listing.IsTextWithheld())
     {
-        // Withhold the flagged text. The client expects exactly this: with the entry flagged it draws
-        // CENSORED_LFG_GROUP_NAME in the header and CENSORED_LFG_GROUP_HEADER_WARNNG (sic) instead of the
-        // description, in the search row, the context menu, the tooltip and the queue status alike.
+        // Withhold the flagged text - but only while the flag is UNRESOLVED, which is exactly what this
+        // function's contract in LFGListMgr.h says. The client expects the withholding: with the entry
+        // flagged it draws CENSORED_LFG_GROUP_NAME in the header and CENSORED_LFG_GROUP_HEADER_WARNNG (sic)
+        // instead of the description, in the search row, the context menu, the tooltip and the queue status
+        // alike. A CONFIRMED listing gets its text back, and testing IsCensored() here instead was a defect:
+        // the confirmation is deliberately never answered and never repeated (the wire can only carry 0 or
+        // 1), so the client's local 2 is all that keeps the placeholder on screen. Lose it to a UI reload
+        // and a still-withheld listing shows an empty title with nothing left to explain it.
         descriptor.Name.clear();
         descriptor.Comment.clear();
     }

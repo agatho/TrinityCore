@@ -452,7 +452,10 @@ namespace WorldPackets
         // SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN (0x5A0009) - Client 12.1.0.69382, dispatcher case @ RVA 0x755BAD,
         // consumer @ RVA 0x24C18C0. Wire: RideTicket ; uint32 TimeLeft. 23..39 bytes.
         // The consumer formats TimeLeft with INT_GENERAL_DURATION (duration formatter 0x36F49B0) into the
-        // GlobalString INSTANCE_SHUTDOWN_MESSAGE and prints it through the system-chat sink 0x2007880.
+        // GlobalString INSTANCE_SHUTDOWN_MESSAGE and prints it through the system-chat sink 0x20A7880
+        // (verified: 0x24C18C0 calls the duration formatter 0x36F49B0 at 0x24C1942 and 0x20A7880 at
+        // 0x24C196E; 0x20A7880 is a function start with 190 code xrefs, while the 0x2007880 this comment
+        // used to name is not a function start at all - it falls inside sub_2005D80 and has no xref).
         // There is NO Lua event, no CVar and no UI state - the time formatting is what proves TimeLeft is a
         // duration in SECONDS. Do not confuse this with INSTANCE_BOOT_START/_STOP (kick from the LFG instance
         // group) or INSTANCE_ABANDON_VOTE_FINISHED (vote to abandon) - different systems, similar names.

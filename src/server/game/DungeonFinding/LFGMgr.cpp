@@ -1144,10 +1144,20 @@ void LFGMgr::UpdateRoleCheck(ObjectGuid gguid, ObjectGuid guid /* = ObjectGuid::
    consequence for the queues it passes in, so only the queue whose OWN retail flow contains the check may
    ever be wired here.
 
-   Consequence for D2: the message is complete and correct on the wire, and the answer path
-   (CMSG_DF_READY_CHECK_RESPONSE -> UpdateReadyCheck) is complete, but nothing in this tree starts a check.
-   Closing that gap needs a capture of a retail skirmish requeue. See orchestrierung/status/lfg_5A.json,
-   aufnahme_noetig.
+   ACCEPTANCE, held open on purpose (audit 2026-08-27, lfg_5A round 4, finding 2, D2 gap on
+   SMSG_LFG_READY_CHECK_UPDATE 0x5A0006, CMSG_DF_READY_CHECK_RESPONSE 0x430048 and
+   SMSG_LFG_READY_CHECK_RESULT 0x5A001E): this function has NO caller anywhere in the tree, and neither
+   does HasReadyCheck. ReadyChecksStore therefore stays empty for good, both SMSG are unreachable, and
+   WorldSession::HandleDFReadyCheckResponse returns from UpdateReadyCheck's first `if` for every packet it
+   ever receives. The wire is complete and correct (D1), the state machine is complete including all four
+   end states and their GameErrors (D3), but D2 is OPEN for all three opcodes and they are NOT acceptable.
+   The gap is recorded in orchestrierung/status/lfg_5A.json under dod_luecken.D2.
+
+   Do NOT close it with a substitute trigger - see the withdrawn arena trigger above. The one belonging
+   trigger, CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3E00C1), sits in family 0x3E, which is outside this unit
+   and, as of 2026-08-27, is not assigned to ANY unit in orchestrierung/familien.json. The link is carried
+   there under offene_serverarbeit, id lfg_bereitschaftscheck_ausloeser: whoever takes on 0x3E inherits
+   this gap together with the requeue capture named in lfg_5A.json, aufnahme_noetig.
 
    @param[in]     gguid Group guid to start the readycheck for
    @param[in]     bgQueueIDs Battleground queue ids; non-empty selects the battleground dialog variant
@@ -2536,10 +2546,30 @@ bool LFGMgr::HasIgnore(ObjectGuid guid1, ObjectGuid guid2)
    gets no ticket and therefore no message. That is not a shortcut, it is what the field means - the ticket
    names the queue entry the player rode in on.
 
-   Caller: InstanceMap::Reset(InstanceResetMethod::Expire) on the HavePlayers() branch (Map.cpp). That is
-   the only shutdown TrinityCore reaches with players present; every path that arms m_unloadTimer is an
-   empty-map path (verified: InstanceMap::RemovePlayerFromMap arms it only for the last player leaving,
-   InstanceMap::Reset's else branch and BattlegroundMap::SetUnload likewise).
+   NO CALLER, and that is the honest state of this opcode - see the ACCEPTANCE note below.
+
+   ACCEPTANCE, held open on purpose (audit 2026-08-27, lfg_5A round 4, finding 1, D2 gap on
+   SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN): there is no shutdown in this tree that this message could
+   truthfully announce, so it is built and byte-correct but has no trigger.
+   Round 2/3 hung it on InstanceMap::Reset(InstanceResetMethod::Expire), HavePlayers() branch. That was
+   wrong and is withdrawn: that branch does NOT shut the instance down. It ends in
+   `return InstanceResetResult::NotEmpty` without a single line that unloads the map, its caller
+   (InstanceMap::Update) only re-arms i_instanceExpireEvent, and the 60 s borrowed from the block below it
+   are PendingRaidLock::TimeUntilLock - the binding window after which the player is bound (SetPendingBind)
+   and the instance keeps running. Announcing a 60-second shutdown there tells the client something false.
+   Every path in this tree that actually unloads a map is an empty-map path with nobody left to receive the
+   message: InstanceMap::RemovePlayerFromMap arms m_unloadTimer only for the LAST player leaving
+   (`!m_unloadTimer && m_mapRefManager.size() == 1`), InstanceMap::Reset's else branch runs only when
+   !HavePlayers(), BattlegroundMap::SetUnload runs from the Battleground destructor, and
+   MapManager::DestroyMap refuses outright while HavePlayers(). Map::RemoveAllPlayers is an emergency path
+   that logs an error and teleports immediately - no countdown, and not a dungeon-finder concept.
+   Do NOT close this gap with a substitute trigger. That was tried once in this unit (the arena trigger of
+   round 2, withdrawn in round 3) and it damaged a working existing path. What retail winds down here is an
+   LFG instance closing under the player - a mechanism TrinityCore does not have at all, not a message it
+   is missing. Settling it needs the capture recorded in orchestrierung/status/lfg_5A.json under
+   aufnahme_noetig, and the missing server mechanism is carried in familien.json under
+   offene_serverarbeit (id lfg_instanz_abschaltung). The gap is recorded in dod_luecken.D2 and must not be
+   dropped at acceptance.
 
    @param[in]     map Instance being shut down
    @param[in]     secondsRemaining Time left, in seconds

@@ -83,7 +83,17 @@ namespace LFGList
         uint8 CensorCode = 0;               // non-zero is what makes the client treat the entry as flagged
 
         uint32 GetCategoryID() const { return Descriptor.CategoryID; }
+        // Flagged at all - this is what the wire carries, and what decides whether
+        // SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE goes out with a code.
         bool IsCensored() const { return Censor != CensorState::None && CensorCode != 0; }
+        // Flagged AND still undecided - this, and only this, is what withholds the listing's text.
+        // Once the player has confirmed the listing (CensorState::Confirmed, set by
+        // CMSG_LFG_LIST_CONFIRM_CENSORED_ACTIVE_ENTRY) the text goes out again. It has to: this wire can
+        // only ever push the client's censor state to 0 or 1, so a confirmed listing is never re-announced,
+        // and a client that lost its local 2 (any UI reload) would otherwise render an EMPTY title with no
+        // dialog and no explanation left to account for it. Withholding past the confirmation buys nothing
+        // and costs the owner their listing's name. See GetPublicDescriptor.
+        bool IsTextWithheld() const { return Censor == CensorState::Unresolved && CensorCode != 0; }
     };
 }
 

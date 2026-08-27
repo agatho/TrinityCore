@@ -140,6 +140,12 @@ void WorldSession::HandleDFConfirmExpandSearch(WorldPackets::LFG::DFConfirmExpan
 // (thunk RVA 0x24CCA50 -> body 0x24CC200), and only while a readiness check is actually running - the
 // client guards the send with `cmp byte [0x4D195C9], 2`, i.e. against the ReadyCheckStatus it last got
 // from SMSG_LFG_READY_CHECK_UPDATE. PartyIndex is that message's first uint8 echoed straight back.
+//
+// INERT TODAY, and knowingly so (audit 2026-08-27, lfg_5A round 4, finding 2): nothing in this tree starts
+// a readiness check, so no client is ever in the state that lets it send this, and UpdateReadyCheck below
+// returns from its first `if` for anything that arrives anyway. That is a D2 gap, not a finished opcode.
+// The reasoning, the prohibition on inventing a trigger, and the hand-off to family 0x3E
+// (CMSG_BATTLEMASTER_JOIN_SKIRMISH 0x3E00C1) are in the docblock of LFGMgr::StartReadyCheck.
 void WorldSession::HandleDFReadyCheckResponse(WorldPackets::LFG::DFReadyCheckResponse& dfReadyCheckResponse)
 {
     TC_LOG_DEBUG("lfg", "CMSG_DF_READY_CHECK_RESPONSE {} isReady: {}", GetPlayerInfo(), dfReadyCheckResponse.IsReady);
@@ -158,7 +164,7 @@ void WorldSession::HandleDFReadyCheckResponse(WorldPackets::LFG::DFReadyCheckRes
 // CMSG_LFG_LOREWALKING_UPDATE_REQUEST (0x3D0259) -> SMSG_LFG_SUSPEND_LOREWALKING (0x5A0021).
 //
 // The client sends this with no Lua call at all: it arises inside the queue-status path (send site
-// RVA 0x24C15C3 in 0x24C0A70), which looks up the LFGDungeons record for Slots[0] & 0xFFFFF and puts a
+// RVA 0x24C15B9 in 0x24C0A70), which looks up the LFGDungeons record for Slots[0] & 0xFFFFF and puts a
 // 16-bit column of it on the wire. The request means "I want to queue for this dungeon - is Lorewalking
 // in my way?".
 //
@@ -241,6 +247,8 @@ void WorldSession::SendSetDFFastLaunchResult(bool lfgFastLaunch)
 }
 
 // SMSG_LFG_READY_CHECK_UPDATE (0x5A0006).
+// Unreachable today: its only sender, LFGMgr::StartReadyCheck, has no caller. D2 is OPEN - see that
+// function's docblock and lfg_5A.json, dod_luecken.D2.
 void WorldSession::SendLfgReadyCheckUpdate(lfg::LfgReadyCheck const& readyCheck)
 {
     TC_LOG_DEBUG("lfg", "SMSG_LFG_READY_CHECK_UPDATE {} state: {}", GetPlayerInfo(), readyCheck.state);
@@ -271,7 +279,9 @@ void WorldSession::SendLfgReadyCheckUpdate(lfg::LfgReadyCheck const& readyCheck)
     SendPacket(lfgReadyCheckUpdate.Write());
 }
 
-// SMSG_LFG_READY_CHECK_RESULT (0x5A001E). Both flanks are required (D3): a false additionally raises
+// SMSG_LFG_READY_CHECK_RESULT (0x5A001E). Unreachable today for the same reason as its sister message
+// above: no running check means no answer to report. D2 is OPEN - see LFGMgr::StartReadyCheck.
+// Both flanks are required (D3): a false additionally raises
 // GameError 831 ERR_LFG_PLAYER_DECLINED_READY_CHECK client-side and fires LFG_READY_CHECK_DECLINED
 // instead of LFG_READY_CHECK_PLAYER_IS_READY.
 void WorldSession::SendLfgReadyCheckResult(ObjectGuid guid, bool ready)
@@ -289,19 +299,14 @@ void WorldSession::SendLfgReadyCheckResult(ObjectGuid guid, bool ready)
 // The consumer (RVA 0x24C18C0) is fully decoded: it formats TimeLeft with INT_GENERAL_DURATION into the
 // GlobalString INSTANCE_SHUTDOWN_MESSAGE and prints it to the system chat.
 //
-// Caller: LFGMgr::SendInstanceShutdownCountdown, from InstanceMap::Reset(InstanceResetMethod::Expire) on
-// the HavePlayers() branch (Map.cpp) - see the docblock there for why that is the only shutdown this tree
-// reaches with players still inside. The anchor the family brief suggested, InstanceMap::RemovePlayerFromMap
-// arming m_unloadTimer, is NOT it and cannot be: that timer is only armed when the LAST player leaves
-// (`!m_unloadTimer && m_mapRefManager.size() == 1`), so nobody is left in the map to receive the message.
-// The two other places TrinityCore sets an unload timer are equally empty-map paths (InstanceMap::Reset's
-// else branch, BattlegroundMap::SetUnload from the Battleground destructor).
+// The only sender is LFGMgr::SendInstanceShutdownCountdown, and that one has NO caller: nothing in this
+// tree shuts an instance down while players are still inside it, so there is nothing this message could
+// truthfully announce. The full reasoning, the withdrawn round-2/3 trigger and the standing prohibition on
+// inventing a substitute are in the docblock of LFGMgr::SendInstanceShutdownCountdown.
 //
-// UNVERIFIED - the retail trigger. That retail sends this exact message on an expiring, still-occupied LFG
-// instance is inference from the consumer, not from a capture; TrinityCore additionally sends
-// SMSG_RAID_INSTANCE_MESSAGE / RAID_INSTANCE_EXPIRED on the same path, which carries the pending-lock
-// dialog rather than the chat countdown. Settling it needs a capture of a retail LFG instance winding down
-// with players inside. See lfg_5A.json, aufnahme_noetig.
+// UNVERIFIED - the retail trigger. That retail sends this message when an LFG instance closes under its
+// occupants is inference from the consumer (a chat line built from INSTANCE_SHUTDOWN_MESSAGE), not from a
+// capture. D2 is consequently OPEN for this opcode; see lfg_5A.json, dod_luecken.D2 and aufnahme_noetig.
 void WorldSession::SendLfgInstanceShutdownCountdown(WorldPackets::LFG::RideTicket const& ticket, uint32 timeLeftSeconds)
 {
     TC_LOG_DEBUG("lfg", "SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN {} timeLeft: {}", GetPlayerInfo(), timeLeftSeconds);

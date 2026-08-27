@@ -37,7 +37,6 @@
 #include "InstancePackets.h"
 #include "InstanceScenario.h"
 #include "InstanceScript.h"
-#include "LFGMgr.h"
 #include "Log.h"
 #include "MMapManager.h"
 #include "MapManager.h"
@@ -3096,20 +3095,6 @@ InstanceResetResult InstanceMap::Reset(InstanceResetMethod method)
                 break;
             case InstanceResetMethod::Expire:
             {
-                // An LFG dungeon whose lock expires while people are still inside is the one shutdown
-                // TrinityCore actually reaches with players present, and the dungeon finder has its own
-                // message for it: SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN (0x5A0009). Its consumer
-                // (RVA 0x24C18C0) formats TimeLeft with INT_GENERAL_DURATION into the GlobalString
-                // INSTANCE_SHUTDOWN_MESSAGE and prints it to the system chat - the same string the client
-                // prints from BATTLEFIELD_SHUTDOWN_TIMER while a battlefield winds down with players in it
-                // (Blizzard_GroupFinder/Mainline/PVPHelper.lua:213). The raid message below stays: it carries
-                // the pending-lock dialog, which is a different thing from the chat countdown.
-                // TimeLeft is the 60 s the pending-lock block right below already uses (TimeUntilLock 60000).
-                // Only for a map that was created for a dungeon-finder slot - i_lfgDungeonsId is set exactly
-                // on the LFG teleport path (MovementHandler.cpp, loc.LfgDungeonsId).
-                if (GetLfgDungeonsId())
-                    sLFGMgr->SendInstanceShutdownCountdown(this, 60);
-
                 WorldPackets::Instance::RaidInstanceMessage raidInstanceMessage;
                 raidInstanceMessage.Type = RAID_INSTANCE_EXPIRED;
                 raidInstanceMessage.MapID = GetId();

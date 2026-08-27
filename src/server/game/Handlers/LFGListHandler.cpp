@@ -162,6 +162,12 @@ void WorldSession::SendLFGListCensoredActiveEntryUpdate(uint32 listingId)
     // client sees. That is what forces the edit dialog to compare server-side
     // (C_LFGList.DoesCensoredTextMatch) instead of against a local copy.
     packet.Listing = sLFGListMgr.GetPublicDescriptor(*listing);
+    // IsCensored(), not IsTextWithheld(): this is the wire code, which says "flagged", while the withholding
+    // of the text stops at the player's confirmation. The two only differ for a CONFIRMED listing, and no
+    // caller can reach this function with one - creation and edit both run EvaluateCensorship first, which
+    // can only land on None or Unresolved, and the reload path below tests Unresolved explicitly. That
+    // matters, because sending this message for a confirmed listing would push the client's censor state
+    // from 2 back to 1 and re-open the dialog the player just dismissed.
     if (listing->IsCensored())
         packet.CensorCode = listing->CensorCode;
 
@@ -305,8 +311,11 @@ void WorldSession::HandleLFGListGetStatus(WorldPackets::LFGList::LFGListGetStatu
     // Only for a listing the player has NOT dealt with yet. The consumer can write 0 or 1 and nothing else,
     // so repeating the message for a confirmed listing would re-raise the dialog on every reload. A confirmed
     // listing consequently comes back with no warning at all - that is the whole of what this wire can carry,
-    // and it is the harmless direction of the two.
-    if (listing->IsCensored() && listing->Censor == LFGList::CensorState::Unresolved)
+    // and it is the harmless direction of the two, but only because the UPDATE_STATUS just sent above now
+    // carries that listing's real name and comment again (GetPublicDescriptor withholds text while the flag
+    // is unresolved, not after the confirmation). Silence plus withheld text would have left the owner with
+    // a blank title and nothing to explain it.
+    if (listing->IsTextWithheld())
         SendLFGListCensoredActiveEntryUpdate(listing->Id);
 }
 
