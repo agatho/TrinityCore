@@ -445,9 +445,15 @@ static ByteBuffer& operator<<(ByteBuffer& data, SearchResultListing const& row)
     // Source for the VALUES, not just the shape - it was dropped when this block was rewritten for 12.1 and
     // is restored here verbatim: the 12.0.7.68974 capture carries every entry as {u32 0, u8 index}. An
     // earlier writer emitted {u32 index, u8 0}, which has the same byte count and put the running index into
-    // the wrong client field. There is no 12.1 capture of this opcode (c:\dumps\wpp_work\lfg_ref holds none
-    // for 0x3D0259), so 68974 remains the only measurement; what 12.1 changed is the POSITION of the table
-    // relative to LeaderScore, which is read from the reader at RVA 0x740020, not from the capture.
+    // the wrong client field. 68974 remains the only measurement of these values. The three 12.1 recordings
+    // of this opcode that DO exist (c:\dumps\wpp_work\lfg_ref\69273_s69273_a_5A0002_0/1/2.bin) cannot
+    // confirm them: each body is 6 bytes, 00 00 00 00 00 00, i.e. the empty form - u16 row count 0 followed
+    // by the trailing u32 - so not one of them reaches a row, let alone this table. (An earlier version of
+    // this note cited "0x3D0259" for the missing capture. That is CMSG_LFG_LOREWALKING_UPDATE_REQUEST, a
+    // different opcode of this same unit; the message being written here is SMSG_LFG_LIST_SEARCH_RESULTS =
+    // 0x5A0002.)
+    // What 12.1 changed is the POSITION of the table relative to LeaderScore, and that is read from the
+    // reader at RVA 0x740020, not from any capture.
     for (uint32 i = 0; i < 9; ++i)                  // +2088, fixed 9-entry {u32,u8} table (reader 0x740020)
     {
         data << uint32(0);
@@ -565,7 +571,7 @@ WorldPacket const* LFGListApplyToGroupResult::Write()
     _worldPacket << Row;                            // 12.1: the row moved in front of the scalar tail
     _worldPacket << uint64(ApplicationExpiration);
     _worldPacket << uint8(Status);
-    _worldPacket << uint8(Unknown);
+    _worldPacket << uint8(RoleGranted);
     _worldPacket << uint8(StateBits);               // client keeps bits 7..4 only
 
     return &_worldPacket;

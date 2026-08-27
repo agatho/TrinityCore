@@ -22,6 +22,7 @@
 #include "Group.h"
 #include "GroupMgr.h"
 #include "LFGListMgr.h"
+#include "Log.h"
 #include "LFGListPackets.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
@@ -93,6 +94,77 @@ namespace
         if (!leaderNotified)
             if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
                 leader->SendDirectMessage(data);
+    }
+
+    // Answer a REFUSED application.
+    //
+    // HandleLFGListApplyToGroup can refuse for four reasons, and until this was written every one of them
+    // returned without sending anything: the player pressed "Apply" and nothing happened - no packet, no
+    // error text, no log line. That is not a corner case. The most common of the four is the configured cap
+    // (LFGList.MaxApplicationsPerPlayer, default 5): the sixth application is refused by
+    // LFGListMgr::AddApplication, which is a decision the server makes deliberately and then used to keep
+    // to itself.
+    //
+    // The wire has the answer and the client decodes it - the full trail is at the declaration of
+    // LFGListApplyToGroupResult in LFGListPackets.h. In short: the consumer @ RVA 0x24DED40 hands the tail
+    // to the state setter @ RVA 0x24DD190, whose only failure arm is
+    //     else if (state == 3 && previous != 3) return present(reasonCode);
+    // so state 3 ("failed", state->string mapper @ RVA 0x24DADA0) is the one state that puts a reason in
+    // front of the player, and the reason is the FIRST u8 of the tail - the field named Status here. The
+    // presenter @ RVA 0x24E25E0 looks it up in a closed table, so only the codes listed in
+    // ApplicationFailureReason arrive anywhere; anything else is silently dropped by the client and would
+    // leave us exactly where we started.
+    //
+    // ListingTicket is the ticket the CLIENT sent, echoed back byte for byte, and that is deliberate. The
+    // consumer resolves the record by that ticket (lookup @ RVA 0x24E38D0, comparing guid, Id, Type and
+    // Time), so echoing is the only construction guaranteed to name the record the client actually built
+    // from its browse row - including on the one path where the listing is gone and the server has nothing
+    // left to build a ticket from.
+    //
+    // UNVERIFIED: which reason code retail pairs with which refusal. The codes themselves and their texts
+    // are measured (table @ RVA 0x44DD860, GameError keys resolved through the table @ RVA 0x43D55C0), and
+    // no 12.1 or 12.0.7 capture of a refused application exists in c:\dumps\wpp_work\lfg_ref, so the
+    // pairing below is chosen by matching the ERR_ text to the situation. A recording of a refusal would
+    // settle it; see aufnahme_noetig in the status file.
+    void SendApplyRefusal(WorldSession* session, Player const* player,
+        WorldPackets::LFG::RideTicket const& listingTicket, LFGList::Listing const* listing,
+        uint8 reason, uint8 stateBits = WorldPackets::LFGList::ApplicationStateBits::Failed)
+    {
+        WorldPackets::LFGList::LFGListApplyToGroupResult result;
+
+        // No application was created, so the application ticket can only name the party that tried and
+        // carry id 0 - the same rule FillRejectedListingTicket follows for a rejected listing, with the
+        // type that belongs to an application.
+        result.Ticket.RequesterGuid = player->GetGUID();
+        result.Ticket.Id = 0;
+        result.Ticket.Type = WorldPackets::LFG::RideType::LfgListApplication;
+        result.Ticket.Time = int32(GameTime::GetGameTime());
+        result.Ticket.IsCrossFaction = false;
+
+        result.ListingTicket = listingTicket;
+        result.ApplicationExpiration = 0;               // nothing is pending, so nothing expires
+        result.Status = reason;
+        result.RoleGranted = 0;
+        result.StateBits = stateBits;
+
+        if (listing)
+            sLFGListMgr.FillSearchRow(result.Row, *listing);
+        else
+        {
+            // The listing is gone, so there is no row to send. The consumer assigns whatever row arrives
+            // into the client's record, which means the browse entry loses its name and members until the
+            // next search - and that is the truth about a listing that no longer exists. The header is
+            // still filled from the echoed ticket so that the create branch, if it runs, keys the record on
+            // the right listing id instead of on 0.
+            result.Row.GroupGuid = listingTicket.RequesterGuid;
+            result.Row.ListingId = listingTicket.Id;
+            result.Row.PostTime = uint64(time_t(listingTicket.Time));
+        }
+
+        TC_LOG_DEBUG("lfg.list", "Refused {} application to listing {}: reason {}, state bits 0x{:02X}",
+            player->GetGUID().ToString(), listingTicket.Id, reason, stateBits);
+
+        session->SendPacket(result.Write());
     }
 
     // Notify one applicant that the state of its application changed (sniff-exact 67/68B layout).
@@ -387,8 +459,32 @@ void WorldSession::HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApply
         return;
 
     LFGList::Listing* listing = sLFGListMgr.GetListing(packet.Ticket.Id);
-    if (!listing || listing->LeaderGuid == player->GetGUID())
+    if (!listing)
+    {
+        // The listing is gone - delisted, expired, or filled - while the browse row was still on screen.
+        // This is the likeliest of the four refusals in practice, because an open browser is not refreshed
+        // when a listing disappears (NotifyListingChanged runs on create and edit only).
+        // "declined_delisted" rather than "failed": nibble 7 is a state of its own in the client's
+        // vocabulary (mapper @ RVA 0x24DADA0) and the UI has a message for exactly this - LFGList.lua:388
+        // maps it to LFG_LIST_APP_DECLINED_DELISTED_MESSAGE and :243 counts it as a decline, which greys
+        // the stale row out instead of leaving it clickable. The failure-reason table has no entry that
+        // says "delisted", so a "failed" state here would have to borrow a text about something else.
+        // The reason byte goes out as 0 because the setter reads it only on state 3.
+        SendApplyRefusal(this, player, packet.Ticket, nullptr, 0,
+            WorldPackets::LFGList::ApplicationStateBits::DeclinedDelisted);
         return;
+    }
+
+    if (listing->LeaderGuid == player->GetGUID())
+    {
+        // Applying to one's own listing. The client never offers it (the browser hides the player's own
+        // entry), so this is a hand-built or stale message rather than something a player can produce -
+        // but it still gets an answer instead of silence. ERR_ALREADY_USING_LFG_LIST is the one code in the
+        // table that describes the situation: this player is the lister.
+        SendApplyRefusal(this, player, packet.Ticket, listing,
+            WorldPackets::LFGList::ApplicationFailureReason::AlreadyUsingLfgList);
+        return;
+    }
 
     // The client echoes ActivityIDs[0] of the browse row it applied from (12.1 binding C_LFGList
     // .ApplyToGroup @ RVA 0x24EB2F0 reads `*(row+0x30)`, i.e. element 0 of the row descriptor's ActivityIDs
@@ -400,12 +496,30 @@ void WorldSession::HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApply
     if (packet.ActivityID && !listing->Descriptor.ActivityIDs.empty()
         && std::find(listing->Descriptor.ActivityIDs.begin(), listing->Descriptor.ActivityIDs.end(),
             packet.ActivityID) == listing->Descriptor.ActivityIDs.end())
+    {
+        // The row the player clicked has been edited to a different activity since it was fetched.
+        // ERR_LFG_INVALID_SLOT ("One or more dungeons was not valid.") is what the mismatch is.
+        // Round 6 fixed the comparison itself here; the return stayed silent until now, which meant the
+        // corrected guard still produced the same nothing-happens as the defect it replaced.
+        SendApplyRefusal(this, player, packet.Ticket, listing,
+            WorldPackets::LFGList::ApplicationFailureReason::InvalidSlot);
         return;
+    }
 
     LFGList::Application* app = sLFGListMgr.AddApplication(listing->Id, player->GetGUID(), packet.RoleMask,
         uint32(player->GetPrimarySpecialization()), uint32(player->GetAverageItemLevel()), packet.Comment);
     if (!app)
+    {
+        // AddApplication refuses for exactly two reasons: the listing is gone, or the player is already at
+        // LFGList.MaxApplicationsPerPlayer (default 5) counting only applications still in state Applied.
+        // The listing was resolved five lines above and nothing between the two can drop it, so at this
+        // point nullptr means the cap - and the cap has a code of its own: ERR_LFG_REASON_TOO_MANY_LFG,
+        // "You are queued for too many instances."
+        // This was the refusal that a player meets in normal play, and it was the quietest of the four.
+        SendApplyRefusal(this, player, packet.Ticket, listing,
+            WorldPackets::LFGList::ApplicationFailureReason::TooManyLfg);
         return;
+    }
 
     // Confirm the application to the applicant (sniff-exact: app ticket + expiration + listing tickets +
     // the full row snapshot so the client renders the "applied" card without a re-search).

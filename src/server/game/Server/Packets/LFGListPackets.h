@@ -755,8 +755,12 @@ namespace WorldPackets
         //   u64      -> obj+112, passed as an ABSOLUTE TIME (the consumer subtracts the client's time base
         //               qword_7FF7877C9640 before storing it), not an opaque blob.
         //   UnkResult-> obj+120, consumed ONLY when the state resolves to 3 = "failed", where the setter
-        //               hands it to the error presenter @ 0x24DB25E0. It is the failure reason code, which
-        //               is why it is meaningless on every other state.
+        //               hands it to the error presenter @ RVA 0x24E25E0 (the address 0x24DB25E0 named here
+        //               before does not decompile to anything - it was a transcription slip; the call in the
+        //               setter is `else if (state == 3 && previous != 3) return present(reason)`). It is the
+        //               failure reason code, which is why it is meaningless on every other state.
+        //               The presenter is a table lookup, so the reason code is a CLOSED vocabulary - see
+        //               ApplicationFailureReason below for the table and its 25 values.
         //   RoleGranted -> obj+128, stored raw at the applicant record's +2256.
         //   StateBits   -> obj+124 as `wireByte >> 4`, i.e. the application state (see ApplicationStateBits).
         class LFGListApplicationStatusUpdate final : public ServerPacket
@@ -771,20 +775,73 @@ namespace WorldPackets
             // UNVERIFIED: the two values are read off the 12.0.7 capture (8 while pending, 60 on invite);
             // "invite window in seconds" is a guess and nothing in the client was found that reads this
             // field on a non-failure state. The decoded meaning covers the FAILURE case only - there the
-            // dispatcher hands it to the error presenter @ 0x24DB25E0 as the reason code (see above).
+            // dispatcher hands it to the error presenter @ RVA 0x24E25E0 as the reason code (see above).
             uint32 UnkResult = 8;
             uint8 RoleGranted = 0;
             uint8 StateBits = 0;
         };
 
+        // The failure reason of an application, i.e. the value the client turns into the red error line the
+        // player actually reads. It is a CLOSED vocabulary, and it is measured, not guessed: the state setter
+        // @ RVA 0x24DD190 forwards it to the presenter @ RVA 0x24E25E0 for state 3 ("failed") and for no
+        // other state, and that presenter is nothing but a lookup in a table of 23 {u32 code, u32 GameError}
+        // pairs at RVA 0x44DD860 (0x7FF7854AD860..0x7FF7854AD918 in the 12.1.0.69382 image) plus two codes
+        // special-cased ahead of it, 65 and 81. Resolving each GameError id through the error table at RVA
+        // 0x43D55C0 (stride 24, [0] = the ERR_* GlobalString key) gives the complete list:
+        //     16 ERR_LFG_MEMBERS_NOT_PRESENT (a second code for the same text as 37)
+        //     31 ERR_LFG_GROUP_FULL                     33 ERR_LFG_NO_LFG_OBJECT
+        //     34 ERR_LFG_NO_SLOTS_PLAYER                35 ERR_LFG_MISMATCHED_SLOTS
+        //     36 ERR_LFG_PARTY_PLAYERS_FROM_DIFFERENT_REALMS
+        //     37 ERR_LFG_MEMBERS_NOT_PRESENT            38 ERR_LFG_GET_INFO_TIMEOUT
+        //     39 ERR_LFG_INVALID_SLOT                   40 ERR_LFG_DESERTER_PLAYER
+        //     41 ERR_LFG_DESERTER_PARTY                 42 ERR_LFG_RANDOM_COOLDOWN_PLAYER
+        //     43 ERR_LFG_RANDOM_COOLDOWN_PARTY          44 ERR_LFG_TOO_MANY_MEMBERS
+        //     45 ERR_LFG_CANT_USE_DUNGEONS              46 ERR_LFG_ROLE_CHECK_FAILED
+        //     52 ERR_LFG_TOO_FEW_MEMBERS                53 ERR_LFG_REASON_TOO_MANY_LFG
+        //     55 ERR_LFG_MISMATCHED_SLOTS_LOCAL_XREALM  63 ERR_ALREADY_USING_LFG_LIST
+        //     65 ERR_RESTRICTED_ACCOUNT_LFG_LIST_TRIAL  66 ERR_USER_SQUELCHED
+        //     74 ERR_ACCOUNT_SILENCED                   75 ERR_PARTY_MEMBER_SILENCED
+        //     81 ERR_RESTRICTED_ACCOUNT_LFG_LIST_CLASS_TRIAL
+        // A code outside that set falls off the end of the table and the presenter returns silently - which is
+        // why picking a value at random is the same as sending nothing at all.
+        // That code column is byte for byte TrinityCore's existing LfgJoinResult (LFGMgr.h:118), whose
+        // comments already carry the English text of each ERR_ key; the names below are only the handful this
+        // family needs, kept here so the packet layer does not have to include the dungeon-finder header.
+        namespace ApplicationFailureReason
+        {
+            constexpr uint8 NoLfgObject         = 0x21;  // "Internal LFG Error."
+            constexpr uint8 InvalidSlot         = 0x27;  // "One or more dungeons was not valid."
+            constexpr uint8 TooManyLfg          = 0x35;  // "You are queued for too many instances."
+            constexpr uint8 AlreadyUsingLfgList = 0x3F;  // "You can't do that while using Premade Groups."
+        }
+
         // SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT (0x5A000D) - dispatcher case @ RVA 0x755DCC:
         //   RideTicket Ticket ; RideTicket ListingTicket ; <full search row, reader 0x758320> ;
-        //   u64 ApplicationExpiration ; u8 Status ; u8 ; one byte whose top 4 bits are StateBits
+        //   u64 ApplicationExpiration ; u8 Status ; u8 RoleGranted ; one byte whose top 4 bits are StateBits
         // 12.1 drift: the whole 14-byte scalar tail moved BEHIND the row and the second ticket moved 14
         // bytes forward. Inherits the search-row defect as well, so before this fix the embedded row put
         // unchecked counters into the client's allocator.
         // The row is written as a complete row (its header block IS a RideTicket in disguise: group guid,
         // listing id, type 4, post time, one bit), which is why the listing ticket appears to be sent twice.
+        //
+        // The three scalars of the tail are DECODED, and the trail is worth writing down because it is what
+        // makes a rejected application answerable at all. The consumer is at RVA 0x24DED40 - the value the
+        // LFG-list registrar @ RVA 0x24DF000 stores into hook slot 0x462ED58, which hooks_5A.json pairs with
+        // this opcode. It resolves the client's application record from the SECOND ticket (obj+72) via the
+        // ticket-keyed lookup @ RVA 0x24E38D0 (which compares guid, Id, Type and Time - the ticket's first
+        // 32 bytes - and NOT IsCrossFaction), and when there is no such record it CREATES one from the
+        // embedded row (LFGListInfo.cpp:1982). Either way it then calls the state setter @ RVA 0x24DD190:
+        //     setter(record, obj+32, obj+2288, obj+2280 - timebase, obj+2292, obj+2293)
+        // Those offsets map back onto the wire exactly: the decoded object's base is the dispatcher's local
+        // v51 @ rsp+0x90, the ticket at +32, the second ticket at +72, the row at +112, and the row's stride
+        // is 2168 (independently confirmed by the row-walking loop @ RVA 0x24DE6B0, which steps `v4 += 2168`),
+        // so +2280 = ApplicationExpiration, +2288 = StateBits >> 4, +2292 = the FIRST u8 of the pair and
+        // +2293 = the second. The setter stores +2293 raw at record+2256, the same slot 0x5A000C's
+        // RoleGranted lands in, and reads +2292 in exactly one arm:
+        //     else if (state == 3 && previous != 3) return present(+2292);
+        // So the first u8 is the FAILURE REASON of this message - not UnkResult, which belongs to 0x5A000C -
+        // and it is looked at only when StateBits says "failed". Retail's success payload carries 6 there
+        // (12.0.7.68974) and the client never reads it, which is why the default stays 6.
         class LFGListApplyToGroupResult final : public ServerPacket
         {
         public:
@@ -795,8 +852,10 @@ namespace WorldPackets
             LFG::RideTicket ListingTicket;      // listing ticket (type 4)
             SearchResultListing Row;
             uint64 ApplicationExpiration = 0;
+            // On StateBits == Failed this is the reason code (see ApplicationFailureReason); on every other
+            // state the client ignores it and 6 is what retail sends.
             uint8 Status = 6;
-            uint8 Unknown = 0;
+            uint8 RoleGranted = 0;              // obj+2293 -> record+2256, same slot as 0x5A000C.RoleGranted
             uint8 StateBits = ApplicationStateBits::Applied;   // nibble 1 = "applied"; see the namespace
         };
 
