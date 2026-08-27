@@ -522,64 +522,6 @@ namespace WorldPackets
             TreasurePickerPick Treasure;
         };
 
-        // Sent by the client's neighbourhood name cache whenever it is asked for a name it does not
-        // have (DataCache<JamCliNeighborhoodName>::Get miss, query callback RVA 0x34F540). The
-        // request is guarded by an "in flight" bit, so a server that never answers leaves the entry
-        // stuck forever and the client never asks again.
-        // Reference bytes: 12.1.0.69273_preyandwqpart1.pkt carries one, opcode 0x4300B7, 7 bytes -
-        // the packed guid and nothing else. Round-tripped byte for byte by
-        // C:\dumps\tools\w0_query_hotfix\round_trip.py.
-        class QueryNeighborhoodInfo final : public ClientPacket
-        {
-        public:
-            explicit QueryNeighborhoodInfo(WorldPacket&& packet) : ClientPacket(CMSG_QUERY_NEIGHBORHOOD_INFO, std::move(packet)) { }
-
-            void Read() override;
-
-            ObjectGuid NeighborhoodGUID;
-        };
-
-        // Answer carrying the authoritative name of a housing neighbourhood. The client fires the Lua
-        // event NEIGHBORHOOD_NAME_UPDATED(neighborhoodGuid, neighborhoodName)
-        // (HousingNeighborhoodUIDocumentation.lua:324-334). Reader RVA 0x72E972: HasName and the
-        // 8 bit name length sit in two separate bytes, not in one bit group. The consumer
-        // (RVA 0x34F580) copies at most 128 bytes of the name.
-        // The layout is not only decompiled but measured. 12.1.0.69273_preyandwqpart1.pkt carries a
-        // retail answer, opcode 0x490012, 17 bytes:
-        //
-        //   03 d0 e1 67 01 80 dc | 80 | 08 | "62-74-76"
-        //   \_____ packed guid _/   ^     ^    \_ 8 name bytes
-        //                       HasName  full 8 bit length
-        //
-        // Write() below reproduces those 17 bytes exactly (round_trip.py, 1 of 1). That also settles
-        // the one question the decompilate left open - whether the length really is 8 bits and not a
-        // 6 bit SizedString like the rest of this file: read as bits<6> the length byte 0x08 would
-        // announce 2 characters and leave 6 bytes unconsumed, so the packet only closes with 8.
-        class QueryNeighborhoodNameResponse final : public ServerPacket
-        {
-        public:
-            static constexpr std::size_t MaxNameLength = 128;
-
-            explicit QueryNeighborhoodNameResponse() : ServerPacket(SMSG_QUERY_NEIGHBORHOOD_NAME_RESPONSE) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid NeighborhoodGUID;
-            Optional<std::string> Name;
-        };
-
-        // Drops the cached name of one neighbourhood. Consumer RVA 0x34F7D0 takes the guid and
-        // nothing else; the client re-asks for the name afterwards.
-        class InvalidateNeighborhoodName final : public ServerPacket
-        {
-        public:
-            explicit InvalidateNeighborhoodName() : ServerPacket(SMSG_INVALIDATE_NEIGHBORHOOD_NAME, 16) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid NeighborhoodGUID;
-        };
-
         ByteBuffer& operator<<(ByteBuffer& data, PlayerGuidLookupData const& lookupData);
     }
 }

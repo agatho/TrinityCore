@@ -1293,7 +1293,15 @@ void WorldSession::HandleSetBankAutosortDisabled(WorldPackets::Item::SetBankAuto
 // resolves carried bags and silently discards a GameObject guid.
 void WorldSession::SendOpenContainer(ObjectGuid containerGuid)
 {
+    // Nothing can be carried while no player is in world, so there is nothing to open either.
+    // Unlike the handlers in this file this one is not reached through DEFINE_HANDLER - the opcode
+    // is STATUS_NEVER - so no opcode status guarantees the logged in state, and _player is null
+    // both before PlayerLoadFromDB and after LogoutPlayer. The guard belongs here rather than at
+    // the first caller, because otherwise every caller would have to repeat it.
     Player* player = GetPlayer();
+    if (!player)
+        return;
+
     Item* container = player->GetItemByGuid(containerGuid);
     if (!container || !container->IsBag())
     {

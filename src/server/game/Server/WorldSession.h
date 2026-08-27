@@ -655,7 +655,6 @@ namespace WorldPackets
     namespace Query
     {
         class QueryCreature;
-        class QueryNeighborhoodInfo;
         struct NameCacheLookupResult;
         class QueryPlayerNames;
         class QueryPageText;
@@ -1675,8 +1674,6 @@ class TC_GAME_API WorldSession
 
         void HandleQueryPageText(WorldPackets::Query::QueryPageText& packet);
         void SendInvalidatePageText(uint32 pageTextId);
-        void HandleQueryNeighborhoodInfo(WorldPackets::Query::QueryNeighborhoodInfo& queryNeighborhoodInfo);
-        void SendInvalidateNeighborhoodName(ObjectGuid neighborhoodGuid);
 
         void HandleTutorialFlag(WorldPackets::Misc::TutorialSetFlag& packet);
 
