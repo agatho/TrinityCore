@@ -73,7 +73,10 @@ void LFGListMgr::Update(uint32 diff)
                         FillApplicationTicket(statusUpdate.Ticket, *appItr);
                         FillListingTicket(statusUpdate.ListingTicket, listing);
                         statusUpdate.UnkResult = 8;
-                        statusUpdate.StateBits = WorldPackets::LFGList::ApplicationStateBits::Declined;
+                        // "timedout", not a generic decline: nibble 8 is a state of its own in the client's
+                        // vocabulary (mapper 0x24DADA0) and the UI treats it separately from the three
+                        // decline states (LFGList.lua:1962-1968). This path IS the timeout, so it says so.
+                        statusUpdate.StateBits = WorldPackets::LFGList::ApplicationStateBits::TimedOut;
                         applicant->SendDirectMessage(statusUpdate.Write());
                     }
                     _applicationIndex.erase(appItr->Id);
@@ -462,15 +465,28 @@ void LFGListMgr::FillApplicationTicket(WorldPackets::LFG::RideTicket& ticket, LF
     ticket.IsCrossFaction = false;
 }
 
-// Wire state bits for an application state (sniff: 0x40 applied, 0x20 invited, 0xA0 accepted).
+// Wire state bits for an application state. The values are measured off the client's state->string mapper
+// @ RVA 0x24DADA0 (see ApplicationStateBits) - the previous comment here claimed "sniff: 0x40 applied", for
+// which no capture exists: there is no 12.1 recording of 0x5A000C, 0x5A000D or 0x5A000F at all. Nibble 4 is
+// "cancelled", so 0x40 marked every fresh applicant as cancelled and the leader's Invite button, which the
+// UI shows only for "applied" (LFGList.lua:1984-1985), never appeared.
+// Every arm is now an exact hit rather than a collective fallback, so the default arm is a compile-safe
+// floor instead of the code path every rejection took. Two honest gaps remain, both server-side and both
+// recorded under D3 in the unit status file: ApplicationState::Cancelled is declared but never assigned
+// anywhere in the tree, and the invite-decline path (HandleLFGListInviteResponse, !packet.Accept) deletes
+// the application instead of moving it to a state, so the client never learns "invitedeclined" - the
+// applicant simply vanishes from the leader's list.
 uint8 LFGListMgr::ApplicationStateToBits(LFGList::ApplicationState state)
 {
     switch (state)
     {
-        case LFGList::ApplicationState::Applied:  return WorldPackets::LFGList::ApplicationStateBits::Applied;
-        case LFGList::ApplicationState::Invited:  return WorldPackets::LFGList::ApplicationStateBits::Invited;
-        case LFGList::ApplicationState::Accepted: return WorldPackets::LFGList::ApplicationStateBits::Accepted;
-        default:                                  return WorldPackets::LFGList::ApplicationStateBits::Declined;
+        case LFGList::ApplicationState::None:      return WorldPackets::LFGList::ApplicationStateBits::None;
+        case LFGList::ApplicationState::Applied:   return WorldPackets::LFGList::ApplicationStateBits::Applied;
+        case LFGList::ApplicationState::Invited:   return WorldPackets::LFGList::ApplicationStateBits::Invited;
+        case LFGList::ApplicationState::Cancelled: return WorldPackets::LFGList::ApplicationStateBits::Cancelled;
+        case LFGList::ApplicationState::Declined:  return WorldPackets::LFGList::ApplicationStateBits::Declined;
+        case LFGList::ApplicationState::Accepted:  return WorldPackets::LFGList::ApplicationStateBits::InviteAccepted;
+        default:                                   return WorldPackets::LFGList::ApplicationStateBits::None;
     }
 }
 

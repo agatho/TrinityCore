@@ -192,7 +192,18 @@ namespace WorldPackets
         //   - each term slot carries a presence bit next to its 5-bit length;
         //   - three of the nine "filters" (indices 4, 6 and 7 of the old array) are ARRAY COUNTS. Reading
         //     them as scalars made the guid list come out of the wrong bytes as soon as one was non-zero.
-        // All three were invisible in the 143-byte sniff because that search had zero terms and empty lists.
+        // All three defects were live in the only capture of this opcode there is, which is what makes them
+        // defects and not refinements: 69273_s69273_a_43003A_{0,1,2}.bin (143 bytes each, build 69273 =
+        // 12.1) carry Terms.Count = 2 ("the", "nexus-captain") and Values1 with 17 entries (723, 2003, 398,
+        // 1773, 1774, 1780, 1779, 2005, 1778, 1957, 1772, 1955, 458, 1289, 1674, 2004, 1956); Values2,
+        // Values3 and Guids are empty. The model below consumes all 143 bytes with nothing left over, so
+        // this is a 12.1 round-trip source for the opcode. The old nine-scalar model misread this very
+        // capture - an earlier revision of this comment claimed the capture had zero terms and empty lists,
+        // which its own bytes disprove.
+        // Measured scalars in those three captures: CategoryID 3, Filter1 1, Filter2 4, LanguageMask 0xFFF,
+        // Filter5 0, Filter8 0, FilterByte1 0xFF, FilterByte2 0x03. Note the per-slot presence bits are all
+        // ZERO while the lengths are non-zero, so the bit is not a "string present" flag - the length alone
+        // gates the string, which is how the reader below treats it.
         class LFGListSearch final : public ClientPacket
         {
         public:
@@ -384,18 +395,46 @@ namespace WorldPackets
 
         // SMSG_LFG_LIST_SEARCH_STATUS (0x5A0003) - dispatcher case @ RVA 0x75568B:
         //   RideTicket ; u8 Status ; one byte with bit7 Complete
-        // Stock defect: the ticket was missing (68275 read it too).
-        // Note this class still has no sender, on purpose: the 68974 capture shows retail answering a
-        // search with results only and never with a status message.
+        // Stock defect: the ticket was missing (68275 read it too). The case body confirms the layout
+        // field for field: ticket reader 0x16C0CB0 into obj+32, then two u8 reads (0x35AF050), the first
+        // stored raw at obj+72, the second as `shr al, 7` at obj+73.
+        //
+        // The consumer IS decoded, and it is not what the field names suggest. Hook slot 0x462ED00 is null
+        // in the shipping image but installed at runtime by the LFGList module initialiser @ RVA 0x24DF000
+        // (`qword_...ED00 = sub_...34AE920`) and cleared again by the teardown @ 0x2087938. The consumer at
+        // RVA 0x24DE920 does this:
+        //   if (Ticket.Guid.High == 0 || Ticket.Id == 0 || Ticket.Type == 0 || Ticket.Time == 0)
+        //       FireEvent(LFG_LIST_SEARCH_FAILED, Status == 57 ? "throttled" : nil);
+        // Three consequences, all measured, none inferred:
+        //   - the message is a search FAILURE notice, not a progress report. Event hash 0xBD0954E363C18D9B
+        //     resolves to LFG_LIST_SEARCH_FAILED, whose documented payload is exactly one nilable cstring
+        //     `reason` (LFGListInfoDocumentation.lua:789-797). Lua sets searching = false, searchFailed =
+        //     true and swaps the result list for the failure text (LFGList.lua:2391-2394, 2899-2902).
+        //   - it only fires on an EMPTY ticket. A populated ticket makes the consumer return without doing
+        //     anything at all, so a sender that fills the ticket sends a silent no-op.
+        //   - Complete (obj+73) is never read by the consumer. It is on the wire and nothing consumes it.
+        // The whole client-side vocabulary of this message is therefore two cases: Status 57 -> "throttled",
+        // every other value -> nil reason. That is measured at 0x24DE945, not inferred.
+        //
+        // The class still has no sender, and THAT GAP IS OPEN, not waived. Earlier revisions argued it away
+        // from the absence of the message in a 68974 capture; that is the forbidden inference (absence is
+        // not evidence) and doubly so because 68974 is 12.0.7 while this is the 12.1 layout. The honest
+        // statement is: the server has no failure condition on the search path today (HandleLFGListSearch
+        // always answers with results), so there is nothing to report - and no sender is invented here.
+        // Whoever adds a search throttle sends this with a ZEROED ticket and Status = SearchFailedThrottled.
         class LFGListSearchStatus final : public ServerPacket
         {
         public:
+            // The only Status value the client distinguishes; everything else yields a nil reason.
+            // Measured at RVA 0x24DE945 (`cmp byte ptr [rcx+48h], 39h`).
+            static constexpr uint8 SearchFailedThrottled = 57;
+
             explicit LFGListSearchStatus() : ServerPacket(SMSG_LFG_LIST_SEARCH_STATUS, 16 + 4 + 4 + 8 + 1 + 1 + 1) { }
             WorldPacket const* Write() override;
 
-            LFG::RideTicket Ticket;
+            LFG::RideTicket Ticket;         // MUST stay zeroed: the consumer ignores the message otherwise
             uint8 Status = 0;
-            bool Complete = true;
+            bool Complete = true;           // on the wire, read by nobody in the 12.1 client
         };
 
         // One member record of a search-result row. Client 12.1.0.69382 reader @ RVA 0x7580F0
@@ -512,12 +551,39 @@ namespace WorldPackets
 
         // Wire state bits for application status (sniff MSB-first): 0x40 applied/pending, 0x20 invited,
         // 0xA0 invite accepted. Declined/cancelled bytes were not captured (best-effort 0x10).
+        // Application state, as it travels in the TOP FOUR BITS of the trailing state byte of both
+        // SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE and SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT. The client stores
+        // `wireByte >> 4` as an int (0x755DA9 and 0x755EB6, both `shr eax, 4`) and hands that int to the
+        // state->string mapper @ RVA 0x24DADA0, a plain switch whose ELEVEN arms are the whole vocabulary:
+        //   0/default "none"   1 "applied"    2 "invited"           3 "failed"      4 "cancelled"
+        //   5 "declined"       6 "declined_full"                    7 "declined_delisted"
+        //   8 "timedout"       9 "invitedeclined"                  10 "inviteaccepted"
+        // Those strings are the same set the UI compares against on both sides of the flow - the applicant
+        // side via LFG_LIST_APPLICATION_STATUS_UPDATED(searchResultID, newStatus, oldStatus, groupName)
+        // (event hash 0x0FA9B1E9B64B0D30, documented in LFGListInfoDocumentation.lua:726-737) and the
+        // leader side via LfgApplicantData.applicationStatus (LFGList.lua:1952-1974, 2033).
+        //
+        // These values are MEASURED, and they replace two guesses that were both wrong:
+        //   - Applied was 0x40. Nibble 4 is "cancelled". LFGList.lua:2033 greys out every "cancelled"
+        //     applicant and lines 1984-1985 show the leader's Invite button ONLY for "applied", so with
+        //     0x40 the leader saw a greyed-out list with no invite button and the whole flow was dead.
+        //   - Declined was 0x10 and marked UNVERIFIED. Nibble 1 is "applied", i.e. the old rejection code
+        //     told the client the application had just been filed. It also collided head-on with the
+        //     measured constant on the success path of SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT, which is 0x10
+        //     for exactly the right reason: a freshly accepted application IS "applied".
         namespace ApplicationStateBits
         {
-            constexpr uint8 Applied  = 0x40;
-            constexpr uint8 Invited  = 0x20;
-            constexpr uint8 Accepted = 0xA0;
-            constexpr uint8 Declined = 0x10;    // UNVERIFIED (not in the capture)
+            constexpr uint8 None             = 0x00;
+            constexpr uint8 Applied          = 0x10;
+            constexpr uint8 Invited          = 0x20;
+            constexpr uint8 Failed           = 0x30;
+            constexpr uint8 Cancelled        = 0x40;
+            constexpr uint8 Declined         = 0x50;
+            constexpr uint8 DeclinedFull     = 0x60;
+            constexpr uint8 DeclinedDelisted = 0x70;
+            constexpr uint8 TimedOut         = 0x80;
+            constexpr uint8 InviteDeclined   = 0x90;
+            constexpr uint8 InviteAccepted   = 0xA0;
         }
 
         // One applicant entry of SMSG_LFG_LIST_APPLICANT_LIST_UPDATE. Client 12.1.0.69382 reader @ RVA
@@ -532,7 +598,7 @@ namespace WorldPackets
         {
             LFG::RideTicket Ticket;             // application ticket (type 6, Id = ApplicationId)
             ObjectGuid PlayerGuid;
-            uint8 StateBits = 0;                // occupies the top 4 bits of the wire
+            uint8 StateBits = 0;                // occupies the top 4 bits of the wire; ApplicationStateBits
             bool Flag = false;
             std::string Comment;                // the applicant's note, bits<8> length
         };
@@ -556,6 +622,15 @@ namespace WorldPackets
         // scalars out of the ticket's interior, i.e. application id, listing id and granted role were all
         // garbage on every status change.
         // StateBits is correctly modelled as an already-shifted value: the client keeps only bits 7..4.
+        // Field roles measured off the consumer @ RVA 0x24DE9A0, which forwards the decoded object into the
+        // state setter @ 0x24DD190 as (ticket, state, time, code, byte):
+        //   u64      -> obj+112, passed as an ABSOLUTE TIME (the consumer subtracts the client's time base
+        //               qword_7FF7877C9640 before storing it), not an opaque blob.
+        //   UnkResult-> obj+120, consumed ONLY when the state resolves to 3 = "failed", where the setter
+        //               hands it to the error presenter @ 0x24DB25E0. It is the failure reason code, which
+        //               is why it is meaningless on every other state.
+        //   RoleGranted -> obj+128, stored raw at the applicant record's +2256.
+        //   StateBits   -> obj+124 as `wireByte >> 4`, i.e. the application state (see ApplicationStateBits).
         class LFGListApplicationStatusUpdate final : public ServerPacket
         {
         public:
@@ -590,7 +665,7 @@ namespace WorldPackets
             uint64 ApplicationExpiration = 0;
             uint8 Status = 6;
             uint8 Unknown = 0;
-            uint8 StateBits = 0x10;             // observed constant
+            uint8 StateBits = ApplicationStateBits::Applied;   // nibble 1 = "applied"; see the namespace
         };
 
         struct LFGListBlacklistEntry
