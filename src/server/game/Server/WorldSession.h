@@ -154,7 +154,10 @@ namespace WorldPackets
     namespace Auth
     {
         enum class ConnectToSerial : uint32;
+        class LatencyReport;
+        class LogStreamingError;
         class QueuedMessagesEnd;
+        class SuspendCommsAck;
     }
 
     namespace Azerite
@@ -651,7 +654,10 @@ namespace WorldPackets
     {
         class QueryCreature;
         struct NameCacheLookupResult;
+        struct BNetAccountAndCommunityID;
         class QueryPlayerNames;
+        class QueryPlayerNameByCommunityId;
+        class QueryPlayerNamesForCommunity;
         class QueryPageText;
         class QueryNPCText;
         class QueryGameObject;
@@ -1073,6 +1079,7 @@ class TC_GAME_API WorldSession
         void SendFeatureSystemStatusGlueScreen();
 
         void BuildNameQueryData(ObjectGuid guid, WorldPackets::Query::NameCacheLookupResult& lookupData);
+        void SendPlayerNameByCommunityId(WorldPackets::Query::BNetAccountAndCommunityID const& member);
 
         void SendTrainerList(Creature* npc, uint32 trainerId);
         void SendListInventory(ObjectGuid guid);
@@ -1223,6 +1230,26 @@ class TC_GAME_API WorldSession
 
         static constexpr uint32 SPECIAL_INIT_ACTIVE_MOVER_TIME_SYNC_COUNTER = 0xFFFFFFFF;
         static constexpr uint32 SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER      = 0xFFFFFFFE;
+        // CMSG_SUSPEND_COMMS_ACK carries the serial we chose, so it gets its own reserved counter instead of
+        // colliding with a real time sync sequence index.
+        static constexpr uint32 SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER     = 0xFFFFFFFD;
+
+        // Client-reported frame rate statistics, fed from CMSG_LATENCY_REPORT. Session lifetime only - see
+        // decision O3 of unit conn_44_4C: deliberately aggregated and NOT persisted, because the client sends
+        // ~20000 measurement points per play session and there is no retention story for a table that size.
+        struct ClientPerformanceStats
+        {
+            uint32 Reports = 0;             ///< number of accepted (deduplicated) reports
+            uint32 Samples = 0;             ///< number of entries folded into the averages
+            uint32 MinFrameRate = 0;
+            uint32 MaxFrameRate = 0;
+            uint32 LastFrameRate = 0;
+            uint64 FrameRateSum = 0;
+            uint64 LastTimestampMS = 0;     ///< client unix time in ms of the newest entry seen
+            uint32 AverageFrameRate() const { return Samples ? uint32(FrameRateSum / Samples) : 0u; }
+        };
+
+        ClientPerformanceStats const& GetClientPerformanceStats() const { return _clientPerformanceStats; }
 
         // Packets cooldown
         time_t GetCalendarEventCreationCooldown() const { return _calendarEventCreationCooldown; }
@@ -1368,6 +1395,8 @@ class TC_GAME_API WorldSession
         void HandleGameobjectReportUse(WorldPackets::GameObject::GameObjReportUse& packet);
 
         void HandleQueryPlayerNames(WorldPackets::Query::QueryPlayerNames& queryPlayerNames);
+        void HandleQueryPlayerNameByCommunityId(WorldPackets::Query::QueryPlayerNameByCommunityId& queryPlayerNameByCommunityId);
+        void HandleQueryPlayerNamesForCommunity(WorldPackets::Query::QueryPlayerNamesForCommunity& queryPlayerNamesForCommunity);
         void HandleQueryTimeOpcode(WorldPackets::Query::QueryTime& queryTime);
         void HandleCreatureQuery(WorldPackets::Query::QueryCreature& packet);
         void HandleGameObjectQueryOpcode(WorldPackets::Query::QueryGameObject& packet);
@@ -1711,6 +1740,9 @@ class TC_GAME_API WorldSession
         void HandleTimeSync(uint32 counter, int64 clientTime, TimePoint responseReceiveTime);
         void HandleTimeSyncResponse(WorldPackets::Misc::TimeSyncResponse const& timeSyncResponse);
         void HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd const& queuedMessagesEnd);
+        void HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck const& suspendCommsAck);
+        void HandleLatencyReport(WorldPackets::Auth::LatencyReport const& latencyReport);
+        void HandleLogStreamingError(WorldPackets::Auth::LogStreamingError const& logStreamingError);
         void HandleWhoIsOpcode(WorldPackets::Who::WhoIsRequest& packet);
         void HandleResetInstancesOpcode(WorldPackets::Instance::ResetInstances& packet);
         void HandleInstanceLockResponse(WorldPackets::Instance::InstanceLockResponse& packet);
@@ -2025,6 +2057,10 @@ class TC_GAME_API WorldSession
         LocaleConstant m_sessionDbLocaleIndex;
         Minutes _timezoneOffset;
         std::atomic<uint32> m_latency;
+        ClientPerformanceStats _clientPerformanceStats;
+        // CMSG_LOG_STREAMING_ERROR is a free-form string from an authenticated but otherwise untrusted client and
+        // the client keeps a 64 slot error ring it can drain in a burst, so the log output is capped per session.
+        uint32 _streamingErrorsReported = 0;
         AccountData _accountData[NUM_ACCOUNT_DATA_TYPES];
         std::array<uint32, MAX_ACCOUNT_TUTORIAL_VALUES> _tutorials;
         uint8 _tutorialsChanged;

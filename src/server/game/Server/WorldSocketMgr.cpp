@@ -31,7 +31,8 @@ void WorldSocketThread::SocketRemoved(std::shared_ptr<WorldSocket>const& sock)
     sScriptMgr->OnSocketClose(sock);
 }
 
-WorldSocketMgr::WorldSocketMgr() : _socketSystemSendBufferSize(-1), _socketApplicationSendBufferSize(65536), _tcpNoDelay(true)
+WorldSocketMgr::WorldSocketMgr() : _socketSystemSendBufferSize(-1), _socketApplicationSendBufferSize(65536), _tcpNoDelay(true),
+    _packetBundling(false)
 {
 }
 
@@ -46,6 +47,12 @@ WorldSocketMgr& WorldSocketMgr::Instance()
 bool WorldSocketMgr::StartNetwork(Trinity::Asio::IoContext& ioContext, std::string const& bindIp, uint16 port, int threadCount)
 {
     _tcpNoDelay = sConfigMgr->GetBoolDefault("Network.TcpNodelay", true);
+
+    // SMSG_MULTIPLE_PACKETS bundling. Off by default: the framing is decoded from the 12.1.0.69382 client and
+    // implemented against it, but it has never been exercised against a running client, and a wrong inner length
+    // makes the client discard the rest of the frame WITHOUT reporting an error (client framing loop 0x18C0490).
+    // A silent-loss failure mode does not belong in a default-on setting.
+    _packetBundling = sConfigMgr->GetBoolDefault("Network.PacketBundling", false);
 
     int const max_connections = TRINITY_MAX_LISTEN_CONNECTIONS;
     TC_LOG_DEBUG("misc", "Max allowed socket connections {}", max_connections);

@@ -18,6 +18,7 @@
 #include "WorldSession.h"
 #include "AuthenticationPackets.h"
 #include "BattlenetRpcErrorCodes.h"
+#include "Log.h"
 #include "CharacterTemplateDataStore.h"
 #include "ClientConfigPackets.h"
 #include "DisableMgr.h"
@@ -163,4 +164,86 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
     WorldPackets::System::MirrorVars variables;
     variables.Variables = vars;
     SendPacket(variables.Write());
+}
+
+// CMSG_LATENCY_REPORT (12.1 0x44000F). The client sends these self-timed from C++ in triples ~200 ms apart, with
+// Kind 0/1/2 carrying 3/7/11 entries; the coupling is exception-free over 4522 captured packets and the entry list
+// is cumulative - the Kind 2 body starts byte-identically with the whole Kind 1 body, which in turn starts with the
+// whole Kind 0 body. Taking only Kind 2 therefore keeps every measurement of the triple exactly once; taking all
+// three would count every measurement three times (finding K3 of AGENT_BRIEF_CONN_44_4C).
+//
+// D2/D4 - what the server does with it: nothing observable by the client. There is no reply opcode, no Lua event
+// (the report has no Lua trigger and no Lua reader; only the display getters GetNetStats/GetFramerate exist) and no
+// CVar that gates it, so anything the server sends back would be invented. Decision O3 of unit conn_44_4C: the
+// values are aggregated into per-session statistics and deliberately NOT persisted. A table would take roughly
+// 20000 rows per play session with no retention strategy.
+void WorldSession::HandleLatencyReport(WorldPackets::Auth::LatencyReport const& latencyReport)
+{
+    // Deduplication. 2 is the last and largest stage of the triple.
+    if (latencyReport.Kind != 2)
+        return;
+
+    ++_clientPerformanceStats.Reports;
+
+    for (WorldPackets::Auth::LatencyReportEntry const& entry : latencyReport.Entries)
+    {
+        // Frame == 0 means this entry carries no frame rate. It happens: in the decoded reference triple entry 0
+        // has Frame 0 while entries 1 and 2 have 21 and 33. Only the last entry of a packet is written by the
+        // sender we decoded (0x20E6F0, which always stores at least 1); who fills the earlier entries of the same
+        // report object is not resolved.
+        // UNVERIFIED: the producer of the entries with Frame == 0. They are skipped rather than averaged in,
+        // because folding a zero into a frame rate average would understate it.
+        if (!entry.Frame)
+            continue;
+
+        ++_clientPerformanceStats.Samples;
+        _clientPerformanceStats.FrameRateSum += entry.Frame;
+        _clientPerformanceStats.LastFrameRate = entry.Frame;
+
+        if (!_clientPerformanceStats.MinFrameRate || entry.Frame < _clientPerformanceStats.MinFrameRate)
+            _clientPerformanceStats.MinFrameRate = entry.Frame;
+
+        if (entry.Frame > _clientPerformanceStats.MaxFrameRate)
+            _clientPerformanceStats.MaxFrameRate = entry.Frame;
+
+        if (entry.TimestampMS > _clientPerformanceStats.LastTimestampMS)
+            _clientPerformanceStats.LastTimestampMS = entry.TimestampMS;
+    }
+
+    TC_LOG_TRACE("network", "WorldSession::HandleLatencyReport: {} reported {} entries (fps last {} min {} max {} avg {}, {} samples over {} reports)",
+        GetPlayerInfo(), latencyReport.Entries.size(), _clientPerformanceStats.LastFrameRate, _clientPerformanceStats.MinFrameRate,
+        _clientPerformanceStats.MaxFrameRate, _clientPerformanceStats.AverageFrameRate(), _clientPerformanceStats.Samples,
+        _clientPerformanceStats.Reports);
+}
+
+// CMSG_LOG_STREAMING_ERROR (12.1 0x44000B). Free-form English CASC/TACT error text out of the client's streaming
+// logger; only severity >= 4 messages reach the ring this is drained from. There is nothing structured in it - no
+// file name field, no FileDataID field, no error code - and the Streaming Lua API has an empty Events table, so
+// there is no client state to change and no reply to send. Logging it is the whole of the effect (decision O4).
+//
+// The message is attacker-controlled and the client keeps a 64 slot error ring it can drain in a burst, so the
+// output is capped per session and control characters are stripped so a crafted message cannot forge log lines.
+void WorldSession::HandleLogStreamingError(WorldPackets::Auth::LogStreamingError const& logStreamingError)
+{
+    static constexpr uint32 MaxReportedPerSession = 10;
+
+    if (_streamingErrorsReported >= MaxReportedPerSession)
+    {
+        ++_streamingErrorsReported;
+        return;
+    }
+
+    std::string message = logStreamingError.Message;
+    for (char& c : message)
+        if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) == 0x7F)
+            c = '.';
+
+    ++_streamingErrorsReported;
+
+    TC_LOG_INFO("network", "WorldSession::HandleLogStreamingError: {} reported a content streaming error ({}/{}): {}",
+        GetPlayerInfo(), _streamingErrorsReported, MaxReportedPerSession, message);
+
+    if (_streamingErrorsReported == MaxReportedPerSession)
+        TC_LOG_INFO("network", "WorldSession::HandleLogStreamingError: {} reached the per session streaming error log cap, further reports are counted but not logged",
+            GetPlayerInfo());
 }

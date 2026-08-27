@@ -391,4 +391,49 @@ void QueuedMessagesEnd::Read()
 {
     _worldPacket >> Timestamp;
 }
+
+WorldPacket const* SuspendComms::Write()
+{
+    _worldPacket << uint32(SerialNumber);
+
+    return &_worldPacket;
+}
+
+void SuspendCommsAck::Read()
+{
+    _worldPacket >> SerialNumber;
+    _worldPacket >> ClientTick;
+}
+
+// Field order and widths are the client writer 0x5D6020 read backwards, not a guess: the entry is
+// { uint32 @0, uint32 @4, uint8 @8, uint64 @9, uint32 @17 } = 21 bytes with no alignment padding, which is what
+// makes the 8 + 21*Count length rule hold on all 4522 captured packets.
+ByteBuffer& operator>>(ByteBuffer& data, LatencyReportEntry& entry)
+{
+    data >> entry.Server;
+    data >> entry.Unknown4;
+    data >> entry.Unknown8;
+    data >> entry.TimestampMS;
+    data >> entry.Frame;
+
+    return data;
+}
+
+void LatencyReport::Read()
+{
+    _worldPacket >> Kind;
+    // Array<> caps the count while reading; a plain resize() on a wire uint32 would allocate first and ask later.
+    _worldPacket >> Size<uint32>(Entries);
+    for (LatencyReportEntry& entry : Entries)
+        _worldPacket >> entry;
+}
+
+void LogStreamingError::Read()
+{
+    // bits<9> length, then the raw bytes. The message is a vsnprintf result from the client's CASC layer and can
+    // legitimately carry byte sequences that are not valid UTF-8 (embedded [Key %02X..%02X] blobs), so it is read
+    // unvalidated - it is only ever logged, never interpreted.
+    _worldPacket >> SizedString::BitsSize<9>(Message);
+    _worldPacket >> SizedString::Data<Strings::DontValidateUtf8>(Message);
+}
 }

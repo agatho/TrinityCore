@@ -27,6 +27,8 @@
 #include "NPCHandler.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
+#include "CharacterCache.h"
+#include "ClubUtils.h"
 #include "Player.h"
 #include "QueryPackets.h"
 #include "RealmList.h"
@@ -54,6 +56,77 @@ void WorldSession::HandleQueryPlayerNames(WorldPackets::Query::QueryPlayerNames&
         BuildNameQueryData(guid, response.Players.emplace_back());
 
     SendPacket(response.Write());
+}
+
+// The Communities and Channel member lists identify a club member only by the pair
+// { BNet account guid, club member id } - never by character guid - so the ordinary CMSG_QUERY_PLAYER_NAMES path
+// cannot resolve them. Without an answer C_Club.AreMembersReady stays false forever: the member list is hidden and
+// the spinner runs unbounded, because CommunitiesMemberList.lua has no timer, no retry and no error dialog.
+//
+// The trigger is a cache miss in the client's CommunityNameCache (DBCacheCommunityName.cpp), reached from
+// C_Club.FocusMembers - CommunitiesMemberList.lua:498-511 and ChannelFrame.lua:103.
+// D5 note: that Lua-to-opcode mapping is derived from the cache architecture plus the only Lua entry point that
+// requests member data, not measured through a call chain - the client's CMSG senders are reached through vtables.
+// The wire format itself is measured (client writers 0x5D5C40 / 0x5D5EC0, response parser case 0x67C6ED).
+void WorldSession::SendPlayerNameByCommunityId(WorldPackets::Query::BNetAccountAndCommunityID const& member)
+{
+    WorldPackets::Query::QueryPlayerNameByCommunityIdResponse response;
+    // Echoing the key back verbatim is what the client matches the answer on. It also satisfies a hard client side
+    // precondition for free: consumer 0x3498F0 throws the guid away and substitutes an empty one unless its
+    // HighGuid is BNetAccount (30) or Null, so the guid in the answer must never be synthesized from something
+    // else - keep the echo.
+    response.Member = member;
+
+    ObjectGuid guid = Battlenet::Services::Clubs::GetGuidFromClubMemberId(member.CommunityID);
+    if (guid.IsEmpty())
+    {
+        // The member id was minted on another realm. Nothing here will ever resolve it, so the permanent answer is
+        // the correct one - the client may burn the entry.
+        response.Result = WorldPackets::Query::QueryPlayerNameByCommunityIdResponse::PermanentFailure;
+    }
+    else if (!sCharacterCache->GetCharacterCacheByGuid(guid))
+    {
+        // Right realm, but no such character. Also permanent.
+        response.Result = WorldPackets::Query::QueryPlayerNameByCommunityIdResponse::PermanentFailure;
+    }
+    else
+    {
+        // Pass the online player through exactly like BuildNameQueryData does. Without it the answer would be
+        // built from cache values only, which for a logged in character means no TimerunningSeasonID, no
+        // DeclinedNames and a level that can be stale - a real divergence from the sibling path.
+        Player const* player = ObjectAccessor::FindConnectedPlayer(guid);
+        if (response.Data.emplace().Initialize(guid, player))
+            response.Result = WorldPackets::Query::QueryPlayerNameByCommunityIdResponse::Success;
+        else
+        {
+            // The cache entry existed a moment ago and Initialize still failed, so this is a transient state and
+            // NOT a permanent negative. Result 1 here would brand the member negative in the client's cache and
+            // leave that player nameless for the rest of the session; Result 2 only clears the pending bit and
+            // lets the client ask again (consumer 0x3498F0).
+            response.Data.reset();
+            response.Result = WorldPackets::Query::QueryPlayerNameByCommunityIdResponse::TemporaryFailure;
+        }
+    }
+
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleQueryPlayerNameByCommunityId(WorldPackets::Query::QueryPlayerNameByCommunityId& queryPlayerNameByCommunityId)
+{
+    SendPlayerNameByCommunityId(queryPlayerNameByCommunityId.Member);
+}
+
+void WorldSession::HandleQueryPlayerNamesForCommunity(WorldPackets::Query::QueryPlayerNamesForCommunity& queryPlayerNamesForCommunity)
+{
+    // There is no batched response opcode. Checked against the 12.1 opcode table rather than inherited as a claim:
+    // Opcodes.h contains SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE (0x64000B) and no collective counterpart.
+    // The client sorts the answers out through the key each response echoes, so one response per requested member
+    // is the only form the 12.1 opcode set allows. The client's bulk observable is CLUB_MEMBERS_UPDATED, which the
+    // club subsystem raises once its cache has filled.
+    // ClubID is not needed to answer - every member id already carries its own realm and character counter - but it
+    // is read because it is on the wire.
+    for (WorldPackets::Query::BNetAccountAndCommunityID const& member : queryPlayerNamesForCommunity.Members)
+        SendPlayerNameByCommunityId(member);
 }
 
 void WorldSession::HandleQueryTimeOpcode(WorldPackets::Query::QueryTime& /*queryTime*/)

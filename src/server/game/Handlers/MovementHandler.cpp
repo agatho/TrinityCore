@@ -998,6 +998,24 @@ void WorldSession::HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd
     HandleTimeSync(SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER, queuedMessagesEnd.Timestamp, queuedMessagesEnd.GetRawPacket()->GetReceivedTime());
 }
 
+// CMSG_SUSPEND_COMMS_ACK (12.1 0x440000). Same shape and the same field order as CMSG_TIME_SYNC_RESPONSE and
+// CMSG_QUEUED_MESSAGES_END, so it is handled the same way: one more clock delta sample.
+//
+// What ClientTick is and is not: the client fills it from its own millisecond clock (0x354ED50) while building the
+// ack in consumer 0x18C1610. Over 33 captured pairs, (ClientTick - capture tick) is constant to within a
+// millisecond inside a single capture and different between captures, in the range of a process uptime (1.7 h to
+// 7.7 d). It is therefore an opaque client tick, exactly like the value CMSG_TIME_SYNC_RESPONSE carries - usable
+// for a clock delta, not comparable against server time. HandleTimeSync treats it that way.
+//
+// SerialNumber is echoed from the SMSG_SUSPEND_COMMS we sent (78/78 pairs in the captures). This server has no
+// send site for that packet, so in practice this handler only ever runs for a serial we never issued; it is
+// registered because the acknowledgement is the receiving half of a pair and a half pair is not an implementation.
+// A serial we did not register simply produces no time sync sample.
+void WorldSession::HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck const& suspendCommsAck)
+{
+    HandleTimeSync(suspendCommsAck.SerialNumber, suspendCommsAck.ClientTick, suspendCommsAck.GetRawPacket()->GetReceivedTime());
+}
+
 void WorldSession::HandleMoveInitActiveMoverComplete(WorldPackets::Movement::MoveInitActiveMoverComplete const& moveInitActiveMoverComplete)
 {
     HandleTimeSync(SPECIAL_INIT_ACTIVE_MOVER_TIME_SYNC_COUNTER, moveInitActiveMoverComplete.Ticks, moveInitActiveMoverComplete.GetRawPacket()->GetReceivedTime());

@@ -163,6 +163,84 @@ namespace WorldPackets
             std::vector<NameCacheLookupResult> Players;
         };
 
+        // The client's community/club member windows identify a member by the pair
+        // JamBNetAccountAndCommunityID { ObjectGuid bnetAccount; uint64 communityID; }. The type name is proven,
+        // not derived: the destructor of the batch message class (0x5D4830) frees its element buffer tagged
+        // WowGetRawTypeName<struct JamBNetAccountAndCommunityID>, and the reflection descriptor (tag 0x388E928)
+        // declares bnetAccount@0x00 and communityID@0x10.
+        // communityID is this server's Clubs::CreateClubMemberId value - the same number PlayerGuidLookupData
+        // carries as GuildClubMemberID.
+        // Wire verified against the 12.1.0.69382 client writers 0x5D5C40 (single) and 0x5D5EC0 (batch).
+        struct BNetAccountAndCommunityID
+        {
+            ObjectGuid BnetAccountGUID;
+            uint64 CommunityID = 0;
+        };
+
+        // CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID (12.1 0x44000D) - { PackedGuid, uint64 }, client object 56 bytes.
+        class QueryPlayerNameByCommunityId final : public ClientPacket
+        {
+        public:
+            explicit QueryPlayerNameByCommunityId(WorldPacket&& packet) : ClientPacket(CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID, std::move(packet)) { }
+
+            void Read() override;
+
+            BNetAccountAndCommunityID Member;
+        };
+
+        // CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY (12.1 0x44000E) - { uint64 ClubID, uint32 Count, Count x member },
+        // client object 64 bytes, in-memory element stride 24.
+        class QueryPlayerNamesForCommunity final : public ClientPacket
+        {
+        public:
+            // UNVERIFIED: the client writer has no upper bound of its own, so this cap is a server side choice, not
+            // a measurement. 200 is above any realistic club roster page and keeps one request from producing an
+            // unbounded number of responses.
+            static constexpr std::size_t MaxMembers = 200;
+
+            explicit QueryPlayerNamesForCommunity(WorldPacket&& packet) : ClientPacket(CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY, std::move(packet)) { }
+
+            void Read() override;
+
+            uint64 ClubID = 0;
+            Array<BNetAccountAndCommunityID, MaxMembers> Members;
+        };
+
+        // SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE (12.1 0x64000B). Note the family: the response to two
+        // 0x44 opcodes lives in 0x64. Verified against the 12.1 dispatcher case at 0x67C6ED, which reads
+        //   Read<uint8> Result, ReadPackedGuid, Read<uint64>
+        // and only then, and only when Result == 0, calls the PlayerGuidLookupData sub reader 0x6E17E0 - the very
+        // same function that parses the per player payload of SMSG_QUERY_PLAYER_NAMES_RESPONSE, so the existing
+        // writer is reused verbatim.
+        // Framing detail worth stating because it looks like a contradiction: the sibling NameCacheLookupResult
+        // gates its payload with OptionalInit bits, this one gates with a full uint8. Both are correct - the client
+        // really does read a whole byte here, and the sub reader's own bit section therefore starts byte aligned.
+        class QueryPlayerNameByCommunityIdResponse final : public ServerPacket
+        {
+        public:
+            // Result is a THREE WAY discriminator, not a bool. Measured in consumer 0x3498F0
+            // (DBCacheCommunityName.cpp):
+            //   0 = success, the PlayerGuidLookupData payload is read and cached
+            //   2 = temporarily unavailable: only the pending bit is cleared, the entry and its callbacks survive
+            //       and the client may ask again
+            //   anything else = permanently unresolvable: the entry is marked negative, all waiting callbacks fire
+            //       with the error flag and are dropped. That player then stays nameless in the UI for good.
+            enum ResultCode : uint8
+            {
+                Success             = 0,
+                PermanentFailure    = 1,
+                TemporaryFailure    = 2
+            };
+
+            explicit QueryPlayerNameByCommunityIdResponse() : ServerPacket(SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE, 60) { }
+
+            WorldPacket const* Write() override;
+
+            uint8 Result = Success;   ///< one of ResultCode
+            BNetAccountAndCommunityID Member;   ///< echoed back, this is the key the client matches on
+            Optional<PlayerGuidLookupData> Data;
+        };
+
         class QueryPageText final : public ClientPacket
         {
         public:
@@ -508,6 +586,8 @@ namespace WorldPackets
         };
 
         ByteBuffer& operator<<(ByteBuffer& data, PlayerGuidLookupData const& lookupData);
+        ByteBuffer& operator>>(ByteBuffer& data, BNetAccountAndCommunityID& member);
+        ByteBuffer& operator<<(ByteBuffer& data, BNetAccountAndCommunityID const& member);
     }
 }
 

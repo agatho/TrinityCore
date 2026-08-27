@@ -28,6 +28,8 @@
 #include "WorldPacketCrypt.h"
 #include <array>
 #include <mutex>
+#include <span>
+#include <vector>
 
 namespace JSON::RealmList
 {
@@ -84,6 +86,12 @@ class TC_GAME_API WorldSocket final : public Trinity::Net::Socket<>
 {
     static uint32 const MinSizeForCompression;
 
+    // Limits for SMSG_MULTIPLE_PACKETS bundles. Neither is a client limit - the client's framing loop
+    // (0x18C0490) stops when fewer than 4 bytes remain and its only hard bound is the uint16 inner length.
+    // These keep one frame from growing without bound; bundling is only worthwhile for small packets anyway.
+    static uint32 const MaxBundlePayloadSize;
+    static uint32 const MaxBundleEntries;
+
     static std::array<uint8, 32> const AuthCheckSeed;
     static std::array<uint8, 32> const SessionKeySeed;
     static std::array<uint8, 32> const ContinuedSessionSeed;
@@ -137,7 +145,10 @@ private:
     /// sends and logs network.opcode without accessing WorldSession
     void SendPacketAndLogOpcode(WorldPacket const& packet);
     void WritePacketToBuffer(EncryptablePacket const& packet, MessageBuffer& buffer);
+    void WriteBundleToBuffer(std::span<EncryptablePacket* const> packets, MessageBuffer& buffer);
+    bool CanBundle(EncryptablePacket const& packet) const;
     uint32 CompressPacket(uint8* buffer, WorldPacket const& packet);
+    void ResetCompressionContext();
 
     ReadDataHandlerResult HandleAuthSession(WorldPacket&& packet);
     void HandleAuthSessionCallback(WorldPackets::Auth::AuthSession const* authSession, JSON::RealmList::RealmJoinTicket* joinTicket, PreparedResultSet const* result);
