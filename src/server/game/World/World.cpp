@@ -2472,7 +2472,6 @@ void World::ForceGameEventUpdate()
     m_timers[WUPDATE_EVENTS].Reset();
 }
 
-/// Send a packet to all players (except self if mentioned)
 // The realm's chat service went down or came back. Both DOWN opcodes share one client consumer, so
 // the event form (SMSG_CHAT_DOWN) is used here; the state form (SMSG_CHAT_IS_DOWN) is what a session
 // gets at login.
@@ -2496,6 +2495,7 @@ void World::SendChatRegionalServiceStatusToAll()
     TC_LOG_INFO("misc", "Regional chat service is now {}", available ? "available" : "unavailable");
 }
 
+/// Send a packet to all players (except self if mentioned)
 void World::SendGlobalMessage(WorldPacket const* packet, WorldSession* self, Optional<Team> team)
 {
     SessionMap::const_iterator itr;

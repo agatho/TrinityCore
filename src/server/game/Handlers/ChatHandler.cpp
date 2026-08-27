@@ -314,10 +314,15 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
     // both need their target resolved first: the whisper variant echoes the sender's own chat line
     // before it holds the message, and echoing that for a target that does not exist would put a
     // whisper in the frame that SendChatPlayerNotfoundNotice is about to reject.
-    bool const spamPattern = (type == CHAT_MSG_WHISPER || type == CHAT_MSG_CHANNEL)
+    //
+    // Order matters for cost, not for the result: MatchesChatSpamPattern walks _chatSpamPatterns and
+    // runs one std::regex_search per pattern on the world thread. It stays behind the two cheap gates
+    // so that the default configuration (Chat.CautionaryChat.Enabled = 0) never pays for it, even
+    // though chat_spam_record is populated to feed SMSG_EXPECTED_SPAM_RECORDS.
+    bool const cautionary = !_chatCautionAccepted
+        && sWorld->getBoolConfig(CONFIG_CHAT_CAUTIONARY_ENABLED)
+        && (type == CHAT_MSG_WHISPER || type == CHAT_MSG_CHANNEL)
         && sObjectMgr->MatchesChatSpamPattern(msg);
-    bool const cautionary = !_chatCautionAccepted && sWorld->getBoolConfig(CONFIG_CHAT_CAUTIONARY_ENABLED)
-        && spamPattern;
 
     switch (type)
     {
