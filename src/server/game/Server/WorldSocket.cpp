@@ -678,6 +678,14 @@ void WorldSocket::WriteBundleToBuffer(std::span<EncryptablePacket* const> packet
     _authCrypt.EncryptSend(dataPos, header.Size, header.Tag);
 
     memcpy(headerPos, &header, sizeof(PacketHeader));
+
+    // Deliberately logged: step 3 of the verification loop ("send it, watch the client react") has no Lua event
+    // to watch for a framing opcode, and a wrong inner length is discarded by the client WITHOUT an error. This
+    // line plus the CMSG_LOG_DISCONNECT reason that WorldSocket::HandleLogDisconnect already logs are the whole
+    // test: bundles emitted and no reason 3 means the client accepted them. Turning that check into one login and
+    // two greps is the point.
+    TC_LOG_DEBUG("network", "WorldSocket::WriteBundleToBuffer: bundled {} packets into one SMSG_MULTIPLE_PACKETS frame of {} bytes for {}",
+        packets.size(), packetSize, GetRemoteIpAddress());
 }
 
 bool WorldSocket::CanBundle(EncryptablePacket const& packet) const
