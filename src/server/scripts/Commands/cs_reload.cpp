@@ -42,6 +42,7 @@ EndScriptData */
 #include "LootMgr.h"
 #include "MapManager.h"
 #include "ObjectMgr.h"
+#include "Player.h"
 #include "SkillDiscovery.h"
 #include "SkillExtraItems.h"
 #include "SmartAI.h"
@@ -50,6 +51,7 @@ EndScriptData */
 #include "SupportMgr.h"
 #include "WaypointManager.h"
 #include "World.h"
+#include "WorldSession.h"
 
 #if TRINITY_COMPILER_IS_GCC
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
