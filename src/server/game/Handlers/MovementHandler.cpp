@@ -1036,20 +1036,30 @@ void WorldSession::HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck con
     // attacker-controlled text of CMSG_LOG_STREAMING_ERROR is. Deciding it once here is also what keeps the two
     // reasons from drifting apart, and the counter is incremented before the cap is consulted so that
     // ~WorldSession can report what the cap swallowed.
+    //
+    // network.telemetry, not network, and for the same reason the sister case uses it: worldserver.conf.dist
+    // declares no Logger.network, so Logger.root=5 (Error, line 4164) applies to it and TC_LOG_DEBUG("network")
+    // is discarded as shipped. Logger.network.telemetry=3 (Info, line 4171) with Appender.Console=1,3,0 (line
+    // 4141) is written without the operator doing anything. That matters here more than anywhere: because
+    // SendSuspendComms has no caller, _suspendCommsPendingSerial is always empty and EVERY arriving ack lands in
+    // this branch, so on the debug logger a session with up to ten unsolicited acks produced no output at all -
+    // and the reader in ~WorldSession only speaks above the cap. Values 1..10 of the counter had no reader.
+    // HandleLogStreamingError (AuthHandler.cpp) carries its lines on TC_LOG_INFO("network.telemetry") after the
+    // same finding; the cap is what bounds the volume, on either logger.
     if (!_suspendCommsPendingSerial || *_suspendCommsPendingSerial != suspendCommsAck.SerialNumber)
     {
         ++_suspendCommsAcksRejected;
         if (_suspendCommsAcksRejected <= MaxSuspendCommsAcksLoggedPerSession)
         {
             if (!_suspendCommsPendingSerial)
-                TC_LOG_DEBUG("network", "WorldSession::HandleSuspendCommsAck: {} sent an unsolicited acknowledgement (serial {}), ignored ({}/{})",
+                TC_LOG_INFO("network.telemetry", "WorldSession::HandleSuspendCommsAck: {} sent an unsolicited acknowledgement (serial {}), ignored ({}/{})",
                     GetPlayerInfo(), suspendCommsAck.SerialNumber, _suspendCommsAcksRejected, MaxSuspendCommsAcksLoggedPerSession);
             else
-                TC_LOG_DEBUG("network", "WorldSession::HandleSuspendCommsAck: {} acknowledged serial {} while serial {} is outstanding, ignored ({}/{})",
+                TC_LOG_INFO("network.telemetry", "WorldSession::HandleSuspendCommsAck: {} acknowledged serial {} while serial {} is outstanding, ignored ({}/{})",
                     GetPlayerInfo(), suspendCommsAck.SerialNumber, *_suspendCommsPendingSerial, _suspendCommsAcksRejected, MaxSuspendCommsAcksLoggedPerSession);
 
             if (_suspendCommsAcksRejected == MaxSuspendCommsAcksLoggedPerSession)
-                TC_LOG_DEBUG("network", "WorldSession::HandleSuspendCommsAck: {} reached the per session cap on rejected acknowledgements, further ones are counted but not logged - ~WorldSession prints the total",
+                TC_LOG_INFO("network.telemetry", "WorldSession::HandleSuspendCommsAck: {} reached the per session cap on rejected acknowledgements, further ones are counted but not logged - ~WorldSession prints the total",
                     GetPlayerInfo());
         }
 

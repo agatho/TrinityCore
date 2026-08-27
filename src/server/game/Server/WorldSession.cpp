@@ -196,11 +196,12 @@ WorldSession::~WorldSession()
             GetPlayerInfo(), _streamingErrorsReported, MaxStreamingErrorsLoggedPerSession,
             _streamingErrorsReported - MaxStreamingErrorsLoggedPerSession);
 
-    ///- the reader of the CMSG_SUSPEND_COMMS_ACK rejection counter. It reports on network.telemetry rather than on
-    /// network because that logger is enabled at Info in worldserver.conf.dist: the per rejection lines in
-    /// HandleSuspendCommsAck are TC_LOG_DEBUG("network") and therefore invisible as shipped, so this line is the
-    /// only trace an operator gets of a client hammering the opcode. Only printed once the cap was exceeded,
-    /// because up to that point every rejection already had its own line wherever the network logger is on.
+    ///- the reader of the CMSG_SUSPEND_COMMS_ACK rejection counter, for the values above the cap. It reports on
+    /// network.telemetry because worldserver.conf.dist enables that logger at Info and declares no Logger.network;
+    /// the per rejection lines in HandleSuspendCommsAck were TC_LOG_DEBUG("network") and therefore invisible as
+    /// shipped, which left the counter values 1..10 without any reader at all - they now sit on the same
+    /// network.telemetry/Info as this line, so the whole range of the counter is visible out of the box. Only
+    /// printed once the cap was exceeded, because up to that point every rejection has its own line.
     if (_suspendCommsAcksRejected > MaxSuspendCommsAcksLoggedPerSession)
         TC_LOG_INFO("network.telemetry", "Rejected suspend comms acknowledgements for {}: {} received, {} logged, {} suppressed by the per session cap",
             GetPlayerInfo(), _suspendCommsAcksRejected, MaxSuspendCommsAcksLoggedPerSession,
