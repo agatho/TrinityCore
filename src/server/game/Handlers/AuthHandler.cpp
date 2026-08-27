@@ -167,9 +167,11 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
 }
 
 // CMSG_LATENCY_REPORT (12.1 0x44000F). The client sends these self-timed from C++ in triples ~200 ms apart, with
-// Kind 0/1/2 carrying 3/7/11 entries; the coupling is exception-free over 4522 captured packets and the entry list
-// is cumulative - the Kind 2 body starts byte-identically with the whole Kind 1 body, which in turn starts with the
-// whole Kind 0 body. Taking only Kind 2 therefore keeps every measurement of the triple exactly once; taking all
+// Kind 0/1/2 carrying 3/7/11 entries; the coupling is exception-free over the corpus's 4522 packets, and the entry
+// list is cumulative - the Kind 2 body starts byte-identically with the whole Kind 1 body, which in turn starts with
+// the whole Kind 0 body. (The corpus is defined once above WorldPackets::Auth::SuspendComms in
+// AuthenticationPackets.h, and every figure in this function is measured on it.)
+// Taking only Kind 2 therefore keeps every measurement of the triple exactly once; taking all
 // three would count every measurement three times (finding K3 of AGENT_BRIEF_CONN_44_4C).
 //
 // D2/D4 - what the server does with it: nothing observable by the client. There is no reply opcode, no Lua event
@@ -197,12 +199,14 @@ void WorldSession::HandleLatencyReport(WorldPackets::Auth::LatencyReport const& 
         // The client's clock, taken from EVERY entry - deliberately BEFORE the frame rate filter below.
         // LastTimestampMS is declared as the newest timestamp seen and it is the one member of this aggregate that
         // says something about the client's clock instead of its frame rate, so it must not inherit the frame
-        // rate's selection: an entry with Frame == 0 still carries a perfectly good timestamp. Measured over all
-        // 25 captures - 11296 packets, 79068 entries, 22849 of them with Frame == 0 - not one Frame == 0 entry has
+        // rate's selection: an entry with Frame == 0 still carries a perfectly good timestamp. Over the corpus -
+        // 4522 packets, 31 650 entries, 9052 of them with Frame == 0 - not one Frame == 0 entry has
         // TimestampMS == 0, so there is nothing here to guard against.
         // A maximum rather than "the last one written", because the entries of one packet are NOT in timestamp
         // order: the entry the sender appends itself (Unknown8 == 33) is regularly OLDER than the entries already
-        // in the report object - 11998 order violations over those same 79068 entries.
+        // in the report object - 9043 of the 27 128 consecutive within-packet pairs go backwards, which is exactly
+        // the number of Unknown8 == 33 entries. Across packets the per-packet maximum IS monotonic (4498
+        // comparisons, 0 violations), which is what makes this accumulator meaningful at all.
         if (entry.TimestampMS > _clientPerformanceStats.LastTimestampMS)
             _clientPerformanceStats.LastTimestampMS = entry.TimestampMS;
 

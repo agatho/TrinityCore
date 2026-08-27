@@ -1003,17 +1003,18 @@ void WorldSession::HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd
 // sample, exactly like those two.
 //
 // What ClientTick is and is not: the client fills it from its own millisecond clock (0x354ED50) while building the
-// ack in consumer 0x18C1610. Over 33 captured pairs, (ClientTick - capture tick) is constant to within a
-// millisecond inside a single capture and different between captures, in the range of a process uptime (1.7 h to
-// 7.7 d). It is therefore an opaque client tick, exactly like the value CMSG_TIME_SYNC_RESPONSE carries - usable
-// for a clock delta, not comparable against server time. HandleTimeSync treats it that way.
+// ack in consumer 0x18C1610. Over the corpus (defined above WorldPackets::Auth::SuspendComms in
+// AuthenticationPackets.h) all 78 pairs across 24 recordings agree: (ClientTick - PKT tick) is constant to within
+// a millisecond inside a single recording and different in every recording, in the range of a process uptime
+// (1.7 h to 7.7 d). It is therefore an opaque client tick, exactly like the value CMSG_TIME_SYNC_RESPONSE
+// carries - usable for a clock delta, not comparable against server time. HandleTimeSync treats it that way.
 //
 // The other half of that equal treatment is the receive time, and it does not come for free:
 // WorldPacket::GetReceivedTime is only filled for the opcodes named in WorldSocket::ReadDataHandler, so
 // CMSG_SUSPEND_COMMS_ACK is listed there next to the other three HandleTimeSync opcodes. Without that entry the
 // roundTripDuration below would be computed against a default constructed TimePoint.
 //
-// SerialNumber is echoed from the SMSG_SUSPEND_COMMS we sent (78/78 pairs in the captures) and is therefore
+// SerialNumber is echoed from the SMSG_SUSPEND_COMMS we sent (78/78 pairs over the corpus) and is therefore
 // entirely client controlled on the way back. It must NOT reach HandleTimeSync as a counter: that counter is the
 // key of _pendingTimeSyncRequests, whose entries are all server minted (SendTimeSync, the resume counter, the
 // init-active-mover counter), and a client that echoed the sequence index of a live SMSG_TIME_SYNC_REQUEST would
@@ -1021,13 +1022,16 @@ void WorldSession::HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd
 // choosing into the six slot _timeSyncClockDeltaQueue, which feeds AdjustClientMovementTime and TransportServerTime.
 //
 // So the serial is checked, not used: it only has to match the one suspend this session actually has outstanding,
-// and the sample is then booked under the reserved counter that WorldSession::SendSuspendComms registered. Since
-// this server has no call site for SendSuspendComms (see the preconditions on WorldPackets::Auth::SuspendComms),
-// nothing is ever outstanding and every ack that arrives is unsolicited and dropped here.
+// and the sample is then booked under the reserved counter that WorldSession::SendSuspendComms registered.
+// Today nothing is ever outstanding, so every ack that arrives is unsolicited and dropped here. The reason is not
+// that the packet is unused in retail - it is that this server never reaches the situation retail sends it in. The
+// full derivation, including the client-side condition and the lines of this tree that keep it from being met, is
+// written out above WorldPackets::Auth::SuspendComms; the guard in WorldSession::AddInstanceConnection is what
+// reports it if the situation ever does arise.
 void WorldSession::HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck const& suspendCommsAck)
 {
     // The two rejections are one branch on purpose. Both are triggerable by the client at will, and today the
-    // first one is the ONLY path this handler ever takes, so their log output is what an authenticated client can
+    // first one is the only path this handler ever takes, so their log output is what an authenticated client can
     // drive - capped per session (WorldSession.h, MaxSuspendCommsAcksLoggedPerSession) exactly as the
     // attacker-controlled text of CMSG_LOG_STREAMING_ERROR is. Deciding it once here is also what keeps the two
     // reasons from drifting apart, and the counter is incremented before the cap is consulted so that

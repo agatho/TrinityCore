@@ -407,7 +407,8 @@ void SuspendCommsAck::Read()
 
 // Field order and widths are the client writer 0x5D6020 read backwards, not a guess: the entry is
 // { uint32 @0, uint32 @4, uint8 @8, uint64 @9, uint32 @17 } = 21 bytes with no alignment padding, which is what
-// makes the 8 + 21*Count length rule hold on all 4522 captured packets.
+// makes the 8 + 21*Count length rule hold on all 4522 packets of the corpus (defined above
+// WorldPackets::Auth::SuspendComms in AuthenticationPackets.h).
 ByteBuffer& operator>>(ByteBuffer& data, LatencyReportEntry& entry)
 {
     data >> entry.Server;

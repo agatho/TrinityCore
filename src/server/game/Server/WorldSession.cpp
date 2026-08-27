@@ -346,6 +346,24 @@ void WorldSession::AddInstanceConnection(WorldSession* session, std::weak_ptr<Wo
         return;
     }
 
+    // The state in which retail sends SMSG_SUSPEND_COMMS, and the state in which this server's unpaired
+    // SMSG_RESUME_COMMS below is fatal instead of merely unusual. Both come from the same client rule: the RESUME
+    // consumer (0x18C1720) requires the suspend flag of the base slot to be set and answers a clear flag with
+    // CMSG_LOG_DISCONNECT(3) plus a closed socket. The flag is set while the slot is empty and CLEARED by the
+    // RESUME that filled it, so a replacement arriving over a still-open base socket needs a SMSG_SUSPEND_COMMS
+    // on the OLD socket first - see WorldPackets::Auth::SuspendComms for the derivation and the measurement.
+    // This server is not supposed to reach that state: the only route to a CONNECT_TO for the instance slot is
+    // HandlePlayerLoginOpcode, which requires !PlayerLoading() and no player, and both exits from a logged-in
+    // state close this socket first (LogoutPlayer below and ~WorldSession). Hence a log line and not a send: a
+    // send here would be untested code in the login path, and if it ever fires it fires because one of those
+    // invariants broke, which is worth knowing on its own. Whoever sees this line is looking at the caller this
+    // opcode is missing - the fix is SendSuspendComms(CONNECTION_TYPE_INSTANCE) on the old socket, then waiting
+    // for the ack before HandleContinuePlayerLogin, which is decision O1's path B and its own unit of work.
+    if (WorldSocket const* previous = session->m_Socket[CONNECTION_TYPE_INSTANCE].get(); previous && previous->IsOpen())
+        TC_LOG_ERROR("network", "WorldSession::AddInstanceConnection: {} is taking over an instance connection while the previous one is still open. "
+            "The client will refuse the SMSG_RESUME_COMMS that follows with CMSG_LOG_DISCONNECT(3) because no SMSG_SUSPEND_COMMS quiesced the old socket.",
+            session->GetPlayerInfo());
+
     socket->SetWorldSession(session);
     session->m_Socket[CONNECTION_TYPE_INSTANCE] = std::move(socket);
     session->HandleContinuePlayerLogin();

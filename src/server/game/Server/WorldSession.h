@@ -1230,10 +1230,17 @@ class TC_GAME_API WorldSession
 
         // SMSG_SUSPEND_COMMS - the sending half of the suspend/ack pair, and the ONLY place a suspend serial is
         // minted. Read the preconditions on WorldPackets::Auth::SuspendComms before adding a call: the client
-        // answers a suspend it did not expect with CMSG_LOG_DISCONNECT(3) and closes the socket.
-        // This server has no call site, because it never redirects an already established socket - retail's only
-        // use for the packet. The entry point exists anyway so that the serial CMSG_SUSPEND_COMMS_ACK echoes has
-        // exactly one issuer; HandleSuspendCommsAck rejects every serial that did not come from here.
+        // answers a suspend sent to the wrong socket with CMSG_LOG_DISCONNECT(3) and closes it, and the socket
+        // this is sent on must be the one being REPLACED, not the replacement.
+        // This function has no caller today, and the reason is a property of this server, not of the packet:
+        // retail sends it when a connection slot's replacement authenticates while the slot's old socket is still
+        // open, and this server never gets into that state - it closes the old instance socket before any new
+        // CONNECT_TO and never redirects the realm socket at all. The derivation and the lines that guarantee it
+        // are above WorldPackets::Auth::SuspendComms; WorldSession::AddInstanceConnection carries the guard that
+        // reports a violation. Decision O1 of unit conn_44_4C, which also records D2/D3 as NOT met for this
+        // opcode rather than closing them.
+        // The entry point exists anyway so that the serial CMSG_SUSPEND_COMMS_ACK echoes has exactly one issuer;
+        // HandleSuspendCommsAck rejects every serial that did not come from here.
         void SendSuspendComms(ConnectionType connection);
 
         static constexpr uint32 SPECIAL_INIT_ACTIVE_MOVER_TIME_SYNC_COUNTER = 0xFFFFFFFF;
@@ -2111,7 +2118,7 @@ class TC_GAME_API WorldSession
         // Rejected CMSG_SUSPEND_COMMS_ACK packets, and the cap on how many of them get a log line. Same reasoning
         // as MaxStreamingErrorsLoggedPerSession above: an authenticated client can send this opcode as often as
         // the shared DosProtection default lets it (it has no entry of its own in GetMaxPacketCounterAllowed), and
-        // because this server has no SendSuspendComms call site, EVERY ack that arrives is a rejection. Without a
+        // because SendSuspendComms has no caller today, EVERY ack that arrives is a rejection. Without a
         // cap that is a client controlled tap on the network logger. Rejections past the cap keep being counted
         // and ~WorldSession prints the total, so the counter has a reader for every value it can take.
         static constexpr uint32 MaxSuspendCommsAcksLoggedPerSession = 10;

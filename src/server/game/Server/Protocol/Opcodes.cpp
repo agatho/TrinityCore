@@ -909,8 +909,10 @@ void OpcodeTable::InitializeClientOpcodes()
     // A status with a silent-drop window is the wrong instrument for that. The one window STATUS_AUTHED does have,
     // m_inQueue, is before CMSG_ENUM_CHARACTERS and so before any community UI can exist.
     // UNVERIFIED: whether RETAIL admits these two before world entry. That is not measurable from here - both
-    // opcodes occur 0 times in all 25 captures (0x44000D/0x44000E and their 12.0.7 numbers 0x41000D/0x41000E), so
-    // there is no observation of the situation either way, and the client's senders are reached through vtables.
+    // opcodes occur 0 times over the capture corpus (defined above WorldPackets::Auth::SuspendComms; counted as
+    // 0x44000D/0x44000E in the 12.1 window and as 0x41000D/0x41000E in the 12.0.7 one, never as one number over
+    // both, since in 12.1 numbering those are CMSG_MOVE_STOP_PITCH and CMSG_MOVE_SET_RUN_MODE), so there is no
+    // observation of the situation either way, and the client's senders are reached through vtables.
     // The choice above is therefore argued from this server's dispatch semantics, which is a fact, and not from
     // retail's admission rule, which is unknown. It is an EXPANSION over the sibling line: if the reservation is
     // ever resolved against retail and retail turns out to gate them on world entry, this is the line to change.
@@ -2362,7 +2364,18 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESTRICTED_ACCOUNT_WARNING,                                   STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESUME_CAST,                                                  STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESUME_CAST_BAR,                                              STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESUME_COMMS,                                                 STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
+    // Left at the tree's CONNECTION_TYPE_REALM although the only send site passes CONNECTION_TYPE_INSTANCE
+    // (WorldSession::HandleContinuePlayerLogin), which reads like an inconsistency and is decision O9 of unit
+    // conn_44_4C. Resolved this way round because "instance" would be the wrong FACT: SMSG_RESUME_COMMS goes to
+    // whichever socket is taking over a connection slot, and retail uses it on both - over the capture corpus
+    // (defined above WorldPackets::Auth::SuspendComms) it appears on the realm slot as well as the instance slot,
+    // as does its SMSG_SUSPEND_COMMS counterpart, which stands further down this table on
+    // CONNECTION_TYPE_REALM for the same reason. The entry cannot be a routing decision either way: both
+    // constructors REQUIRE an explicit ConnectionType, so WorldSession::SendPacket always overrides this value
+    // (the override is unconditional for anything but CONNECTION_TYPE_DEFAULT, and neither opcode is in
+    // IsInstanceOnlyOpcode, so nothing here can reject a realm-side send later). Changing it would therefore have
+    // recorded a claim about the packet that the corpus contradicts, in exchange for no behaviour at all.
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESUME_COMMS,                                                 STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESUME_TOKEN,                                                 STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESURRECT_REQUEST,                                            STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESYNC_RUNES,                                                 STATUS_NEVER,       CONNECTION_TYPE_REALM);

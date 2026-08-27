@@ -164,11 +164,17 @@ namespace WorldPackets
         };
 
         // UNVERIFIED: none of the three community messages below is proven at the wire. All three - the two 0x44
-        // requests and their 0x64 response - occur in NONE of the 25 captures: 0 raw occurrences of 0x44000D,
-        // 0x44000E and 0x64000B, and 0 of their 12.0.7 numbers 0x41000D, 0x41000E and 0x5F000B. No reference bytes
-        // exist, so no round trip was possible for any of them. The field order is the client writers and the
-        // response reader read backwards (arbiter rank 1); the only check it got is the length rule noted at each
-        // class.
+        // requests and their 0x64 response - occur 0 times over the capture corpus (the corpus is defined above
+        // WorldPackets::Auth::SuspendComms in AuthenticationPackets.h). Counted per build window, as 0x44000D,
+        // 0x44000E, 0x64000B in the 12.1 window and as 0x41000D, 0x41000E, 0x5F000B in the 12.0.7 one - note that
+        // the family shift is NOT uniform, 0x44 -> 0x41 is -3 but 0x64 -> 0x5F is -5. A single number over a
+        // corpus that mixes windows counts a DIFFERENT opcode in half of it (0x41000D and 0x41000E are
+        // CMSG_MOVE_STOP_PITCH and CMSG_MOVE_SET_RUN_MODE in 12.1 numbering), which is why the count is not
+        // quoted that way here. Per DEFINITION_OF_DONE_pro_opcode.md section 2 the absence is a statement
+        // about our recording sessions, not about these opcodes - a character in a community was never recorded.
+        // So there are no reference bytes and no round trip was possible for any of them. The field order is the
+        // client writers and the response reader read backwards (arbiter rank 1); the only check it got is the
+        // length rule noted at each class.
         //
         // The client's community/club member windows identify a member by the pair
         // JamBNetAccountAndCommunityID { ObjectGuid bnetAccount; uint64 communityID; }. The type name is proven,
