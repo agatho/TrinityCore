@@ -473,6 +473,11 @@ class TC_GAME_API LFGMgr
         /// FinishReadyCheck throws the REMAINING members out of every queue in bgQueueIDs - although all of
         /// them agreed. Called from LFGGroupScript::OnRemoveMember.
         void RemoveReadyCheckMember(ObjectGuid gguid, ObjectGuid guid);
+        /// Follows a group leader change into a running readiness check. Only SMSG_LFG_READY_CHECK_UPDATE
+        /// carries the member order and the client expects the leader in slot 0, so the check has to be told
+        /// about a promotion - it cannot re-read it from the group. Called from
+        /// LFGGroupScript::OnChangeLeader.
+        void SetReadyCheckLeader(ObjectGuid gguid, ObjectGuid leaderGuid);
         /// True while a readiness check is running for that group
         bool HasReadyCheck(ObjectGuid gguid) const;
 

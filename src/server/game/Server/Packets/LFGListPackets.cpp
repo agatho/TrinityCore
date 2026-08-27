@@ -35,7 +35,7 @@ namespace
 
 // The embedded DungeonScoreSummary. MythicPlusPacketsCommon already provides operator<< for both this and
 // its element type and both are byte-identical to the client's reader 0x6EC830 / writer 0x6EC980
-// ({u32,u32,u32 count} then count x {i32, float, i32, i32, u8, one bit + flush}); only the read direction
+// ({float, float, u32 count} then count x {i32, float, i32, i32, u8, one bit + flush}); only the read direction
 // is missing there, so it lives here.
 static ByteBuffer& operator>>(ByteBuffer& data, MythicPlus::DungeonScoreMapSummary& run)
 {

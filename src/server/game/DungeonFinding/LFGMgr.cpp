@@ -1293,13 +1293,14 @@ void LFGMgr::AbortReadyCheck(ObjectGuid gguid)
      - still someone pending      -> keep running, and refresh the dialog so the leaver disappears from it
    A member that had already DECLINED cannot be reached here: that answer ends the check on the spot.
 
-   One detail stays imprecise on purpose, because the tree does not allow better: if the departing player is
-   the check's LEADER, readyCheck.leader goes stale and the next SMSG_LFG_READY_CHECK_UPDATE has no member in
-   slot 0 (SendLfgReadyCheckUpdate looks the leader up in `answers` and skips the slot when it is gone).
-   Re-reading the group's leader here would not help - Group::RemoveMember fires this hook at its very top
-   (Group.cpp:551), long before it promotes the new leader (Group.cpp:626), so GetLeaderGUID() still returns
-   the player that is leaving. Fixing it properly needs a leader hook, which is outside this unit. The check
-   itself stays correct either way; only the positional leader slot of the refresh message is affected.
+   What this function deliberately does NOT do is fix up readyCheck.leader when the departing player was the
+   leader. Re-reading the group's leader here would be wrong, not merely useless: Group::RemoveMember fires
+   this hook at its very top (Group.cpp:551), long before it promotes the new leader (Group.cpp:626), so
+   GetLeaderGUID() still returns the player that is leaving. The promotion is picked up one step later, by
+   SetReadyCheckLeader from LFGGroupScript::OnChangeLeader - Group::RemoveMember reaches the new leader
+   through Group::ChangeLeader (Group.cpp:626), which fires OnGroupChangeLeader (Group.cpp:676) before it
+   touches anything else. So the update this function sends can still be missing slot 0, and the one
+   SetReadyCheckLeader sends right afterwards has it again.
 
    @param[in]     gguid Group guid the check belongs to
    @param[in]     guid Player that left the group
@@ -1328,6 +1329,56 @@ void LFGMgr::RemoveReadyCheckMember(ObjectGuid gguid, ObjectGuid guid)
         FinishReadyCheck(itReadyCheck, LFG_READYCHECK_FINISHED);
         return;
     }
+
+    SendReadyCheckUpdate(readyCheck);
+}
+
+/**
+   The group got a new leader while the check was running - carry that into the check and refresh the dialog.
+
+   readyCheck.leader is filled once by StartReadyCheck and decides ONE thing: which member
+   SendLfgReadyCheckUpdate puts into slot 0 of the member list, because the client reads that list
+   positionally and expects the leader first (LFGHandler.cpp, SendLfgReadyCheckUpdate; the same requirement
+   is spelled out in the tree for the sister message, LFGHandler.cpp:515-517 "Leader info MUST be sent 1st").
+   Nothing else in the check consults the field, so a promotion cannot break the state machine - it can only
+   make every following update name the wrong player as leader.
+
+   Both ways into a promotion end up here, and the second is the more common one:
+     - the leader LEFT       -> Group::RemoveMember erases the member slot and then picks a new leader via
+                                Group::ChangeLeader (Group.cpp:626). RemoveReadyCheckMember has already run
+                                at that point (OnGroupRemoveMember, Group.cpp:551) and its update went out
+                                without slot 0; this one puts it back.
+     - a plain LEADER CHANGE -> no member leaves, nobody is erased from `answers`, and without this hook the
+                                OLD leader would stay in the field and keep occupying slot 0 for the rest of
+                                the check. Four paths in the tree reach it: CMSG_SET_PARTY_LEADER
+                                (GroupHandler.cpp:306), the offline-leader timer (Group::Update ->
+                                Group::SelectNewPartyOrRaidLeader, Group.cpp:97/136), the `.group leader`
+                                command (cs_group.cpp:267) and the battleground leader pick
+                                (Battleground.cpp:1112).
+   Group::ChangeLeader fires OnGroupChangeLeader (Group.cpp:676) before it updates m_leaderGuid, so the hook
+   passes the new guid explicitly and GetLeaderGUID() must NOT be used to obtain it.
+
+   The refresh is skipped when the new leader does not take part in the check (nothing in the tree adds a
+   member to a running check, but a caller could): SendLfgReadyCheckUpdate leaves slot 0 out for an unknown
+   leader, so the message would be byte-identical to the previous one.
+
+   @param[in]     gguid Group guid the check belongs to
+   @param[in]     leaderGuid The new leader, as handed over by the hook
+*/
+void LFGMgr::SetReadyCheckLeader(ObjectGuid gguid, ObjectGuid leaderGuid)
+{
+    LfgReadyCheckContainer::iterator itReadyCheck = ReadyChecksStore.find(gguid);
+    if (itReadyCheck == ReadyChecksStore.end())
+        return;
+
+    LfgReadyCheck& readyCheck = itReadyCheck->second;
+    if (readyCheck.leader == leaderGuid)
+        return;
+
+    readyCheck.leader = leaderGuid;
+
+    if (readyCheck.answers.find(leaderGuid) == readyCheck.answers.end())
+        return;
 
     SendReadyCheckUpdate(readyCheck);
 }

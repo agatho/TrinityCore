@@ -232,6 +232,14 @@ void LFGGroupScript::OnDisband(Group* group)
 
 void LFGGroupScript::OnChangeLeader(Group* group, ObjectGuid newLeaderGuid, ObjectGuid oldLeaderGuid)
 {
+    // Ahead of the option gate, for the same reason as in OnDisband and OnRemoveMember: a readiness check
+    // does not depend on the dungeon-finder options. The check stores its own leader and that guid decides
+    // who lands in slot 0 of SMSG_LFG_READY_CHECK_UPDATE, which the client reads positionally - so a
+    // promotion has to be carried into it, or every following update names the wrong player as leader.
+    // newLeaderGuid, not group->GetLeaderGUID(): Group::ChangeLeader fires this hook before it updates
+    // m_leaderGuid (Group.cpp:676). SetReadyCheckLeader is a no-op when no check is running.
+    sLFGMgr->SetReadyCheckLeader(group->GetGUID(), newLeaderGuid);
+
     if (!sLFGMgr->isOptionEnabled(LFG_OPTION_ENABLE_DUNGEON_FINDER | LFG_OPTION_ENABLE_RAID_BROWSER))
         return;
 
