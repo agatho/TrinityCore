@@ -105,12 +105,15 @@ namespace
         FillApplicationTicket(packet.Ticket, app);
         FillListingTicket(packet.ListingTicket, listing);
         packet.StateBits = ApplicationStateToBits(app.State);
-        // Sniff: UnkResult 8 while pending, 60 on invite (possibly the invite-response window in seconds);
-        // the granted role echoes the applied role only once invited.
+        // Sniff: UnkResult 8 while pending, 60 on invite (possibly the invite-response window in seconds).
+        // RoleGranted is the role the LEADER assigned in CMSG_LFG_LIST_INVITE_APPLICANT.Invitees[], not the
+        // one the applicant asked for - that is why the invite message carries a per-invitee RoleMask at all
+        // (client writer RVA 0x6A4A30). Falls back to the applied mask when the invite named no role for this
+        // applicant, which is what an invite that simply accepts the application means.
         if (app.State == LFGList::ApplicationState::Invited || app.State == LFGList::ApplicationState::Accepted)
         {
             packet.UnkResult = 60;
-            packet.RoleGranted = app.RoleMask;
+            packet.RoleGranted = app.GrantedRoleMask ? app.GrantedRoleMask : app.RoleMask;
         }
         else
             packet.UnkResult = 8;
@@ -133,11 +136,13 @@ void WorldSession::SendLFGListUpdateStatus(uint32 listingId, uint8 status /*= 0x
     }
     else
     {
-        packet.Ticket.Id = listingId;
-        packet.Ticket.RequesterGuid = _player ? _player->GetGUID() : ObjectGuid::Empty;
-        packet.Listed = false;
-        if (_player)
-            packet.LeaderGuid = _player->GetGUID();
+        // A gone listing CANNOT be announced from here, and pretending otherwise was a live defect. The ticket
+        // that keys the client's stored active entry is only reconstructible from the listing itself
+        // (FillListingTicket: party guid, listing id, type 4, post time); assembled from the session's own
+        // player guid it matched nothing, and the consumer (RVA 0x24DE410) dropped the delist in silence,
+        // leaving the entry standing in the leader's group finder. Delisting is LFGListMgr::DelistAndNotify's
+        // job, which sends BEFORE it erases. Nothing left to say here.
+        return;
     }
     SendPacket(packet.Write());
 }
@@ -274,16 +279,12 @@ void WorldSession::HandleLFGListLeave(WorldPackets::LFGList::LFGListLeave& packe
     if (!player)
         return;
 
-    uint32 const listingId = packet.Ticket.Id;
-    sLFGListMgr.RemoveListing(listingId, player->GetGUID());
-
-    // Confirm delisting to the client (sniff: status 0x08, expiration 0, zeroed descriptor).
-    WorldPackets::LFGList::LFGListUpdateStatus status;
-    status.Ticket = packet.Ticket;
-    status.Status = 0x08;
-    status.Listed = false;
-    status.LeaderGuid = player->GetGUID();   // the 69273 delist payload carries it too
-    SendPacket(status.Write());
+    // Confirm delisting to the client (sniff: status 0x08, expiration 0, zeroed descriptor). Status 0x08 is
+    // the no-popup arm of the consumer's switch and that is correct here: the player pressed the button, they
+    // do not need to be told why. Through DelistAndNotify like every other delist - echoing the client's own
+    // packet.Ticket happened to satisfy the field-by-field comparison, but it also answered requests for
+    // listings the player does not own, and it was a fourth place where this ticket got assembled.
+    sLFGListMgr.DelistAndNotify(packet.Ticket.Id, player->GetGUID(), 0x08);
 }
 
 void WorldSession::HandleLFGListGetStatus(WorldPackets::LFGList::LFGListGetStatus& /*packet*/)
@@ -439,6 +440,19 @@ void WorldSession::HandleLFGListInviteApplicant(WorldPackets::LFGList::LFGListIn
     if (sLFGListMgr.GetListingByApplication(applicationId) != listing)
         return;
 
+    // Invitees[] is the leader's role assignment, and it is the reason this message carries a list at all:
+    // { PackedGuid, u8 RoleMask } per entry (client writer RVA 0x6A4A30). The entry naming the applicant
+    // decides SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE.RoleGranted; without it RoleGranted could only ever
+    // repeat the role the applicant applied for and the leader's choice would never leave the client.
+    // A list can name more than one guid because an applicant may apply as a group - only the entries that
+    // match a live application of THIS listing are honoured, the rest are ignored rather than trusted.
+    for (WorldPackets::LFGList::LFGListInvitee const& invitee : packet.Invitees)
+    {
+        for (LFGList::Application const& candidate : listing->Applications)
+            if (candidate.ApplicantGuid == invitee.Guid)
+                sLFGListMgr.SetApplicationGrantedRole(candidate.Id, invitee.RoleMask);
+    }
+
     sLFGListMgr.SetApplicationState(applicationId, LFGList::ApplicationState::Invited);
     SendApplicationStatus(*listing, *app);
     SendApplicantList(*listing);
@@ -503,16 +517,14 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
     sLFGListMgr.RemoveApplication(applicationId);
     SendApplicantList(*listing);
 
-    // Retail auto-delists when the group reaches the activity's player cap.
+    // Retail auto-delists when the group reaches the activity's player cap. Through DelistAndNotify, which
+    // builds the ticket from the still-live listing - the previous order (remove, then announce) produced a
+    // ticket from the leader's own player guid with Type 0 and Time 0, which the client discarded.
+    // Status 0x2C, not 0x08: the consumer's switch (RVA 0x24DE410) maps 0x2C to the Lua event
+    // LFG_LIST_ENTRY_EXPIRED_TOO_MANY_PLAYERS (hash 0xFF802F6F0E65A26D), which is exactly this reason.
+    // 0x08 falls into the default arm and raises no popup, so the leader was never told why the entry went.
     if (group->IsFull())
-    {
-        uint32 const listingId = listing->Id;
-        ObjectGuid const leaderGuid = listing->LeaderGuid;
-        sLFGListMgr.RemoveListing(listingId, leaderGuid);
-        if (Player* leaderPlayer = ObjectAccessor::FindConnectedPlayer(leaderGuid))
-            if (WorldSession* leaderSession = leaderPlayer->GetSession())
-                leaderSession->SendLFGListUpdateStatus(listingId, 0x08);
-    }
+        sLFGListMgr.DelistAndNotify(listing->Id, listing->LeaderGuid, 0x2C);
 }
 
 namespace

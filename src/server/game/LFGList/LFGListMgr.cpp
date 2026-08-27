@@ -27,6 +27,7 @@
 #include "Group.h"
 #include "GroupMgr.h"
 #include <cctype>
+#include <utility>
 
 namespace
 {
@@ -66,14 +67,11 @@ void LFGListMgr::Update(uint32 diff)
                     if (Player* applicant = ObjectAccessor::FindConnectedPlayer(appItr->ApplicantGuid))
                     {
                         WorldPackets::LFGList::LFGListApplicationStatusUpdate statusUpdate;
-                        statusUpdate.Ticket.RequesterGuid = appItr->ApplicantGuid;
-                        statusUpdate.Ticket.Id = appItr->Id;
-                        statusUpdate.Ticket.Type = WorldPackets::LFG::RideType::LfgListApplication;
-                        statusUpdate.Ticket.Time = int32(appItr->AppliedTime);
-                        statusUpdate.ListingTicket.RequesterGuid = listing.LeaderGuid;
-                        statusUpdate.ListingTicket.Id = listing.Id;
-                        statusUpdate.ListingTicket.Type = WorldPackets::LFG::RideType::LfgListListing;
-                        statusUpdate.ListingTicket.Time = int32(listing.CreatedTime);
+                        // Both tickets through the shared builders. Hand-building them here put the LEADER
+                        // guid into the listing ticket where every other path sends the PARTY guid, so the
+                        // two disagreed on the same listing - the same defect class as the delist paths.
+                        FillApplicationTicket(statusUpdate.Ticket, *appItr);
+                        FillListingTicket(statusUpdate.ListingTicket, listing);
                         statusUpdate.UnkResult = 8;
                         statusUpdate.StateBits = WorldPackets::LFGList::ApplicationStateBits::Declined;
                         applicant->SendDirectMessage(statusUpdate.Write());
@@ -100,52 +98,47 @@ void LFGListMgr::Update(uint32 diff)
         }
     }
 
-    for (auto itr = _listings.begin(); itr != _listings.end(); )
-    {
-        LFGList::Listing const& listing = itr->second;
+    // Collected first, delisted after: DelistAndNotify sends from the live listing and then erases it, which
+    // would invalidate an iterator held across the call. Worth the extra pass - it leaves exactly ONE producer
+    // of SMSG_LFG_LIST_UPDATE_STATUS's delist form in the tree, which is the whole point after four separate
+    // hand-built copies of it drifted apart.
+    std::vector<std::pair<uint32, ObjectGuid>> expired;
+    for (auto const& [listingId, listing] : _listings)
         if (listing.ExpireTime && now >= listing.ExpireTime)
+            expired.emplace_back(listingId, listing.LeaderGuid);
+
+    for (auto const& [listingId, leaderGuid] : expired)
+    {
+        // Tell the leader (if online) the listing expired, then delist it.
+        //
+        // What actually reaches the player is the STATUS byte of the second message, not the Reason byte
+        // of the first. Consumer of SMSG_LFG_LIST_UPDATE_STATUS @ RVA 0x24DE410: with Listed = 0, and only
+        // once the incoming ticket matches the stored active entry field for field, it clears the entry,
+        // fires LFG_LIST_ACTIVE_ENTRY_UPDATE (hash 0xF03C06AFDFAA0FB0) and then switches on Status:
+        //   0x2C -> LFG_LIST_ENTRY_EXPIRED_TOO_MANY_PLAYERS   0x3B -> LFG_LIST_ENTRY_EXPIRED_TIMEOUT
+        //   0x4B -> GameError 0x291                            anything else -> no popup at all
+        // (both event hashes verified against the 12.1 image; the two Lua events carry no payload, which
+        // is why the byte has to select between them). This sweep is the timeout, so 0x3B it is - the
+        // previous Status 0 landed in the default arm and the player was never told anything.
+        if (LFGList::Listing const* listing = GetListing(listingId))
         {
-            // Tell the leader (if online) the listing expired and is no longer listed.
-            //
-            // What actually reaches the player is the STATUS byte of the second message, not the Reason byte
-            // of the first. Consumer of SMSG_LFG_LIST_UPDATE_STATUS @ RVA 0x24DE410: with Listed = 0, and only
-            // once the incoming ticket matches the stored active entry field for field, it clears the entry,
-            // fires LFG_LIST_ACTIVE_ENTRY_UPDATE (hash 0xF03C06AFDFAA0FB0) and then switches on Status:
-            //   0x2C -> LFG_LIST_ENTRY_EXPIRED_TOO_MANY_PLAYERS   0x3B -> LFG_LIST_ENTRY_EXPIRED_TIMEOUT
-            //   0x4B -> GameError 0x291                            anything else -> no popup at all
-            // (both event hashes verified against the 12.1 image; the two Lua events carry no payload, which
-            // is why the byte has to select between them). This loop is the timeout, so 0x3B it is - the
-            // previous Status 0 landed in the default arm and the player was never told anything.
-            if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
+            if (Player* leader = ObjectAccessor::FindConnectedPlayer(leaderGuid))
             {
                 WorldPackets::LFGList::LFGListUpdateExpiration expiration;
                 // Same builder as every other listing message. Hand-building it here put the LEADER guid
                 // where the create path had sent the PARTY guid and left Time at 0, so the consumer's
                 // field-by-field comparison failed and the delist was dropped without a trace.
-                FillListingTicket(expiration.Ticket, listing);
-                expiration.ExpirationTime = listing.ExpireTime;
+                FillListingTicket(expiration.Ticket, *listing);
+                expiration.ExpirationTime = listing->ExpireTime;
                 // UNVERIFIED: the Reason enum of this message. Its own hook slot (RVA 0x55FECF0, dispatcher
                 // case 5898251) is NULL in the retail image, so no consumer could be decoded. We send the
                 // same code the STATUS switch above uses for a timeout, so the two messages cannot disagree.
                 expiration.Reason = 0x3B;
                 leader->SendDirectMessage(expiration.Write());
-
-                WorldPackets::LFGList::LFGListUpdateStatus status;
-                status.Ticket = expiration.Ticket;
-                status.ExpirationTime = listing.ExpireTime;
-                status.Status = 0x3B;               // -> LFG_LIST_ENTRY_EXPIRED_TIMEOUT
-                status.Listed = false;
-                status.LeaderGuid = listing.LeaderGuid;     // present in every captured payload, listed or not
-                leader->SendDirectMessage(status.Write());
             }
-
-            for (LFGList::Application const& app : listing.Applications)
-                _applicationIndex.erase(app.Id);
-            _listingByLeader.erase(listing.LeaderGuid);
-            itr = _listings.erase(itr);
         }
-        else
-            ++itr;
+
+        DelistAndNotify(listingId, leaderGuid, 0x3B);   // -> LFG_LIST_ENTRY_EXPIRED_TIMEOUT
     }
 }
 
@@ -210,6 +203,33 @@ void LFGListMgr::RemoveListing(uint32 listingId, ObjectGuid leader)
         _applicationIndex.erase(app.Id);
     _listingByLeader.erase(itr->second.LeaderGuid);
     _listings.erase(itr);
+}
+
+// Every server-initiated delist. Order matters and is the whole point of this function existing: the
+// message is built from the LIVE listing and only then is the listing erased. The client compares the
+// incoming ticket against its stored active entry field for field (consumer RVA 0x24DE410, six comparisons
+// against LFG-list manager +0..+24) and drops a delist whose ticket differs, without a word in any log.
+// Three separate paths used to assemble that ticket by hand; two of them got it wrong.
+void LFGListMgr::DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 status)
+{
+    LFGList::Listing const* listing = GetListing(listingId);
+    if (!listing || listing->LeaderGuid != leader)
+        return;
+
+    if (Player* leaderPlayer = ObjectAccessor::FindConnectedPlayer(leader))
+    {
+        WorldPackets::LFGList::LFGListUpdateStatus packet;
+        FillListingTicket(packet.Ticket, *listing);
+        packet.Status = status;
+        packet.Listed = false;
+        // The 69273 delist reference payload (69273_s69273_a_5A000A_1.bin) carries ExpirationTime 0 and a
+        // zeroed descriptor with Listed = 0 - a delisted entry has no expiry left to report.
+        packet.ExpirationTime = 0;
+        packet.LeaderGuid = listing->LeaderGuid;     // present in every captured payload, listed or not
+        leaderPlayer->SendDirectMessage(packet.Write());
+    }
+
+    RemoveListing(listingId, leader);
 }
 
 void LFGListMgr::RemoveListingsBy(ObjectGuid leader)
@@ -302,6 +322,26 @@ LFGList::Application* LFGListMgr::GetApplication(uint32 applicationId)
         if (app.Id == applicationId)
             return &app;
     return nullptr;
+}
+
+// The role the leader granted in CMSG_LFG_LIST_INVITE_APPLICANT.Invitees[]. Kept apart from the applied
+// RoleMask because SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE.RoleGranted is a distinct field: echoing the
+// applied mask back would make the two structurally indistinguishable and the leader's assignment lost.
+bool LFGListMgr::SetApplicationGrantedRole(uint32 applicationId, uint8 roleMask)
+{
+    LFGList::Listing* listing = GetListingByApplication(applicationId);
+    if (!listing)
+        return false;
+
+    for (LFGList::Application& app : listing->Applications)
+    {
+        if (app.Id != applicationId)
+            continue;
+
+        app.GrantedRoleMask = roleMask;
+        return true;
+    }
+    return false;
 }
 
 bool LFGListMgr::SetApplicationState(uint32 applicationId, LFGList::ApplicationState state)

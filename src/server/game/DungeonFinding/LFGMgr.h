@@ -470,6 +470,9 @@ class TC_GAME_API LFGMgr
         void AbortReadyCheck(ObjectGuid gguid);
         /// True while a readiness check is running for that group
         bool HasReadyCheck(ObjectGuid gguid) const;
+
+        /// Announces to everyone in an LFG instance that it is being shut down in `secondsRemaining`.
+        void SendInstanceShutdownCountdown(Map const* map, uint32 secondsRemaining) const;
         /// Sets player lfg roles
         void SetRoles(ObjectGuid guid, uint8 roles);
         /// Join Lfg with selected roles, dungeons and comment
@@ -523,6 +526,7 @@ class TC_GAME_API LFGMgr
         void SendReadyCheckUpdate(LfgReadyCheck const& readyCheck) const;
         void SendReadyCheckResult(LfgReadyCheck const& readyCheck, ObjectGuid guid, bool isReady) const;
         void FinishReadyCheck(LfgReadyCheckContainer::iterator itReadyCheck, LfgReadyCheckState state);
+        void LeaveReadyCheckQueues(LfgReadyCheck const& readyCheck);
 
         // Proposals
         void RemoveProposal(LfgProposalContainer::iterator itProposal, LfgUpdateType type);

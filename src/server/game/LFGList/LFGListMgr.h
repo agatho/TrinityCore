@@ -46,7 +46,12 @@ namespace LFGList
     {
         uint32 Id = 0;
         ObjectGuid ApplicantGuid;           // the applying player (or group leader)
-        uint8 RoleMask = 0;
+        uint8 RoleMask = 0;                 // the role the applicant asked for
+        // The role the LEADER assigned when inviting. CMSG_LFG_LIST_INVITE_APPLICANT carries an Invitees[]
+        // list of { PackedGuid, u8 RoleMask } (client writer RVA 0x6A4A30) precisely so the leader can grant
+        // a role other than the one applied for - a healer applicant slotted as damage, say. Zero until an
+        // invite names it; SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE.RoleGranted then carries this, not RoleMask.
+        uint8 GrantedRoleMask = 0;
         uint32 SpecID = 0;
         uint32 ItemLevel = 0;
         std::string Comment;
@@ -94,6 +99,14 @@ public:
     bool UpdateListing(uint32 listingId, ObjectGuid leader, WorldPackets::LFGList::ListingDescriptor const& descriptor);
     void RemoveListing(uint32 listingId, ObjectGuid leader);
     void RemoveListingsBy(ObjectGuid leader); // logout cleanup
+    // Delist AND tell the leader, in that order, from one place. The notification has to be built while the
+    // listing still exists: the client only accepts a delist whose ticket matches its stored active entry
+    // field for field (see FillListingTicket below), and a ticket cannot be reconstructed once the listing is
+    // gone. Every server-initiated delist goes through here; a hand-built "not listed" message is silently
+    // dropped by the client and leaves the entry standing in the leader's group finder.
+    // `status` selects the client's popup (consumer RVA 0x24DE410): 0x2C too many players, 0x3B timeout,
+    // 0x4B GameError 0x291, anything else no popup at all.
+    void DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 status);
 
     LFGList::Listing* GetListing(uint32 listingId);
     LFGList::Listing const* GetListing(uint32 listingId) const;
@@ -143,6 +156,8 @@ public:
     LFGList::Listing* GetListingByApplication(uint32 applicationId);
     LFGList::Application* GetApplication(uint32 applicationId);
     bool SetApplicationState(uint32 applicationId, LFGList::ApplicationState state);
+    // Records the role the leader granted in CMSG_LFG_LIST_INVITE_APPLICANT.Invitees[].
+    bool SetApplicationGrantedRole(uint32 applicationId, uint8 roleMask);
     void RemoveApplication(uint32 applicationId);
     // Drops every application this player has outstanding (logout cleanup).
     void RemoveApplicationsBy(ObjectGuid applicant);

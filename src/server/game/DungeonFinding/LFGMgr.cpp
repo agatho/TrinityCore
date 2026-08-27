@@ -23,6 +23,9 @@
 #include "GameTime.h"
 #include "Group.h"
 #include "GroupMgr.h"
+#include "BattlegroundMgr.h"
+#include "BattlegroundPackets.h"
+#include "BattlegroundQueue.h"
 #include "InstanceLockMgr.h"
 #include "LFGGroupData.h"
 #include "LFGPlayerData.h"
@@ -1248,11 +1251,55 @@ void LFGMgr::SendReadyCheckResult(LfgReadyCheck const& readyCheck, ObjectGuid gu
 
 /// Pushes the terminal state out and drops the check. Erasing without sending would leave
 /// LFGReadyCheckPopup open on every client - only an update ever closes that dialog.
+/// A check that did NOT end in LFG_READYCHECK_FINISHED also has to undo what it was guarding: the group
+/// leaves the queues named in bgQueueIDs. Without that the check would be a dialog with no consequence -
+/// members could decline and the group would sit in the queue anyway.
 void LFGMgr::FinishReadyCheck(LfgReadyCheckContainer::iterator itReadyCheck, LfgReadyCheckState state)
 {
     itReadyCheck->second.state = state;
     SendReadyCheckUpdate(itReadyCheck->second);
+
+    if (state != LFG_READYCHECK_FINISHED)
+        LeaveReadyCheckQueues(itReadyCheck->second);
+
     ReadyChecksStore.erase(itReadyCheck);
+}
+
+/**
+   Drops every member of a failed readiness check out of the battleground queues the check was about.
+
+   The consequence is not invented: Blizzard_PVPMatch/PVPMatchResults.lua:227-229 re-enables the requeue
+   button on LFG_READY_CHECK_DECLINED, i.e. after a refusal the group is NOT in the queue and may try
+   again. The sequence used here is the one CMSG_BATTLEFIELD_PORT already uses to leave a queue
+   (BattleGroundHandler.cpp): SMSG_BATTLEFIELD_STATUS_NONE, then Player::RemoveBattlegroundQueueId, then
+   BattlegroundQueue::RemovePlayer - in that order, because moving the first removal into the queue causes
+   known bugs (comment at the original site).
+
+   UNVERIFIED: that retail resolves a refusal by dropping the queue entry rather than by never creating it.
+   Both end with "the group is not queued"; which of the two retail does is not visible from the client.
+*/
+void LFGMgr::LeaveReadyCheckQueues(LfgReadyCheck const& readyCheck)
+{
+    for (uint64 packedQueueId : readyCheck.bgQueueIDs)
+    {
+        BattlegroundQueueTypeId const bgQueueTypeId = BattlegroundQueueTypeId::FromPacked(packedQueueId);
+        BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
+
+        for (LfgAnswerContainer::value_type const& answer : readyCheck.answers)
+        {
+            Player* player = ObjectAccessor::FindConnectedPlayer(answer.first);
+            if (!player || !player->InBattlegroundQueueForBattlegroundQueueType(bgQueueTypeId))
+                continue;
+
+            WorldPackets::Battleground::BattlefieldStatusNone battlefieldStatus;
+            BattlegroundMgr::BuildBattlegroundStatusNone(&battlefieldStatus, player,
+                player->GetBattlegroundQueueIndex(bgQueueTypeId), player->GetBattlegroundQueueJoinTime(bgQueueTypeId));
+            player->SendDirectMessage(battlefieldStatus.Write());
+
+            player->RemoveBattlegroundQueueId(bgQueueTypeId);
+            bgQueue.RemovePlayer(player->GetGUID(), true);
+        }
+    }
 }
 
 /**
@@ -2448,6 +2495,51 @@ bool LFGMgr::HasIgnore(ObjectGuid guid1, ObjectGuid guid2)
     return plr1 && plr2
         && (plr1->GetSocial()->HasIgnore(guid2, plr2->GetSession()->GetAccountGUID())
             || plr2->GetSocial()->HasIgnore(guid1, plr1->GetSession()->GetAccountGUID()));
+}
+
+/**
+   SMSG_LFG_LIST_INSTANCE_SHUTDOWN_COUNTDOWN (0x5A0009) to every player in an LFG instance that is winding
+   down while they are still inside it.
+
+   The consumer (RVA 0x24C18C0) formats TimeLeft with INT_GENERAL_DURATION into the GlobalString
+   INSTANCE_SHUTDOWN_MESSAGE and prints it to the system chat - no Lua event, no CVar, no UI state. So the
+   whole effect is a chat line, and the unit of TimeLeft is seconds, proven by the duration formatting.
+
+   The message carries the player's own LFG ride ticket. Only somebody who queued through the dungeon
+   finder has one, which is also the filter: a player who walked into the same instance without queueing
+   gets no ticket and therefore no message. That is not a shortcut, it is what the field means - the ticket
+   names the queue entry the player rode in on.
+
+   Caller: InstanceMap::Reset(InstanceResetMethod::Expire) on the HavePlayers() branch (Map.cpp). That is
+   the only shutdown TrinityCore reaches with players present; every path that arms m_unloadTimer is an
+   empty-map path (verified: InstanceMap::RemovePlayerFromMap arms it only for the last player leaving,
+   InstanceMap::Reset's else branch and BattlegroundMap::SetUnload likewise).
+
+   @param[in]     map Instance being shut down
+   @param[in]     secondsRemaining Time left, in seconds
+*/
+void LFGMgr::SendInstanceShutdownCountdown(Map const* map, uint32 secondsRemaining) const
+{
+    if (!map)
+        return;
+
+    for (MapReference const& ref : map->GetPlayers())
+    {
+        Player* player = ref.GetSource();
+        if (!player || !player->GetSession())
+            continue;
+
+        // The group's ticket if it queued as a group, otherwise the player's own.
+        WorldPackets::LFG::RideTicket const* ticket = nullptr;
+        if (Group const* group = player->GetGroup())
+            ticket = GetTicket(group->GetGUID());
+        if (!ticket)
+            ticket = GetTicket(player->GetGUID());
+        if (!ticket)
+            continue;
+
+        player->GetSession()->SendLfgInstanceShutdownCountdown(*ticket, secondsRemaining);
+    }
 }
 
 void LFGMgr::SendLfgRoleChosen(ObjectGuid guid, ObjectGuid pguid, uint8 roles)
