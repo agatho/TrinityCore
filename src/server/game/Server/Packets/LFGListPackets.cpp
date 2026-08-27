@@ -508,9 +508,13 @@ WorldPacket const* LFGListSearchResultsUpdate::Write()
 
         // 21 bits across three bytes (+3 padding): 7 presence flags for the seven trailing optionals,
         // 12 plain bools, and a presence/value pair for one in-band bool - the per-bit map is in the header.
-        // All zero -> no optionals follow. UNVERIFIED: what the 12 bools mean.
+        // Every presence flag stays 0, so no optionals follow. Bit 4 is the one bool with a decoded meaning
+        // and a producer: it is the sticky half of the client's isDelisted (applier RVA 0x24DCDD0 ->
+        // stored +2196, read by the Lua filler RVA 0x24E95D0 as `+2196 || +2197`), and it is what makes a
+        // delisted row grey out in a browser that is still open. The remaining ten bools are documented as
+        // UNVERIFIED in the header and go out as zero.
         for (uint32 i = 0; i < 21; ++i)
-            _worldPacket << Bits<1>(false);
+            _worldPacket << Bits<1>(i == 4 && row.Delisted);
         _worldPacket.FlushBits();
     }
 
@@ -543,7 +547,7 @@ WorldPacket const* LFGListApplicantListUpdate::Write()
         // 12.1: the 13-bit block sits behind the member array. Written out bit by bit rather than as two
         // hand-packed bytes so it stays correct if the member list is ever filled.
         _worldPacket.WriteBits(applicant.StateBits >> 4, 4);
-        _worldPacket << Bits<1>(applicant.Flag);
+        _worldPacket << Bits<1>(applicant.CommentUpdated);
         _worldPacket << SizedString::BitsSize<8>(applicant.Comment);
         _worldPacket.FlushBits();
         _worldPacket << SizedString::Data(applicant.Comment);

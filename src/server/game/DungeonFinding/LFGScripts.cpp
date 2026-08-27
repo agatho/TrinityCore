@@ -22,6 +22,7 @@
 #include "LFGScripts.h"
 #include "Common.h"
 #include "Group.h"
+#include "LFGListMgr.h"
 #include "LFGMgr.h"
 #include "Log.h"
 #include "Map.h"
@@ -120,6 +121,15 @@ LFGGroupScript::LFGGroupScript() : GroupScript("LFGGroupScript") { }
 
 void LFGGroupScript::OnAddMember(Group* group, ObjectGuid guid)
 {
+    // Ahead of the option gate, same reasoning as in the three hooks below: the premade group finder is not
+    // the dungeon finder. A search-result row lists the members of the LIVE group
+    // (LFGListMgr::FillSearchRow), so every open browser showing this listing is now one member out of date
+    // - and it stays that way, because the push used to happen only when the LEADER edited the listing.
+    // This hook rather than the group-finder handler alone: a listed party also grows through an ordinary
+    // party invite and through an LFG proposal, and the row is just as wrong then. Group::AddMember fires it
+    // after the member slot is in place (Group.cpp:494-495), so the roster this reads is the new one.
+    sLFGListMgr.NotifyGroupMemberJoined(group->GetGUID());
+
     if (!sLFGMgr->isOptionEnabled(LFG_OPTION_ENABLE_DUNGEON_FINDER | LFG_OPTION_ENABLE_RAID_BROWSER))
         return;
 
@@ -157,6 +167,13 @@ void LFGGroupScript::OnRemoveMember(Group* group, ObjectGuid guid, RemoveMethod 
     // OnDisband this does not abort the check: the group is still there and the rest of it can still be
     // ready. RemoveReadyCheckMember is a no-op when no check is running or the player is not in one.
     sLFGMgr->RemoveReadyCheckMember(group->GetGUID(), guid);
+
+    // Ahead of the option gate for a second, independent reason: the premade group finder is NOT the
+    // dungeon finder. It has its own manager, its own opcode family and no option of its own, and a realm
+    // that has turned the dungeon finder off still lets players publish and join listings. Gating this on
+    // LFG_OPTION_ENABLE_DUNGEON_FINDER would leave the listing system without its only member-departure
+    // signal on exactly those realms.
+    sLFGListMgr.NotifyGroupMemberLeft(group->GetGUID(), guid);
 
     if (!sLFGMgr->isOptionEnabled(LFG_OPTION_ENABLE_DUNGEON_FINDER | LFG_OPTION_ENABLE_RAID_BROWSER))
         return;
@@ -221,6 +238,13 @@ void LFGGroupScript::OnDisband(Group* group)
     // calls it again, which covers any other caller of that function.
     sLFGMgr->AbortReadyCheck(group->GetGUID());
 
+    // Ahead of the option gate, same reasoning as in OnRemoveMember. A listing whose party has been
+    // disbanded went on being advertised and applied to for the rest of its 30-minute expiry window,
+    // because the leader stays logged in and the logout path was the only thing that could have caught it.
+    // Group::Disband fires this hook as its FIRST statement (Group.cpp:710), so the member slots are still
+    // populated here - which is what the delist needs, since it addresses everyone holding an active entry.
+    sLFGListMgr.RemoveListingsByGroup(group->GetGUID());
+
     if (!sLFGMgr->isOptionEnabled(LFG_OPTION_ENABLE_DUNGEON_FINDER | LFG_OPTION_ENABLE_RAID_BROWSER))
         return;
 
@@ -239,6 +263,11 @@ void LFGGroupScript::OnChangeLeader(Group* group, ObjectGuid newLeaderGuid, Obje
     // newLeaderGuid, not group->GetLeaderGUID(): Group::ChangeLeader fires this hook before it updates
     // m_leaderGuid (Group.cpp:676). SetReadyCheckLeader is a no-op when no check is running.
     sLFGMgr->SetReadyCheckLeader(group->GetGUID(), newLeaderGuid);
+
+    // Ahead of the option gate, same reasoning as in OnRemoveMember. newLeaderGuid rather than
+    // group->GetLeaderGUID() for the same reason as the line above: Group::ChangeLeader fires this hook
+    // before it updates m_leaderGuid (Group.cpp:676).
+    sLFGListMgr.TransferListingLeadership(group->GetGUID(), newLeaderGuid);
 
     if (!sLFGMgr->isOptionEnabled(LFG_OPTION_ENABLE_DUNGEON_FINDER | LFG_OPTION_ENABLE_RAID_BROWSER))
         return;

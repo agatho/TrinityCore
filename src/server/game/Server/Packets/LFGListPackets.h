@@ -488,6 +488,30 @@ namespace WorldPackets
         // client filled its ticket from the Status/Result bytes, ran off the end of the packet and zeroed
         // every field. A rejected listing creation then showed no error, or the wrong one.
         // The trailing u8 is genuinely new in 12.1 (68275 read Ticket, u32, u8).
+        //
+        // THE CONSUMER IS DECODED. Two earlier rounds recorded this message's hook slot (RVA 0x462ED90,
+        // written as 0x55FED90 in the older notes) as NULL and concluded that no consumer could be reached.
+        // That reading came from the live pointer in the memory image, and it was wrong for the reason such
+        // a read is always wrong here: the LFG-list registrar installs the slot at runtime. The registrar
+        // @ RVA 0x24DF000 assigns `qword_7FF7855FED90 = sub_7FF7834AE370`, i.e. the consumer sits at
+        // RVA 0x24DE370, and the SAME registrar line was independently confirmed for the two slots whose
+        // consumers earlier rounds DID decode (0x462ED60 -> 0x24DEED0, the applicant list; 0x462ED68 ->
+        // 0x24DEF20, the search-results update), which is what makes the method trustworthy here.
+        //
+        // What that consumer does, in full - it is nine lines long:
+        //   if (obj+72 == 0)  return;                              // NOTHING happens. No event, no error.
+        //   fire LFG_LIST_ENTRY_CREATION_FAILED (hash 0x93C4BB937EE1C647, payloadless);
+        //   if (obj+72 == 65) GameError(0x411); else if (obj+72 == 81) GameError(0x4DA);
+        //   else GameError(lookup(obj+72, table @ RVA 0x44DD860 .. 0x44DD918));
+        // obj+72 is the u32: the dispatcher case writes the three scalars to obj+72 (u32), obj+76 (u8) and
+        // obj+77 (u8), and the consumer reads obj+72 and NOTHING else. So Status is the whole message as
+        // far as the client is concerned, Result and ResultDetail are decoded and dropped, and a Status of
+        // 0 is not a neutral value - it is silence, the one answer that leaves the creation dialog standing.
+        //
+        // The table it looks the code up in is the very table this file already documents for
+        // SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE's reason field: same address, same 23 pairs, same two
+        // special cases 65 and 81. See ApplicationFailureReason below - the vocabulary is shared, which is
+        // why there is an alias next to it instead of a second copy of the constants.
         class LFGListJoinResult final : public ServerPacket
         {
         public:
@@ -495,10 +519,12 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             LFG::RideTicket Ticket;
+            // The refusal code, and the only field the consumer reads. It MUST be one of
+            // ListingFailureReason's table values: 0 makes the client do nothing at all, and a non-zero
+            // value outside the table fires the failure event but leaves the error line empty.
             uint32 Status = 0;
-            uint8 Result = 0;               // UNVERIFIED: the exact enum. There is no Enum.LfgEntryResult in
-                                            // the client, and LFG_LIST_ENTRY_CREATION_FAILED has no payload.
-            uint8 ResultDetail = 0;         // UNVERIFIED: new in 12.1, no consumer evidence
+            uint8 Result = 0;               // decoded to obj+76 and never read (consumer RVA 0x24DE370)
+            uint8 ResultDetail = 0;         // decoded to obj+77 and never read; new in 12.1
         };
 
         // SMSG_LFG_LIST_UPDATE_STATUS (0x5A000A) - Client 12.1.0.69382, reader @ RVA 0x754910:
@@ -636,6 +662,12 @@ namespace WorldPackets
             ObjectGuid LeaderGuid;                // fills the five-guid block
             std::vector<SearchResultMember> Members;
             ListingDescriptor Listing;
+            // The row describes a listing that is GONE. Carried only by
+            // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE - a listing that no longer exists is simply absent from a
+            // fresh SMSG_LFG_LIST_SEARCH_RESULTS, so the full-results writer has nowhere to put it and does
+            // not try. See the bit map on LFGListSearchResultsUpdate for where it rides and how it was
+            // measured; LFGListMgr sets it on exactly one path, the delist push.
+            bool Delisted = false;
         };
 
         class LFGListSearchResults final : public ServerPacket
@@ -664,12 +696,29 @@ namespace WorldPackets
         //           when has(CondBool) is set) . 3 bits padding to the byte
         // So: 7 presence flags for the seven trailing optionals, 12 plain bools, and a pair (presence flag in
         // byte 1, value in byte 3) for one in-band bool. 7 + 12 + 1 + 1 = 21.
-        // UNVERIFIED: what any of the 12 bools MEAN. The shape above is read off the reader; the semantics
-        // are not, and every bit goes out as zero.
+        //
+        // TWO of the 12 bools are now decoded, and they are the pair this message could not do without -
+        // both of them feed LfgSearchResultData.isDelisted, the field the browser greys a row out with:
+        //   bit 4 (row +120): sets the listing's delisted flag ONE WAY. Applier @ RVA 0x24DCDD0:
+        //                     `if (row[+120]) stored[+2196] = 1;` - never cleared by any later row.
+        //   bit 5 (row +121): the same state, copied straight through - `stored[+2197] = row[+121];`
+        // and the Lua-facing filler @ RVA 0x24E95D0 reads them as one field:
+        //                     `data[+200] = stored[+2196] || stored[+2197];`
+        // with +200 identified by name from C_LFGList.GetSearchResultInfo @ RVA 0x117BF20, which pushes
+        // that byte under the key "isDelisted". Consumers of the flag: LFGList.lua:3391 and :3418 (row and
+        // activity text switch to LFG_LIST_DELISTED_FONT_COLOR), :2859 (the apply button is refused),
+        // :3372 (the row can no longer be selected) and :4552 (the tooltip gains LFG_LIST_ENTRY_DELISTED).
+        // Declared as `isDelisted, bool, Nilable = false` in LFGListInfoDocumentation.lua:983.
+        // The writer sets bit 4 from SearchResultListing::Delisted and leaves bit 5 at 0 deliberately: the
+        // sticky one is what a delist is - it must survive whatever the browser hears afterwards - and one
+        // bit is enough for a field the client ORs.
+        //
+        // UNVERIFIED: what the OTHER ten bools mean. The shape above is read off the reader; those ten
+        // semantics are not, and all ten go out as zero.
         // 12.1 drift: 68275 read Ticket, Age, MemberCount, u8, three bit bytes, descriptor, optionals,
         // members. The old writer emitted `u8 0, u32 8, 26 zero bytes` which happens to be exactly the 68275
         // shape (three bit bytes 08 00 00 plus a 27-byte zero descriptor) and is wrong for 12.1.
-        // We emit all 21 bits as zero and therefore no optionals. The 0x08 bit the 68275 writer carried is
+        // We emit the 21 bits as zero except bit 4 (see above) and therefore no optionals. The 0x08 bit the 68275 writer carried is
         // NOT reproduced: in 12.1 that bit position belongs to a different field of a re-laid-out struct, so
         // copying it forward would assert something we cannot support.
         class LFGListSearchResultsUpdate final : public ServerPacket
@@ -747,7 +796,7 @@ namespace WorldPackets
         // One applicant entry of SMSG_LFG_LIST_APPLICANT_LIST_UPDATE. Client 12.1.0.69382 reader @ RVA
         // 0x754CF0 (in-memory stride 352):
         //   RideTicket ; PackedGuid ; u32 MemberCount ; MemberCount x <member block, stride 248> ;
-        //   bits<4> StateBits ; bit ; bits<8> len(Comment) ; FlushBits ; Comment bytes
+        //   bits<4> StateBits ; bit CommentUpdated ; bits<8> len(Comment) ; FlushBits ; Comment bytes
         // 12.1 drift, currently latent: in 68275 the 13-bit block sat BEFORE the member array. We always
         // send MemberCount == 0, so the two orders coincide and the wire is identical today. It stops being
         // identical the moment anyone fills the member array - which is why the bits are now written
@@ -757,7 +806,30 @@ namespace WorldPackets
             LFG::RideTicket Ticket;             // application ticket (type 6, Id = ApplicationId)
             ObjectGuid PlayerGuid;
             uint8 StateBits = 0;                // occupies the top 4 bits of the wire; ApplicationStateBits
-            bool Flag = false;
+            // "The Comment in THIS record is the current one." The single bit behind StateBits, and it is
+            // not decoration: the consumer chain of this opcode reads it and branches on it twice.
+            //
+            // Reader @ RVA 0x754CF0 stores it at applicant record +64 (bit 3 of the state byte, i.e. the
+            // fifth bit MSB-first, exactly where this struct writes it). The consumer @ RVA 0x24DC020 then,
+            // for an applicant it ALREADY holds:
+            //   if (!incoming[+64])  copy the STORED comment over the incoming one;   // wire value dropped
+            //   stored = incoming;                                                    // assignment
+            //   if ( incoming[+64])  run the stored comment through the text filter @ RVA 0x2CB63A0;
+            // The member array has its own presence signal one field earlier and is treated the same way
+            // ("if the incoming count is 0, keep the stored members"), which is what identifies the pattern:
+            // this record is a PATCH, and this bit is the patch flag of the comment.
+            //
+            // 0 therefore does not mean "no information", it means "do not take my comment". A brand-new
+            // applicant survived it only by accident - the record constructor @ RVA 0x24DB040 copies the
+            // comment and filters it unconditionally, and it is only reached for the two states 1 (applied)
+            // and 2 (invited) - so the note arrived on the creating push and could never be corrected after.
+            //
+            // Measured, not inferred, in the 12.0.7.68275 capture (LFGLIST_SNIFF_DEEP_68275.md): retail's
+            // full applicant records carry state bytes 0x18 (state 1, bit set) and 0x28 (state 2, bit set),
+            // while the status-only echo that carries neither members nor comment carries 0xA0 (state 10,
+            // bit clear). LFGListMgr::FillApplicantInfo always writes the authoritative comment, so this is
+            // always true for us.
+            bool CommentUpdated = true;
             std::string Comment;                // the applicant's note, bits<8> length
         };
 
@@ -859,6 +931,13 @@ namespace WorldPackets
             constexpr uint8 TooManyLfg          = 0x35;  // "You are queued for too many instances."
             constexpr uint8 AlreadyUsingLfgList = 0x3F;  // "You can't do that while using Premade Groups."
         }
+
+        // The SAME closed vocabulary, under the name the listing path reads correctly in. It is an ALIAS and
+        // not a second namespace with the same constants on purpose: SMSG_LFG_LIST_JOIN_RESULT.Status is
+        // looked up in the identical table at the identical address (consumer RVA 0x24DE370, table RVA
+        // 0x44DD860 - see the note on LFGListJoinResult), and two hand-maintained copies of one measured
+        // table is the defect class this family has already paid for four times over.
+        namespace ListingFailureReason = ApplicationFailureReason;
 
         class LFGListApplicationStatusUpdate final : public ServerPacket
         {

@@ -26,6 +26,7 @@
 #include "Group.h"
 #include "GroupMgr.h"
 #include "Util.h"
+#include "WorldSession.h"      // TransferListingLeadership re-announces the entry to the new owner
 #include <cctype>
 #include <utility>
 
@@ -209,6 +210,30 @@ void LFGListMgr::RemoveListing(uint32 listingId, ObjectGuid leader)
     _listings.erase(itr);
 }
 
+// See the contract on the declaration. Every field of the delist form is decided here, once.
+void LFGListMgr::BuildDelistPacket(WorldPackets::LFGList::LFGListUpdateStatus& packet,
+    LFGList::Listing const& listing, uint8 status)
+{
+    FillListingTicket(packet.Ticket, listing);
+    packet.Status = status;
+    packet.Listed = false;
+    // The 69273 delist reference payload (69273_s69273_a_5A000A_1.bin) carries ExpirationTime 0 and a
+    // zeroed descriptor with Listed = 0 - a delisted entry has no expiry left to report.
+    packet.ExpirationTime = 0;
+    packet.LeaderGuid = listing.LeaderGuid;     // present in every captured payload, listed or not
+    // The second optional is present on the delist payload and nowhere else. Measured, not guessed:
+    // 69273_s69273_a_5A000A_1.bin (74 bytes, the delist) ends on
+    //   08 60 | 0f e0 88 10 7f 0e 44 16 08 | 00
+    // = Status 0x08, bit byte 0x60 (Listed 0, has(Guid) 1, has(u8) 1), the 9-byte PackedGuid, then the
+    // payload byte 0x00. The two listed payloads _0 and _2 (81 bytes each) carry 0xC0 instead, i.e.
+    // has(u8) 0 - which is why WorldSession::SendLFGListUpdateStatus leaves it unset. Without this line
+    // the delist went out one byte short and with 0x40 in the bit byte, so it did not match the
+    // reference capture this layout is derived from.
+    // UNVERIFIED: the meaning of the byte. Its only observed value is 0 and no consumer reads it in a
+    // way that distinguishes values (see LFGListPackets.h).
+    packet.UnkByte = 0;
+}
+
 // Every server-initiated delist. Order matters and is the whole point of this function existing: the
 // message is built from the LIVE listing and only then is the listing erased. The client compares the
 // incoming ticket against its stored active entry field for field (consumer RVA 0x24DE410, six comparisons
@@ -228,29 +253,21 @@ void LFGListMgr::DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 stat
 
     {
         WorldPackets::LFGList::LFGListUpdateStatus packet;
-        FillListingTicket(packet.Ticket, *listing);
-        packet.Status = status;
-        packet.Listed = false;
-        // The 69273 delist reference payload (69273_s69273_a_5A000A_1.bin) carries ExpirationTime 0 and a
-        // zeroed descriptor with Listed = 0 - a delisted entry has no expiry left to report.
-        packet.ExpirationTime = 0;
-        packet.LeaderGuid = listing->LeaderGuid;     // present in every captured payload, listed or not
-        // The second optional is present on the delist payload and nowhere else. Measured, not guessed:
-        // 69273_s69273_a_5A000A_1.bin (74 bytes, the delist) ends on
-        //   08 60 | 0f e0 88 10 7f 0e 44 16 08 | 00
-        // = Status 0x08, bit byte 0x60 (Listed 0, has(Guid) 1, has(u8) 1), the 9-byte PackedGuid, then the
-        // payload byte 0x00. The two listed payloads _0 and _2 (81 bytes each) carry 0xC0 instead, i.e.
-        // has(u8) 0 - which is why WorldSession::SendLFGListUpdateStatus leaves it unset. Without this line
-        // the delist went out one byte short and with 0x40 in the bit byte, so it did not match the
-        // reference capture this layout is derived from.
-        // UNVERIFIED: the meaning of the byte. Its only observed value is 0 and no consumer reads it in a
-        // way that distinguishes values (see LFGListPackets.h).
-        packet.UnkByte = 0;
+        BuildDelistPacket(packet, *listing, status);
         WorldPacket const* built = packet.Write();
         for (ObjectGuid const& addressee : addressees)
             if (Player* recipient = ObjectAccessor::FindConnectedPlayer(addressee))
                 recipient->SendDirectMessage(built);
     }
+
+    // The delist also has to reach every browser that is standing open on this listing's row, and it has to
+    // reach it HERE - the listing is about to be erased and the row cannot be built afterwards. Without this
+    // the row stayed in the browser, fully applicable, until the searcher re-searched by hand; the flag it
+    // carries is what greys the row out and locks its apply button (LFGList.lua:2859, :3372, :3391, :3418,
+    // :4552). This unit already knew the gap - the choice of "declined_delisted" over the other three
+    // refusals in HandleLFGListApplyToGroup is argued from "an open browser is not refreshed when a listing
+    // disappears" - and that argument is what this line retires.
+    PushSearchRow(*listing, true, ObjectGuid::Empty);
 
     // The addressees above are the holders of an ACTIVE ENTRY. A player whose application is still pending
     // never received a Listed payload and is not among them, yet its application dies here with the listing -
@@ -311,6 +328,113 @@ LFGList::Listing* LFGListMgr::GetListingByLeader(ObjectGuid leader)
 {
     auto itr = _listingByLeader.find(leader);
     return itr != _listingByLeader.end() ? GetListing(itr->second) : nullptr;
+}
+
+LFGList::Listing* LFGListMgr::GetListingByGroup(ObjectGuid groupGuid)
+{
+    if (groupGuid.IsEmpty())
+        return nullptr;
+
+    for (auto& [listingId, listing] : _listings)
+        if (listing.GroupGuid == groupGuid)
+            return &listing;
+
+    return nullptr;
+}
+
+// See the contract on the declaration for what retail does with the OTHER half of a leader change and why
+// that half is not this unit's opcode.
+void LFGListMgr::TransferListingLeadership(ObjectGuid groupGuid, ObjectGuid newLeader)
+{
+    LFGList::Listing* listing = GetListingByGroup(groupGuid);
+    if (!listing || listing->LeaderGuid == newLeader || newLeader.IsEmpty())
+        return;
+
+    uint32 const listingId = listing->Id;
+
+    // The promoted member may own a listing of his own - he published one while solo and was then invited
+    // into this party. _listingByLeader is keyed on the leader, so one of the two has to go, and it is the
+    // solo one: it advertises a party he is no longer alone in. Through DelistAndNotify like every other
+    // server-initiated delist, and BEFORE the pointer above is used again, because it erases from _listings.
+    if (auto itr = _listingByLeader.find(newLeader); itr != _listingByLeader.end() && itr->second != listingId)
+        RemoveListingsBy(newLeader);
+
+    listing = GetListing(listingId);
+    if (!listing)
+        return;
+
+    _listingByLeader.erase(listing->LeaderGuid);
+    listing->LeaderGuid = newLeader;
+    _listingByLeader[newLeader] = listingId;
+
+    // Listing::TicketGuid is deliberately NOT touched. It is the listing's identity on the wire and the
+    // client drops any message whose ticket differs from the one it stored (consumer RVA 0x24DE410), so
+    // re-deriving it from the new leader would silently disconnect every client that already holds the
+    // entry - the same defect the field was introduced to end. A promotion changes who OWNS the listing,
+    // not which listing it is.
+
+    // The new owner needs an active entry of his own: C_LFGList.HasActiveEntryInfo is what gates both the
+    // edit dialog and C_LFGList.RemoveListing on his client, and it is fed by a Listed payload of this very
+    // opcode. Status is the default 0x38, the steady re-announcement - it is what the two other
+    // re-announcing callers use and it sits in the no-popup arm of the consumer's switch, so it cannot
+    // claim anything about WHY the entry arrived.
+    // UNVERIFIED: that retail re-announces the entry with this status on a promotion. No capture contains a
+    // leader change of a listed party; what is established is that the new leader's client must hold the
+    // entry for the retail popup's own buttons to work at all (GameDialogDefs.lua:3286-3317).
+    if (Player* leader = ObjectAccessor::FindConnectedPlayer(newLeader))
+        leader->GetSession()->SendLFGListUpdateStatus(listingId);
+
+    // The row changed: FillSearchRow marks the leader among the members (SearchResultMember::IsLeader), so
+    // an open browser is showing the wrong player as leader until this arrives.
+    NotifyListingChanged(listingId);
+}
+
+void LFGListMgr::RemoveListingsByGroup(ObjectGuid groupGuid)
+{
+    LFGList::Listing const* listing = GetListingByGroup(groupGuid);
+    if (!listing)
+        return;
+
+    // Status 0x01, not 0x08. 0x08 is the code retail sends for a deliberate delist by the owner (68275:
+    // "own delist via LEAVE"); 0x01 is the one it sends when "the player left the listed group / the
+    // listing is no longer relevant" (LFGLIST_SNIFF_DEEP_68275.md, the observed status list of this
+    // opcode), and a disband is that for every single addressee at once. Both sit in the no-popup arm of
+    // the consumer's switch (RVA 0x24DE410 - only 0x2C, 0x3B and 0x4B raise anything), so the choice cannot
+    // mislead the client either way; it is the honest one of the two, and it gives 0x01 the producer it has
+    // been documented without since the status list was first written down.
+    DelistAndNotify(listing->Id, listing->LeaderGuid, 0x01);
+}
+
+void LFGListMgr::NotifyGroupMemberJoined(ObjectGuid groupGuid)
+{
+    if (LFGList::Listing const* listing = GetListingByGroup(groupGuid))
+        PushSearchRow(*listing, false, ObjectGuid::Empty);
+}
+
+void LFGListMgr::NotifyGroupMemberLeft(ObjectGuid groupGuid, ObjectGuid member)
+{
+    LFGList::Listing* listing = GetListingByGroup(groupGuid);
+    if (!listing)
+        return;
+
+    // The listing survives - the party is still there, one member short. What must not survive is the
+    // leaver's ACTIVE ENTRY: whoever joined through the group finder was handed this listing with
+    // Listed = true (WorldSession::HandleLFGListInviteResponse, status 0x19) and his client built an entry
+    // from it (consumer RVA 0x24DE410 creates one from any Listed payload with an unknown ticket). Nothing
+    // used to take it away again, so it stood in his group finder until relog - the exact damage
+    // DelistAndNotify and Listing::StatusRecipients exist to prevent, on the one flank neither could see.
+    // Same status and same source as the disband path above: 0x01, "left the listed group".
+    {
+        WorldPackets::LFGList::LFGListUpdateStatus packet;
+        BuildDelistPacket(packet, *listing, 0x01);
+        if (Player* player = ObjectAccessor::FindConnectedPlayer(member))
+            player->SendDirectMessage(packet.Write());
+    }
+    listing->StatusRecipients.erase(member);
+
+    // And the row every open browser holds still counts him among the members. Excluded by hand because
+    // this hook runs before Group::RemoveMember erases the slot - see FillSearchRow's declaration.
+    NotifyListingChanged(listing->Id, member);
 }
 
 LFGList::Application* LFGListMgr::AddApplication(uint32 listingId, ObjectGuid applicant, uint8 roleMask, uint32 specId, uint32 itemLevel, std::string const& comment)
@@ -694,6 +818,11 @@ void LFGListMgr::FillApplicantInfo(WorldPackets::LFGList::ApplicantInfo& info, L
     info.PlayerGuid = app.ApplicantGuid;
     info.StateBits = ApplicationStateToBits(app.State);
     info.Comment = app.Comment;
+    // Said explicitly rather than left to the default: this record carries the authoritative comment, and
+    // the bit is what tells the client to take it instead of keeping whatever it already had. See
+    // ApplicantInfo::CommentUpdated for the consumer branch that reads it - with a 0 here the applicant's
+    // note could only ever arrive on the push that CREATED the client's record and never be corrected.
+    info.CommentUpdated = true;
 }
 
 // See the contract on the declaration for why this is the only producer of the message and why the
@@ -746,7 +875,8 @@ void LFGListMgr::SendApplicationStatusBits(LFGList::Listing const& listing, LFGL
     applicant->SendDirectMessage(packet.Write());
 }
 
-void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing) const
+void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing,
+    ObjectGuid excludeMember /*= ObjectGuid::Empty*/) const
 {
     // The frozen ticket guid, not the live GroupGuid: the row header IS a RideTicket (see operator<<
     // SearchResultListing), so a browser identifies the row by it. Same freeze, same reason as
@@ -781,7 +911,8 @@ void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, 
     };
     if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
         for (Group::MemberSlot const& slot : group->GetMemberSlots())
-            addMember(slot.guid);
+            if (slot.guid != excludeMember)
+                addMember(slot.guid);
     if (row.Members.empty())
         addMember(listing.LeaderGuid);                  // solo listing: the leader is the only member
 }
@@ -952,13 +1083,16 @@ void LFGListMgr::UnregisterSearch(ObjectGuid player)
     _searchSubscriptions.erase(player);
 }
 
-void LFGListMgr::NotifyListingChanged(uint32 listingId)
+void LFGListMgr::NotifyListingChanged(uint32 listingId, ObjectGuid excludeMember /*= ObjectGuid::Empty*/)
+{
+    if (LFGList::Listing const* listing = GetListing(listingId))
+        PushSearchRow(*listing, false, excludeMember);
+}
+
+// See the contract on the declaration.
+void LFGListMgr::PushSearchRow(LFGList::Listing const& listing, bool delisted, ObjectGuid excludeMember)
 {
     if (_searchSubscriptions.empty())
-        return;
-
-    LFGList::Listing const* listing = GetListing(listingId);
-    if (!listing)
         return;
 
     // The filter test is LFGListMgr::Matches - the same call Search() makes, not a second copy of the
@@ -966,7 +1100,8 @@ void LFGListMgr::NotifyListingChanged(uint32 listingId)
     // search reply. Keeping the two in step by hand is exactly what this used to get wrong.
     WorldPackets::LFGList::LFGListSearchResultsUpdate update;
     WorldPackets::LFGList::SearchResultListing row;
-    FillSearchRow(row, *listing);
+    FillSearchRow(row, listing, excludeMember);
+    row.Delisted = delisted;
     update.Listings.push_back(std::move(row));
     WorldPacket const* packet = update.Write();
 
@@ -987,7 +1122,7 @@ void LFGListMgr::NotifyListingChanged(uint32 listingId)
             continue;
         }
 
-        if (Matches(*listing, sub.Filter))
+        if (Matches(listing, sub.Filter))
             searcher->SendDirectMessage(packet);
 
         ++itr;

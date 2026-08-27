@@ -72,14 +72,22 @@ namespace
     // (from SMSG_LFG_LIST_JOIN_RESULT, see LFGListJoinResult in LFGListPackets.h). Returning without
     // sending either one leaves the dialog standing. Duplicating the send at each call site is what let the
     // edit path fall silent while the create path answered all three of its rejections.
-    // `echo` is the ticket the client sent, where it sent one. UNVERIFIED: that echoing is what retail does -
-    // the hook slot of SMSG_LFG_LIST_JOIN_RESULT is NULL, so its consumer could not be decoded. It is the
-    // safer of the two options rather than a measurement: the one consumer of this family whose ticket
-    // handling IS decoded (SMSG_LFG_LIST_UPDATE_STATUS, RVA 0x24DE410) compares the incoming ticket against
-    // its stored active entry field for field and silently drops a mismatch, so on a rejection that names an
-    // existing listing an echo can match where a zeroed ticket cannot. Where the client sent no ticket
+    // `echo` is the ticket the client sent, where it sent one. UNVERIFIED: that echoing is what retail does.
+    // The consumer of this message is decoded (RVA 0x24DE370, reached through the registrar - see
+    // LFGListJoinResult in LFGListPackets.h) and it reads the STATUS and nothing else, so it settles the
+    // reason code but says nothing about the ticket. Echoing is the safer of the two options rather than a
+    // measurement: the one consumer of this family whose ticket handling IS decoded
+    // (SMSG_LFG_LIST_UPDATE_STATUS, RVA 0x24DE410) compares the incoming ticket against its stored active
+    // entry field for field and silently drops a mismatch, so on a rejection that names an existing listing
+    // an echo can match where a zeroed ticket cannot. Where the client sent no ticket
     // (CMSG_LFG_LIST_JOIN), FillRejectedListingTicket applies and there is nothing to echo.
-    void SendListingRejected(WorldSession* session, Player const* player, uint8 result,
+    //
+    // `reason` is the u32 Status, and it is the whole answer. It used to be a u8 in the Result field while
+    // Status went out as a hard 0, and 0 is the one value that makes the consumer return before it does
+    // anything at all - no LFG_LIST_ENTRY_CREATION_FAILED, no error line, the creation dialog left standing.
+    // Every rejection of this file therefore names a value from the client's own closed table
+    // (ListingFailureReason); a value outside it fires the event but still shows no text.
+    void SendListingRejected(WorldSession* session, Player const* player, uint32 reason,
         WorldPackets::LFG::RideTicket const* echo = nullptr)
     {
         WorldPackets::LFGList::LFGListJoinResult packet;
@@ -87,7 +95,7 @@ namespace
             packet.Ticket = *echo;
         else
             FillRejectedListingTicket(packet.Ticket, player);
-        packet.Result = result;
+        packet.Status = reason;
         session->SendPacket(packet.Write());
     }
 
@@ -105,9 +113,10 @@ namespace
         {
             if (activityId && !sGroupFinderActivityStore.LookupEntry(activityId))
             {
-                // UNVERIFIED: the value 1, the same guess the other rejections make - see
-                // LFGListJoinResult::Result for why no consumer could settle the enum.
-                SendListingRejected(session, player, 1, echo); // invalid activity
+                // ERR_LFG_INVALID_SLOT ("One or more dungeons was not valid.") - the descriptor named an
+                // activity that is not in GroupFinderActivity.db2, which is that sentence exactly. This is
+                // the one rejection of the four whose code is a match rather than a choice.
+                SendListingRejected(session, player, WorldPackets::LFGList::ListingFailureReason::InvalidSlot, echo);
                 return false;
             }
         }
@@ -372,9 +381,13 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
     {
         if (group->GetLeaderGUID() != player->GetGUID())
         {
-            // UNVERIFIED: the value 1. "Rejected" is certain, the enum member is guessed - see
-            // LFGListJoinResult::Result for why no consumer could settle it.
-            SendListingRejected(this, player, 1); // not the leader
+            // UNVERIFIED: the CHOICE of code, not the vocabulary. The client's table is measured and
+            // closed (ListingFailureReason) and it has no entry that says "you are not the leader" -
+            // retail never needs one, because only the leader is shown the Create button, so anything
+            // arriving here comes from a client that made the request up. ERR_LFG_NO_LFG_OBJECT
+            // ("Internal LFG Error.") is the table's word for a request that cannot be honoured at all,
+            // and something has to go out: 0 would leave the dialog standing.
+            SendListingRejected(this, player, WorldPackets::LFGList::ListingFailureReason::NoLfgObject);
             return;
         }
     }
@@ -425,8 +438,11 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
     }
     else
     {
-        // UNVERIFIED: the value 1, same guess as above (LFGListJoinResult::Result).
-        SendListingRejected(this, player, 1); // create failed
+        // ERR_LFG_NO_LFG_OBJECT ("Internal LFG Error.") is a match here rather than a choice:
+        // LFGListMgr::CreateListing has exactly one failure and it is a null leader, i.e. a server-side
+        // fault with no player-facing cause - the same reading, and the same code, as the Group::Create
+        // failure in HandleLFGListInviteResponse.
+        SendListingRejected(this, player, WorldPackets::LFGList::ListingFailureReason::NoLfgObject);
     }
 }
 
@@ -457,9 +473,11 @@ void WorldSession::HandleLFGListUpdateRequest(WorldPackets::LFGList::LFGListUpda
         // is still open - so this is not a can't-happen branch. Silence here left the player who pressed
         // "Update" with a dialog that never resolved: the client waits for LFG_LIST_ACTIVE_ENTRY_UPDATE or
         // LFG_LIST_ENTRY_CREATION_FAILED and gets neither.
-        // UNVERIFIED: the value 1, the same guess the create path's rejections make - see
-        // LFGListJoinResult::Result. What is certain is that an answer has to go out.
-        SendListingRejected(this, player, 1, &packet.Ticket); // update failed
+        // ERR_LFG_NO_LFG_OBJECT ("Internal LFG Error.") covers both of them without straining: the
+        // reachable one IS a missing object - the listing the dialog is editing has expired out from under
+        // it - and the other is a listing that exists but is not the sender's to touch, which from the
+        // sender's side is the same absence. What is certain is that an answer has to go out.
+        SendListingRejected(this, player, WorldPackets::LFGList::ListingFailureReason::NoLfgObject, &packet.Ticket);
     }
 }
 
@@ -565,8 +583,12 @@ void WorldSession::HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApply
     if (!listing)
     {
         // The listing is gone - delisted, expired, or filled - while the browse row was still on screen.
-        // This is the likeliest of the four refusals in practice, because an open browser is not refreshed
-        // when a listing disappears (NotifyListingChanged runs on create and edit only).
+        // Still reachable, and still worth answering, although the browser is now told when a listing
+        // disappears (LFGListMgr::DelistAndNotify pushes the row with the sticky isDelisted bit): the push
+        // only reaches browsers whose CURRENT filters still match, a search subscription lapses after five
+        // minutes of not searching, and nothing stops the application from being in flight while the delist
+        // goes out. The reasoning below is unchanged; only the claim that this is the likeliest of the four
+        // refusals is retired with the gap that caused it.
         // "declined_delisted" rather than "failed": nibble 7 is a state of its own in the client's
         // vocabulary (mapper @ RVA 0x24DADA0) and the UI has a message for exactly this - LFGList.lua:388
         // maps it to LFG_LIST_APP_DECLINED_DELISTED_MESSAGE and :243 counts it as a decline, which greys
@@ -847,6 +869,12 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
 
     sLFGListMgr.RemoveApplication(applicationId);
     SendApplicantList(*listing);
+
+    // The row every open browser holds is now one member out of date - and, for a listing that was solo
+    // until this moment, short the whole group. It is not refreshed from here: Group::AddMember above has
+    // already fired LFGGroupScript::OnAddMember, which pushes it through LFGListMgr::NotifyGroupMemberJoined
+    // for THIS path and for the two others by which a listed party grows (an ordinary party invite, an LFG
+    // proposal). Pushing again here would be a second producer of a message that has one.
 
     // Retail auto-delists when the group reaches the activity's player cap. Through DelistAndNotify, which
     // builds the ticket from the still-live listing - the previous order (remove, then announce) produced a

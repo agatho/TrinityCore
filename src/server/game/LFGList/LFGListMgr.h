@@ -170,6 +170,41 @@ public:
     LFGList::Listing* GetListing(uint32 listingId);
     LFGList::Listing const* GetListing(uint32 listingId) const;
     LFGList::Listing* GetListingByLeader(ObjectGuid leader);
+    // The listing published for THIS group, if any. There is no index for it because there cannot be more
+    // than a handful of listings at a time and because an index keyed on Listing::GroupGuid would have to be
+    // maintained across the one place that writes it after CreateListing (a solo leader whose first
+    // applicant forms the party, WorldSession::HandleLFGListInviteResponse). The three group hooks below are
+    // its only callers.
+    LFGList::Listing* GetListingByGroup(ObjectGuid groupGuid);
+
+    // ---- the group's own lifecycle, as it reaches the listing (LFGGroupScript) ----
+    // Without these three the listing outlives the group it advertises. Logout of the leader and the expiry
+    // sweep were the only two events that could ever end a listing, so a disbanded group kept a phantom row
+    // in the browser for the rest of the 30-minute window, a promoted leader could not touch the listing of
+    // his own party, and a member who left kept an active entry until relog.
+
+    // The party has a new leader. The listing follows him: Listing::LeaderGuid is what UpdateListing,
+    // RemoveListing and DelistAndNotify all check the sender against, so leaving it on the previous leader
+    // locks the listing - the new leader can neither edit nor delist it while it goes on being advertised.
+    // He is also sent the active entry, because he needs one for C_LFGList.HasActiveEntryInfo to be true.
+    //
+    // Retail additionally WARNS him and delists on a timer, and that half does not live here: the warning
+    // is SMSG_PARTY_NOTIFY_LFG_LEADER_CHANGE (0x45030A, family 0x45, still STATUS_UNHANDLED and NOT part of
+    // this unit), which feeds LFG_GROUP_DELISTED_LEADERSHIP_CHANGE(listingName, automaticDelistTimeRemaining)
+    // (LFGListInfoDocumentation.lua:684-691) and through it the popup PREMADE_GROUP_LEADER_CHANGE_DELIST_WARNING
+    // (LFGList.lua:346-348). The delist itself is then the CLIENT's: GameDialogDefs.lua:3286-3317 shows the
+    // popup calling C_LFGList.RemoveListing() from its OnHide unless the new leader picks "List My Group" -
+    // i.e. the server must NOT delist here, it must keep the listing alive and owned so that the client's
+    // choice has something to act on. See dod_luecken/D2 in the status file for the handover.
+    void TransferListingLeadership(ObjectGuid groupGuid, ObjectGuid newLeader);
+    // The party is gone. So is anything it advertised.
+    void RemoveListingsByGroup(ObjectGuid groupGuid);
+    // One member joined a listed party. Nothing to decide, only something to say: the row a browser holds
+    // enumerates the LIVE group, so it is out of date until this pushes it.
+    void NotifyGroupMemberJoined(ObjectGuid groupGuid);
+    // One member left a listed party - the listing stays, that member's active entry must not. Also
+    // refreshes the row in every open browser, without the departing member.
+    void NotifyGroupMemberLeft(ObjectGuid groupGuid, ObjectGuid member);
 
     // Search the registry. Every empty / zero member of the filter is a wildcard. Results are capped by
     // config. The per-listing test is Matches(), which the live push uses too.
@@ -192,7 +227,12 @@ public:
 
     // Fills one search-result row for a listing. Shared by the search reply, the apply-result snapshot and the
     // live update push so all three serialize a listing identically.
-    void FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing) const;
+    // `excludeMember` leaves one guid out of the roster. It exists for exactly one caller and for a reason
+    // that is not negotiable: LFGGroupScript::OnRemoveMember fires from the FIRST statement of
+    // Group::RemoveMember (Group.cpp:551), long before the member slot is erased, so a row built from the
+    // live group at that moment still advertises the player who is leaving.
+    void FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing,
+        ObjectGuid excludeMember = ObjectGuid::Empty) const;
 
     // The two RideTickets of the listing system. These MUST be built in exactly one place: the client keys
     // its stored active entry on the whole 32-byte ticket and compares it field by field before it accepts a
@@ -264,7 +304,7 @@ public:
     // here; listing mutations then push the affected row to every subscriber whose filters still match.
     void RegisterSearch(ObjectGuid player, LFGList::SearchFilter filter);
     void UnregisterSearch(ObjectGuid player);
-    void NotifyListingChanged(uint32 listingId);
+    void NotifyListingChanged(uint32 listingId, ObjectGuid excludeMember = ObjectGuid::Empty);
 
     // Applications. An application gets a globally-unique id the client keys on via a RideTicket.
     LFGList::Application* AddApplication(uint32 listingId, ObjectGuid applicant, uint8 roleMask, uint32 specId, uint32 itemLevel, std::string const& comment);
@@ -281,6 +321,24 @@ public:
 
 private:
     LFGListMgr() = default;
+
+    // Push ONE row of one listing to every open browser whose filters still match it, and reap the
+    // subscriptions that have lapsed while doing so. The one place that serializes
+    // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE, which is what keeps its two occasions in step: a listing that
+    // changed (delisted = false) and a listing that is about to cease to exist (delisted = true, the sticky
+    // isDelisted bit - see LFGListSearchResultsUpdate in LFGListPackets.h). The second occasion is why this
+    // takes the listing by reference rather than an id: it is called from inside DelistAndNotify, where the
+    // row has to be built while the listing is still there.
+    void PushSearchRow(LFGList::Listing const& listing, bool delisted, ObjectGuid excludeMember);
+
+    // The delist form of SMSG_LFG_LIST_UPDATE_STATUS - Listed = 0, no expiry, no descriptor - built from the
+    // LIVE listing. THE one builder, for the same reason the two ticket builders are: the client compares
+    // the incoming ticket against its stored active entry field by field and drops a mismatch in silence
+    // (consumer RVA 0x24DE410), and four hand-built copies of this message have already drifted apart once.
+    // Its two callers differ only in who they send it to - DelistAndNotify to everyone holding an entry,
+    // NotifyGroupMemberLeft to the single player who left.
+    static void BuildDelistPacket(WorldPackets::LFGList::LFGListUpdateStatus& packet,
+        LFGList::Listing const& listing, uint8 status);
 
     // An open Premade Groups browser: the filters the player last searched with. 0 / empty = wildcard, matching
     // Search(). Refreshed by every search; expires so a client that closed the browser (there is no "stopped
