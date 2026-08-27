@@ -1262,7 +1262,12 @@ class TC_GAME_API WorldSession
             uint32 Samples = 0;             ///< number of entries folded into the averages
             uint32 MinFrameRate = 0;
             uint32 MaxFrameRate = 0;
-            uint32 LastFrameRate = 0;
+            uint32 LastFrameRate = 0;       ///< frame rate of the NEWEST entry that carried one, picked by
+                                            ///< timestamp and not by write order - see the selection in
+                                            ///< HandleLatencyReport. Assigned in iteration order this would name
+                                            ///< the entry the sender appends itself, which is provably the oldest
+                                            ///< of its block, so "last" would mean close to the opposite of what
+                                            ///< it says.
             uint64 FrameRateSum = 0;
             uint64 LastTimestampMS = 0;     ///< client unix time in ms of the newest entry seen - EVERY entry,
                                             ///< including the ones with Frame == 0 that Samples excludes. It is
@@ -1270,6 +1275,15 @@ class TC_GAME_API WorldSession
                                             ///< otherwise healthy session is the one thing this aggregate shows
                                             ///< that the frame rates do not, and it would not be that if it hung
                                             ///< on the frame rates' own selection. Read out in ~WorldSession.
+            uint64 LastFrameRateTimestampMS = 0;    ///< selection key for LastFrameRate: the timestamp of the
+                                            ///< entry that supplied it. Deliberately NOT LastTimestampMS, even
+                                            ///< though the two carry the same value over the whole corpus: that
+                                            ///< one advances on every entry, including the Frame == 0 ones the
+                                            ///< frame rate branch never sees, so sharing it would freeze the
+                                            ///< frame rate for the rest of the session the first time an entry
+                                            ///< without a frame rate happened to be the newest of its packet.
+                                            ///< Unlike the members above this one is not reported; it only
+                                            ///< carries the choice from one report to the next.
             uint32 AverageFrameRate() const { return Samples ? uint32(FrameRateSum / Samples) : 0u; }
         };
 

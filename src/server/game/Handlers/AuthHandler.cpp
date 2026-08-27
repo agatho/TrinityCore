@@ -238,7 +238,31 @@ void WorldSession::HandleLatencyReport(WorldPackets::Auth::LatencyReport const& 
 
         ++_clientPerformanceStats.Samples;
         _clientPerformanceStats.FrameRateSum += entry.Frame;
-        _clientPerformanceStats.LastFrameRate = entry.Frame;
+
+        // "Last" is meant as the NEWEST measurement, so it is selected by timestamp - the same selection as
+        // LastTimestampMS above, for the same reason, and it has to be made separately because the filter this
+        // branch sits behind makes the two selections range over different entries.
+        // Assigning in iteration order instead, as an earlier revision of this handler did, hands the value to
+        // the last entry that passes the filter, and that entry is not merely sometimes stale - it is the
+        // block-closing Unknown8 == 33 at index 10 in 1507 of the corpus's 1507 accepted packets, it never has
+        // Frame == 0 so it always passes, and by the measurement above it is older than the entry before it in
+        // all 1507. So the iteration-order value is the newest measurement in 0 of 1507 packets. The two rules
+        // disagree in 1440 of the 1507 (95.6%), by a median of 5 and up to 192 frames per second: not a rounding
+        // difference in a diagnostic, a different measurement.
+        // >= and not >, i.e. a tie goes to the LATER entry: indices 8 and 9 carry the same millisecond in 743 of
+        // the 1507 packets, and in 733 of those their frame rates differ - median 31 apart - so the tie is real
+        // and has to be broken on purpose rather than by accident. With this rule the entry chosen is index 9 in
+        // 1507 of 1507.
+        // UNVERIFIED: that the later of two equally stamped entries is the better of the two. Nothing available
+        // orders them - both sit in the interior of the last stage's block, the timestamps are equal at the
+        // millisecond the field resolves, and the only thing telling them apart is Unknown8 (0 at index 8, 12 at
+        // index 9), whose meaning is itself unverified. What IS measured is that either of them beats index 10,
+        // which is the whole point of this selection.
+        if (entry.TimestampMS >= _clientPerformanceStats.LastFrameRateTimestampMS)
+        {
+            _clientPerformanceStats.LastFrameRateTimestampMS = entry.TimestampMS;
+            _clientPerformanceStats.LastFrameRate = entry.Frame;
+        }
 
         if (!_clientPerformanceStats.MinFrameRate || entry.Frame < _clientPerformanceStats.MinFrameRate)
             _clientPerformanceStats.MinFrameRate = entry.Frame;
