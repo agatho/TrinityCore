@@ -150,6 +150,14 @@ void LFGGroupScript::OnAddMember(Group* group, ObjectGuid guid)
 
 void LFGGroupScript::OnRemoveMember(Group* group, ObjectGuid guid, RemoveMethod method, ObjectGuid kicker, char const* reason)
 {
+    // Ahead of the option gate, for the same reason as in OnDisband: a readiness check does not depend on
+    // the dungeon-finder options, and it must not keep waiting for an answer from a player who is gone. Left
+    // in place, that answer stays PENDING forever, the check times out after 45 s and FinishReadyCheck drops
+    // the REMAINING members out of every queue it was guarding - although all of them agreed. Unlike
+    // OnDisband this does not abort the check: the group is still there and the rest of it can still be
+    // ready. RemoveReadyCheckMember is a no-op when no check is running or the player is not in one.
+    sLFGMgr->RemoveReadyCheckMember(group->GetGUID(), guid);
+
     if (!sLFGMgr->isOptionEnabled(LFG_OPTION_ENABLE_DUNGEON_FINDER | LFG_OPTION_ENABLE_RAID_BROWSER))
         return;
 

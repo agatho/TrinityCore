@@ -468,6 +468,11 @@ class TC_GAME_API LFGMgr
         void UpdateReadyCheck(ObjectGuid gguid, ObjectGuid guid, bool isReady);
         /// Aborts a running readiness check (group broke up, dungeon left, ...) -> ERR_LFG_READY_CHECK_ABORTED
         void AbortReadyCheck(ObjectGuid gguid);
+        /// Drops a player who left the group out of its running readiness check. Without this the departed
+        /// member's LFG_ANSWER_PENDING can never be answered, the check runs into its 45 s timeout and
+        /// FinishReadyCheck throws the REMAINING members out of every queue in bgQueueIDs - although all of
+        /// them agreed. Called from LFGGroupScript::OnRemoveMember.
+        void RemoveReadyCheckMember(ObjectGuid gguid, ObjectGuid guid);
         /// True while a readiness check is running for that group
         bool HasReadyCheck(ObjectGuid gguid) const;
 

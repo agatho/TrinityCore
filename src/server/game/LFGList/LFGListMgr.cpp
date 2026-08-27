@@ -219,7 +219,12 @@ void LFGListMgr::DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 stat
     if (!listing || listing->LeaderGuid != leader)
         return;
 
-    if (Player* leaderPlayer = ObjectAccessor::FindConnectedPlayer(leader))
+    // Every addressee that was handed this listing with Listed = true holds an active entry keyed on the
+    // ticket below, so every one of them needs the delist. The leader is included explicitly because a
+    // listing that was never re-announced (no GET_STATUS, no edit) has an empty recipient set.
+    std::unordered_set<ObjectGuid> addressees = listing->StatusRecipients;
+    addressees.insert(leader);
+
     {
         WorldPackets::LFGList::LFGListUpdateStatus packet;
         FillListingTicket(packet.Ticket, *listing);
@@ -240,7 +245,10 @@ void LFGListMgr::DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 stat
         // UNVERIFIED: the meaning of the byte. Its only observed value is 0 and no consumer reads it in a
         // way that distinguishes values (see LFGListPackets.h).
         packet.UnkByte = 0;
-        leaderPlayer->SendDirectMessage(packet.Write());
+        WorldPacket const* built = packet.Write();
+        for (ObjectGuid const& addressee : addressees)
+            if (Player* recipient = ObjectAccessor::FindConnectedPlayer(addressee))
+                recipient->SendDirectMessage(built);
     }
 
     RemoveListing(listingId, leader);
@@ -401,7 +409,41 @@ LFGList::Listing const* LFGListMgr::GetListing(uint32 listingId) const
     return itr != _listings.end() ? &itr->second : nullptr;
 }
 
-std::vector<LFGList::Listing const*> LFGListMgr::Search(uint32 category, uint32 activityGroup, uint32 activityId, std::string const& keyword) const
+// The keyword half of a search. See the contract on the declaration for why a withheld listing is matched
+// against an empty name rather than against the text it is hiding.
+bool LFGListMgr::MatchesKeywords(LFGList::Listing const& listing, LFGList::SearchKeywords const& keywords)
+{
+    if (keywords.empty())
+        return true;
+
+    // Match against what a searcher would actually RECEIVE. GetPublicDescriptor clears Name for a withheld
+    // listing, so there is no delivered name left to match and the listing cannot be a keyword hit.
+    if (listing.IsTextWithheld())
+        return false;
+
+    std::string const& name = listing.Descriptor.Name;
+    if (name.empty())
+        return false;
+
+    // Every block has to be satisfied by at least one of its own values (case-insensitive substring, as
+    // before). The AND/OR split is LFGListSearch::GetKeywords' documented and marked decision.
+    for (std::vector<std::string> const& alternatives : keywords)
+    {
+        bool any = false;
+        for (std::string const& value : alternatives)
+            if (StringContainsStringI(name, value))
+            {
+                any = true;
+                break;
+            }
+        if (!any)
+            return false;
+    }
+    return true;
+}
+
+std::vector<LFGList::Listing const*> LFGListMgr::Search(uint32 category, uint32 activityGroup, uint32 activityId,
+    LFGList::SearchKeywords const& keywords) const
 {
     uint32 const maxResults = uint32(sConfigMgr->GetIntDefault("LFGList.MaxSearchResults", 100));
 
@@ -427,8 +469,9 @@ std::vector<LFGList::Listing const*> LFGListMgr::Search(uint32 category, uint32 
         if (activityId && std::find(d.ActivityIDs.begin(), d.ActivityIDs.end(), activityId) == d.ActivityIDs.end())
             continue;
 
-        // Keyword search matches the listing title (case-insensitive substring, retail behaviour).
-        if (!keyword.empty() && !StringContainsStringI(d.Name, keyword))
+        // Keyword search matches the listing title (case-insensitive substring, retail behaviour) - through
+        // MatchesKeywords, which is also what the live push uses, so the two can never disagree.
+        if (!MatchesKeywords(listing, keywords))
             continue;
 
         results.push_back(&listing);
@@ -643,12 +686,12 @@ bool LFGListMgr::ConfirmCensoredListing(uint32 listingId, ObjectGuid leader)
     return true;
 }
 
-void LFGListMgr::RegisterSearch(ObjectGuid player, uint32 category, uint32 activityGroup, std::string const& keyword)
+void LFGListMgr::RegisterSearch(ObjectGuid player, uint32 category, uint32 activityGroup, LFGList::SearchKeywords keywords)
 {
     SearchSubscription& sub = _searchSubscriptions[player];
     sub.CategoryId = category;
     sub.ActivityGroupId = activityGroup;
-    sub.Keyword = keyword;
+    sub.Keywords = std::move(keywords);
     sub.ExpireTime = uint32(GameTime::GetGameTime()) + SEARCH_SUBSCRIPTION_TTL_SECONDS;
 }
 
@@ -674,7 +717,8 @@ void LFGListMgr::NotifyListingChanged(uint32 listingId)
     //    looked up in GroupFinderActivity.db2 (that was the empty-browse-pane bug fixed by the 68974 pass).
     //  - activity group: resolve each id of the descriptor's trailing activity vector in GroupFinderActivity.db2
     //    and match if ANY of them sits in the requested group. Unresolvable ids are skipped, as in Search().
-    //  - keyword: case-insensitive substring of the listing title, as in Search().
+    //  - keyword: MatchesKeywords, the same call Search() makes - all term blocks, and a withheld listing
+    //    matched against an empty name so the push cannot leak what the search reply withholds either.
     std::vector<uint32> listingActivityGroups;
     listingActivityGroups.reserve(d.ActivityIDs.size());
     for (uint32 listedActivity : d.ActivityIDs)
@@ -707,7 +751,7 @@ void LFGListMgr::NotifyListingChanged(uint32 listingId)
         bool const matches =
             (!sub.CategoryId || d.CategoryID == sub.CategoryId) &&
             (!sub.ActivityGroupId || std::find(listingActivityGroups.begin(), listingActivityGroups.end(), sub.ActivityGroupId) != listingActivityGroups.end()) &&
-            (sub.Keyword.empty() || StringContainsStringI(d.Name, sub.Keyword));
+            MatchesKeywords(*listing, sub.Keywords);
         if (matches)
             searcher->SendDirectMessage(packet);
 

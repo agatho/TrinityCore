@@ -21,7 +21,9 @@
 #include "Define.h"
 #include "ObjectGuid.h"
 #include "LFGListPackets.h"
+#include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class Player;
@@ -69,6 +71,11 @@ namespace LFGList
         Confirmed   = 2,
     };
 
+    // The search terms of one CMSG_LFG_LIST_SEARCH, as the packet hands them over: one inner vector per
+    // term block, holding that block's non-empty values. Blocks are ANDed, values inside a block ORed -
+    // see LFGListSearch::GetKeywords, which owns that decision and marks it.
+    using SearchKeywords = std::vector<std::vector<std::string>>;
+
     // One published group listing.
     struct Listing
     {
@@ -79,6 +86,14 @@ namespace LFGList
         uint32 CreatedTime = 0;
         uint32 ExpireTime = 0;
         std::vector<Application> Applications;
+        // Every client that has been handed this listing with Listed = true, and therefore holds an active
+        // entry for it. The delist has to reach ALL of them, not just the leader: the consumer of
+        // SMSG_LFG_LIST_UPDATE_STATUS (RVA 0x24DE410) creates the entry from any Listed payload whose ticket
+        // it does not know yet, and an applicant who accepts an invite is sent exactly that (status 0x19).
+        // Notifying only the leader left the joined member's group finder showing the entry until relog -
+        // the very damage DelistAndNotify exists to prevent, one flank short. Maintained by
+        // WorldSession::SendLFGListUpdateStatus, which is the only producer of a Listed payload.
+        std::unordered_set<ObjectGuid> StatusRecipients;
         CensorState Censor = CensorState::None;
         uint8 CensorCode = 0;               // non-zero is what makes the client treat the entry as flagged
 
@@ -109,11 +124,15 @@ public:
     bool UpdateListing(uint32 listingId, ObjectGuid leader, WorldPackets::LFGList::ListingDescriptor const& descriptor);
     void RemoveListing(uint32 listingId, ObjectGuid leader);
     void RemoveListingsBy(ObjectGuid leader); // logout cleanup
-    // Delist AND tell the leader, in that order, from one place. The notification has to be built while the
-    // listing still exists: the client only accepts a delist whose ticket matches its stored active entry
-    // field for field (see FillListingTicket below), and a ticket cannot be reconstructed once the listing is
-    // gone. Every server-initiated delist goes through here; a hand-built "not listed" message is silently
-    // dropped by the client and leaves the entry standing in the leader's group finder.
+    // Delist AND tell everyone holding an active entry for the listing, in that order, from one place. The
+    // notification has to be built while the listing still exists: the client only accepts a delist whose
+    // ticket matches its stored active entry field for field (see FillListingTicket below), and a ticket
+    // cannot be reconstructed once the listing is gone. Every server-initiated delist goes through here; a
+    // hand-built "not listed" message is silently dropped by the client and leaves the entry standing in the
+    // recipient's group finder.
+    // "Everyone" is the leader plus Listing::StatusRecipients - an applicant who accepted an invite was sent
+    // the listing with Listed = true (status 0x19) and holds an entry of its own. Addressing the leader alone
+    // fixed the create/edit flank and left that one standing until relog.
     // `status` selects the client's popup (consumer RVA 0x24DE410): 0x2C too many players, 0x3B timeout,
     // 0x4B GameError 0x291, anything else no popup at all.
     void DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 status);
@@ -122,8 +141,19 @@ public:
     LFGList::Listing const* GetListing(uint32 listingId) const;
     LFGList::Listing* GetListingByLeader(ObjectGuid leader);
 
-    // Search the registry. Any argument left 0 acts as a wildcard. Results are capped by config.
-    std::vector<LFGList::Listing const*> Search(uint32 category, uint32 activityGroup, uint32 activityId, std::string const& keyword = std::string()) const;
+    // Search the registry. Any argument left 0 acts as a wildcard, an empty keyword list matches every
+    // listing. Results are capped by config.
+    std::vector<LFGList::Listing const*> Search(uint32 category, uint32 activityGroup, uint32 activityId,
+        LFGList::SearchKeywords const& keywords = LFGList::SearchKeywords()) const;
+
+    // Does this listing satisfy the keyword part of a search? The ONE place that answers it, because the
+    // search reply and the live push have to agree - and because it has to agree with what
+    // GetPublicDescriptor actually delivers. A listing whose text is withheld is matched against an EMPTY
+    // name, i.e. it is never a keyword hit: matching the STORED name would have let a searcher confirm a
+    // word inside the withheld text from a result row that renders as CENSORED_LFG_GROUP_NAME, which is the
+    // one thing withholding the text is supposed to prevent. Such a listing still shows up in an unfiltered
+    // browse, exactly as in retail.
+    static bool MatchesKeywords(LFGList::Listing const& listing, LFGList::SearchKeywords const& keywords);
 
     // Fills one search-result row for a listing. Shared by the search reply, the apply-result snapshot and the
     // live update push so all three serialize a listing identically.
@@ -157,7 +187,7 @@ public:
     // Live search updates. While a player has the Premade Groups browser open, retail keeps pushing
     // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE as listings appear/change. A search registers the player's filters
     // here; listing mutations then push the affected row to every subscriber whose filters still match.
-    void RegisterSearch(ObjectGuid player, uint32 category, uint32 activityGroup, std::string const& keyword);
+    void RegisterSearch(ObjectGuid player, uint32 category, uint32 activityGroup, LFGList::SearchKeywords keywords);
     void UnregisterSearch(ObjectGuid player);
     void NotifyListingChanged(uint32 listingId);
 
@@ -184,7 +214,7 @@ private:
     {
         uint32 CategoryId = 0;
         uint32 ActivityGroupId = 0;
-        std::string Keyword;
+        LFGList::SearchKeywords Keywords;
         uint32 ExpireTime = 0;
     };
 

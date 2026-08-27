@@ -1144,6 +1144,14 @@ void LFGMgr::UpdateRoleCheck(ObjectGuid gguid, ObjectGuid guid /* = ObjectGuid::
    consequence for the queues it passes in, so only the queue whose OWN retail flow contains the check may
    ever be wired here.
 
+   The same consequence has a second entrance, and a caller has to know about it: a member who LEAVES the
+   group during the check. Its LFG_ANSWER_PENDING would be unanswerable, the check would run into the 45 s
+   timeout and LeaveReadyCheckQueues would throw the remaining members - all of whom agreed - out of the
+   queues. LFGGroupScript::OnRemoveMember therefore calls RemoveReadyCheckMember, which drops the answer and
+   re-evaluates the check exactly as an answer does. Only OnDisband aborts the whole check. That path is not
+   optional bookkeeping; it is what keeps the two failure modes of this function to ONE - a real decline and
+   a real timeout.
+
    ACCEPTANCE, held open on purpose (audit 2026-08-27, lfg_5A round 4, finding 2, D2 gap on
    SMSG_LFG_READY_CHECK_UPDATE 0x5A0006, CMSG_DF_READY_CHECK_RESPONSE 0x430048 and
    SMSG_LFG_READY_CHECK_RESULT 0x5A001E): this function has NO caller anywhere in the tree, and neither
@@ -1266,6 +1274,62 @@ void LFGMgr::AbortReadyCheck(ObjectGuid gguid)
         return;
 
     FinishReadyCheck(itReadyCheck, LFG_READYCHECK_ABORTED);
+}
+
+/**
+   A member left the group while the check was running - take its answer out and carry on with the rest.
+
+   StartReadyCheck fills `answers` once from the member list and nothing used to maintain it afterwards, so a
+   departure left a permanently PENDING entry: std::all_of in UpdateReadyCheck could never come out true, the
+   check ran to its LFG_TIME_ROLECHECK timeout and FinishReadyCheck, seeing a state other than
+   LFG_READYCHECK_FINISHED, called LeaveReadyCheckQueues - the remaining members were dropped from every
+   queue in bgQueueIDs even though every one of them had agreed. That is the same destructive outcome the
+   withdrawn arena trigger was found for, reached without any trigger at all.
+
+   The three outcomes here are the three the state machine already has, no new ones:
+     - nobody left in the check   -> abort (the dialog has to be closed on the clients that still show it)
+     - everyone remaining agreed  -> the check is finished, which is what it would have been had the departed
+                                     member simply answered yes
+     - still someone pending      -> keep running, and refresh the dialog so the leaver disappears from it
+   A member that had already DECLINED cannot be reached here: that answer ends the check on the spot.
+
+   One detail stays imprecise on purpose, because the tree does not allow better: if the departing player is
+   the check's LEADER, readyCheck.leader goes stale and the next SMSG_LFG_READY_CHECK_UPDATE has no member in
+   slot 0 (SendLfgReadyCheckUpdate looks the leader up in `answers` and skips the slot when it is gone).
+   Re-reading the group's leader here would not help - Group::RemoveMember fires this hook at its very top
+   (Group.cpp:551), long before it promotes the new leader (Group.cpp:626), so GetLeaderGUID() still returns
+   the player that is leaving. Fixing it properly needs a leader hook, which is outside this unit. The check
+   itself stays correct either way; only the positional leader slot of the refresh message is affected.
+
+   @param[in]     gguid Group guid the check belongs to
+   @param[in]     guid Player that left the group
+*/
+void LFGMgr::RemoveReadyCheckMember(ObjectGuid gguid, ObjectGuid guid)
+{
+    LfgReadyCheckContainer::iterator itReadyCheck = ReadyChecksStore.find(gguid);
+    if (itReadyCheck == ReadyChecksStore.end())
+        return;
+
+    LfgReadyCheck& readyCheck = itReadyCheck->second;
+    if (!readyCheck.answers.erase(guid))
+        return;
+
+    if (readyCheck.answers.empty())
+    {
+        FinishReadyCheck(itReadyCheck, LFG_READYCHECK_ABORTED);
+        return;
+    }
+
+    bool const allReady = std::all_of(readyCheck.answers.begin(), readyCheck.answers.end(),
+        [](LfgAnswerContainer::value_type const& answer) { return answer.second == LFG_ANSWER_AGREE; });
+
+    if (allReady)
+    {
+        FinishReadyCheck(itReadyCheck, LFG_READYCHECK_FINISHED);
+        return;
+    }
+
+    SendReadyCheckUpdate(readyCheck);
 }
 
 /// Sends the current state of a readiness check to every member still in it.

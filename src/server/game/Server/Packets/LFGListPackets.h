@@ -220,15 +220,28 @@ namespace WorldPackets
             uint32 Filter5 = 0;
             uint32 Filter8 = 0;
             uint8 FilterByte1 = 0;              // observed 0xFF
-            uint8 FilterByte2 = 0;              // observed 0x05
+            uint8 FilterByte2 = 0;              // measured 0x03 in all three 12.1 captures (69273_s69273_a_43003A_{0,1,2}.bin)
             std::vector<uint32> Values1;
             std::vector<uint32> Values2;
             std::vector<uint32> Values3;
             std::vector<ObjectGuid> Guids;
 
             uint32 GetCategoryId() const { return CategoryID; }
-            // First non-empty search term, or an empty string. The server filters listings by keyword with it.
-            std::string const& GetKeyword() const;
+            // The search terms, one inner vector per term BLOCK that carries at least one non-empty value.
+            // All of them, not just the first: the client tokenises the search box on whitespace and puts one
+            // token in each block, so returning only the first word turned a search for "nexus-captain" into a
+            // search for "the" and matched practically every listing. The single 12.1 capture of this opcode
+            // proves the shape - 69273_s69273_a_43003A_{0,1,2}.bin carry Terms.Count 2 with block 0 = "the"
+            // and block 1 = "nexus-captain".
+            //
+            // UNVERIFIED: how the blocks and the ten slots within a block combine. Only the STRUCTURE is
+            // measured; no consumer decides it, because the deciding side is the server and there is no
+            // retail server to read. The server treats blocks as AND and the slots inside one block as OR,
+            // which is the only reading that gives both nesting levels a purpose (tokens are all required,
+            // alternative spellings of one token are interchangeable) and the only one under which the
+            // captured payload means what the player typed. Flat OR over all twenty slots would make a
+            // two-word search WIDER than a one-word search, flat AND would make the ten slots unusable.
+            std::vector<std::vector<std::string>> GetKeywords() const;
         };
 
         // CMSG_LFG_LIST_APPLY_TO_GROUP (0x43003B) - Client 12.1.0.69382, writer @ RVA 0x6A46A0:
@@ -236,6 +249,31 @@ namespace WorldPackets
         // The byte after RoleMask is a length prefix (client buffer capacity 256, so ceil(log2(256)) = 8
         // bits, which the compiler emits as a whole byte), NOT a scalar. With an empty comment both models
         // produce the same 33 bytes, which is why the sniff never caught it.
+        //
+        // The u32 is an ACTIVITY id, not the category id, and that is decided at the arbiter rather than
+        // left to the field name. Three independent sources, all from the 12.1 image:
+        //  1. The producer. C_LFGList.ApplyToGroup is the Lua binding at RVA 0x24EB2F0 (name/function pair
+        //     in the C_LFGList registration table, and the only function in the tree that references the
+        //     vtable at 0x3BF60F8 whose slot 2 is this writer). It assembles the message on the stack from
+        //     the browse row in rbx: row 0x00..0x28 -> msg+0x20 (the RideTicket), and for msg+0x48
+        //         mov rax, [rbx+30h] ; mov ecx, [rax] ; mov [rsp+..msg+48h], ecx
+        //     - a POINTER DEREFERENCE to a dword. A scalar member would be `mov ecx, [rbx+off]`; only an
+        //     array's element 0 needs the extra load. rbx+0x30 is the row's embedded ListingDescriptor,
+        //     whose first member is the ActivityIDs vector: the descriptor's own field offsets prove it -
+        //     CategoryID sits at desc+24 and the Name buffer at desc+32, so desc+0..24 is the 24-byte
+        //     vector and desc+0 is its data pointer. The value sent is therefore ActivityIDs[0]. Had the
+        //     client meant the category it would have read row+0x30+24 = row+0x48 directly.
+        //  2. The row has no category to echo. LfgSearchResultData - the structure C_LFGList
+        //     .GetSearchResultInfo returns (marshaller RVA 0x117BF20: searchResultID @+0, activityIDs @+8)
+        //     - carries `activityIDs` as a table of numbers and NO category field at all. The same holds
+        //     for LfgEntryData (marshaller 0x117A8C0, activityIDs at +0). Both match the generated API doc
+        //     Blizzard_APIDocumentationGenerated/LFGListInfoDocumentation.lua field for field.
+        //  3. The two values are not interchangeable. The 12.1 reference payload of
+        //     SMSG_LFG_LIST_UPDATE_STATUS (69273_s69273_a_5A000A_0.bin) decodes to CategoryID 3 with
+        //     ActivityIDs [1735].
+        // Comparing this field against the listing's CategoryID was therefore a live defect: with 1735 vs 3
+        // the handler returned before AddApplication and the applicant got no packet, no error and no log
+        // line. It is matched against the listing's ActivityIDs now, which is what the client sends.
         class LFGListApplyToGroup final : public ClientPacket
         {
         public:
@@ -243,7 +281,9 @@ namespace WorldPackets
             void Read() override;
 
             LFG::RideTicket Ticket;         // the listing being applied to
-            uint32 ActivityID = 0;
+            uint32 ActivityID = 0;          // ActivityIDs[0] of the browse row the player clicked, echoed
+                                            // back so a stale row can be told from a current one. NOT the
+                                            // category id - see the source trail above.
             uint8 RoleMask = 0;
             std::string Comment;            // the applicant's note to the group leader
         };

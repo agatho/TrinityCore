@@ -31,8 +31,6 @@ namespace
 
     // The trailing uint32 vector's count is a 5-bit field, so it can never legitimately exceed 31.
     constexpr uint32 DESCRIPTOR_MAX_ACTIVITY_IDS = 31;
-
-    std::string const EmptyString;
 }
 
 // The embedded DungeonScoreSummary. MythicPlusPacketsCommon already provides operator<< for both this and
@@ -190,14 +188,23 @@ void LFGListLeave::Read()
     _worldPacket >> Ticket;
 }
 
-std::string const& LFGListSearch::GetKeyword() const
+std::vector<std::vector<std::string>> LFGListSearch::GetKeywords() const
 {
+    std::vector<std::vector<std::string>> keywords;
+    keywords.reserve(Terms.size());
     for (LFGListSearchTerm const& term : Terms)
+    {
+        std::vector<std::string> alternatives;
         for (std::string const& value : term.Values)
             if (!value.empty())
-                return value;
+                alternatives.push_back(value);
 
-    return EmptyString;
+        // A block with nothing in it constrains nothing. Keeping it would turn every search that carries a
+        // trailing empty block into a search no listing can satisfy.
+        if (!alternatives.empty())
+            keywords.push_back(std::move(alternatives));
+    }
+    return keywords;
 }
 
 void LFGListSearch::Read()

@@ -25,6 +25,7 @@
 #include "LFGListPackets.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include <algorithm>
 
 namespace
 {
@@ -126,13 +127,20 @@ void WorldSession::SendLFGListUpdateStatus(uint32 listingId, uint8 status /*= 0x
 {
     WorldPackets::LFGList::LFGListUpdateStatus packet;
     packet.Status = status;
-    if (LFGList::Listing const* listing = sLFGListMgr.GetListing(listingId))
+    if (LFGList::Listing* listing = sLFGListMgr.GetListing(listingId))
     {
         FillListingTicket(packet.Ticket, *listing);
         packet.ExpirationTime = listing->ExpireTime;
         packet.Listing = sLFGListMgr.GetPublicDescriptor(*listing);
         packet.Listed = true;
         packet.LeaderGuid = listing->LeaderGuid;    // present in every captured payload, listed or not
+        // This session's client now holds an active entry for the listing (consumer RVA 0x24DE410 creates
+        // it from any Listed payload), so it has to be told when the listing goes. This is the ONLY place a
+        // Listed payload is produced, which is what makes the bookkeeping complete; DelistAndNotify reads
+        // the set back. Recording the receiver rather than the leader matters for exactly one caller -
+        // HandleLFGListInviteResponse, which sends status 0x19 on the joining APPLICANT's session.
+        if (Player const* receiver = GetPlayer())
+            listing->StatusRecipients.insert(receiver->GetGUID());
     }
     else
     {
@@ -324,14 +332,17 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     if (!GetPlayer())
         return;
 
-    std::string const keyword = packet.GetKeyword();
+    // ALL the terms the client sent, not just the first one. See LFGListSearch::GetKeywords for the shape
+    // and for the AND/OR decision; the previous single-keyword form reduced the two-block reference payload
+    // ("the", "nexus-captain") to a search for "the".
+    LFGList::SearchKeywords const keywords = packet.GetKeywords();
 
     // Keep this browser subscribed so listings published/edited from now on are pushed live via
     // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE instead of the player having to re-search. The filters recorded are
     // exactly the ones handed to Search() below, so the push can only carry rows this reply would have carried.
-    sLFGListMgr.RegisterSearch(GetPlayer()->GetGUID(), packet.GetCategoryId(), 0, keyword);
+    sLFGListMgr.RegisterSearch(GetPlayer()->GetGUID(), packet.GetCategoryId(), 0, keywords);
 
-    std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(packet.GetCategoryId(), 0, 0, keyword);
+    std::vector<LFGList::Listing const*> matches = sLFGListMgr.Search(packet.GetCategoryId(), 0, 0, keywords);
 
     // 68974 capture: one CMSG_LFG_LIST_SEARCH (idx 8197) is answered by TWO SMSG_LFG_LIST_SEARCH_RESULTS —
     // an empty one first (idx 8215: u16 0 + u32 0) and then the populated one (idx 8224: 2 rows). No
@@ -361,9 +372,16 @@ void WorldSession::HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApply
     if (!listing || listing->LeaderGuid == player->GetGUID())
         return;
 
-    // The client echoes the listing's descriptor @0x38 value (the category id per the 68974 capture;
-    // sniff-verified to match at 68275 where it was 6); a mismatch means a stale browse row.
-    if (packet.ActivityID && listing->Descriptor.CategoryID && packet.ActivityID != listing->Descriptor.CategoryID)
+    // The client echoes ActivityIDs[0] of the browse row it applied from (12.1 binding C_LFGList
+    // .ApplyToGroup @ RVA 0x24EB2F0 reads `*(row+0x30)`, i.e. element 0 of the row descriptor's ActivityIDs
+    // vector - the full source trail is in LFGListPackets.h). A value that is not among the listing's
+    // activities means the player clicked a row that has since been edited, so the application is refused.
+    // This used to be compared against Descriptor.CategoryID, and that killed the whole path without a
+    // trace: the 12.1 reference listing carries CategoryID 3 with ActivityIDs [1735], so the guard fired on
+    // a perfectly current row and the applicant received nothing at all.
+    if (packet.ActivityID && !listing->Descriptor.ActivityIDs.empty()
+        && std::find(listing->Descriptor.ActivityIDs.begin(), listing->Descriptor.ActivityIDs.end(),
+            packet.ActivityID) == listing->Descriptor.ActivityIDs.end())
         return;
 
     LFGList::Application* app = sLFGListMgr.AddApplication(listing->Id, player->GetGUID(), packet.RoleMask,
