@@ -900,18 +900,20 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_QUERY_PLAYER_NAMES,                                 STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleQueryPlayerNames);
     // STATUS_AUTHED on the next two, against STATUS_LOGGEDIN on the line above, which serves the same
     // PlayerGuidLookupData. The reason is a property of this dispatcher, not an assumption about the client:
-    // STATUS_AUTHED is the only status in WorldSession::Update that neither drops nor defers a packet once the
-    // session is past the login queue - it tests neither _player nor IsInWorld (WorldSession.cpp, case
+    // STATUS_AUTHED is the only status in WorldSession::Update that never silently drops and never defers a packet
+    // once the session is past the login queue - it tests neither _player nor IsInWorld (WorldSession.cpp, case
     // STATUS_AUTHED). STATUS_LOGGEDIN drops when _player exists but is not in world, which is every map transfer;
-    // STATUS_LOGGEDIN_OR_RECENTLY_LOGGOUT drops when there is no player at all. Neither drop is silent - both go
-    // through WorldSession::LogUnexpectedOpcode, which writes "Received unexpected opcode {} Status: {} Reason: {}"
-    // on "network.opcode" at ERROR (WorldSession.cpp), and worldserver.conf.dist declares no Logger.network.opcode
-    // of its own, so that line falls to Logger.root=5 and is written in the shipped configuration. The line does
-    // not recover the packet, though, and for these two opcodes a dropped answer costs more than the packet: one
-    // unanswered member leaves C_Club.AreMembersReady false and the whole member list spinning, with no timer, no
-    // retry and no error dialog to recover (see HandleQueryPlayerNamesForCommunity). A status with a drop window is
-    // the wrong instrument for that, logged or not. The one window STATUS_AUTHED does have, m_inQueue, is before
-    // CMSG_ENUM_CHARACTERS and so before any community UI can exist - and it logs through the same helper.
+    // STATUS_LOGGEDIN_OR_RECENTLY_LOGGOUT drops when there is no player at all. The word "silently" is exact for
+    // STATUS_LOGGEDIN and only for it: its _player && !IsInWorld() case falls through to the bare break at the end
+    // of the case, its !_player && m_playerRecentlyLogout case has no branch at all, and the one arm that does say
+    // something - the requeue - says it with TC_LOG_DEBUG on "network", which Logger.root=5 in worldserver.conf.dist
+    // does not write. STATUS_LOGGEDIN_OR_RECENTLY_LOGGOUT, STATUS_TRANSFER and the m_inQueue window of STATUS_AUTHED
+    // itself all drop through WorldSession::LogUnexpectedOpcode instead, which is TC_LOG_ERROR on "network.opcode"
+    // and therefore visible. So the instrument to avoid here is specifically STATUS_LOGGEDIN, and for these two
+    // opcodes a dropped answer costs more than the packet: one unanswered member leaves C_Club.AreMembersReady
+    // false and the whole member list spinning, with no timer, no retry and no error dialog to recover (see
+    // HandleQueryPlayerNamesForCommunity). The one window STATUS_AUTHED does have, m_inQueue, is before
+    // CMSG_ENUM_CHARACTERS and so before any community UI can exist - and unlike STATUS_LOGGEDIN's, it logs.
     // UNVERIFIED: whether RETAIL admits these two before world entry. That is not measurable from here - both
     // opcodes occur 0 times over the capture corpus (defined above WorldPackets::Auth::SuspendComms; counted as
     // 0x44000D/0x44000E in the 12.1 window and as 0x41000D/0x41000E in the 12.0.7 one, never as one number over
