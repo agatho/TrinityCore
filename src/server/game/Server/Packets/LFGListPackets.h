@@ -215,14 +215,22 @@ namespace WorldPackets
         //     GroupFinderCategoryID == 3 - the CategoryID of that same packet. Independent confirmation
         //     that this list holds GroupFinderActivity ids and is category-consistent.
         //
-        // The one that is NOT a Lua argument: ResolvedActivityIDs (+40/+48). The C++ search fills it by
-        // calling RVA 0x24E26D0 with (categoryID, filter, terms, &out). That function walks
-        // GroupFinderActivity, drops every record whose GroupFinderCategoryID != CategoryID and every
-        // record whose Flags do not carry all bits of Filter, matches the remainder's names against the
-        // typed terms, and emits the surviving ids (directly for a name hit, one per difficulty for records
-        // reached through the second store). So the client resolves the SEARCH BOX against the activity
-        // table itself and tells the server which activities it wants - the server does not have to
-        // reproduce that predicate, only honour the set.
+        // The one that is NOT a Lua argument: ResolvedActivityIDs (+40/+48). Nor is the search text - the
+        // 12.1 Search binding takes no searchText (see the argument list above, and LFGListSearchPanel_DoSearch
+        // reads self.SearchBox:GetText() only to decide about auto-create mode), so the C++ search reads the
+        // box itself and hands it on. It fills the list by calling RVA 0x24E26D0 with
+        // (categoryID, filter, terms, &out). That function walks GroupFinderActivity, drops every record
+        // whose GroupFinderCategoryID != CategoryID and every record whose computed filter mask does not
+        // carry all bits of Filter, matches the remainder's names against the typed terms, and emits the
+        // surviving ids (directly for a name hit, one per difficulty for records reached through the second
+        // store). So the client resolves the SEARCH BOX against the activity table itself and tells the
+        // server which activities it wants - the server does not have to reproduce that predicate, only
+        // honour the set.
+        // BOTH emission sites are gated on the term matcher @ RVA 0x24E2630, and that function opens with
+        // `if (terms.begin() == terms.end()) return 0`. So an EMPTY SEARCH BOX PRODUCES AN EMPTY LIST - not
+        // "every activity of the category", which is what LFGListMgr::Matches used to assert. The list is
+        // therefore always a name-derived set, and it is non-empty only when the player typed something.
+        // That is what makes it safe for the server to treat it as a narrowing whenever it is present.
         // Three separate defects were fixed here against the old nine-scalar model:
         //   - the term blocks are written AFTER all fixed scalars, not right behind the 5-bit count;
         //   - each term slot carries a presence bit next to its 5-bit length;
@@ -259,10 +267,31 @@ namespace WorldPackets
             bool CrossFaction = false;
             uint32 CategoryID = 0;              // GroupFinderCategory id - C_LFGList.Search arg 1. (68974:
                                                 // JOIN carried 1 = questing and the SEARCH echoed the 1)
-            uint32 Filter = 0;                  // C_LFGList.Search arg 2. Consumed CLIENT-side: RVA
-                                                // 0x24E26D0 drops every GroupFinderActivity whose Flags do
-                                                // not carry all of these bits before it builds
-                                                // ResolvedActivityIDs. Nothing left for the server to do.
+            uint32 Filter = 0;                  // C_LFGList.Search arg 2, a mask of Enum.LFGListFilter
+                                                // (LFGConstantsDocumentation.lua 12.1.0.69404): Recommended
+                                                // 1, NotRecommended 2, PvE 4, PvP 8, Timerunning 16,
+                                                // CurrentExpansion 32, CurrentSeason 64, NotCurrentSeason
+                                                // 128. Measured 1 in all three captures, which is what
+                                                // ResolveCategoryFilters (LFGList.lua) forces for the
+                                                // dungeon category.
+                                                // Applied CLIENT-side and only there: RVA 0x24E26D0 keeps a
+                                                // GroupFinderActivity record only when `(~mask & Filter)==0`
+                                                // before it builds ResolvedActivityIDs. `mask` is NOT the
+                                                // DB2 Flags column - it is computed per record at RVA
+                                                // 0x24DA960 from the SEARCHING PLAYER's level against the
+                                                // activity's suggestion (bits 1/2), the record's PvE/PvP/
+                                                // Timerunning flag bits (4/8/16), an expansion test (32) and
+                                                // membership in a client-side store (64/128). The server
+                                                // models neither the player-relative half nor that store, so
+                                                // it cannot reproduce this predicate, and the client does
+                                                // not make up for it: GetFilteredSearchResults @ RVA
+                                                // 0x24E3A40 drops only rows listed in a client-side map, it
+                                                // re-applies no filter mask. Runde 12 finding, left OPEN and
+                                                // recorded as such: the narrowing reaches the server ONLY
+                                                // through ResolvedActivityIDs, and that list is itself empty
+                                                // when nothing is typed - see the note on it below, and
+                                                // LFGListMgr::Matches for why a partial reproduction would
+                                                // empty the browse pane instead of narrowing it.
             uint32 PreferredFilters = 0;        // C_LFGList.Search arg 3.
                                                 // UNVERIFIED: what "preferred" changes. It reaches the
                                                 // message unexamined (+32 = argument 3 verbatim) and no
@@ -758,27 +787,9 @@ namespace WorldPackets
         //               setter is `else if (state == 3 && previous != 3) return present(reason)`). It is the
         //               failure reason code, which is why it is meaningless on every other state.
         //               The presenter is a table lookup, so the reason code is a CLOSED vocabulary - see
-        //               ApplicationFailureReason below for the table and its 25 values.
+        //               ApplicationFailureReason above for the table and its 25 values.
         //   RoleGranted -> obj+128, stored raw at the applicant record's +2256.
         //   StateBits   -> obj+124 as `wireByte >> 4`, i.e. the application state (see ApplicationStateBits).
-        class LFGListApplicationStatusUpdate final : public ServerPacket
-        {
-        public:
-            explicit LFGListApplicationStatusUpdate() : ServerPacket(SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE, 80) { }
-            WorldPacket const* Write() override;
-
-            LFG::RideTicket Ticket;             // application ticket (type 6)
-            LFG::RideTicket ListingTicket;      // listing ticket (type 4)
-            uint64 Unknown = 0;
-            // UNVERIFIED: the two values are read off the 12.0.7 capture (8 while pending, 60 on invite);
-            // "invite window in seconds" is a guess and nothing in the client was found that reads this
-            // field on a non-failure state. The decoded meaning covers the FAILURE case only - there the
-            // dispatcher hands it to the error presenter @ RVA 0x24E25E0 as the reason code (see above).
-            uint32 UnkResult = 8;
-            uint8 RoleGranted = 0;
-            uint8 StateBits = 0;
-        };
-
         // The failure reason of an application, i.e. the value the client turns into the red error line the
         // player actually reads. It is a CLOSED vocabulary, and it is measured, not guessed: the state setter
         // @ RVA 0x24DD190 forwards it to the presenter @ RVA 0x24E25E0 for state 3 ("failed") and for no
@@ -802,16 +813,52 @@ namespace WorldPackets
         //     81 ERR_RESTRICTED_ACCOUNT_LFG_LIST_CLASS_TRIAL
         // A code outside that set falls off the end of the table and the presenter returns silently - which is
         // why picking a value at random is the same as sending nothing at all.
+        // Re-read from the 12.1.0.69382 image in Runde 12, independently of the list above: the 23 pairs run
+        // from offset 0x00 to 0xB0 in the order 31, 33, 34, 35, 55, 36, 37, 16, 38, 39, 40, 41, 42, 43, 44,
+        // 45, 46, 52, 53, 63, 66, 74, 75 - and 0xB8 onward is float data, so the table really does end there.
+        // The GameError ids resolve as claimed (31 -> 805 ERR_LFG_GROUP_FULL, 33 -> 806 ERR_LFG_NO_LFG_OBJECT,
+        // 37 -> 813 ERR_LFG_MEMBERS_NOT_PRESENT, 63 -> 1040 ERR_ALREADY_USING_LFG_LIST). 8 is NOT in the set.
         // That code column is byte for byte TrinityCore's existing LfgJoinResult (LFGMgr.h:118), whose
         // comments already carry the English text of each ERR_ key; the names below are only the handful this
         // family needs, kept here so the packet layer does not have to include the dungeon-finder header.
         namespace ApplicationFailureReason
         {
+            // NOT a reason: 0x08 is what the 12.0.7 capture carries while an application is merely pending,
+            // and it is the ONLY legitimate content of a reason field on a state other than "failed" - the
+            // client never reads it there. It is named so that a sender on a non-failure state has to say so
+            // instead of leaving a value in the field that looks like a code and is not one. Runde 12: 0x08
+            // is exactly what used to go out on the four FAILED endings of the invite-accept flow, where it
+            // falls off the end of the presenter's table and leaves the player with no error line at all.
+            constexpr uint8 NotAFailure         = 0x08;
+            constexpr uint8 GroupFull           = 0x1F;  // "Your group is already full."
             constexpr uint8 NoLfgObject         = 0x21;  // "Internal LFG Error."
+            constexpr uint8 MembersNotPresent   = 0x25;  // "One or more group members are pending invites or disconnected."
             constexpr uint8 InvalidSlot         = 0x27;  // "One or more dungeons was not valid."
             constexpr uint8 TooManyLfg          = 0x35;  // "You are queued for too many instances."
             constexpr uint8 AlreadyUsingLfgList = 0x3F;  // "You can't do that while using Premade Groups."
         }
+
+        class LFGListApplicationStatusUpdate final : public ServerPacket
+        {
+        public:
+            explicit LFGListApplicationStatusUpdate() : ServerPacket(SMSG_LFG_LIST_APPLICATION_STATUS_UPDATE, 80) { }
+            WorldPacket const* Write() override;
+
+            LFG::RideTicket Ticket;             // application ticket (type 6)
+            LFG::RideTicket ListingTicket;      // listing ticket (type 4)
+            uint64 Unknown = 0;
+            // On StateBits == Failed this is the failure reason and nothing else: it has to be one of
+            // ApplicationFailureReason's TABLE values or the presenter drops it and the player is left with
+            // no error line - which is why the default is the named non-failure filler and not a bare 8.
+            // UNVERIFIED: the two values are read off the 12.0.7 capture (8 while pending, 60 on invite);
+            // "invite window in seconds" is a guess and nothing in the client was found that reads this
+            // field on a non-failure state. The decoded meaning covers the FAILURE case only - there the
+            // dispatcher hands it to the error presenter @ RVA 0x24E25E0 as the reason code (see above).
+            uint32 UnkResult = ApplicationFailureReason::NotAFailure;
+            uint8 RoleGranted = 0;
+            uint8 StateBits = 0;
+        };
+
 
         // SMSG_LFG_LIST_APPLY_TO_GROUP_RESULT (0x5A000D) - dispatcher case @ RVA 0x755DCC:
         //   RideTicket Ticket ; RideTicket ListingTicket ; <full search row, reader 0x758320> ;

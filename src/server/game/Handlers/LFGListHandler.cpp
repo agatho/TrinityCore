@@ -185,12 +185,16 @@ namespace
     // one of those endings was a bare `return`: the applicant pressed Accept and received nothing at all.
     // Same defect class as the four silent refusals in HandleLFGListApplyToGroup, on the sister handler.
     //
-    // UnkResult 8, as on every non-invite path: the 60 of the invite branch is the invite-response window,
-    // and after a failed accept there is no window left to count down.
+    // The reason field is a required argument and is forwarded verbatim - see the contract on
+    // LFGListMgr::SendApplicationStatusBits. In short: the client presents it ONLY on the failed state, and
+    // only if it is one of ApplicationFailureReason's table values. Runde 11 gave these endings a state but
+    // left the reason at the pending filler 8, which is not in that table - so the four endings below still
+    // put no text in front of the player. Naming the reason at every call site is what closes that.
     // Lives in LFGListMgr for the same reason SendApplicantList does: the delist path needs it too.
-    void SendApplicationStatusBits(LFGList::Listing const& listing, LFGList::Application const& app, uint8 stateBits)
+    void SendApplicationStatusBits(LFGList::Listing const& listing, LFGList::Application const& app,
+        uint8 stateBits, uint8 failureReason)
     {
-        LFGListMgr::SendApplicationStatusBits(listing, app, stateBits);
+        LFGListMgr::SendApplicationStatusBits(listing, app, stateBits, failureReason);
     }
 }
 
@@ -676,7 +680,10 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
         // The inviting leader went offline between invite and accept. "failed" (nibble 3), not one of the
         // three decline states: nobody declined anything, the group is simply not reachable. The
         // application stays - the leader may come back, and the leader's own list is unchanged by this.
-        SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::Failed);
+        // ERR_LFG_MEMBERS_NOT_PRESENT, "One or more group members are pending invites or disconnected", is
+        // what the situation is: the one member that matters is disconnected.
+        SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::Failed,
+            WorldPackets::LFGList::ApplicationFailureReason::MembersNotPresent);
         return;
     }
 
@@ -688,7 +695,10 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
         if (!group->Create(leader))
         {
             delete group;
-            SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::Failed);
+            // Group::Create failed - a server-side fault with no player-facing cause, which is precisely
+            // what ERR_LFG_NO_LFG_OBJECT ("Internal LFG Error.") is the table's word for.
+            SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::Failed,
+                WorldPackets::LFGList::ApplicationFailureReason::NoLfgObject);
             return;
         }
         sGroupMgr->AddGroup(group);
@@ -705,7 +715,8 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
         // word for it; the constant was measured and had no caller until now, which is what made this
         // ending silent. The application is dropped with it: the seat it was invited to no longer exists,
         // and leaving the row standing would give the leader an Invite button that cannot succeed.
-        SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::DeclinedFull);
+        SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::DeclinedFull,
+            WorldPackets::LFGList::ApplicationFailureReason::NotAFailure);
         sLFGListMgr.RemoveApplication(applicationId);
         SendApplicantList(*listing);
         return;
@@ -715,7 +726,15 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
     {
         // The applicant joined some other party in the meantime. Its own doing, not a decline by the
         // leader, so "failed" - and the application goes, because it can never be honoured from here.
-        SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::Failed);
+        //
+        // UNVERIFIED: the reason code. The blocker is the applicant's OWN membership in another party, and
+        // the presenter's closed table has no code that says so - it speaks about the group, the dungeon or
+        // the queue. ERR_ALREADY_USING_LFG_LIST ("You can't do that while using Premade Groups.") is the one
+        // entry that names the player's own conflicting state, and it is the code this unit already uses for
+        // the other state conflict of the same kind (applying to one's own listing). A recording of this
+        // ending would settle it; it is in the status file's aufnahme_noetig with the other refusals.
+        SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::Failed,
+            WorldPackets::LFGList::ApplicationFailureReason::AlreadyUsingLfgList);
         sLFGListMgr.RemoveApplication(applicationId);
         SendApplicantList(*listing);
         return;
@@ -725,12 +744,20 @@ void WorldSession::HandleLFGListInviteResponse(WorldPackets::LFGList::LFGListInv
     // SMSG_PARTY_INVITE dialog), the accepted state (0xA0) is echoed, and the joining member receives the
     // listing status (0x19).
     //
-    // The return value is checked: AddMember refuses on its own account (a full or converted group, a
-    // failed member row) and the acceptance plus the 0x19 listing status used to go out regardless, so the
-    // applicant was told it had joined a party it was not in.
+    // The return value is checked: the acceptance plus the 0x19 listing status used to go out regardless,
+    // so the applicant was told it had joined a party it was not in.
+    //
+    // Group::AddMember has exactly ONE false return, and it is not a family of them: it fails only when the
+    // group is a raid and no subgroup has a free slot (Group.cpp, the `if (!groupFound) return false` of the
+    // MAX_RAID_SUBGROUPS scan) - everything after that point either succeeds or aborts. So the reason is not
+    // a judgement call: ERR_LFG_GROUP_FULL, "Your group is already full." The IsFull() guard above already
+    // covers the same ground by member count (MAX_RAID_SUBGROUPS * MAX_GROUP_SIZE == MAX_RAID_SIZE, so a
+    // raid with every subgroup full IS full), which makes this a consistency backstop for a group whose
+    // subgroup counters and slot vector have drifted apart - reachable only then, and answered when it is.
     if (!group->AddMember(applicant))
     {
-        SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::Failed);
+        SendApplicationStatusBits(*listing, application, WorldPackets::LFGList::ApplicationStateBits::Failed,
+            WorldPackets::LFGList::ApplicationFailureReason::GroupFull);
         return;
     }
 

@@ -263,7 +263,8 @@ void LFGListMgr::DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 stat
     // See aufnahme_noetig in the status file. Silence is the one answer that is certainly wrong: the client
     // has no other way to learn that the application is over.
     for (LFGList::Application const& app : listing->Applications)
-        SendApplicationStatusBits(*listing, app, WorldPackets::LFGList::ApplicationStateBits::DeclinedDelisted);
+        SendApplicationStatusBits(*listing, app, WorldPackets::LFGList::ApplicationStateBits::DeclinedDelisted,
+            WorldPackets::LFGList::ApplicationFailureReason::NotAFailure);
 
     RemoveListing(listingId, leader);
 }
@@ -454,6 +455,10 @@ LFGList::Listing const* LFGListMgr::GetListing(uint32 listingId) const
 // against an empty name rather than against the text it is hiding.
 bool LFGListMgr::MatchesKeywords(LFGList::Listing const& listing, LFGList::SearchKeywords const& keywords)
 {
+    // An empty request constrains nothing. Matches(), the only caller today, no longer reaches this: it
+    // decides the both-halves-empty case itself, because a wildcard inside an OR is a wildcard for the whole
+    // condition. The guard stays because it is this function's contract - dropping it would make a future
+    // caller's empty request match NOTHING, which is the opposite of what an empty request means.
     if (keywords.empty())
         return true;
 
@@ -529,17 +534,56 @@ bool LFGListMgr::Matches(LFGList::Listing const& listing, LFGList::SearchFilter 
     // The client's own resolution of the search box against GroupFinderActivity, ORed with the title match.
     // Both halves come out of the SAME typed words: the client turns them into an activity set (it alone has
     // the activity names) and the server matches them against the listing title (it alone has the titles).
+    //
+    // WHAT THE CLIENT ACTUALLY SENDS, decompiled in Runde 12 instead of inferred from the field list. The
+    // resolver @ RVA 0x24E26D0 walks GroupFinderActivity and drops a record on two tests before it looks at
+    // any name: `categoryOf(record) != CategoryID` and `(~mask(record) & Filter) != 0`, i.e. keep only what
+    // carries ALL bits of Filter. It then emits an id at two places, and BOTH are gated on the term matcher
+    // @ RVA 0x24E2630 - whose very first statement is `if (terms.begin() == terms.end()) return 0`.
+    // So an empty search box yields an EMPTY ResolvedActivityIDs. The note that stood here claimed the
+    // opposite ("the client sends every activity of the category"); it reached the right behaviour by a
+    // route the client does not take, and Runde 12 called that out.
+    //
+    // Two consequences, and they decide the shape of this predicate:
+    //   - ResolvedActivityIds is non-empty ONLY when the player typed something. It is never the lone
+    //     carrier of a request, and the union below can never be reached with a wildcard on one side.
+    //   - The Filter narrowing therefore does not reach the server at all when the box is empty, and this
+    //     is a REAL GAP, stated here rather than smoothed over. mask() is the client's computed
+    //     Enum.LFGListFilter mask (RVA 0x24DA960), built from the SEARCHING PLAYER's level against the
+    //     activity's suggestion (Recommended 1 / NotRecommended 2), the record's own PvE 4 / PvP 8 /
+    //     Timerunning 16 flag bits, an expansion test (CurrentExpansion 32) and membership in a client-side
+    //     store (CurrentSeason 64 / NotCurrentSeason 128). The last three are not server state at all, and
+    //     the first two need a level/suggestion model this unit's listing does not carry.
+    //     The client does NOT make up for it either - that was checked rather than hoped. The UI displays
+    //     C_LFGList.GetFilteredSearchResults() (LFGList.lua 12.1.0.69404,
+    //     LFGListSearchPanel_UpdateResultList), whose implementation @ RVA 0x24E3A40 walks the received
+    //     rows and drops exactly those whose key at row+0x10 is present in a client-side map
+    //     (qword_7FF7853F17F0) - what fills that map was not identified. It re-applies neither the filter
+    //     mask nor the category nor the activity set. So a search with a Filter and an empty box really does
+    //     show the whole category, and closing it needs work outside this unit.
+    //     Reproducing the mask PARTIALLY would be worse than not reproducing it: the test is
+    //     `(mask & Filter) == Filter`, so a server mask that cannot carry Recommended would fail every
+    //     record for the one Filter value actually measured (1, which ResolveCategoryFilters forces for the
+    //     dungeon category) and empty the browse pane. Delivering too much is the recoverable error here.
+    //
+    // Hence: a request with BOTH halves empty is the wildcard - that is the search box left blank, and the
+    // whole category is the honest answer to it. Anything else has to satisfy at least one half, and each
+    // half only counts when it was actually asked for. That is the fix for Runde 12's second finding: a
+    // request carrying resolved activities and no keywords now filters by them instead of riding in an OR
+    // that an empty keyword set satisfies on its own.
+    if (filter.Keywords.empty() && filter.ResolvedActivityIds.empty())
+        return true;
+
     // Retail shows a group whose activity is what you typed even when its title says something else, and a
     // group whose title says what you typed even when its activity is called otherwise, so the union is the
-    // only reading that does not silently drop one of the two halves. With an empty search box the client
-    // sends every activity of the category and there are no keywords, so both sides are wildcards anyway.
+    // only reading that does not silently drop one of the two halves.
     //
     // UNVERIFIED: that retail unions them rather than intersecting. Only the server can decide it and there
     // is no retail server to read; what IS measured is that the client sends both halves for one query
     // (69273_s69273_a_43003A_{0,1,2}.bin: Terms "the"/"nexus-captain" AND 17 resolved activity ids). The
     // union is also the non-regressive choice - intersecting would empty the browse pane for every listing
     // whose title does not repeat the dungeon name.
-    bool const keywordHit = MatchesKeywords(listing, filter.Keywords);
+    bool const keywordHit = !filter.Keywords.empty() && MatchesKeywords(listing, filter.Keywords);
     bool const activityHit = !filter.ResolvedActivityIds.empty()
         && OffersAnyActivity(d.ActivityIDs, filter.ResolvedActivityIds);
     return keywordHit || activityHit;
@@ -657,10 +701,12 @@ void LFGListMgr::SendApplicantList(LFGList::Listing const& listing)
             leader->SendDirectMessage(data);
 }
 
-// See the contract on the declaration. UnkResult goes out as 8, the value every non-invite path carries:
-// the 60 of the invite branch is the invite-response window, and none of the endings this serves has a
-// window left to count down.
-void LFGListMgr::SendApplicationStatusBits(LFGList::Listing const& listing, LFGList::Application const& app, uint8 stateBits)
+// See the contract on the declaration for why failureReason is a required argument and what it may hold.
+// It goes into the message unchanged: on a failed state it IS the reason the client looks up, and on every
+// other state it is the non-failure filler the capture carries. The 60 of the invite branch is the
+// invite-response window, and none of the endings this serves has a window left to count down.
+void LFGListMgr::SendApplicationStatusBits(LFGList::Listing const& listing, LFGList::Application const& app,
+    uint8 stateBits, uint8 failureReason)
 {
     Player* applicant = ObjectAccessor::FindConnectedPlayer(app.ApplicantGuid);
     if (!applicant)
@@ -670,7 +716,7 @@ void LFGListMgr::SendApplicationStatusBits(LFGList::Listing const& listing, LFGL
     FillApplicationTicket(packet.Ticket, app);
     FillListingTicket(packet.ListingTicket, listing);
     packet.StateBits = stateBits;
-    packet.UnkResult = 8;
+    packet.UnkResult = failureReason;
     packet.RoleGranted = 0;
     applicant->SendDirectMessage(packet.Write());
 }

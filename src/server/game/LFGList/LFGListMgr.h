@@ -220,7 +220,16 @@ public:
     // member for - "declined because the party filled up", "declined because the listing is gone" - which
     // the CLIENT does have (nibbles 6 and 7 of the state->string mapper @ RVA 0x24DADA0). Without it those
     // endings were bare returns and the applicant was told nothing at all.
-    static void SendApplicationStatusBits(LFGList::Listing const& listing, LFGList::Application const& app, uint8 stateBits);
+    //
+    // failureReason has NO default on purpose. It is the message's reason field, and the client reads it on
+    // exactly one state: the setter @ RVA 0x24DD190 forwards it to the error presenter @ RVA 0x24E25E0 only
+    // when the state resolves to 3 = failed. There it must be one of the presenter table's values or the
+    // lookup falls off the end and the applicant sees nothing - the state changes, no text appears. On every
+    // other state pass ApplicationFailureReason::NotAFailure, which is the value the capture carries and
+    // says in its name that no reason is being claimed. A default would let a Failed caller forget it and
+    // reinstate exactly the silence this parameter exists to end.
+    static void SendApplicationStatusBits(LFGList::Listing const& listing, LFGList::Application const& app,
+        uint8 stateBits, uint8 failureReason);
 
     // The descriptor as it must go out to a client. Identical to the stored one, except that a listing
     // whose text was flagged and not yet resolved goes out WITHOUT its name and comment: retail withholds
