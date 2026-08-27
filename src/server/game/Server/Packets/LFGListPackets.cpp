@@ -481,8 +481,9 @@ WorldPacket const* LFGListSearchResultsUpdate::Write()
         for (SearchResultMember const& member : row.Members)
             WriteSearchResultMember(_worldPacket, member);
 
-        // 21 bits across three bytes: 7 optional-presence flags, 13 bools, and one conditional value bit
-        // (see the header). All zero -> no optionals follow. UNVERIFIED: the meaning of each bit.
+        // 21 bits across three bytes (+3 padding): 7 presence flags for the seven trailing optionals,
+        // 12 plain bools, and a presence/value pair for one in-band bool - the per-bit map is in the header.
+        // All zero -> no optionals follow. UNVERIFIED: what the 12 bools mean.
         for (uint32 i = 0; i < 21; ++i)
             _worldPacket << Bits<1>(false);
         _worldPacket.FlushBits();

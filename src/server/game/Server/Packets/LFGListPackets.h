@@ -449,16 +449,27 @@ namespace WorldPackets
         // Client 12.1.0.69382: u32 RowCount, then RowCount rows through reader 0x758640 (stride 2008):
         //   RideTicket ; u32 Age(+40) ; u32 MemberCount ; ListingDescriptor(+224) ; u8(+2002) ;
         //   MemberCount x member(0x7580F0) ;
-        //   three bit bytes carrying 21 bits (7 optional-presence flags + 12 bools + 1 conditional value bit,
-        //   3 padding) ;
-        //   then the present optionals in order: PackedGuid, u32, u32, PackedGuid, PackedGuid, PackedGuid,
-        //   PackedGuid.
+        //   three bit bytes carrying 21 bits, then the present optionals in order: PackedGuid, u32, u32,
+        //   PackedGuid, PackedGuid, PackedGuid, PackedGuid.
+        // The 21 bits, counted off the reader MSB-first (two earlier comments itemized this differently and
+        // both were wrong - one totalled 20, the other folded the conditional's presence flag in with the
+        // plain bools; the real split is 7 + 12 + 1 + 1):
+        //   byte 1: has(GuidA)+48 . has(U32A)+72 . has(CondBool)+81 . has(U32B)+84 . bool+120 . bool+121 .
+        //           has(GuidB)+128 . has(GuidC)+152
+        //   byte 2: has(GuidD)+176 . has(GuidE)+200 . bool+1992 . bool+1993 . bool+1994 . bool+1995 .
+        //           bool+1996 . bool+1997
+        //   byte 3: bool+1998 . bool+1999 . bool+2000 . bool+2001 . value of CondBool -> +80 (stored only
+        //           when has(CondBool) is set) . 3 bits padding to the byte
+        // So: 7 presence flags for the seven trailing optionals, 12 plain bools, and a pair (presence flag in
+        // byte 1, value in byte 3) for one in-band bool. 7 + 12 + 1 + 1 = 21.
+        // UNVERIFIED: what any of the 12 bools MEAN. The shape above is read off the reader; the semantics
+        // are not, and every bit goes out as zero.
         // 12.1 drift: 68275 read Ticket, Age, MemberCount, u8, three bit bytes, descriptor, optionals,
         // members. The old writer emitted `u8 0, u32 8, 26 zero bytes` which happens to be exactly the 68275
         // shape (three bit bytes 08 00 00 plus a 27-byte zero descriptor) and is wrong for 12.1.
         // We emit all 21 bits as zero and therefore no optionals. The 0x08 bit the 68275 writer carried is
         // NOT reproduced: in 12.1 that bit position belongs to a different field of a re-laid-out struct, so
-        // copying it forward would assert something we cannot support. UNVERIFIED: the meaning of all 21 bits.
+        // copying it forward would assert something we cannot support.
         class LFGListSearchResultsUpdate final : public ServerPacket
         {
         public:
@@ -482,6 +493,9 @@ namespace WorldPackets
         // 2 = the player confirmed it (C_LFGList.ConfirmCensoredActiveEntry),
         // 0 = revealed/cleared (C_LFGList.RevealCensoredActiveEntry).
         // So marking a listing as flagged needs BOTH the presence bit AND a non-zero code.
+        // Note what that bool implies: this message can only ever drive the state to 0 or 1. The 2 is written
+        // by the client alone, and any server-sent update after a confirmation would silently revoke it. The
+        // senders therefore never repeat this message for a listing the player has already confirmed.
         // UNVERIFIED: the value range of CensorCode. The client only ever tests it against zero.
         class LFGListCensoredActiveEntryUpdate final : public ServerPacket
         {

@@ -28,40 +28,39 @@
 
 namespace
 {
-    // Fill the RideTicket that keys a listing on the client (sniff: type 4, Id = listing id, Time = post
-    // time). RequesterGuid is the listed PARTY, not the leader: decoding the 69273 SMSG_LFG_LIST_UPDATE_STATUS
-    // payloads gives a HighGuid::Party guid here that changes from one listing to the next, while the
-    // leader's HighGuid::Player guid stays constant and rides in the message's own optional field. A
-    // solo listing has no group yet, so fall back to the leader.
+    // Both listing tickets are built by LFGListMgr and nowhere else - see the note on the declarations there.
+    // These are the shorthands this file used before the two builders moved; they forward, they do not copy.
     void FillListingTicket(WorldPackets::LFG::RideTicket& ticket, LFGList::Listing const& listing)
     {
-        ticket.RequesterGuid = !listing.GroupGuid.IsEmpty() ? listing.GroupGuid : listing.LeaderGuid;
-        ticket.Id = listing.Id;
-        ticket.Type = WorldPackets::LFG::RideType::LfgListListing;
-        ticket.Time = int32(listing.CreatedTime);
-        ticket.IsCrossFaction = false;
+        LFGListMgr::FillListingTicket(ticket, listing);
     }
 
-    // Fill an application RideTicket (sniff: type 6, Id = application id, Time = apply time).
     void FillApplicationTicket(WorldPackets::LFG::RideTicket& ticket, LFGList::Application const& app)
     {
-        ticket.RequesterGuid = app.ApplicantGuid;
-        ticket.Id = app.Id;
-        ticket.Type = WorldPackets::LFG::RideType::LfgListApplication;
-        ticket.Time = int32(app.AppliedTime);
+        LFGListMgr::FillApplicationTicket(ticket, app);
+    }
+
+    // Fill the RideTicket of a REJECTED listing creation. CMSG_LFG_LIST_JOIN carries a descriptor and no
+    // ticket (reader: LFGListJoin::Read), and a rejected create leaves no listing behind, so there is no id
+    // to name and nothing to echo - the only thing this ticket can identify is the party that tried. Same
+    // requester rule as FillListingTicket: the party being listed, falling back to the leader when solo.
+    // Type stays LfgListListing so the client files the answer with the listing flow rather than with an
+    // application. UNVERIFIED: what the consumer does with the id. The hook slot of SMSG_LFG_LIST_JOIN_RESULT
+    // (dispatcher case 5898241 in 0x755460, slot RVA 0x55FED90) is NULL in the retail image, so no consumer
+    // could be decoded; only that the ticket is read at all is established.
+    void FillRejectedListingTicket(WorldPackets::LFG::RideTicket& ticket, Player const* player)
+    {
+        Group const* group = player->GetGroup();
+        ticket.RequesterGuid = group ? group->GetGUID() : player->GetGUID();
+        ticket.Id = 0;                          // no listing was created
+        ticket.Type = WorldPackets::LFG::RideType::LfgListListing;
+        ticket.Time = int32(GameTime::GetGameTime());
         ticket.IsCrossFaction = false;
     }
 
-    // Wire state bits for an application state (sniff: 0x40 applied, 0x20 invited, 0xA0 accepted).
     uint8 ApplicationStateToBits(LFGList::ApplicationState state)
     {
-        switch (state)
-        {
-            case LFGList::ApplicationState::Applied:  return WorldPackets::LFGList::ApplicationStateBits::Applied;
-            case LFGList::ApplicationState::Invited:  return WorldPackets::LFGList::ApplicationStateBits::Invited;
-            case LFGList::ApplicationState::Accepted: return WorldPackets::LFGList::ApplicationStateBits::Accepted;
-            default:                                  return WorldPackets::LFGList::ApplicationStateBits::Declined;
-        }
+        return LFGListMgr::ApplicationStateToBits(state);
     }
 
     // NOTE: the search-result row builder lives in LFGListMgr (LFGListMgr::FillSearchRow) so the search reply,
@@ -75,13 +74,7 @@ namespace
         WorldPackets::LFGList::LFGListApplicantListUpdate packet;
         FillListingTicket(packet.ListingTicket, listing);
         for (LFGList::Application const& app : listing.Applications)
-        {
-            WorldPackets::LFGList::ApplicantInfo& info = packet.Applicants.emplace_back();
-            FillApplicationTicket(info.Ticket, app);
-            info.PlayerGuid = app.ApplicantGuid;
-            info.StateBits = ApplicationStateToBits(app.State);
-            info.Comment = app.Comment;
-        }
+            LFGListMgr::FillApplicantInfo(packet.Applicants.emplace_back(), app);
         WorldPacket const* data = packet.Write();
 
         bool leaderNotified = false;
@@ -182,10 +175,13 @@ void WorldSession::HandleLFGListConfirmCensoredActiveEntry(WorldPackets::LFGList
     if (!sLFGListMgr.ConfirmCensoredListing(packet.Ticket.Id, player->GetGUID()))
         return;
 
-    // Confirming does not lift the flag - the text stays withheld from searchers. Re-send so the client's
-    // own state matches ours; it moves its resolution state to "confirmed" locally when it sends, and this
-    // keeps the two in step after a reload.
-    SendLFGListCensoredActiveEntryUpdate(packet.Ticket.Id);
+    // No answer, on purpose. The confirmation is client-local by construction: C_LFGList.ConfirmCensoredActiveEntry
+    // (RVA 0x117E560) writes the resolution state 2 itself before sending, and the only opcode that can write
+    // that state again is SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE - whose consumer (RVA 0x24DEAA0) stores
+    // `HasCensorCode && CensorCode != 0`, a bool that can only produce 0 or 1. Answering the confirmation with
+    // that message would therefore push the client from 2 straight back to 1 and re-open the very dialog the
+    // player just dismissed. The wire has no way to say "flagged and confirmed"; the state we keep here only
+    // stops the server from nagging again (see HandleLFGListGetStatus).
 }
 
 void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
@@ -200,6 +196,7 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
         if (group->GetLeaderGUID() != player->GetGUID())
         {
             WorldPackets::LFGList::LFGListJoinResult result;
+            FillRejectedListingTicket(result.Ticket, player);
             result.Result = 1; // not the leader (exact enum value NEEDS-SNIFF)
             SendPacket(result.Write());
             return;
@@ -214,6 +211,7 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
         if (activityId && !sGroupFinderActivityStore.LookupEntry(activityId))
         {
             WorldPackets::LFGList::LFGListJoinResult result;
+            FillRejectedListingTicket(result.Ticket, player);
             result.Result = 1; // invalid activity (exact enum value NEEDS-SNIFF)
             SendPacket(result.Write());
             return;
@@ -249,6 +247,7 @@ void WorldSession::HandleLFGListJoin(WorldPackets::LFGList::LFGListJoin& packet)
     else
     {
         WorldPackets::LFGList::LFGListJoinResult result;
+        FillRejectedListingTicket(result.Ticket, player);
         result.Result = 1; // create failed (exact enum value NEEDS-SNIFF)
         SendPacket(result.Write());
     }
@@ -302,7 +301,11 @@ void WorldSession::HandleLFGListGetStatus(WorldPackets::LFGList::LFGListGetStatu
     // the server re-announcing it - without this the player sits on an invisibly flagged listing whose text
     // nobody can see and which no dialog ever mentions again. CMSG_LFG_LIST_GET_STATUS is the request the
     // client makes when the group finder comes back up, so this is the moment to repeat it.
-    if (listing->IsCensored())
+    // Only for a listing the player has NOT dealt with yet. The consumer can write 0 or 1 and nothing else,
+    // so repeating the message for a confirmed listing would re-raise the dialog on every reload. A confirmed
+    // listing consequently comes back with no warning at all - that is the whole of what this wire can carry,
+    // and it is the harmless direction of the two.
+    if (listing->IsCensored() && listing->Censor == LFGList::CensorState::Unresolved)
         SendLFGListCensoredActiveEntryUpdate(listing->Id);
 }
 

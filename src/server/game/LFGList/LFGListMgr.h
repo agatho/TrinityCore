@@ -106,6 +106,19 @@ public:
     // live update push so all three serialize a listing identically.
     void FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing) const;
 
+    // The two RideTickets of the listing system. These MUST be built in exactly one place: the client keys
+    // its stored active entry on the whole 32-byte ticket and compares it field by field before it accepts a
+    // delist (SMSG_LFG_LIST_UPDATE_STATUS consumer @ RVA 0x24DE410, six comparisons against LFG-list manager
+    // +0..+24). A ticket assembled differently on one path than on another is silently ignored by the client.
+    static void FillListingTicket(WorldPackets::LFG::RideTicket& ticket, LFGList::Listing const& listing);
+    static void FillApplicationTicket(WorldPackets::LFG::RideTicket& ticket, LFGList::Application const& app);
+
+    // The wire state bits of an application, and one whole applicant record of SMSG_LFG_LIST_APPLICANT_LIST_UPDATE.
+    // Shared for the same reason as the tickets: the message has two producers (the handler's push and the
+    // application-timeout sweep) and every field one of them forgets is a field the leader's applicant list loses.
+    static uint8 ApplicationStateToBits(LFGList::ApplicationState state);
+    static void FillApplicantInfo(WorldPackets::LFGList::ApplicantInfo& info, LFGList::Application const& app);
+
     // The descriptor as it must go out to a client. Identical to the stored one, except that a listing
     // whose text was flagged and not yet resolved goes out WITHOUT its name and comment: retail withholds
     // them (that is why the edit dialog has to ask the server via C_LFGList.DoesCensoredTextMatch instead

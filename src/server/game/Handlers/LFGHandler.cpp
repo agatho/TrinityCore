@@ -166,11 +166,13 @@ void WorldSession::HandleDFReadyCheckResponse(WorldPackets::LFG::DFReadyCheckRes
 //   Suspend == 1 -> silence, the player may queue
 //   Suspend == 0 -> GameError 832 ERR_LFG_LOREWALKING, the queue attempt is refused
 //
-// TrinityCore has no Lorewalking content: the state is a character flag
-// (CHARACTER_FLAG_4_LOGGED_OUT_WHILE_LOREWALKING = 0x40, SharedDefines.h) that nothing in the tree ever
-// sets. No character can therefore be Lorewalking, and the correct answer is always "suspended, go
-// ahead". The refusal path is implemented and reachable the moment a Lorewalking implementation starts
-// setting that flag - it is not dead by omission.
+// TrinityCore has no Lorewalking content, and - this is the honest version of an earlier claim here - it
+// has nowhere to keep the state either. CHARACTER_FLAG_4_LOGGED_OUT_WHILE_LOREWALKING (0x40) exists as an
+// enumerator in SharedDefines.h and nothing more: no CharacterFlags4 field on Player, no column on the
+// characters table, not one reference anywhere under src/server. So there is no flag to read, and the
+// refusal path CANNOT be exercised on this tree today. Only the success path is live.
+// What is built is the branch, funnelled through IsLorewalkingActive() below so that a later Lorewalking
+// implementation gives that one predicate a body and changes nothing else in this handler.
 //
 // Where the data for such an implementation would live: NOT in a Lorewalking DB2 and not in a column of
 // LFGDungeons, LFGDungeonGroup, GroupFinderCategory or ContentTuning (all four checked against the 12.1
@@ -179,17 +181,32 @@ void WorldSession::HandleDFReadyCheckResponse(WorldPackets::LFG::DFReadyCheckRes
 // has no code xref and appears only in the 18-entry field-name table of the JAM telemetry struct
 // JamTelemetryCharacter, right beside chromieTimeID and timeRunningSeasonID. Lorewalking is a
 // Campaign.db2 id, reported per character alongside the two other alternate-progression modes.
+namespace
+{
+    // Is this character currently Lorewalking, so that queueing for `mapId` has to be refused?
+    // Always false, and not by oversight: the tree has no storage for the state at all (see above). This is
+    // the single place a Lorewalking implementation has to fill in - it would test the campaign
+    // (`lorewalkingCampaignID`, a Campaign.db2 id) against the dungeon's map.
+    // UNVERIFIED: retail's actual condition. No client evidence exists for it either - the client only reads
+    // the answer bit, it never computes the state itself.
+    bool IsLorewalkingActive(Player const* /*player*/, int32 /*mapId*/)
+    {
+        return false;
+    }
+}
+
 void WorldSession::HandleLFGLorewalkingUpdateRequest(WorldPackets::LFG::LFGLorewalkingUpdateRequest& lfgLorewalkingUpdateRequest)
 {
     TC_LOG_DEBUG("lfg", "CMSG_LFG_LOREWALKING_UPDATE_REQUEST {} mapId: {}", GetPlayerInfo(), lfgLorewalkingUpdateRequest.MapID);
 
-    if (!GetPlayer())
+    Player const* player = GetPlayer();
+    if (!player)
         return;
 
     // The payload is LFGDungeons.MapID of the slot the player wants to queue for (see LFGPackets.h for the
-    // DB2Meta walk that establishes it). Nothing in the answer depends on it while no character can be
-    // Lorewalking, but it is the map a future implementation has to test the campaign against.
-    SendLfgSuspendLorewalking(true);
+    // DB2Meta walk that establishes it) - the map a Lorewalking implementation has to test the campaign
+    // against. Suspend is INVERTED: true lets the player queue, false raises GameError 832.
+    SendLfgSuspendLorewalking(!IsLorewalkingActive(player, lfgLorewalkingUpdateRequest.MapID));
 }
 
 // SMSG_LFG_SUSPEND_LOREWALKING (0x5A0021) - one byte, bit 7.

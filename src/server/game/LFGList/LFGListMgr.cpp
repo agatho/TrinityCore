@@ -91,20 +91,9 @@ void LFGListMgr::Update(uint32 diff)
                 if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
                 {
                     WorldPackets::LFGList::LFGListApplicantListUpdate applicantList;
-                    applicantList.ListingTicket.RequesterGuid = listing.LeaderGuid;
-                    applicantList.ListingTicket.Id = listing.Id;
-                    applicantList.ListingTicket.Type = WorldPackets::LFG::RideType::LfgListListing;
-                    applicantList.ListingTicket.Time = int32(listing.CreatedTime);
+                    FillListingTicket(applicantList.ListingTicket, listing);
                     for (LFGList::Application const& app : listing.Applications)
-                    {
-                        WorldPackets::LFGList::ApplicantInfo& info = applicantList.Applicants.emplace_back();
-                        info.Ticket.RequesterGuid = app.ApplicantGuid;
-                        info.Ticket.Id = app.Id;
-                        info.Ticket.Type = WorldPackets::LFG::RideType::LfgListApplication;
-                        info.Ticket.Time = int32(app.AppliedTime);
-                        info.PlayerGuid = app.ApplicantGuid;
-                        info.StateBits = WorldPackets::LFGList::ApplicationStateBits::Applied;
-                    }
+                        FillApplicantInfo(applicantList.Applicants.emplace_back(), app);
                     leader->SendDirectMessage(applicantList.Write());
                 }
             }
@@ -117,17 +106,36 @@ void LFGListMgr::Update(uint32 diff)
         if (listing.ExpireTime && now >= listing.ExpireTime)
         {
             // Tell the leader (if online) the listing expired and is no longer listed.
+            //
+            // What actually reaches the player is the STATUS byte of the second message, not the Reason byte
+            // of the first. Consumer of SMSG_LFG_LIST_UPDATE_STATUS @ RVA 0x24DE410: with Listed = 0, and only
+            // once the incoming ticket matches the stored active entry field for field, it clears the entry,
+            // fires LFG_LIST_ACTIVE_ENTRY_UPDATE (hash 0xF03C06AFDFAA0FB0) and then switches on Status:
+            //   0x2C -> LFG_LIST_ENTRY_EXPIRED_TOO_MANY_PLAYERS   0x3B -> LFG_LIST_ENTRY_EXPIRED_TIMEOUT
+            //   0x4B -> GameError 0x291                            anything else -> no popup at all
+            // (both event hashes verified against the 12.1 image; the two Lua events carry no payload, which
+            // is why the byte has to select between them). This loop is the timeout, so 0x3B it is - the
+            // previous Status 0 landed in the default arm and the player was never told anything.
             if (Player* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
             {
                 WorldPackets::LFGList::LFGListUpdateExpiration expiration;
-                expiration.Ticket.RequesterGuid = listing.LeaderGuid;
-                expiration.Ticket.Id = listing.Id;
-                expiration.Ticket.Type = WorldPackets::LFG::RideType::Lfg;
+                // Same builder as every other listing message. Hand-building it here put the LEADER guid
+                // where the create path had sent the PARTY guid and left Time at 0, so the consumer's
+                // field-by-field comparison failed and the delist was dropped without a trace.
+                FillListingTicket(expiration.Ticket, listing);
+                expiration.ExpirationTime = listing.ExpireTime;
+                // UNVERIFIED: the Reason enum of this message. Its own hook slot (RVA 0x55FECF0, dispatcher
+                // case 5898251) is NULL in the retail image, so no consumer could be decoded. We send the
+                // same code the STATUS switch above uses for a timeout, so the two messages cannot disagree.
+                expiration.Reason = 0x3B;
                 leader->SendDirectMessage(expiration.Write());
 
                 WorldPackets::LFGList::LFGListUpdateStatus status;
                 status.Ticket = expiration.Ticket;
+                status.ExpirationTime = listing.ExpireTime;
+                status.Status = 0x3B;               // -> LFG_LIST_ENTRY_EXPIRED_TIMEOUT
                 status.Listed = false;
+                status.LeaderGuid = listing.LeaderGuid;     // present in every captured payload, listed or not
                 leader->SendDirectMessage(status.Write());
             }
 
@@ -376,6 +384,56 @@ std::vector<LFGList::Listing const*> LFGListMgr::Search(uint32 category, uint32 
     return results;
 }
 
+// Fill the RideTicket that keys a listing on the client (sniff: type 4, Id = listing id, Time = post time).
+// RequesterGuid is the listed PARTY, not the leader: decoding the 69273 SMSG_LFG_LIST_UPDATE_STATUS payloads
+// gives a HighGuid::Party guid here that changes from one listing to the next, while the leader's
+// HighGuid::Player guid stays constant and rides in the message's own optional field. A solo listing has no
+// group yet, so fall back to the leader.
+// Every path that names a listing has to come through here. The client stores this ticket when the listing is
+// created and compares the incoming one against it field by field before it will act on a delist; a path that
+// builds the ticket its own way produces a message the client drops without a word.
+void LFGListMgr::FillListingTicket(WorldPackets::LFG::RideTicket& ticket, LFGList::Listing const& listing)
+{
+    ticket.RequesterGuid = !listing.GroupGuid.IsEmpty() ? listing.GroupGuid : listing.LeaderGuid;
+    ticket.Id = listing.Id;
+    ticket.Type = WorldPackets::LFG::RideType::LfgListListing;
+    ticket.Time = int32(listing.CreatedTime);
+    ticket.IsCrossFaction = false;
+}
+
+// Fill an application RideTicket (sniff: type 6, Id = application id, Time = apply time).
+void LFGListMgr::FillApplicationTicket(WorldPackets::LFG::RideTicket& ticket, LFGList::Application const& app)
+{
+    ticket.RequesterGuid = app.ApplicantGuid;
+    ticket.Id = app.Id;
+    ticket.Type = WorldPackets::LFG::RideType::LfgListApplication;
+    ticket.Time = int32(app.AppliedTime);
+    ticket.IsCrossFaction = false;
+}
+
+// Wire state bits for an application state (sniff: 0x40 applied, 0x20 invited, 0xA0 accepted).
+uint8 LFGListMgr::ApplicationStateToBits(LFGList::ApplicationState state)
+{
+    switch (state)
+    {
+        case LFGList::ApplicationState::Applied:  return WorldPackets::LFGList::ApplicationStateBits::Applied;
+        case LFGList::ApplicationState::Invited:  return WorldPackets::LFGList::ApplicationStateBits::Invited;
+        case LFGList::ApplicationState::Accepted: return WorldPackets::LFGList::ApplicationStateBits::Accepted;
+        default:                                  return WorldPackets::LFGList::ApplicationStateBits::Declined;
+    }
+}
+
+// One applicant record as the leader's list must carry it - ticket, guid, real state and the note the
+// applicant wrote. The comment is the reason this exists: the timeout sweep used to build the record by hand
+// and omit it, so every sweep stripped the notes off the applicants that were still waiting.
+void LFGListMgr::FillApplicantInfo(WorldPackets::LFGList::ApplicantInfo& info, LFGList::Application const& app)
+{
+    FillApplicationTicket(info.Ticket, app);
+    info.PlayerGuid = app.ApplicantGuid;
+    info.StateBits = ApplicationStateToBits(app.State);
+    info.Comment = app.Comment;
+}
+
 void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing) const
 {
     row.GroupGuid = !listing.GroupGuid.IsEmpty() ? listing.GroupGuid : listing.LeaderGuid;
@@ -483,9 +541,12 @@ bool LFGListMgr::EvaluateCensorship(LFGList::Listing& listing)
 
     if (flagged)
     {
-        // Re-flagging an edited listing resets the decision: the player has to deal with it again.
-        if (listing.Censor == LFGList::CensorState::None)
-            listing.Censor = LFGList::CensorState::Unresolved;
+        // Re-flagging an edited listing resets the decision: the player has to deal with it again. This runs
+        // only on create and on an actual player edit, so a previous "confirmed" always refers to text that
+        // no longer exists. Keeping the decision here would also desync the client: the update-request path
+        // answers an edit with SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE, whose consumer can only store
+        // 0 or 1, so the client lands on "unresolved" either way and the server has to agree.
+        listing.Censor = LFGList::CensorState::Unresolved;
         listing.CensorCode = 1;
     }
     else
