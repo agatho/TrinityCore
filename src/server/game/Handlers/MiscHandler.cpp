@@ -1565,9 +1565,18 @@ void WorldSession::HandleSetExcludedChatCensorSources(WorldPackets::Misc::SetExc
 // (0x209C8B0 liest sie aus der eingegangenen Nachricht). Der Server bekommt seine eigene
 // Korrelationskennung zurueck und kann damit zwei gleichzeitige Abfragen unterscheiden.
 //
-// D2-Anker: die gemeldeten Namen und Versionen gehoeren gegen DB2 BannedAddons geprueft
-// (LayoutHash 56583F69: ID, Name, Version, Flags). Damit hat die Nachricht eine echte
-// Serverwirkung und ist kein reines Telemetriepaket.
+// Der Abgleich gegen DB2 BannedAddons (LayoutHash 56583F69: ID, Name, Version, Flags) ist
+// TrinityCore-Hauskonvention, also Server-Vertrag - er ist KEIN Beleg fuer Retail-Semantik.
+//
+// UNVERIFIED: D2 ist NICHT erfuellt. Was Retail mit der gemeldeten Addonliste tut, ist von
+// aussen nicht messbar: der Client ist hier ausschliesslich Sender, es gibt kein Gegenpaket
+// (D3 gegenstandslos) und kein Lua-Ereignis, an dem sich eine Serverwirkung ablesen liesse -
+// Blizzard_AddOnList/AddonList.lua ist reine Clientverwaltung des Addonfensters ohne Bezug zu
+// dieser Nachricht. Eine DB2-Tabelle sagt, welche Daten der Client hat, nicht welchen Zustand
+// der Server aendert. Der Handler unten aendert deshalb bewusst KEINEN Zustand: er
+// protokolliert den Treffer und nichts weiter. Weder Kick noch Flag noch Persistenz sind
+// belegt, und keines davon wird geraten. Bis eine Aufnahme eines Retail-Realms zeigt, was auf
+// einen gesperrten Addonnamen folgt, bleibt D2 = offen.
 void WorldSession::HandleAddonList(WorldPackets::Misc::AddonList& addonList)
 {
     for (WorldPackets::Misc::AddonInfo const& addon : addonList.AddOns)
