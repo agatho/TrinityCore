@@ -273,14 +273,12 @@ void WorldSession::HandleConfirmArtifactRespec(WorldPackets::Artifact::ConfirmAr
         if (GtArtifactLevelXPEntry const* cost = sArtifactLevelXPGameTable.GetRow(i))
             newAmount += uint64(artifact->GetModifier(ITEM_MODIFIER_ARTIFACT_TIER) == 1 ? cost->XP2 : cost->XP);
 
-    uint32 refundedRanks = 0;
     for (UF::ArtifactPower const& artifactPower : artifact->m_itemData->ArtifactPowers)
     {
         uint8 oldPurchasedRank = artifactPower.PurchasedRank;
         if (!oldPurchasedRank)
             continue;
 
-        refundedRanks += oldPurchasedRank;
         artifact->SetArtifactPower(artifactPower.ArtifactPowerID, artifactPower.PurchasedRank - oldPurchasedRank, artifactPower.CurrentRankWithBonus - oldPurchasedRank);
 
         if (artifact->IsEquipped())
@@ -306,15 +304,15 @@ void WorldSession::HandleConfirmArtifactRespec(WorldPackets::Artifact::ConfirmAr
     artifact->SetArtifactXP(newAmount);
     artifact->SetState(ITEM_CHANGED, _player);
 
-    // Until now this handler performed the whole respec and told the client nothing at all, so the
-    // artifact frame kept showing the old traits until it was reopened. The client resolves
-    // ArtifactGUID against the player's own items (type mask 2 = TYPEMASK_ITEM) and derives bag and
-    // slot itself; if it cannot find the item it drops the message silently.
-    // NumRefundedPowers is the number of refunded artifact points, i.e. purchased ranks - it drives
-    // the tick count of the PointsRemainingLabel animation (Blizzard_ArtifactPerks.lua:915-944).
-    WorldPackets::Artifact::ArtifactEndgamePowersRefunded artifactEndgamePowersRefunded;
-    artifactEndgamePowersRefunded.ArtifactGUID = artifact->GetGUID();
-    artifactEndgamePowersRefunded.RefundedTier = uint8(artifact->GetModifier(ITEM_MODIFIER_ARTIFACT_TIER));
-    artifactEndgamePowersRefunded.NumRefundedPowers = refundedRanks;
-    SendPacket(artifactEndgamePowersRefunded.Write());
+    // No message is sent here on purpose. The refunded traits reach the client through the item
+    // update fields written above (UF::ArtifactPower + SetState(ITEM_CHANGED)), and the artifact
+    // frame is already closed by then - CONFIRM_ARTIFACT_RESPEC.OnAccept calls C_ArtifactUI.ConfirmRespec()
+    // and HideUIPanel(ArtifactFrame) in the same statement (Blizzard_ArtifactUI.lua:7).
+    // SMSG_ARTIFACT_ENDGAME_POWERS_REFUNDED must NOT be sent from the ordinary paid respec: its
+    // consumer sets numArtifactTraitsRefunded/perksDirty (Blizzard_ArtifactPerks.lua:893-895) and the
+    // next Refresh runs AnimateTraitRefund (:415-417), which is the tier 2 forging and reveal sequence
+    // (Tier2ForgingScene.ForgingEffectAnimIn :923, Model.ForgingEffectAnimIn :928, PrepTierTwoReveal
+    // at :931-933, and nothing else when NumRefundedPowers is 0). It also suppresses the normal tier
+    // display on that same Refresh (:392). Sending it after a tier 0/1 respec would play the tier 2
+    // reveal on the next opening of the artifact frame. See ArtifactPackets.h for the missing sender.
 }

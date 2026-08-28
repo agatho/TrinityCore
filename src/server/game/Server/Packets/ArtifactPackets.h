@@ -126,9 +126,27 @@ namespace WorldPackets
         // Consumer 0x23299E0 resolves ArtifactGUID with type mask 2 (TYPEMASK_ITEM), derives bag and
         // slot index from that item and fires Lua ARTIFACT_ENDGAME_REFUND (0x21B4401823260C60,
         // ArtifactUIDocumentation.lua:832-844) - the event name does not match the opcode name.
-        // NumRefundedPowers drives ArtifactPerksMixin:AnimateTraitRefund, which animates the
-        // PointsRemainingLabel by that many ticks (Blizzard_ArtifactPerks.lua:915-944), so it counts
-        // refunded artifact *points*, i.e. purchased ranks - not distinct powers.
+        // NO SENDER. This is not the ordinary paid artifact respec. The effect the message actually
+        // produces is the tier 2 upgrade sequence: ArtifactPerksMixin:OnTraitsRefunded stores
+        // numArtifactTraitsRefunded and sets perksDirty (Blizzard_ArtifactPerks.lua:893-895), and the
+        // next Refresh dispatches to AnimateTraitRefund (:415-417). That function plays
+        // Tier2ForgingScene.ForgingEffectAnimIn (:923) and Model.ForgingEffectAnimIn (:928), and for
+        // NumRefundedPowers == 0 it does nothing but PrepTierTwoReveal (:931-933); the same Refresh
+        // also suppresses the normal tier display while numArtifactTraitsRefunded is set (:392).
+        // Together with the opcode name and RefundedTier (an ArtifactTiers value,
+        // ArtifactUIDocumentation.lua:840) that places the message at the endgame tier upgrade - the
+        // point at which the previously purchased endgame powers are given back so they can be
+        // re-spent in the new tier. TrinityCore has no such upgrade: MAX_ARTIFACT_TIER is 1
+        // (DBCEnums.h:225), so tier 2 is never reached, and nothing in the tree refunds powers on a
+        // tier change. A sender was therefore deliberately not built - hanging it off
+        // CMSG_CONFIRM_ARTIFACT_RESPEC (the paid respec) would make every tier 0/1 respec play the
+        // tier 2 reveal on the next opening of the artifact frame. See HandleConfirmArtifactRespec.
+        // NumRefundedPowers drives the tick count of the PointsRemainingLabel animation
+        // (Blizzard_ArtifactPerks.lua:943), so it counts refunded artifact *points*, i.e. purchased
+        // ranks - not distinct powers.
+        // UNVERIFIED: the exact trigger. 0 captured packets; the tier upgrade reading is derived from
+        // the consumer and the opcode name, no source names the sending event.
+        // UNVERIFIED: whether RefundedTier carries the tier that was refunded or the tier now reached.
         class ArtifactEndgamePowersRefunded final : public ServerPacket
         {
         public:
