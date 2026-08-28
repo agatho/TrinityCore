@@ -71,14 +71,24 @@ void WorldSession::HandleStartChallengeMode(WorldPackets::ChallengeMode::StartCh
     if (!mapChallengeModeId || !keystoneLevel)
         return;
 
-    // The player must be standing in the matching Mythic Keystone instance for that dungeon.
+    // The player must be standing in the dungeon this keystone belongs to. The client can only enter it at
+    // Mythic (23): difficulty 8 (Mythic Keystone) is not DIFFICULTY_FLAG_CAN_SELECT (Flags 0x1, measured on
+    // 12.1.0.69497), so no client ever selects it. Accept a Mythic run about to be converted, or an already
+    // converted keystone instance (e.g. a relog into a live run). The old gate required IsMythicPlus() (== 8)
+    // here, which nothing on the client path could ever produce - it locked the whole challenge mode out.
     Map* map = player->GetMap();
     InstanceMap* instanceMap = map->ToInstanceMap();
-    if (!instanceMap || !map->IsMythicPlus())
+    if (!instanceMap || !(map->IsMythic() || map->IsMythicPlus()))
         return;
 
     if (sChallengeModeMgr.GetMapIdForChallengeMode(mapChallengeModeId) != map->GetId())
         return;
+
+    // Activating the keystone at the Font of Power is what lifts the run to Mythic Keystone (8): the server
+    // is the writer, because the client cannot enter at 8. Convert the live Mythic instance and create the
+    // ChallengeMode object the run needs (see InstanceMap::ActivateChallengeMode). Skipped if already 8.
+    if (!map->IsMythicPlus())
+        instanceMap->ActivateChallengeMode();
 
     ChallengeMode* challenge = instanceMap->GetChallengeMode();
     if (!challenge || challenge->IsActive() || challenge->IsCompleted())
@@ -158,4 +168,23 @@ void WorldSession::HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetCh
             instanceMap->SendToPlayers(resetPacket.Write());
         }
     }
+}
+
+void WorldSession::HandleChallengeModeRequestLeaders(WorldPackets::ChallengeMode::RequestLeaders& request)
+{
+    // The client asks for the guild + realm best-run leaders of one dungeon (MapId + ChallengeModeId), passing
+    // the timestamps it last saw so the server could answer "nothing newer". This branch keeps no challenge
+    // leaderboard records, so both boards go out empty. The request and its two answers are one closed exchange
+    // (subplan 2.2, kept together per DoD 4.3); the two SMSG were taken from the unassigned cut rest_kern_weltzustand.
+    WorldPackets::ChallengeMode::ChallengeModeRequestLeadersResult leaders;
+    leaders.MapId = request.MapId;
+    leaders.ChallengeModeId = request.ChallengeModeId;
+    leaders.LastGuildUpdate = uint32(request.LastGuildUpdate);
+    leaders.LastRealmUpdate = uint32(request.LastRealmUpdate);
+    SendPacket(leaders.Write());
+
+    WorldPackets::ChallengeMode::ChallengeModeRequestLeaderboardResult board;
+    board.MapId = request.MapId;
+    board.ChallengeModeId = request.ChallengeModeId;
+    SendPacket(board.Write());
 }
