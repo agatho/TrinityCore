@@ -14214,7 +14214,14 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             // prompt from the gossip of that very npc satisfies both.
             Aura const* artifactAura = GetAura(ARTIFACTS_ALL_WEAPONS_GENERAL_WEAPON_EQUIPPED_PASSIVE);
             Item const* artifact = artifactAura ? GetItemByGuid(artifactAura->GetCastItemGUID()) : nullptr;
-            if (!artifact)
+            // Both halves of the condition are WorldSession::HandleConfirmArtifactRespec verbatim. That
+            // handler is the only consumer of the answer, and it refuses on '!artifact ||
+            // IsArtifactDisabled()' - Item::IsArtifactDisabled is true for every artifact except the
+            // fishing one (ArtifactCategoryID != 2), the same switch that stops Player::ApplyArtifactPowers
+            // and WorldSession::HandleArtifactAddPower. Testing only '!artifact' here would offer the
+            // prompt for artifacts whose confirmation is already decided, and the player would answer a
+            // popup that can only end in ERR_MUST_EQUIP_ARTIFACT + CloseArtifactForge.
+            if (!artifact || artifact->IsArtifactDisabled())
             {
                 // handled stays true on both refusal paths: no prompt goes out, so no interaction
                 // must be opened either. Only the success path below falls through to the
