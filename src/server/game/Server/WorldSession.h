@@ -1010,6 +1010,10 @@ class TC_GAME_API WorldSession
         // refuses to send a fifth instead of losing it.
         static constexpr std::size_t MaxPendingInviteConfirmations = 4;
         static constexpr Seconds PendingInviteConfirmationTimeout = Seconds(120);
+        // How often this session may make the leader's client show a suggested invite. A server
+        // side choice - the client prescribes no interval - and the only bound on a message that
+        // one player triggers at a third one. See SendSuggestedInvite.
+        static constexpr Seconds SuggestedInviteCooldown = Seconds(10);
 
         struct PendingInviteConfirmation
         {
@@ -2083,6 +2087,7 @@ class TC_GAME_API WorldSession
         time_t _calendarEventCreationCooldown;
 
         std::vector<PendingInviteConfirmation> _pendingInviteConfirmations;
+        TimePoint _nextSuggestedInviteTime = TimePoint::min();
 
         std::unique_ptr<BattlePets::BattlePetMgr> _battlePetMgr;
 

@@ -145,7 +145,7 @@ namespace WorldPackets
             uint64 ReferredByClubID = 0;
             uint8 ReferralRelation = 0;             // Enum.PartyRequestJoinRelation
             uint32 ReferralUnused796 = 0;
-            std::string ReferredByName;             // clamped to 306 on write
+            std::string ReferredByName;             // clamped to 305 on write, client buffer is 306
             uint64 ReferralUnused808 = 0;
 
             uint8 Level = 0;
@@ -627,7 +627,8 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
-            // client buffer is 306 bytes, both are clamped on write
+            // client buffers are 306 (SuggesterName) and 310 (TargetName) bytes and the reader
+            // NUL terminates in place, so both are clamped to 305 / 309 on write
             std::string SuggesterName;
             std::string TargetName;
         };

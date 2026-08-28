@@ -26031,22 +26031,40 @@ Optional<WorldPackets::Party::SummonRaidMemberValidateReason> Player::ValidateSu
     // both and the comparison is constantly false. Reason::RealmMismatch (1) therefore never goes
     // out today. Reason::Offline (5) cannot be produced either - the only caller is
     // Spell::EffectSummonPlayer, which requires unitTarget to be a player object present in the
-    // world. Of the five wire reasons only 2, 3 and 4 are producible; see the status file.
+    // world. Of the five wire reasons only 4 is producible; see the status file.
     if (Player const* playerSummoner = summoner->ToPlayer())
         if (*playerSummoner->m_playerData->VirtualPlayerRealm != *m_playerData->VirtualPlayerRealm)
             return Reason::RealmMismatch;
 
     // Everything the destination map itself refuses. The two lock reasons get their own client
     // string, the remainder collapses into the generic map condition.
-    if (TransferAbortParams denyReason = Map::PlayerCannotEnter(summoner->GetMapId(), const_cast<Player*>(this)))
+    //
+    // The map id comparison is NOT a shortcut, it is the precondition of the function being asked.
+    // Map::PlayerCannotEnter answers "may this player ENTER that map" and assumes he is not
+    // standing in it: for an instanceable map it resolves the player's OWN bound instance
+    // (MapManager::FindInstanceIdForPlayer) and hands that map to InstanceMap::CannotEnter, whose
+    // first statement is ABORT() when player->GetMapRef().getTarget() == this. ABORT is WPAbort,
+    // a process abort, so the return below it is dead code. Asking about the map a player already
+    // occupies therefore takes the worldserver down, and the only caller of the summon path,
+    // Spell::EffectSummonPlayer, always hands over a unitTarget resolved in the caster's own map -
+    // ritual of summoning or a meeting stone inside a dungeon would hit it on the first cast.
+    //
+    // Consequence, stated rather than glossed over: with the single caller this tree has, the
+    // branch never runs, so RaidLocked (2) and MapCondition (3) are unreachable today just like
+    // RealmMismatch (1) and Offline (5). It stays for the caller that summons across maps, where
+    // the question is real and the abort cannot trigger.
+    if (GetMapId() != summoner->GetMapId())
     {
-        switch (denyReason.Reason)
+        if (TransferAbortParams denyReason = Map::PlayerCannotEnter(summoner->GetMapId(), const_cast<Player*>(this)))
         {
-            case TRANSFER_ABORT_LOCKED_TO_DIFFERENT_INSTANCE:
-            case TRANSFER_ABORT_ALREADY_COMPLETED_ENCOUNTER:
-                return Reason::RaidLocked;
-            default:
-                return Reason::MapCondition;
+            switch (denyReason.Reason)
+            {
+                case TRANSFER_ABORT_LOCKED_TO_DIFFERENT_INSTANCE:
+                case TRANSFER_ABORT_ALREADY_COMPLETED_ENCOUNTER:
+                    return Reason::RaidLocked;
+                default:
+                    return Reason::MapCondition;
+            }
         }
     }
 
