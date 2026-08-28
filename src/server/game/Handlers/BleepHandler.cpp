@@ -101,6 +101,16 @@ void WorldSession::HandleRefreshBleepTokens(WorldPackets::Bleep::RefreshBleepTok
 //      ruft UNMITTELBAR danach die lokale Raeumfunktion auf. Reines Fire-and-Forget.
 // Der Drahtrumpf ist byteweise identisch zu CMSG_REFRESH_BLEEP_TOKENS: ein Serializer (0x6B2F80),
 // zwei Opcodes.
+//
+// UNVERIFIED: D2 ist NICHT erfuellt - und die beiden Belege oben sind D3, nicht D2. Sie zeigen,
+// dass KEINE Antwort geht; sie sagen nichts darueber, was ein Retail-Realm beim Empfang tut. Das
+// ist von aussen auch nicht messbar: es gibt kein Gegenpaket, keine Bleep-Oberflaeche und kein
+// Lua-Ereignis, an dem sich eine Serverwirkung ablesen liesse (siehe Dateikopf - "Bleep" kommt in
+// 613 Dateien API-Doku, der gesamten Interface-Quelle und 1735 Client-Enums nicht vor). Dieser
+// Realm haelt keine Bleep-Tokens, die er verwerfen koennte, also aendert der Handler bewusst
+// keinen Zustand und protokolliert nur. Damit steht der Opcode wie die uebrigen reinen
+// Protokollhandler dieser Einheit auf D2 = offen - genau wie der Nachbar CMSG_BLEEP_PONG, der in
+// derselben Lage ist.
 void WorldSession::HandleExpireBleepTokens(WorldPackets::Bleep::ExpireBleepTokens& expireBleepTokens)
 {
     TC_LOG_DEBUG("network.opcode", "CMSG_EXPIRE_BLEEP_TOKENS from {} with {} tokens - fire and forget, no response by design",

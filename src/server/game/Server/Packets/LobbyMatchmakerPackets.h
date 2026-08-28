@@ -446,6 +446,11 @@ namespace WorldPackets
             int32 WowLabsAreaID = 0;            // 0 == nichts ausgewaehlt
         };
 
+        // 0x45032B - die BESTAETIGUNG einer gesetzten Absprungzone, zweites Paket des
+        // Erfolgspfads von CMSG_SELECT_WOW_LABS_AREA. Diesen Pfad geht der Baum nicht
+        // (WowLabsHandler.cpp antwortet Success = false), es gibt hier also KEINE Sendestelle.
+        // Gebaut und in Opcodes.cpp auf STATUS_NEVER freigegeben ist sie trotzdem, damit der
+        // spaetere Erfolgspfad nicht stumm in der SendPacket-Sperre verschwindet. D3 offen.
         class WowLabsAreaSelected final : public ServerPacket
         {
         public:

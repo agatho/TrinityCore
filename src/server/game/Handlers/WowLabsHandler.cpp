@@ -76,6 +76,15 @@ void WorldSession::HandleQueryWowLabsAreaInfo(WorldPackets::WowLabs::QueryWowLab
 // stehen. Ein echter Erfolg braeuchte ZWEI Pakete - dieses mit true, dann
 // SMSG_WOW_LABS_AREA_SELECTED mit der bestaetigten ID.
 //
+// DARAUS FOLGT EINE LUECKE, DIE HIER STEHEN MUSS: SMSG_WOW_LABS_AREA_SELECTED (0x45032B) ist die
+// EINZIGE der 16 in dieser Einheit auf STATUS_NEVER gedrehten SMSG, die im ganzen Baum KEINE
+// Sendestelle hat - Paketklasse und Write sind gebaut, gesendet wird sie von nichts, weil der
+// Erfolgspfad nicht existiert. Sie mit Success = false mitzuschicken waere eine Bestaetigung
+// einer Auswahl, die nicht stattgefunden hat. Die Sendefreigabe bleibt trotzdem gedreht: wer den
+// Erfolgspfad spaeter baut, laeuft sonst in die stille Sperre von WorldSession::SendPacket, die
+// jedes STATUS_UNHANDLED-Paket verwirft, ohne es zu melden. D3 ist fuer diesen Opcode damit
+// ausdruecklich OFFEN, nicht erfuellt - so auch in der Statusdatei unter smsg_freigaben gefuehrt.
+//
 // UNVERIFIED, ehrlich vermerkt: auch auf dem Misserfolgszweig ruft
 // WM_WoWLabsAreaDataProvider:OnEvent nur RefreshAllData() und loescht self.requestedAreaID
 // nicht. Der Spieler sieht die rote Fehlermeldung, aber die Auswahlnadel wird nicht wieder

@@ -1568,6 +1568,16 @@ void WorldSession::HandleSetExcludedChatCensorSources(WorldPackets::Misc::SetExc
 // Der Abgleich gegen DB2 BannedAddons (LayoutHash 56583F69: ID, Name, Version, Flags) ist
 // TrinityCore-Hauskonvention, also Server-Vertrag - er ist KEIN Beleg fuer Retail-Semantik.
 //
+// AUF EINEM UNVERAENDERTEN REALM ERREICHT DIESE NACHRICHT DEN HANDLER NIE, und das ist keine
+// Vermutung: der Ausloeser SMSG_ADDON_LIST_REQUEST (0x4500EB) steht in Opcodes.cpp weiterhin auf
+// STATUS_UNHANDLED und hat im ganzen Baum weder Paketklasse noch Sendestelle - grep ueber
+// src/server/game trifft ausser Opcodes.h/Opcodes.cpp nur die Kommentare dieser Einheit. CMSG ist
+// hier die ANTWORT, nicht der Anfang; ohne Anfrage sendet der Client nichts. Ein beobachteter
+// Umlauf braucht deshalb entweder eine Aufnahme eines Retail-Realms oder zuerst die
+// Gegenrichtung (Paketklasse, Sender und Statusdrehung fuer SMSG_ADDON_LIST_REQUEST). Beides
+// liegt ausserhalb dieser Einheit; der Handler ist gebaut, damit er steht, wenn die Anfrage
+// entsteht.
+//
 // UNVERIFIED: D2 ist NICHT erfuellt. Was Retail mit der gemeldeten Addonliste tut, ist von
 // aussen nicht messbar: der Client ist hier ausschliesslich Sender, es gibt kein Gegenpaket
 // (D3 gegenstandslos) und kein Lua-Ereignis, an dem sich eine Serverwirkung ablesen liesse -
