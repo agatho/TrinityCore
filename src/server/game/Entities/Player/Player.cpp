@@ -14172,6 +14172,9 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             Item const* artifact = artifactAura ? GetItemByGuid(artifactAura->GetCastItemGUID()) : nullptr;
             if (!artifact)
             {
+                // handled stays true on both refusal paths: no prompt goes out, so no interaction
+                // must be opened either. Only the success path below falls through to the
+                // interaction block.
                 SendDirectMessage(WorldPackets::Misc::DisplayGameError(GameError::ERR_MUST_EQUIP_ARTIFACT).Write());
                 break;
             }
@@ -14194,6 +14197,19 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             artifactRespecPrompt.ArtifactGUID = artifact->GetGUID();
             artifactRespecPrompt.NpcGUID = guid;
             SendDirectMessage(artifactRespecPrompt.Write());
+
+            // The prompt alone does not make the artifact forge the active interaction. That is what
+            // the block below does: GossipOptionNpcToInteractionType maps ArtifactRespec (21) to
+            // PlayerInteractionType::ArtifactForge (38) and, through GossipOptionNPCInteraction or
+            // NPCInteractionOpenResult, tells the client about it - it is the only place in the core
+            // that ever sets that type. Without it every SMSG_CLOSE_ARTIFACT_FORGE the server sends
+            // afterwards is a no-op, because its consumer (0x2329870) clears the interaction with the
+            // checkType byte set, i.e. only while 38 really is the active one. The three refusals in
+            // WorldSession::HandleConfirmArtifactRespec answer that way, so the interaction has to be
+            // open for them to land. Order is harmless: the client opens the frame from the prompt
+            // event itself (ShowArtifactFrame, EventImplementation.lua:526-534), the message that
+            // follows only marks the interaction.
+            handled = false;
             break;
         }
         case GossipOptionNpc::GarrisonTradeskillNpc: // NYI
