@@ -34,6 +34,7 @@
 #include <boost/circular_buffer_fwd.hpp>
 #include <array>
 #include <atomic>
+#include <bitset>
 #include <map>
 #include <memory>
 #include <unordered_map>
@@ -539,6 +540,8 @@ namespace WorldPackets
         class RequestLatestSplashScreen;
         class QueryCountdownTimer;
         class SetCurrencyFlags;
+        class KioskEnableGodMode;
+        class SetGameEventDebugViewState;
     }
 
     namespace Movement
@@ -1832,6 +1835,16 @@ class TC_GAME_API WorldSession
         void HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownTimer& queryCountdownTimer);
         void HandleSetCurrencyFlags(WorldPackets::Misc::SetCurrencyFlags const& setCurrenctFlags);
 
+        // GM / Cheat / Debug (families 0x45 and 0x3D)
+        void HandleKioskEnableGodMode(WorldPackets::Misc::KioskEnableGodMode& kioskEnableGodMode);
+        void HandleSetGameEventDebugViewState(WorldPackets::Misc::SetGameEventDebugViewState& setGameEventDebugViewState);
+
+        // Subscription state of the client debug views (table 0x43BD1C0, indices 0..39), driven by
+        // CMSG_SET_GAME_EVENT_DEBUG_VIEW_STATE. Deliberately session bound and never persisted: the
+        // client re-announces every subscription after each SMSG_DEBUG_MENU_MANAGER_FULL_UPDATE.
+        bool IsDebugViewSubscribed(uint32 viewIndex) const { return viewIndex < MaxDebugViews && _debugViewSubscriptions.test(viewIndex); }
+        std::bitset<40> const& GetDebugViewSubscriptions() const { return _debugViewSubscriptions; }
+
         // Adventure Journal
         void HandleAdventureJournalOpenQuest(WorldPackets::AdventureJournal::AdventureJournalOpenQuest& openQuest);
         void HandleAdventureJournalUpdateSuggestions(WorldPackets::AdventureJournal::AdventureJournalUpdateSuggestions& updateSuggestions);
@@ -2057,6 +2070,9 @@ class TC_GAME_API WorldSession
         std::unique_ptr<CollectionMgr> _collectionMgr;
 
         ConnectToKey _instanceConnectKey;
+
+        static constexpr uint32 MaxDebugViews = 40;
+        std::bitset<MaxDebugViews> _debugViewSubscriptions;
 
         WorldSession(WorldSession const& right) = delete;
         WorldSession& operator=(WorldSession const& right) = delete;

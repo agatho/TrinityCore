@@ -43,11 +43,13 @@ EndScriptData */
 #include "Log.h"
 #include "M2Stores.h"
 #include "MapManager.h"
+#include "MiscPackets.h"
 #include "MovementPackets.h"
 #include "MovementTypedefs.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "PhasingHandler.h"
+#include "Player.h"
 #include "PoolMgr.h"
 #include "RBAC.h"
 #include "SpellMgr.h"
@@ -56,6 +58,8 @@ EndScriptData */
 #include "World.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
+#include <array>
+#include <bitset>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -132,7 +136,14 @@ public:
             { "guidlimits",         HandleDebugGuidLimitsCommand,          rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "objectcount",        HandleDebugObjectCountCommand,         rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "questreset",         HandleDebugQuestResetCommand,          rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
-            { "personalclone",      HandleDebugBecomePersonalClone,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No }
+            { "personalclone",      HandleDebugBecomePersonalClone,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "console",            HandleDebugConsoleWriteCommand,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "gamespeed",          HandleDebugGameSpeedCommand,           rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "menu",               HandleDebugMenuManagerFullUpdateCommand, rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
+            { "views",              HandleDebugViewsCommand,               rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "forceanim",          HandleDebugForceAnimCommand,           rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "forceanimations",    HandleDebugForceAnimationsCommand,     rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "runeregen",          HandleDebugRuneRegenCommand,           rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No }
         };
         static ChatCommandTable commandTable =
         {
@@ -1793,6 +1804,224 @@ public:
     static bool HandleDebugDummyCommand(ChatHandler* handler)
     {
         handler->SendSysMessage("This command does nothing right now. Edit your local core (cs_debug.cpp) to make it do whatever you need for testing.");
+        return true;
+    }
+
+    // --- GM / Cheat / Debug block, client 12.1.0.69382 family 0x45 -------------------------------
+    //
+    // The five commands below are the triggers for the five server-to-client messages of this block
+    // that are not a receipt of an existing cheat state (those hang off .cheat, see cs_cheat.cpp).
+    //
+    // Expected test result differs per message, and three of them are deliberately invisible:
+    // SMSG_RUNE_REGEN_DEBUG, SMSG_FORCE_ANIM and SMSG_FORCE_ANIMATIONS are registered in the retail
+    // client, but their registrar installs the no-op stub at 0x1D9E30 (raw bytes c2 00 00 = ret 0).
+    // The client parses them in full and then throws the result away. Seeing no reaction is the
+    // correct outcome for those three, not a defect - do not "fix" them into doing something.
+    //
+    // SMSG_CONSOLE_WRITE and SMSG_GAME_SPEED_SET are observable, but only with the developer console
+    // open (or an addon listening to CONSOLE_MESSAGE); SMSG_DEBUG_MENU_MANAGER_FULL_UPDATE is
+    // observable through the answer it provokes, which .debug views prints.
+
+    // The 40 debug views of the client, table 0x43BD1C0 (stride 40, first qword is the name pointer),
+    // read by DebugViewName @ 0x1CDC460. The index of this array is the ViewIndex field of
+    // CMSG_SET_GAME_EVENT_DEBUG_VIEW_STATE.
+    static constexpr std::array<char const*, WorldPackets::Misc::MAX_DEBUG_VIEWS> DebugViewNames =
+    { {
+        "Area Triggers", "Damage Calculator", "AI Event Log", "AIController Event Log",
+        "MoveHistory Event Log", "Spell Event Log", "Spell Script Event Log",
+        "Verbose Spell Script Event Log", "Custom Design Event Log", "Area Trigger Event Log",
+        "Aura Event Log", "Proc Debug Event Log", "Quest Event Log", "Hotfix Event Log",
+        "Client Message Event Log", "Server Message Event Log", "Custom Window Event Log",
+        "World Actions Log", "AI Brain", "AI Controller", "Unit Enter Combat Log", "Content Tuning",
+        "Heal Handler", "Spawn Region", "Behavior Tree", "Spell Targeting", "Spell Overrides",
+        "Pathing", "Player Spawn Tracking", "Phase History", "Gameplay Context", "Collision",
+        "Aura Debugger", "Spell Cooldown Debugger", "Beckon Trigger Event log", "Game Data Visualizer",
+        "Walkable Surfaces Validation Log", "Spell Visuals", "Unit Visibility", "Async Assist Actions"
+    } };
+
+    // .debug console <colorType> <text> - SMSG_CONSOLE_WRITE (0x4500DE).
+    // colorType is Enum.ConsoleColorType; the client's ConsoleGetColorFromType (0xD38780) indexes a
+    // 12 entry table with it and performs no range check, so the range has to be enforced here.
+    static bool HandleDebugConsoleWriteCommand(ChatHandler* handler, uint32 colorType, Tail text)
+    {
+        if (colorType >= uint32(WorldPackets::Misc::ConsoleColorType::Max))
+        {
+            handler->PSendSysMessage("Invalid console colour type %u, expected 0..%u (Enum.ConsoleColorType).",
+                colorType, uint32(WorldPackets::Misc::ConsoleColorType::Max) - 1);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        if (text.length() > WorldPackets::Misc::ConsoleWrite::MaxTextLength)
+        {
+            handler->PSendSysMessage("Console text is too long (%u characters, maximum is %u).",
+                uint32(text.length()), uint32(WorldPackets::Misc::ConsoleWrite::MaxTextLength));
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        WorldPackets::Misc::ConsoleWrite consoleWrite;
+        consoleWrite.Text.assign(text);
+        consoleWrite.ColorType = WorldPackets::Misc::ConsoleColorType(colorType);
+        handler->GetSession()->SendPacket(consoleWrite.Write());
+
+        handler->PSendSysMessage("Sent SMSG_CONSOLE_WRITE (colour %u, %u characters). Visible in the developer console or via the Lua event CONSOLE_MESSAGE.",
+            colorType, uint32(text.length()));
+        return true;
+    }
+
+    // .debug gamespeed <speed> - SMSG_GAME_SPEED_SET (0x45012D).
+    // The float is game minutes per real second, i.e. the runtime channel for the NewSpeed field
+    // that SMSG_LOGIN_SET_TIME_SPEED already carries once at login; 0.01666667 is real time.
+    // This changes the CLIENT world clock only. TrinityCore has no runtime switch for its own time
+    // rates (World::setRate has no caller anywhere in src/), so server and client will drift apart
+    // for as long as the value differs from real time, and the next login resets the client to the
+    // hardcoded default. That is a deliberate scope decision, not an oversight - pulling the server
+    // side GameTime along would mean touching GameTime and GameEventMgr.
+    static bool HandleDebugGameSpeedCommand(ChatHandler* handler, float speed)
+    {
+        if (speed < WorldPackets::Misc::GameSpeedSet::MinSpeed || speed > WorldPackets::Misc::GameSpeedSet::MaxSpeed)
+        {
+            handler->PSendSysMessage("Game speed must be between %f and %f game minutes per real second (the client clamps to that range).",
+                WorldPackets::Misc::GameSpeedSet::MinSpeed, WorldPackets::Misc::GameSpeedSet::MaxSpeed);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        handler->GetSession()->SendPacket(WorldPackets::Misc::GameSpeedSet(speed).Write());
+        handler->PSendSysMessage("Sent SMSG_GAME_SPEED_SET (%f game minutes per real second). Client world clock only, server time rates are unchanged.", speed);
+        return true;
+    }
+
+    // .debug menu - SMSG_DEBUG_MENU_MANAGER_FULL_UPDATE (0x4500FF), an empty message.
+    // The client answers with up to 40 CMSG_SET_GAME_EVENT_DEBUG_VIEW_STATE(index, true), one per
+    // debug view that has a local listener; WorldSession::HandleSetGameEventDebugViewState records
+    // them. A retail client without the debug manager (qword_462BBC8 == 0) stays silent - that is
+    // the expected outcome there, and .debug views will simply show nothing subscribed.
+    static bool HandleDebugMenuManagerFullUpdateCommand(ChatHandler* handler)
+    {
+        handler->GetSession()->SendPacket(WorldPackets::Misc::DebugMenuManagerFullUpdate().Write());
+        handler->SendSysMessage("Sent SMSG_DEBUG_MENU_MANAGER_FULL_UPDATE. Use .debug views to see which views the client subscribed to.");
+        return true;
+    }
+
+    // .debug views - prints the subscription state this session collected from the client.
+    static bool HandleDebugViewsCommand(ChatHandler* handler)
+    {
+        std::bitset<40> const& subscriptions = handler->GetSession()->GetDebugViewSubscriptions();
+
+        handler->PSendSysMessage("Client debug view subscriptions (%u of %u active):",
+            uint32(subscriptions.count()), uint32(WorldPackets::Misc::MAX_DEBUG_VIEWS));
+
+        for (uint32 i = 0; i < WorldPackets::Misc::MAX_DEBUG_VIEWS; ++i)
+            if (subscriptions.test(i))
+                handler->PSendSysMessage("  [%u] %s", i, DebugViewNames[i]);
+
+        if (!subscriptions.any())
+            handler->SendSysMessage("  none - the client either has no debug manager or has not answered yet.");
+
+        return true;
+    }
+
+    // .debug forceanim <animation name> - SMSG_FORCE_ANIM (0x4501FB) on the selected unit.
+    // The message carries a NAME of up to 511 characters, not a database id, so there is nothing to
+    // validate it against: neither AnimationData nor AnimKit stores names.
+    // UNVERIFIED: open question F2 - whether that name is resolved against AnimationData or against
+    // a client internal animation kit namespace. No server side table carries animation names and
+    // the no-op consumer never resolves the string, so the namespace stays undecided; the command
+    // passes the name through unvalidated apart from its length.
+    // The retail consumer is the no-op stub, so no visible reaction is the correct result.
+    static bool HandleDebugForceAnimCommand(ChatHandler* handler, Tail animName)
+    {
+        Unit* target = handler->getSelectedUnit();
+        if (!target)
+            target = handler->GetSession()->GetPlayer();
+
+        if (animName.empty() || animName.length() > WorldPackets::Misc::ForceAnim::MaxAnimNameLength)
+        {
+            handler->PSendSysMessage("Animation name must be 1..%u characters long.", uint32(WorldPackets::Misc::ForceAnim::MaxAnimNameLength));
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        WorldPackets::Misc::ForceAnim forceAnim;
+        forceAnim.UnitGUID = target->GetGUID();
+        forceAnim.AnimName.assign(animName);
+        // UNVERIFIED: send scope. The neighbouring AnimKit messages in MiscPackets all go to every
+        // observer, and this one addresses a unit rather than the receiver, so the same scope is
+        // used here - the client consumer is a no-op stub and cannot confirm it either way.
+        target->SendMessageToSet(forceAnim.Write(), true);
+
+        handler->PSendSysMessage("Sent SMSG_FORCE_ANIM ('%s') for %s. The retail client discards this message (consumer is a ret stub) - no visible reaction is expected.",
+            forceAnim.AnimName.c_str(), target->GetName().c_str());
+        return true;
+    }
+
+    // .debug forceanimations <animID> [variation] [loopCount] [speed] [boneType]
+    // SMSG_FORCE_ANIMATIONS (0x4501FC) on the selected unit. Same no-op consumer as .debug forceanim.
+    static bool HandleDebugForceAnimationsCommand(ChatHandler* handler, uint32 animId, Optional<uint8> variation,
+        Optional<uint32> loopCount, Optional<float> speed, Optional<uint8> boneType)
+    {
+        Unit* target = handler->getSelectedUnit();
+        if (!target)
+            target = handler->GetSession()->GetPlayer();
+
+        // animID indexes AnimationData (DB2 FDID 1375431), the same validation the AnimKit family
+        // does in Unit::SetAIAnimKitId.
+        if (!sAnimationDataStore.LookupEntry(animId))
+        {
+            handler->PSendSysMessage("Animation %u does not exist in AnimationData.", animId);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        WorldPackets::Misc::ForceAnimations forceAnimations;
+        forceAnimations.UnitGUID = target->GetGUID();
+        forceAnimations.AnimIDs.push_back(int32(animId));
+        if (variation)
+            forceAnimations.Variations.push_back(*variation);
+        forceAnimations.LoopCount = loopCount.value_or(1);
+        forceAnimations.Speed = speed.value_or(1.0f);
+        forceAnimations.BoneType = boneType.value_or(0);
+        // UNVERIFIED: send scope, same reasoning as .debug forceanim.
+        target->SendMessageToSet(forceAnimations.Write(), true);
+
+        handler->PSendSysMessage("Sent SMSG_FORCE_ANIMATIONS (animID %u, loop %u, speed %f, bone type %u) for %s. The retail client discards this message - no visible reaction is expected.",
+            animId, forceAnimations.LoopCount, forceAnimations.Speed, uint32(forceAnimations.BoneType), target->GetName().c_str());
+        return true;
+    }
+
+    // .debug runeregen - SMSG_RUNE_REGEN_DEBUG (0x45005A).
+    // The wire format is measured (reader 0x5DE620), the MEANING of the three scalars and of the
+    // second array is not: the message has no JAM descriptor, no DB2 table, no Lua surface, and its
+    // consumer is the no-op stub. The fields are filled from the player's real rune state under the
+    // assumption that they mirror what Player::ResyncRunes keeps - that is an analogy, not evidence.
+    static bool HandleDebugRuneRegenCommand(ChatHandler* handler)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+        if (player->GetClass() != CLASS_DEATH_KNIGHT)
+        {
+            handler->SendSysMessage("Only a death knight has runes.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        uint32 maxRunes = uint32(player->GetMaxPower(POWER_RUNES));
+
+        WorldPackets::Misc::RuneRegenDebug runeRegenDebug;
+        // UNVERIFIED: field assignment below.
+        runeRegenDebug.RegenTimer = 0;
+        runeRegenDebug.BaseCooldown = player->GetRuneBaseCooldown();
+        runeRegenDebug.ActiveRuneMask = player->GetRunesState();
+        for (uint32 i = 0; i < maxRunes; ++i)
+            runeRegenDebug.Cooldowns.push_back(int32(player->GetRuneCooldown(uint8(i))));
+        // RuneTypes stays empty: modern builds have no per-rune type any more, and guessing a
+        // filler would put invented data on the wire.
+
+        player->SendDirectMessage(runeRegenDebug.Write());
+
+        handler->PSendSysMessage("Sent SMSG_RUNE_REGEN_DEBUG (%u rune cooldowns, base cooldown %u, rune state 0x%X). The retail client discards this message - no visible reaction is expected.",
+            uint32(runeRegenDebug.Cooldowns.size()), runeRegenDebug.BaseCooldown, runeRegenDebug.ActiveRuneMask);
         return true;
     }
 };
