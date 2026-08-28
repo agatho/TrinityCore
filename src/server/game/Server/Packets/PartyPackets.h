@@ -169,7 +169,12 @@ namespace WorldPackets
         // and that key is written first: wire guid #1 is SMSG_CONFIRM_PARTY_INVITE.ApplicantGUID
         // (its field 2), wire guid #2 is SMSG_CONFIRM_PARTY_INVITE.PartyGUID (its field 1). A
         // server that assumes the order of the SMSG assigns the answer to the wrong applicant.
-        // The client additionally checks that the key carries HighGuid::Player before sending.
+        //
+        // Guid #1 is coerced to HighGuid::Player rather than checked: the helper at RVA 0x200CF0
+        // passes a player guid and an empty guid through and replaces anything else with an empty
+        // guid, without logging. The only outright refusal on the way in is an IsEmpty test on the
+        // Lua argument. So a wrong high type does not produce a malformed packet - it produces one
+        // with an empty first guid, which finds no pending confirmation here and is dropped.
         class QuickJoinRespondToInvite final : public ClientPacket
         {
         public:
