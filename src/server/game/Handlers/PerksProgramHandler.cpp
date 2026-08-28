@@ -26,7 +26,9 @@
 #include "PerksProgramMgr.h"
 #include "PerksProgramPackets.h"
 #include "UnitDefines.h"
+#include "Util.h"
 #include "World.h"
+#include <ctime>
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
@@ -58,10 +60,28 @@ static bool HasActivePerksProgramVendor(Player* player, ObjectGuid vendorGuid)
 // Trading Post interval, account-wide).
 static constexpr uint32 PERKS_MONTHLY_CACHE_TENDER = 500;
 
-// Grants the account's base monthly Trader's Tender once per Trading Post interval, keyed on the current UTC
-// month-start period, so it is idempotent per account per period (Tender is account-wide after G6). Triggered on
-// the first Trading Post interaction of the period. Note: two game accounts of one bnet account online at once can
-// each grant once for the same period (bounded, non-repeatable) since account state is not live-synced between
+// Calendar month of a Trading Post period start as a monotonically increasing index (UTC year * 12 + month).
+//
+// The stipend is keyed on THIS, not on the raw periodStart timestamp, because periodStart moves with the
+// configurable PerksProgram.ResetHour: at hour 0 the August period starts 2026-08-01 00:00, at hour 4 it starts
+// 04:00. Comparing timestamps, any change to that setting -- including the default itself moving to 4 -- makes
+// the stored value differ from the recomputed one for the very same month, so the lock would open and every
+// account would collect its 500 Trader's Tender a second time on a single unpayloaded status request. The month
+// index does not move with the hour.
+//
+// A never-granted account stores 0, which maps to January 1970 and is therefore below every real month.
+static uint32 PerksPeriodMonthIndex(uint64 periodStart)
+{
+    time_t periodTime = time_t(periodStart);
+    tm date;
+    gmtime_r(&periodTime, &date);
+    return uint32(date.tm_year) * 12 + uint32(date.tm_mon);
+}
+
+// Grants the account's base monthly Trader's Tender once per Trading Post interval, keyed on the calendar month
+// of the current period, so it is idempotent per account per month (Tender is account-wide after G6). Triggered
+// on the first Trading Post interaction of the period. Note: two game accounts of one bnet account online at once
+// can each grant once for the same period (bounded, non-repeatable) since account state is not live-synced between
 // concurrent sessions -- consistent with how the rest of the account collection behaves.
 static void GrantMonthlyPerksCache(WorldSession* session, Player* player)
 {
@@ -69,7 +89,11 @@ static void GrantMonthlyPerksCache(WorldSession* session, Player* player)
     uint64 periodEnd = 0;
     sPerksProgramMgr->GetCurrentPeriod(periodStart, periodEnd);
 
-    if (session->GetAccountPerksCacheGrantPeriod() == periodStart)
+    // Compared with >=, not !=: raising the reset hour moves the boundary later on the 1st, which puts "now"
+    // back into the PREVIOUS month's period for a few hours. An inequality would read that as a fresh period and
+    // pay a month that is already paid. A monotonic guard pays each calendar month exactly once and never walks
+    // backwards, whatever the setting does.
+    if (PerksPeriodMonthIndex(session->GetAccountPerksCacheGrantPeriod()) >= PerksPeriodMonthIndex(periodStart))
         return;
 
     // Mark the period granted BEFORE crediting so the balance-persist stamps the new period, then persist again
@@ -98,11 +122,54 @@ void WorldSession::SendPerksProgramDisabled(bool disabled)
     SendPacket(packet.Write());
 }
 
+// Sends SMSG_PERKS_PROGRAM_VENDOR_UPDATE -- but only when the listing this session was last given has actually
+// been rebuilt since (a Trading Post rotation rollover, or an operator Reload()). The message is a full REPLACE,
+// not an update: it enters the client's merge routine (client RVA 0x253DC00) with flag 0, which clears the
+// vendor map before refilling it.
+//
+// That is why it must not be sent on the status poll. The client polls CMSG_PERKS_PROGRAM_STATUS_REQUEST every
+// 6000 ms while the Trading Post frame is open (AGENT_BRIEF_perks_2A_63.md section 10.2, from the captures), so
+// a listing on every poll would clear the map every six seconds -- and with it the rows merged in for purchases
+// from earlier rotations, which HandlePerksProgramItemsRefreshed supplies as type 9 (flag 1, additive). The client
+// does not re-request those on its own: it derives the gap list only in PerksProgramMgr::SetRecentPurchases
+// (client RVA 0x253E020), which a VENDOR_UPDATE does not reach. The refund display consults exactly that map.
+//
+// It is also what retail does. SMSG_PERKS_PROGRAM_VENDOR_UPDATE appears 0 times in the 51 available captures
+// across 20 builds, while CMSG_PERKS_PROGRAM_STATUS_REQUEST -> SMSG_PERKS_PROGRAM_ACTIVITY_UPDATE is 1:1 in all
+// 14 12.0 builds (same section). The listing itself arrives at window open as RESULT type 5.
+//
+// UNVERIFIED: no capture contains a rotation rollover at all, so the shape of this push is reasoned from the
+// consumer, not observed. With the DB2 data alone the rebuilt listing is usually identical anyway -- see
+// PerksProgramMgr::EnsureCurrent.
+void WorldSession::SendPerksProgramVendorRefresh()
+{
+    uint32 generation = sPerksProgramMgr->GetListingGeneration();
+
+    // 0 means this session was never handed a listing at all -- the status request came from the Traveler's Log,
+    // which has no vendor. Pushing one would open nothing and clear nothing that exists.
+    if (!_perksVendorListingGeneration || _perksVendorListingGeneration == generation)
+        return;
+
+    _perksVendorListingGeneration = generation;
+
+    WorldPackets::PerksProgram::PerksProgramVendorUpdate vendorUpdate;
+    vendorUpdate.VendorItems = sPerksProgramMgr->GetCurrentVendorItems();
+    SendPacket(vendorUpdate.Write());
+
+    // The replace just dropped every row merged in for purchases outside the listing, and the client will not
+    // ask for them again by itself. Re-sending the purchase list drives PerksProgramMgr::SetRecentPurchases
+    // (client RVA 0x253E020) once more; that re-derives the unresolvable ids and re-sends
+    // CMSG_PERKS_PROGRAM_ITEMS_REFRESHED, so the type 9 merge is redone against the new listing.
+    WorldPackets::PerksProgram::ResponsePerkRecentPurchases purchases;
+    purchases.Purchases = BuildPerksRecentPurchases();
+    SendPacket(purchases.Write());
+}
+
 void WorldSession::HandlePerksProgramStatusRequest(WorldPackets::PerksProgram::PerksProgramStatusRequest& /*packet*/)
 {
     // Realm has the Trading Post switched off: answer the status request with the disabled message instead of a
-    // listing. Staying silent is not an option -- the client polls this every 6000 ms while the frame is open and
-    // would keep an empty window up forever.
+    // listing. Staying silent is not an option -- the client polls this every 6000 ms while the frame is open
+    // (AGENT_BRIEF_perks_2A_63.md section 10.2) and would keep an empty window up forever.
     if (!IsPerksProgramEnabled())
     {
         SendPerksProgramDisabled(true);
@@ -112,10 +179,7 @@ void WorldSession::HandlePerksProgramStatusRequest(WorldPackets::PerksProgram::P
     if (Player* player = GetPlayer())
         GrantMonthlyPerksCache(this, player);
 
-    WorldPackets::PerksProgram::PerksProgramVendorUpdate vendorUpdate;
-    vendorUpdate.VendorItems = sPerksProgramMgr->GetCurrentVendorItems();
-    SendPacket(vendorUpdate.Write());
-
+    SendPerksProgramVendorRefresh();
     SendPerksProgramActivityUpdate();
 }
 
@@ -345,6 +409,10 @@ void WorldSession::SendPerksProgramVendorOpen(ObjectGuid const& vendorGuid)
     result.DisplayGUID = vendorGuid;
     result.VendorItems = sPerksProgramMgr->GetCurrentVendorItems();
     SendPacket(result.Write());
+
+    // Type 5 is a full replace too, so this session now holds the listing as it stands. Stamping it here is what
+    // keeps the status poll silent until the listing is actually rebuilt.
+    _perksVendorListingGeneration = sPerksProgramMgr->GetListingGeneration();
 }
 
 // Sends SMSG_PERKS_PROGRAM_RESULT type 2 (purchase) or 3 (refund). Answering is not optional: without it the
@@ -362,19 +430,6 @@ void WorldSession::SendPerksProgramPurchaseResult(int32 perksVendorItemId, bool 
     SendPacket(result.Write());
 }
 
-// Sends a refused Trading Post request back as an empty error carrier. Type 0 with Err 1 resolves to
-// ERR_CANT_DO_THAT_RIGHT_NOW through the client's GameError table and then raises PERKS_PROGRAM_RESULT_ERROR,
-// which puts the frame into its server-error state: the buy and refund controls grey out
-// (Blizzard_PerksProgramElements.lua:805) until the player reopens the window.
-//
-// What it does NOT do is cancel the client's pending-purchase timer -- CancelPurchaseTimer() runs only on
-// PERKS_PROGRAM_PURCHASE_SUCCESS and _REFUND_SUCCESS (Blizzard_PerksProgram.lua:265-270), so a refused purchase
-// still raises the PERKS_PROGRAM_SLOW_PURCHASE popup after 10 seconds. The protocol offers no way to retract a
-// purchase cleanly; the only alternative would be to claim success, which would be a lie. An error is the best
-// honest answer available, and it is strictly better than silence.
-//
-// The type is deliberately fixed to 0: Err != 0 combined with type 8 or 9 makes the client read past the end of
-// that GameError table and crash, so the unsafe combination is not expressible here.
 // Sends SMSG_PERKS_PROGRAM_RESULT type 8 -- "the server just credited you this much Trader's Tender".
 // It is the announcement half of a credit the server makes on its own initiative (a monthly-activity threshold),
 // as opposed to a purchase or refund, which carry their own type 2 / type 3 answer.
@@ -397,6 +452,19 @@ void WorldSession::SendPerksProgramTenderAwarded(int32 amount)
     SendPacket(result.Write());
 }
 
+// Sends a refused Trading Post request back as an empty error carrier. Type 0 with Err 1 resolves to
+// ERR_CANT_DO_THAT_RIGHT_NOW through the client's GameError table and then raises PERKS_PROGRAM_RESULT_ERROR,
+// which puts the frame into its server-error state: the buy and refund controls grey out
+// (Blizzard_PerksProgramElements.lua:805) until the player reopens the window.
+//
+// What it does NOT do is cancel the client's pending-purchase timer -- CancelPurchaseTimer() runs only on
+// PERKS_PROGRAM_PURCHASE_SUCCESS and _REFUND_SUCCESS (Blizzard_PerksProgram.lua:265-270), so a refused purchase
+// still raises the PERKS_PROGRAM_SLOW_PURCHASE popup after 10 seconds. The protocol offers no way to retract a
+// purchase cleanly; the only alternative would be to claim success, which would be a lie. An error is the best
+// honest answer available, and it is strictly better than silence.
+//
+// The type is deliberately fixed to 0: Err != 0 combined with type 8 or 9 makes the client read past the end of
+// that GameError table and crash, so the unsafe combination is not expressible here.
 void WorldSession::SendPerksProgramResultError()
 {
     WorldPackets::PerksProgram::PerksProgramResult result(WorldPackets::PerksProgram::PerksProgramResult::ResultTypeError);

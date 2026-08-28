@@ -110,22 +110,53 @@ void PerksProgramMgr::BuildVendorList()
     }
 
     _loaded = true;
+    ++_listingGeneration;
     TC_LOG_INFO("server.loading", ">> Built {} Perks Program vendor items (perks month {}), {} in the full catalogue.",
         _vendorItems.size(), currentMonth, _catalogue.size());
 }
 
+// The offering is a per-rotation set, so the listing stays valid exactly as long as the Trading Post period it
+// was built for does. Rebuilding when that period rolls over is the one runtime moment the offering changes.
+//
+// With the DB2 data alone the rebuilt set is usually identical -- BuildVendorList derives "current" from the
+// highest PerksMonth present in the tables, which does not advance by itself. That is a property of the data,
+// not of this check: whatever supplies a live rotation later (a calendar table, a rotation script calling
+// Reload()) passes through here, and everything downstream already reacts correctly. Reload() clears _loaded,
+// which lands in the same rebuild and bumps the same generation, so an operator reload reaches open windows too.
+//
+// Pointer lifetime: GetVendorItem hands out pointers into _vendorItems, which a rebuild invalidates. That is
+// safe because the period is derived from GameTime, which is fixed for the whole world tick: the stamp is
+// updated in the same call that rebuilds, so at most ONE rebuild can happen per tick and it happens on the
+// first access of that tick -- before any handler has been given a pointer to hold.
+void PerksProgramMgr::EnsureCurrent()
+{
+    uint64 periodStart = 0;
+    uint64 periodEnd = 0;
+    GetCurrentPeriod(periodStart, periodEnd);
+
+    if (_loaded && _listingPeriod == periodStart)
+        return;
+
+    BuildVendorList();
+    _listingPeriod = periodStart;
+}
+
+uint32 PerksProgramMgr::GetListingGeneration()
+{
+    EnsureCurrent();
+    return _listingGeneration;
+}
+
 std::vector<WorldPackets::PerksProgram::PerksVendorItem> const& PerksProgramMgr::GetCurrentVendorItems()
 {
-    if (!_loaded)
-        BuildVendorList();
+    EnsureCurrent();
 
     return _vendorItems;
 }
 
 WorldPackets::PerksProgram::PerksVendorItem const* PerksProgramMgr::GetCatalogueVendorItem(int32 vendorItemId)
 {
-    if (!_loaded)
-        BuildVendorList();
+    EnsureCurrent();
 
     auto itr = _catalogue.find(vendorItemId);
     return itr != _catalogue.end() ? &itr->second : nullptr;

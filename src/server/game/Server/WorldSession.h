@@ -1496,6 +1496,7 @@ class TC_GAME_API WorldSession
         void SendPerksAnimToggleKillSwitch();
         void SendPerksProgramDisabled(bool disabled);
         void SendPerksProgramVendorOpen(ObjectGuid const& vendorGuid);
+        void SendPerksProgramVendorRefresh();
         void SendPerksProgramPurchaseResult(int32 perksVendorItemId, bool refund);
         void SendPerksProgramTenderAwarded(int32 amount);
         void SendPerksProgramResultError();
@@ -2106,6 +2107,7 @@ class TC_GAME_API WorldSession
 
         int64 _accountPerksTender = -1;   // cached account-wide Trader's Tender balance; -1 = not loaded / no row yet
         uint64 _accountPerksCacheGrantPeriod = 0;   // interval the base monthly Tender was last granted for this account
+        uint32 _perksVendorListingGeneration = 0;   // PerksProgramMgr listing generation this session last sent; 0 = none sent
 
         ConnectToKey _instanceConnectKey;
 

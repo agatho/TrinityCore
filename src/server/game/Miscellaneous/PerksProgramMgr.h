@@ -48,12 +48,22 @@ public:
     // [periodStart, periodEnd). The client uses periodEnd to show the "time remaining" countdown.
     void GetCurrentPeriod(uint64& periodStart, uint64& periodEnd) const;
 
+    // Counts how often the listing has been (re)built. A session stamps the listing it last handed a client
+    // with this value; when it moves on, that client's copy is stale and has to be replaced with
+    // SMSG_PERKS_PROGRAM_VENDOR_UPDATE. A rotation rollover and an explicit Reload() both bump it, and those are
+    // the only runtime moments the offering changes -- so they are the only moments that message is due.
+    uint32 GetListingGeneration();
+
     void Reload() { _loaded = false; }
 
 private:
     void BuildVendorList();
+    // Rebuilds the listing if it was never built or belongs to a Trading Post period that has since rolled over.
+    void EnsureCurrent();
 
     bool _loaded = false;
+    uint64 _listingPeriod = 0;      // Trading Post period the current listing was built for
+    uint32 _listingGeneration = 0;  // bumped by every BuildVendorList; 0 = never built
     std::vector<WorldPackets::PerksProgram::PerksVendorItem> _vendorItems;
     std::unordered_map<int32, WorldPackets::PerksProgram::PerksVendorItem> _catalogue;
 };
