@@ -29,7 +29,14 @@
 void WorldSession::HandleArtifactAddPower(WorldPackets::Artifact::ArtifactAddPower& artifactAddPower)
 {
     if (!_player->GetGameObjectIfCanInteractWith(artifactAddPower.ForgeGUID, GAMEOBJECT_TYPE_ITEM_FORGE))
+    {
+        // The client believes it is at the forge and the server disagrees - tell it to close the frame
+        // instead of leaving it open on a forge that is gone or out of range. The message is safe to
+        // send unconditionally: its consumer clears the interaction only if ArtifactForge (38) is the
+        // active one (checkType byte, see ArtifactPackets.h).
+        SendPacket(WorldPackets::Artifact::CloseArtifactForge().Write());
         return;
+    }
 
     Item* artifact = _player->GetItemByGuid(artifactAddPower.ArtifactGUID);
     if (!artifact || artifact->IsArtifactDisabled())
@@ -158,7 +165,10 @@ void WorldSession::HandleArtifactAddPower(WorldPackets::Artifact::ArtifactAddPow
 void WorldSession::HandleArtifactSetAppearance(WorldPackets::Artifact::ArtifactSetAppearance& artifactSetAppearance)
 {
     if (!_player->GetGameObjectIfCanInteractWith(artifactSetAppearance.ForgeGUID, GAMEOBJECT_TYPE_ITEM_FORGE))
+    {
+        SendPacket(WorldPackets::Artifact::CloseArtifactForge().Write());
         return;
+    }
 
     ArtifactAppearanceEntry const* artifactAppearance = sArtifactAppearanceStore.LookupEntry(artifactSetAppearance.ArtifactAppearanceID);
     if (!artifactAppearance)
@@ -219,12 +229,14 @@ void WorldSession::HandleConfirmArtifactRespec(WorldPackets::Artifact::ConfirmAr
         if (GtArtifactLevelXPEntry const* cost = sArtifactLevelXPGameTable.GetRow(i))
             newAmount += uint64(artifact->GetModifier(ITEM_MODIFIER_ARTIFACT_TIER) == 1 ? cost->XP2 : cost->XP);
 
+    uint32 refundedRanks = 0;
     for (UF::ArtifactPower const& artifactPower : artifact->m_itemData->ArtifactPowers)
     {
         uint8 oldPurchasedRank = artifactPower.PurchasedRank;
         if (!oldPurchasedRank)
             continue;
 
+        refundedRanks += oldPurchasedRank;
         artifact->SetArtifactPower(artifactPower.ArtifactPowerID, artifactPower.PurchasedRank - oldPurchasedRank, artifactPower.CurrentRankWithBonus - oldPurchasedRank);
 
         if (artifact->IsEquipped())
@@ -249,4 +261,16 @@ void WorldSession::HandleConfirmArtifactRespec(WorldPackets::Artifact::ConfirmAr
 
     artifact->SetArtifactXP(newAmount);
     artifact->SetState(ITEM_CHANGED, _player);
+
+    // Until now this handler performed the whole respec and told the client nothing at all, so the
+    // artifact frame kept showing the old traits until it was reopened. The client resolves
+    // ArtifactGUID against the player's own items (type mask 2 = TYPEMASK_ITEM) and derives bag and
+    // slot itself; if it cannot find the item it drops the message silently.
+    // NumRefundedPowers is the number of refunded artifact points, i.e. purchased ranks - it drives
+    // the tick count of the PointsRemainingLabel animation (Blizzard_ArtifactPerks.lua:915-944).
+    WorldPackets::Artifact::ArtifactEndgamePowersRefunded artifactEndgamePowersRefunded;
+    artifactEndgamePowersRefunded.ArtifactGUID = artifact->GetGUID();
+    artifactEndgamePowersRefunded.RefundedTier = uint8(artifact->GetModifier(ITEM_MODIFIER_ARTIFACT_TIER));
+    artifactEndgamePowersRefunded.NumRefundedPowers = refundedRanks;
+    SendPacket(artifactEndgamePowersRefunded.Write());
 }

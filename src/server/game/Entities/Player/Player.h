@@ -125,6 +125,11 @@ namespace WorldPackets
         struct CustomTabardInfo;
     }
 
+    namespace Misc
+    {
+        enum class LevelLinkingResultType : uint8;
+    }
+
     namespace Movement
     {
         enum class UpdateCollisionHeightReason : uint8;
@@ -2018,6 +2023,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void IncreaseResetTalentsCostAndCounters(uint32 lastResetTalentsCost);
         void InitTalentForLevel();
         void SendTalentsInfoData();
+        void SendUpdatePrimarySpec();
+        void SendLevelLinkingResult(WorldPackets::Misc::LevelLinkingResultType result, uint32 restrictedLevel = 0);
         TalentLearnResult LearnTalent(uint32 talentId, int32* spellOnCooldown);
         bool AddTalent(TalentEntry const* talent, uint8 spec, bool learning);
         bool HasTalent(uint32 spell_id, uint8 spec) const;

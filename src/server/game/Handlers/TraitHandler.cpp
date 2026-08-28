@@ -18,6 +18,7 @@
 #include "WorldSession.h"
 #include "Battleground.h"
 #include "DB2Stores.h"
+#include "Log.h"
 #include "Player.h"
 #include "SpellHistory.h"
 #include "TraitMgr.h"
@@ -211,15 +212,29 @@ void WorldSession::HandleClassTalentsDeleteConfig(WorldPackets::Traits::ClassTal
 
 void WorldSession::HandleClassTalentsSetStarterBuildActive(WorldPackets::Traits::ClassTalentsSetStarterBuildActive const& classTalentsSetStarterBuildActive)
 {
+    // All three validation failures answer with SMSG_STARTER_BUILD_ACTIVATE_FAILED. Without it the
+    // client's talent frame keeps the pending starter build state forever: the failure event is what
+    // drives SetCommitStarted(nil, CommitUpdateReasons.CommitFailed) and ResetToLastConfigID()
+    // (Blizzard_ClassTalentsFrame.lua:326-328). The message carries no reason code - the client does
+    // not read one - so all three cases send the same empty packet.
     UF::TraitConfig const* traitConfig = _player->GetTraitConfig(classTalentsSetStarterBuildActive.ConfigID);
     if (!traitConfig)
+    {
+        SendPacket(WorldPackets::Traits::StarterBuildActivateFailed().Write());
         return;
+    }
 
     if (static_cast<TraitConfigType>(*traitConfig->Type) != TraitConfigType::Combat)
+    {
+        SendPacket(WorldPackets::Traits::StarterBuildActivateFailed().Write());
         return;
+    }
 
     if (!EnumFlag(static_cast<TraitCombatConfigFlags>(*traitConfig->CombatConfigFlags)).HasFlag(TraitCombatConfigFlags::ActiveForSpec))
+    {
+        SendPacket(WorldPackets::Traits::StarterBuildActivateFailed().Write());
         return;
+    }
 
     if (classTalentsSetStarterBuildActive.Active)
     {
@@ -253,4 +268,31 @@ void WorldSession::HandleClassTalentsSetUsesSharedActionBars(WorldPackets::Trait
 {
     _player->SetTraitConfigUseSharedActionBars(classTalentsSetUsesSharedActionBars.ConfigID, classTalentsSetUsesSharedActionBars.UsesShared,
         classTalentsSetUsesSharedActionBars.IsLastSelectedSavedConfig);
+}
+
+// Client to server diagnostics of the talent configuration state. Both are one way notifications:
+// the client's writers (0x6CD620 / 0x6D2550) send a single uint32 and the client never waits for an
+// answer. CMSG_CLASS_TALENTS_NOTIFY_VALIDATION_FAILED in particular is the only channel on which the
+// client reports that a configuration the server sent did not validate locally - without recording
+// it, every such mismatch stays silent on the server side.
+void WorldSession::HandleClassTalentsNotifyEmptyConfig(WorldPackets::Traits::ClassTalentsNotifyEmptyConfig const& classTalentsNotifyEmptyConfig)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_CLASS_TALENTS_NOTIFY_EMPTY_CONFIG: Player '{}' ({}) reports trait config {} as empty",
+        _player->GetName(), _player->GetGUID().ToString(), classTalentsNotifyEmptyConfig.ConfigID);
+}
+
+void WorldSession::HandleClassTalentsNotifyValidationFailed(WorldPackets::Traits::ClassTalentsNotifyValidationFailed const& classTalentsNotifyValidationFailed)
+{
+    TC_LOG_ERROR("network.opcode", "CMSG_CLASS_TALENTS_NOTIFY_VALIDATION_FAILED: Player '{}' ({}) failed to validate trait config {}",
+        _player->GetName(), _player->GetGUID().ToString(), classTalentsNotifyValidationFailed.ConfigID);
+}
+
+// C_Traits.TalentTestUnlearnSpells() (Lua binding RVA 0x14C3160) - a talent test command with an
+// empty payload and no answer. TrinityCore has no talent test mode, so there is nothing to unlearn.
+// UNVERIFIED: what retail does on this message is not derivable from the client - the writer is
+// empty and there is no matching server side state in TrinityCore. Recorded rather than acted on.
+void WorldSession::HandleTraitsTalentTestUnlearnSpells(WorldPackets::Traits::TraitsTalentTestUnlearnSpells const& /*traitsTalentTestUnlearnSpells*/)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_TRAITS_TALENT_TEST_UNLEARN_SPELLS: Player '{}' ({}) - talent test mode is not implemented",
+        _player->GetName(), _player->GetGUID().ToString());
 }

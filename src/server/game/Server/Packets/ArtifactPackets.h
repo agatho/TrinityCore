@@ -89,6 +89,58 @@ namespace WorldPackets
             ObjectGuid NpcGUID;
         };
 
+        // SMSG_CLOSE_ARTIFACT_FORGE (0x45024F) and SMSG_ARTIFACT_FORGE_ERROR (0x450250) share one
+        // consumer (0x2329870). Both readers (0x5FF780 / 0x5FF800) only take a raw pointer to the
+        // remaining span, and the consumer never touches its argument:
+        //     mov  byte ptr [rip+0x2971b6d], 0   ; forge state flag byte_7FF785C6B3E8 = 0
+        //     call 0x7FF781274DC0                ; PlayerInteractionManager singleton
+        //     mov  dword ptr [rsp+0x38], 0x26    ; 38 == PlayerInteractionType::ArtifactForge
+        //     mov  byte  ptr [rsp+0x3c], 1       ; only clear if that type is the active one
+        //     call 0x7FF78323A4D0                ; ClearInteraction(type, checkType)
+        // Both messages therefore carry no payload the client can use, and both are idempotent: the
+        // checkType byte makes the client ignore them unless the artifact forge is the open frame.
+        class CloseArtifactForge final : public ServerPacket
+        {
+        public:
+            explicit CloseArtifactForge() : ServerPacket(SMSG_CLOSE_ARTIFACT_FORGE, 0) { }
+
+            WorldPacket const* Write() override;
+        };
+
+        // See CloseArtifactForge. The client has no reader, no enum and no Lua event for an error code
+        // here - a code on the wire would not reach the UI. The only matching string,
+        // ARTIFACT_TRAITS_NO_FORGE_ERROR (GlobalStrings 35246), is set client side in
+        // Blizzard_ArtifactPowerButton.lua:66.
+        // UNVERIFIED: whether retail nevertheless puts bytes on the wire cannot be decided offline
+        // (0 captured packets). Sent empty; a later capture can add fields without changing the effect.
+        class ArtifactForgeError final : public ServerPacket
+        {
+        public:
+            explicit ArtifactForgeError() : ServerPacket(SMSG_ARTIFACT_FORGE_ERROR, 0) { }
+
+            WorldPacket const* Write() override;
+        };
+
+        // SMSG_ARTIFACT_ENDGAME_POWERS_REFUNDED (0x450252), reader 0x5FF910:
+        //     ReadPackedGuid, Read<uint8> (no shift - a real byte aligned uint8), Read<uint32>
+        // Consumer 0x23299E0 resolves ArtifactGUID with type mask 2 (TYPEMASK_ITEM), derives bag and
+        // slot index from that item and fires Lua ARTIFACT_ENDGAME_REFUND (0x21B4401823260C60,
+        // ArtifactUIDocumentation.lua:832-844) - the event name does not match the opcode name.
+        // NumRefundedPowers drives ArtifactPerksMixin:AnimateTraitRefund, which animates the
+        // PointsRemainingLabel by that many ticks (Blizzard_ArtifactPerks.lua:915-944), so it counts
+        // refunded artifact *points*, i.e. purchased ranks - not distinct powers.
+        class ArtifactEndgamePowersRefunded final : public ServerPacket
+        {
+        public:
+            explicit ArtifactEndgamePowersRefunded() : ServerPacket(SMSG_ARTIFACT_ENDGAME_POWERS_REFUNDED, 16 + 1 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid ArtifactGUID;
+            uint8 RefundedTier = 0;             ///< ArtifactTier::ArtifactTier of the refunded tier
+            uint32 NumRefundedPowers = 0;       ///< purchased ranks given back
+        };
+
         class ArtifactXpGain final : public ServerPacket
         {
         public:

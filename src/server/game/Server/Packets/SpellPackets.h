@@ -1204,6 +1204,37 @@ namespace WorldPackets
             bool IsFavorite = false;
         };
 
+        // SMSG_XP_AWARDED_FROM_CURRENCY (0x450341), reader 0x60ED40:
+        //     Read<uint32> x3, then Read<uint8> followed by ">> 7" (a one bit section) - 13 bytes.
+        // The opcode name is TrinityCore convention and is misleading: the consumer (0x24006B0) fires
+        // Lua TRADE_SKILL_CURRENCY_REWARD_RESULT (murmur3 0xB2B6D1FA06DDBC2A) with one argument of
+        // type CraftingCurrencyResultData, whose field order is
+        //     currencyID, quantity, operationID, firstCraftReward, showCurrencyText
+        // (TradeSkillUITypesDocumentation.lua:110-120). That structure has no XP field at all. This is
+        // the currency reward of a crafting order, handled in
+        // Blizzard_ProfessionsCraftingOutputLog.lua:262 and :344-347; OperationID is the key that ties
+        // child results to their parent result (:359-370). The sender belongs in the crafting order
+        // code, not in Player::GiveXP.
+        //
+        // The consumer has three silent drop conditions - it fires nothing at all unless the bit is
+        // set, OperationID != 0 and Quantity > 0 (signed compare). A server that leaves one of these
+        // at zero looks exactly like a server that sent nothing, and logs nothing either.
+        class XPAwardedFromCurrency final : public ServerPacket
+        {
+        public:
+            explicit XPAwardedFromCurrency() : ServerPacket(SMSG_XP_AWARDED_FROM_CURRENCY, 4 + 4 + 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            int32 CurrencyID = 0;               ///< CurrencyTypes::ID
+            int32 Quantity = 0;                 ///< must be > 0 or the client drops the message
+            int32 OperationID = 0;              ///< must be != 0 or the client drops the message
+            /// UNVERIFIED: proven to be a gate the client requires to be set; which of the two Lua
+            /// bools it carries is not decidable offline - the consumer writes both as constants
+            /// (mov word ptr [rsp+0x2c], 1). Named after the more likely of the two.
+            bool FirstCraftReward = false;
+        };
+
         class KeyboundOverride final : public ClientPacket
         {
         public:

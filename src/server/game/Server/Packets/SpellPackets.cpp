@@ -1179,6 +1179,21 @@ void TradeSkillSetFavorite::Read()
     _worldPacket >> Bits<1>(IsFavorite);
 }
 
+// Length 4 + 4 + 4 + 1 = 13 bytes.
+// UNVERIFIED: no capture exists (0 packets in 72 sniffs). The uint32 + trailing bit section layout is
+// calibrated against SMSG_TRAIT_CONFIG_COMMIT_FAILED (0x450075, 1 captured packet, 9 bytes:
+// 87 22 ab 02 | 00 00 00 00 | 10 = uint32, uint32, bits<4>).
+WorldPacket const* XPAwardedFromCurrency::Write()
+{
+    _worldPacket << int32(CurrencyID);
+    _worldPacket << int32(Quantity);
+    _worldPacket << int32(OperationID);
+    _worldPacket << Bits<1>(FirstCraftReward);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
 void KeyboundOverride::Read()
 {
     _worldPacket >> OverrideID;

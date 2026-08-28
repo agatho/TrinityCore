@@ -22,6 +22,7 @@
 #include "AchievementMgr.h"
 #include "ArenaTeam.h"
 #include "ArenaTeamMgr.h"
+#include "ArtifactPackets.h"
 #include "AzeriteEmpoweredItem.h"
 #include "AzeriteItem.h"
 #include "Bag.h"
@@ -14141,11 +14142,16 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             PlayerTalkClass->SendCloseGossip();
             CastSpell(nullptr, SPELL_EXPERIENCE_ELIMINATED, true);
             SetPlayerFlag(PLAYER_FLAGS_NO_XP_GAIN);
+            // The state itself travels in PLAYER_FLAGS_NO_XP_GAIN; SMSG_XP_GAIN_ENABLED is the
+            // confirmation the client logs on its console channel (consumer 0x1E1DCA0). Enabled is
+            // the negation of the flag, so the state field and the message always agree.
+            SendDirectMessage(WorldPackets::Character::XPGainEnabled(false).Write());
             break;
         case GossipOptionNpc::EnableXPGain:
             PlayerTalkClass->SendCloseGossip();
             RemoveAurasDueToSpell(SPELL_EXPERIENCE_ELIMINATED);
             RemovePlayerFlag(PLAYER_FLAGS_NO_XP_GAIN);
+            SendDirectMessage(WorldPackets::Character::XPGainEnabled(true).Write());
             break;
         case GossipOptionNpc::SpecializationMaster:
             PlayerTalkClass->SendCloseGossip();
@@ -14155,6 +14161,29 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             PlayerTalkClass->SendCloseGossip();
             SendRespecWipeConfirm(guid, 0, SPEC_RESET_GLYPHS);
             break;
+        case GossipOptionNpc::ArtifactRespec:
+        {
+            // The client resolves the second GUID as a unit (type mask 32 = TYPEMASK_UNIT), checks the
+            // interaction range against it and only then fires Lua ARTIFACT_RESPEC_PROMPT
+            // (consumer 0x23298B0). It keeps polling C_ArtifactUI.CheckRespecNPC() while the popup is
+            // open (Blizzard_ArtifactUI.lua:11,29), so the npc has to stay reachable - sending the
+            // prompt from the gossip of that very npc satisfies both.
+            Aura const* artifactAura = GetAura(ARTIFACTS_ALL_WEAPONS_GENERAL_WEAPON_EQUIPPED_PASSIVE);
+            Item const* artifact = artifactAura ? GetItemByGuid(artifactAura->GetCastItemGUID()) : nullptr;
+            if (!artifact)
+            {
+                SendDirectMessage(WorldPackets::Misc::DisplayGameError(GameError::ERR_MUST_EQUIP_ARTIFACT).Write());
+                break;
+            }
+
+            PlayerTalkClass->SendCloseGossip();
+
+            WorldPackets::Artifact::ArtifactRespecPrompt artifactRespecPrompt;
+            artifactRespecPrompt.ArtifactGUID = artifact->GetGUID();
+            artifactRespecPrompt.NpcGUID = guid;
+            SendDirectMessage(artifactRespecPrompt.Write());
+            break;
+        }
         case GossipOptionNpc::GarrisonTradeskillNpc: // NYI
             break;
         case GossipOptionNpc::GarrisonRecruitment: // NYI
@@ -27672,13 +27701,64 @@ void Player::ResetTalentSpecialization()
     RemoveSpecializationSpells();
 
     ChrSpecializationEntry const* defaultSpec = ASSERT_NOTNULL(sDB2Manager.GetDefaultChrSpecializationForClass(GetClass()));
+    ChrSpecialization previousSpec = GetPrimarySpecialization();
     SetPrimarySpecialization(defaultSpec->ID);
     SetActiveTalentGroup(defaultSpec->OrderIndex);
 
     LearnSpecializationSpells();
 
     SendTalentsInfoData();
+
+    // Only report a change that actually happened. InitTalentForLevel() calls this method on every
+    // level up below MIN_SPECIALIZATION_LEVEL and on login, so an unconditional notice would pop the
+    // dialog again and again for a character that never had a specialization to lose.
+    if (previousSpec != GetPrimarySpecialization())
+    {
+        SendUpdatePrimarySpec();
+
+        // This is the one path on which the server changes the specialization without the player
+        // asking for it, so it is the send site of SMSG_SPEC_INVOLUNTARILY_CHANGED - unlike
+        // ActivateTalentGroup, whose only caller is the player cast Spell::EffectActivateSpec.
+        // IsPet is false: the pet specialization is not touched here. The client shows GlobalStrings
+        // 32100 ("Your Specialization was changed because it has been disabled.") via
+        // StaticPopup_Show (EventImplementation.lua:580-582).
+        // The order matches the captured retail order of the twin SMSG_TALENTS_INVOLUNTARILY_RESET:
+        // state first (spells, action buttons, talent data), the notice last.
+        SendDirectMessage(WorldPackets::Talent::SpecInvoluntarilyChanged(false).Write());
+    }
+
     UpdateItemSetAuras(this, false);
+}
+
+// SMSG_UPDATE_PRIMARY_SPEC carries a uint16 into the client's primary specialization cache
+// (dword_7FF7877E1ABC). The same cache is written by the consumer of SMSG_UPDATE_TALENT_DATA from
+// that message's PrimarySpecialization field, which TrinityCore fills from
+// GetPrimarySpecialization() - so the value here is a ChrSpecialization::ID, not an index. See
+// WorldPackets::Talent::UpdatePrimarySpec for the full derivation.
+// UNVERIFIED: there is no capture of this opcode, so the exact points at which retail sends it are
+// not established. It is sent here on both runtime specialization changes, next to the full talent
+// data that carries the same value.
+void Player::SendUpdatePrimarySpec()
+{
+    SendDirectMessage(WorldPackets::Talent::UpdatePrimarySpec(uint16(AsUnderlyingType(GetPrimarySpecialization()))).Write());
+}
+
+// SMSG_LEVEL_LINKING_RESULT tells the client that its effective level is capped (Result::Linked, with
+// the cap in RestrictedLevel) or that the cap is gone (Result::Unlinked). The client answers with
+// ERR_LEVEL_LINKING_RESULT_LINKED / _UNLINKED in the UIErrorsFrame and locks actions and spells above
+// the cap via C_LevelLink.IsActionLocked / IsSpellLocked.
+// UNVERIFIED: there is no caller. Level linking is the party sync / quest session level cap
+// (REQUEST_INVITE_CONFIRMATION.partyLevelLink, PartyInfoDocumentation.lua:871-885,
+// QuestSession.lua:689-701) and TrinityCore has no such state at all - no field, no handler, no CMSG,
+// no DB2 table. The wire is complete and verified against the client reader; the trigger has to be
+// built together with party sync. PlayerGUID is unread by the client (see the packet class).
+void Player::SendLevelLinkingResult(WorldPackets::Misc::LevelLinkingResultType result, uint32 restrictedLevel)
+{
+    WorldPackets::Misc::LevelLinkingResult levelLinkingResult;
+    levelLinkingResult.Result = result;
+    levelLinkingResult.PlayerGUID = GetGUID();
+    levelLinkingResult.RestrictedLevel = restrictedLevel;
+    SendDirectMessage(levelLinkingResult.Write());
 }
 
 TalentLearnResult Player::LearnPvpTalent(uint32 talentID, uint8 slot, int32* spellOnCooldown)
@@ -28901,6 +28981,7 @@ void Player::ActivateTalentGroup(ChrSpecializationEntry const* spec)
 
     SetActiveTalentGroup(spec->OrderIndex);
     SetPrimarySpecialization(spec->ID);
+    SendUpdatePrimarySpec();
     UF::TraitConfig const* specTraitConfig = m_activePlayerData->TraitConfigs.FindIf([spec](UF::TraitConfig const& traitConfig)
     {
         return static_cast<TraitConfigType>(*traitConfig.Type) == TraitConfigType::Combat

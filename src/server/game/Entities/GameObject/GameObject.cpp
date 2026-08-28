@@ -3415,6 +3415,10 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
                     if (!item)
                     {
                         player->SendDirectMessage(WorldPackets::Misc::DisplayGameError(GameError::ERR_MUST_EQUIP_ARTIFACT).Write());
+                        // The forge could not be opened. SMSG_ARTIFACT_FORGE_ERROR shares its consumer
+                        // with SMSG_CLOSE_ARTIFACT_FORGE and makes sure a stale artifact frame is not
+                        // left open; it is a no-op if the frame is not the active interaction.
+                        player->SendDirectMessage(WorldPackets::Artifact::ArtifactForgeError().Write());
                         return;
                     }
 

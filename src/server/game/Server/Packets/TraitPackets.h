@@ -90,6 +90,66 @@ public:
     bool Active = false;
 };
 
+// SMSG_STARTER_BUILD_ACTIVATE_FAILED (0x450076) - the failure answer to
+// CMSG_CLASS_TALENTS_SET_STARTER_BUILD_ACTIVE (C_ClassTalents.SetStarterBuildActive).
+// The reader (0x5E1C70) does not decompose anything, and the consumer (0x23995D0) never touches its
+// argument at all:
+//     sub    rsp, 0x28
+//     call   0x7FF7828C8830                 ; event singleton
+//     mov    r8, [rax+0x43b8]
+//     lea    rdx, [rsp+0x38]
+//     movabs rcx, 0x1D7DF894817106CB        ; murmur3 of "STARTER_BUILD_ACTIVATION_FAILED"
+//     call   r8
+// The Lua event is payload free (ClassTalentsDocumentation.lua:483-488) and the UI answers it with
+// SetCommitStarted(nil, CommitUpdateReasons.CommitFailed) plus ResetToLastConfigID()
+// (Blizzard_ClassTalentsFrame.lua:326-328). There is no reason code: the client does not read one,
+// so this message is empty. The ERR_TALENT_FAILED_* strings are distributed purely client side
+// (Blizzard_ClassTalentsFrame.lua:1717-1765) and are not this opcode's payload.
+class StarterBuildActivateFailed final : public ServerPacket
+{
+public:
+    explicit StarterBuildActivateFailed() : ServerPacket(SMSG_STARTER_BUILD_ACTIVATE_FAILED, 0) { }
+
+    WorldPacket const* Write() override;
+};
+
+// CMSG_CLASS_TALENTS_NOTIFY_EMPTY_CONFIG (0x3D00C7), writer 0x6CD620: a single uint32, 4 bytes.
+// A client to server diagnostic with no answer: the client reports that a trait configuration it
+// holds is empty.
+class ClassTalentsNotifyEmptyConfig final : public ClientPacket
+{
+public:
+    explicit ClassTalentsNotifyEmptyConfig(WorldPacket&& packet) : ClientPacket(CMSG_CLASS_TALENTS_NOTIFY_EMPTY_CONFIG, std::move(packet)) { }
+
+    void Read() override;
+
+    int32 ConfigID = 0;
+};
+
+// CMSG_CLASS_TALENTS_NOTIFY_VALIDATION_FAILED (0x3D02C6), writer 0x6D2550: a single uint32, 4 bytes.
+// Confirmed on the wire: one captured packet in C:\sniff, 4 bytes, d3 b9 51 06 -> 0x0651B9D3.
+// The client reports that a configuration the server sent did not validate locally. No answer.
+class ClassTalentsNotifyValidationFailed final : public ClientPacket
+{
+public:
+    explicit ClassTalentsNotifyValidationFailed(WorldPacket&& packet) : ClientPacket(CMSG_CLASS_TALENTS_NOTIFY_VALIDATION_FAILED, std::move(packet)) { }
+
+    void Read() override;
+
+    int32 ConfigID = 0;
+};
+
+// CMSG_TRAITS_TALENT_TEST_UNLEARN_SPELLS (0x3D02BA), writer 0x6D21F0: empty, 0 bytes.
+// Lua entry point C_Traits.TalentTestUnlearnSpells() (binding RVA 0x14C3160), which takes no
+// arguments. No answer.
+class TraitsTalentTestUnlearnSpells final : public ClientPacket
+{
+public:
+    explicit TraitsTalentTestUnlearnSpells(WorldPacket&& packet) : ClientPacket(CMSG_TRAITS_TALENT_TEST_UNLEARN_SPELLS, std::move(packet)) { }
+
+    void Read() override { }
+};
+
 class ClassTalentsSetUsesSharedActionBars final : public ClientPacket
 {
 public:
