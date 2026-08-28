@@ -29,7 +29,7 @@ namespace WorldPackets
 {
 namespace ContentTracking
 {
-    // CMSG_CONTENT_TRACKING_START_TRACKING (0x3A02DC): { u32 TargetType, u32 TargetID, u32 CollectableSourceInfoID, bit }.
+    // CMSG_CONTENT_TRACKING_START_TRACKING (0x3D02D8): { u32 TargetType, u32 TargetID, u32 CollectableSourceInfoID, bit }.
     class StartTracking final : public ClientPacket
     {
     public:
@@ -43,7 +43,7 @@ namespace ContentTracking
         bool Flag = false;
     };
 
-    // CMSG_CONTENT_TRACKING_STOP_TRACKING (0x3A02DD): { u32 TargetType, u32 TargetID, u32 CollectableSourceInfoID,
+    // CMSG_CONTENT_TRACKING_STOP_TRACKING (0x3D02D9): { u32 TargetType, u32 TargetID, u32 CollectableSourceInfoID,
     // u32 StopType, bit }.
     class StopTracking final : public ClientPacket
     {

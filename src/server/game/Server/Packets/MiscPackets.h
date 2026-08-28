@@ -995,7 +995,7 @@ namespace WorldPackets
 
         // Cancels the SMSG_START_TIMER countdown of a given type. Wire (12.0.7/68275) is a single
         // uint32 carrying the CountdownTimerType - verified against the client deserializer for
-        // SMSG_STOP_TIMER (0x42003E), which performs exactly one 4-byte read.
+        // SMSG_STOP_TIMER (0x45003F), which performs exactly one 4-byte read.
         class StopTimer final : public ServerPacket
         {
         public:

@@ -33,9 +33,9 @@ class Player;
 // SMSG_START_TIMER / SMSG_STOP_TIMER pair.
 //
 // Wire (all four opcodes flipped to STATUS_NEVER alongside this manager):
-//   SMSG_START_ELAPSED_TIMER  0x4200AA  { int64 CurrentDuration; uint32 TimerID; }
-//   SMSG_START_ELAPSED_TIMERS 0x4200AC  { uint32 Count; Count x <as above> }   - zone-in resync
-//   SMSG_STOP_ELAPSED_TIMER   0x4200AB  { uint32 TimerID; bit KeepTimer; }
+//   SMSG_START_ELAPSED_TIMER  0x4500AB  { int64 CurrentDuration; uint32 TimerID; }
+//   SMSG_START_ELAPSED_TIMERS 0x4500AD  { uint32 Count; Count x <as above> }   - zone-in resync
+//   SMSG_STOP_ELAPSED_TIMER   0x4500AC  { uint32 TimerID; bit KeepTimer; }
 //   SMSG_STOP_TIMER           0x42003E  { uint32 CountdownTimerType }
 //
 // IMPORTANT - what the 68275 client will actually render:
