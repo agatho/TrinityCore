@@ -26024,8 +26024,8 @@ Optional<WorldPackets::Party::SummonRaidMemberValidateReason> Player::ValidateSu
     // Dead or in ghost form. Retail refuses the summon here and names the reason; TrinityCore used
     // to summon the corpse walker silently.
     //
-    // This is the one reason of the five that is actually producible on this tree, and the step
-    // that decides it is the spell, so the spell is named rather than assumed:
+    // The step that decides this one is the spell, so the spell is named rather than assumed
+    // (2 and 3 are producible as well, out of the map branch at the bottom; 1 and 5 are not):
     //
     //   * The only spell in the client data carrying SPELL_EFFECT_SUMMON_PLAYER (85) is 7720
     //     "Ritual of Summoning". Full scan of SpellEffect.db2 (WOWSTATIC_12_0_7_67808, layout
@@ -26062,7 +26062,8 @@ Optional<WorldPackets::Party::SummonRaidMemberValidateReason> Player::ValidateSu
     // both and the comparison is constantly false. Reason::RealmMismatch (1) therefore never goes
     // out today. Reason::Offline (5) cannot be produced either - the only caller is
     // Spell::EffectSummonPlayer, which requires unitTarget to be a player object present in the
-    // world. Of the five wire reasons only 4 is producible; see the status file.
+    // world. Of the five wire reasons 2, 3 and 4 are producible, 1 and 5 are not; see the status
+    // file and the map branch below.
     if (Player const* playerSummoner = summoner->ToPlayer())
         if (*playerSummoner->m_playerData->VirtualPlayerRealm != *m_playerData->VirtualPlayerRealm)
             return Reason::RealmMismatch;
@@ -26074,19 +26075,31 @@ Optional<WorldPackets::Party::SummonRaidMemberValidateReason> Player::ValidateSu
     // Map::PlayerCannotEnter answers "may this player ENTER that map" and assumes he is not
     // standing in it: for an instanceable map it resolves the player's OWN bound instance
     // (MapManager::FindInstanceIdForPlayer) and hands that map to InstanceMap::CannotEnter, whose
-    // first statement is ABORT() when player->GetMapRef().getTarget() == this. ABORT is WPAbort,
-    // a process abort, so the return below it is dead code. Asking about the map a player already
-    // occupies therefore takes the worldserver down, and the only caller of the summon path,
-    // Spell::EffectSummonPlayer, always hands over a unitTarget resolved in the caster's own map -
-    // ritual of summoning or a meeting stone inside a dungeon would hit it on the first cast.
+    // first statement is ABORT() when player->GetMapRef().getTarget() == this (Map.cpp, WPAbort -
+    // a process abort, so the return below it is dead code). Asking about the map a player already
+    // occupies takes the worldserver down; hence the guard, and hence it must stay. It cannot
+    // misfire in the other direction either: past the comparison the requested map id differs from
+    // the one this player stands on, so FindMap(mapid, ...) can never return his own map.
     //
-    // Consequence, stated rather than glossed over: with the single caller this tree has, the
-    // branch never runs, so RaidLocked (2) and MapCondition (3) are unreachable today just like
-    // RealmMismatch (1) and Offline (5). It stays for the caller that summons across maps, where
-    // the question is real and the abort cannot trigger.
+    // The branch is the NORMAL case, not an exception - this corrects a claim that stood here
+    // before. Spell::SelectEffectTypeImplicitTargets resolves the summon target with the GLOBAL
+    // ObjectAccessor::FindPlayer (Spell.cpp) and queues the effect on target->GetMap() via
+    // AddFarSpellCallback, which is precisely the machinery for reaching a player on another map;
+    // Spell::CheckCast asks only IsInSameRaidWith for SPELL_EFFECT_SUMMON_PLAYER, neither map nor
+    // range. A ritual of summoning fetching a raid mate from the city into the instance therefore
+    // enters here every time, and RaidLocked (2) and MapCondition (3) are ordinary outcomes.
+    //
+    // report = false is the point of the parameter. Map::PlayerCannotEnter passes the flag to
+    // Player::Satisfy, which on failure writes to the checked player DIRECTLY - PSendSysMessage
+    // with the access requirement's questFailedText, or SendNotification with
+    // LANG_LEVEL_MINREQUIRED_AND_ITEM / LANG_LEVEL_MINREQUIRED. The checked player here is the one
+    // being summoned, who asked for nothing: with report on, a raid mate standing in the city gets
+    // "you must be at least level X and own item Y" the moment somebody ritualises him, an entry
+    // refusal for an entry he never attempted. The refusal belongs to the SUMMONER, and he gets it
+    // as the reason code of this function, carried by SMSG_SUMMON_RAID_MEMBER_VALIDATE_FAILED.
     if (GetMapId() != summoner->GetMapId())
     {
-        if (TransferAbortParams denyReason = Map::PlayerCannotEnter(summoner->GetMapId(), const_cast<Player*>(this)))
+        if (TransferAbortParams denyReason = Map::PlayerCannotEnter(summoner->GetMapId(), const_cast<Player*>(this), false))
         {
             switch (denyReason.Reason)
             {

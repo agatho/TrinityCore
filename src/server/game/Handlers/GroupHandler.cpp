@@ -500,7 +500,20 @@ void WorldSession::HandlePartyInviteOpcode(WorldPackets::Party::PartyInviteClien
                 // F3), so it cannot be sent from this tree. The suggester therefore gets no
                 // confirmation - silence where retail confirms, which is a named gap, rather than
                 // an error where retail confirms, which was a wrong statement.
-                if (!SendSuggestedInvite(group, invitingPlayer, invitedPlayer))
+                //
+                // MEMBERSHIP is the precondition of the whole path, not a formality. `group` above
+                // falls back to invitingPlayer->GetGroupInvite(), so a player who merely holds an
+                // UNANSWERED invite to this group arrives here too, and nothing between there and
+                // here asks whether he belongs to it. The client never sends a suggestion in that
+                // state - GetDisplayedInviteType (LFGUtil.lua:89) gates the whole SUGGEST_INVITE
+                // branch behind IsInGroup(), which a pending invite does not satisfy, so such a
+                // player is offered plain "Invite". Letting him through would let a stranger to the
+                // group put a confirmation dialog on the leader's screen and hold one of his four
+                // ticket slots for up to 120 s, on the strength of an invite he never accepted. He
+                // gets exactly what he got before this path existed: ERR_NOT_LEADER.
+                if (!group->IsMember(invitingPlayer->GetGUID()))
+                    SendPartyResult(PARTY_OP_INVITE, "", ERR_NOT_LEADER);
+                else if (!SendSuggestedInvite(group, invitingPlayer, invitedPlayer))
                     SendPartyResult(PARTY_OP_INVITE, "", ERR_NOT_LEADER);
             }
             return;
