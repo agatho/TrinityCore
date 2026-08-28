@@ -58,12 +58,29 @@ void ReadDynStringData(ByteBuffer& data, std::string& value, uint32 length)
 // Ein BleepToken am Draht - identisch in CMSG 0x4301A2 / 0x4301A3 (Writer 0x6B2F80) und in
 // SMSG 0x450384 (Element-Reader 0x6B9060). Bit-Sektion 5 + 24 + 6 = 35 Bit -> genau 5 Byte,
 // danach das uint64, erst danach die drei Rohbloecke.
+//
+// HIER greift die Eingangsvalidierung aus BleepPackets.h, und sie muss hier greifen: die
+// Reader-Bitbreiten sind WEITER als die Zielpuffer des Clients (Address bits<6> = bis 63 gegen
+// Puffer 46, Token bits<5> = bis 31 gegen Puffer 25, ProxyId bits<24> gegen Inline-char[256]).
+// Der einzige Weg, auf dem ein zu langer Wert wieder hinausgeht, ist die Spiegelung der
+// eingereichten Tokens in SMSG_REFRESH_BLEEP_TOKENS_RESPONSE - er wird an dieser Stelle
+// abgeschnitten, nicht erst dort. Ueberlaenge verwirft das ganze Paket: die
+// ByteBufferInvalidValueException faengt WorldSession::Update als ByteBufferException.
 void ReadBleepToken(ByteBuffer& data, BleepToken& token)
 {
     data >> SizedString::BitsSize<5>(token.Token);
     uint32 proxyIdLength = ReadDynStringLength(data);
     data >> SizedString::BitsSize<6>(token.Address);
     data.ResetBitPos();
+
+    if (token.Token.length() > MaxProxyTokenLength)
+        throw ByteBufferInvalidValueException("BleepToken::Token", "laenger als der Clientpuffer");
+
+    if (proxyIdLength > MaxProxyIdLength)
+        throw ByteBufferInvalidValueException("BleepToken::ProxyId", "laenger als der Clientpuffer");
+
+    if (token.Address.length() > MaxProxyAddressLength)
+        throw ByteBufferInvalidValueException("BleepToken::Address", "laenger als der Clientpuffer");
 
     data >> token.TokenLifespanNanoSecs;
 
@@ -99,7 +116,8 @@ void BleepPong::Read()
         _worldPacket >> ping.PongsReceived;
 
         // Hier ist das uint8 wirklich ein Byte: Laengenfeld bei leerem Akkumulator, der
-        // FlushBits danach schreibt nichts.
+        // FlushBits danach schreibt nichts. Eine Schranke gegen MaxProxyIdLength braucht es an
+        // dieser Stelle nicht: bits<8> laesst hoechstens 255 zu, und das IST MaxProxyIdLength.
         _worldPacket >> SizedString::BitsSize<8>(ping.ProxyId);
         _worldPacket.ResetBitPos();
         _worldPacket >> SizedString::Data(ping.ProxyId);

@@ -75,6 +75,12 @@ void WorldSession::HandleBleepPong(WorldPackets::Bleep::BleepPong& bleepPong)
 // verwendet. Genau deshalb wird das Element unveraendert gespiegelt: wer nur Token oder nur
 // Address zuruecksendet, loest die Zeile 257 "Received Bleep token refresh failure that's not
 // managed by us!" aus.
+//
+// Die Spiegelung ist genau deshalb unbedenklich, WEIL sie hier nichts mehr pruefen muss:
+// ReadBleepToken verwirft ein Paket bereits am Eingang, sobald Token, ProxyId oder Address laenger
+// sind als der Clientpuffer (MaxProxyTokenLength / MaxProxyIdLength / MaxProxyAddressLength in
+// BleepPackets.h). Ohne diese Schranke wuerde die Bitbreite bits<6> eine 63 Byte lange Address
+// durchlassen, die der Client in einen 46-Byte-Puffer schreibt.
 void WorldSession::HandleRefreshBleepTokens(WorldPackets::Bleep::RefreshBleepTokens& refreshBleepTokens)
 {
     WorldPackets::Bleep::RefreshBleepTokensResponse response;

@@ -64,7 +64,9 @@ namespace WorldPackets
     namespace Bleep
     {
         // Puffergroessen, aus den strnlen-Zaehlerkonstanten gemessen - NICHT aus den Bitbreiten
-        // abgeleitet. Sie sind die Eingangsvalidierung.
+        // abgeleitet. Sie sind die Eingangsvalidierung und werden in ReadBleepToken
+        // (BleepPackets.cpp) angewendet: ein zu langer Wert verwirft das Paket, statt spaeter in
+        // der Fehlschlagsspiegelung von SMSG_REFRESH_BLEEP_TOKENS_RESPONSE wieder hinauszugehen.
         constexpr std::size_t MaxProxyAddressLength = 46;    // INET6_ADDRSTRLEN
         constexpr std::size_t MaxProxyTokenLength   = 24;    // 24 Zeichen Base64 (+ NUL im Puffer)
         constexpr std::size_t MaxProxyIdLength      = 255;   // Inline-char[256]

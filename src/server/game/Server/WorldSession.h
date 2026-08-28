@@ -2246,12 +2246,14 @@ class TC_GAME_API WorldSession
         ConnectToKey _instanceConnectKey;
 
         // Einheit w4_cmsg_43_3D - Sitzungszustand der Sammelfamilien 0x43 / 0x3D.
-        // Alle drei sind bewusst FLUECHTIG (DoD D4): der Client haelt sie als CVar bzw. als
+        // Beide sind bewusst FLUECHTIG (DoD D4): der Client haelt sie als CVar bzw. als
         // UI-Zustand und sendet sie nach jedem Login erneut - CMSG_SET_EXCLUDED_CHAT_CENSOR_SOURCES
         // ist mit 22 Paketen ueber vier Builds genau so am Draht belegt.
+        // Beide werden bisher von nichts gelesen; die Handler vermerken das als D2 = offen.
+        // CMSG_LOW_LEVEL_RAID1 stand hier ebenfalls und gehoert NICHT hierher: sein Traeger ist
+        // PLAYER_FLAGS_LOW_LEVEL_RAID_ENABLED in characters.playerFlags.
         uint8 _excludedChatCensorSources;    // Enum.ExcludedCensorSources als Bitmaske
         bool _quickJoinAutoAcceptRequests;
-        bool _lowLevelRaid;
 
         // Der Baum hat kein Anti-Cheat. SMSG_WARDEN3_DISABLED geht genau EINMAL je Sitzung
         // hinaus - der Client schickt sonst rund 1400 Datenpakete ins Leere.

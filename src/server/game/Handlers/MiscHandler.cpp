@@ -1309,7 +1309,13 @@ void WorldSession::HandleTraitsTalentTestUnlearnSpells(WorldPackets::Misc::Trait
 // Beides sind Rueckmeldungen des Talent-UI ueber Enum.LoadConfigResult (0 Error,
 // 1 NoChangesNecessary, 2 LoadInProgress, 3 Ready): der Client meldet, dass die zuletzt
 // geschickte Konfiguration leer war bzw. die Validierung nicht bestanden hat. Der Server haelt
-// die Konfiguration bereits - die Nachricht diagnostiziert einen Zustand, sie korrigiert keinen.
+// die Konfiguration bereits.
+//
+// UNVERIFIED: dass Retail hier NICHTS tut, ist nicht belegt - Enum.LoadConfigResult benennt nur
+// den Wertebereich, es ist kein Konsument und keine RVA, aus der eine Serverwirkung folgte. Beide
+// Nachrichten bleiben deshalb bei D2 = offen, in derselben Beweislage wie CMSG_USED_FOLLOW: reine
+// CMSG-Notify ohne Gegenstueck, Serverwirkung aus dem Binary nicht ableitbar. Protokollieren ist
+// die ehrliche Untergrenze, nicht die belegte Vollstaendigkeit.
 void WorldSession::HandleClassTalentsNotifyEmptyConfig(WorldPackets::Misc::ClassTalentsNotifyEmptyConfig& classTalentsNotifyEmptyConfig)
 {
     TC_LOG_DEBUG("network.opcode", "CMSG_CLASS_TALENTS_NOTIFY_EMPTY_CONFIG from {} for config {}",
@@ -1466,6 +1472,10 @@ void WorldSession::HandleSpectateEnd(WorldPackets::Misc::SpectateEnd& /*spectate
 // Weltserver nicht herstellbar. Diese drei Umlaufopcodes werden deshalb geprueft und
 // protokolliert, nicht beantwortet. CMSG_QUICK_JOIN_AUTO_ACCEPT_REQUESTS (Einstellung) und
 // CMSG_QUICK_JOIN_SIGNAL_TOAST_DISPLAYED (Telemetrie) sind davon NICHT betroffen.
+//
+// UNVERIFIED: die Serverwirkung ist unbelegt. C_SocialQueue.SignalToastDisplayed erklaert den
+// float Priority, nennt aber keinen Konsumenten auf der Serverseite; dass Retail die Meldung nur
+// verbucht, ist Vermutung. D2 = offen.
 void WorldSession::HandleQuickJoinSignalToastDisplayed(WorldPackets::Misc::QuickJoinSignalToastDisplayed& quickJoinSignalToastDisplayed)
 {
     TC_LOG_DEBUG("network.opcode", "CMSG_QUICK_JOIN_SIGNAL_TOAST_DISPLAYED from {} group {} priority {} members {}",
@@ -1500,15 +1510,36 @@ void WorldSession::HandleQuickJoinRequestInviteWithConfirmation(WorldPackets::Mi
 // 0x430132, Writer 0x6AFAD0, ein Bit. Am Draht belegt: 37 Pakete, konstant 1 Byte.
 // Reine Einstellung ohne Umlauf, fluechtig: der Client haelt sie im UI und sendet sie nach jedem
 // Login erneut - genau das zeigen die 37 Pakete ueber vier Builds.
+//
+// UNVERIFIED: der Wert wird gehalten, aber von nichts gelesen - der QuickJoin-Umlauf ist im
+// Weltserver gar nicht herstellbar (siehe Block oben), also gibt es nichts, was die Einstellung
+// steuern koennte. Sobald ein QuickJoin-Einladungspfad existiert, ist DIES das Feld, das ihn
+// unterdrueckt. Bis dahin D2 = offen und ausdruecklich keine erfundene Wirkung.
 void WorldSession::HandleQuickJoinAutoAcceptRequests(WorldPackets::Misc::QuickJoinAutoAcceptRequests& quickJoinAutoAcceptRequests)
 {
     _quickJoinAutoAcceptRequests = quickJoinAutoAcceptRequests.AutoAccept;
 }
 
-// 0x4300CF, Writer 0x6AB1E0, ein Bit. Schalter "niedrigstufige Schlachtzuege anzeigen".
+// 0x4300CF, Writer 0x6AB1E0, ein Bit. Schalter "niedrigstufige Schlachtzuege betreten duerfen".
+//
+// D2 - der Traeger ist KEIN Sitzungsfeld, sondern ein Spielerflag, das der Baum bereits fuehrt:
+// PLAYER_FLAGS_LOW_LEVEL_RAID_ENABLED (0x00010000). Es wird mit m_playerData->PlayerFlags nach
+// characters.playerFlags geschrieben, beim Laden ueber ReplaceAllPlayerFlags zurueckgeholt und in
+// der Charakterliste nach CHARACTER_FLAG_2_LOW_LEVEL_RAID_ENABLED gespiegelt
+// (CharacterPackets.cpp: EnumCharactersResult::CharacterInfo). Wer den Wert stattdessen in ein
+// Sitzungsfeld legt, gibt dem Client den Schalter nach dem Relog nicht zurueck.
+//
+// D5 - Quelle der Semantik: PlayerScript.SetAllowLowLevelRaid(allow) / GetAllowLowLevelRaid()
+// (wow-ui-source Blizzard_APIDocumentationGenerated/PlayerScriptDocumentation.lua), dazu die
+// Ereignisse ENABLE_LOW_LEVEL_RAID / DISABLE_LOW_LEVEL_RAID in EncounterInfoDocumentation.lua.
+// Der Getter liest den Zustand, den der Server haelt - der Schalter ist damit dauerhaft (D4:
+// persistiert in characters.playerFlags), nicht fluechtig.
 void WorldSession::HandleLowLevelRaid1(WorldPackets::Misc::LowLevelRaid1& lowLevelRaid1)
 {
-    _lowLevelRaid = lowLevelRaid1.Enable;
+    if (lowLevelRaid1.Enable)
+        _player->SetPlayerFlag(PLAYER_FLAGS_LOW_LEVEL_RAID_ENABLED);
+    else
+        _player->RemovePlayerFlag(PLAYER_FLAGS_LOW_LEVEL_RAID_ENABLED);
 }
 
 // 0x430133, Writer 0x6AFB60, ein uint8. Am Draht belegt: 22 Pakete, konstant 1 Byte.
@@ -1520,6 +1551,10 @@ void WorldSession::HandleLowLevelRaid1(WorldPackets::Misc::LowLevelRaid1& lowLev
 // Wert nach jedem Login neu - genau das bilden die 22 Pakete ueber vier Builds ab. Eine
 // serverseitige Spalte waere ein zweiter Wahrheitstraeger, der beim ersten Login ueberschrieben
 // wird. Deshalb fluechtig in der Sitzung. D4 ist damit ENTSCHIEDEN, nicht vergessen.
+//
+// UNVERIFIED: D2 ist NICHT erfuellt. Der Baum hat keinen Chat-Zensurpfad, von dem die Maske etwas
+// ausnehmen koennte - der Wert wird gehalten und von nichts gelesen. Sobald eine Zensur im
+// Chatweg existiert, ist DIES die Maske, die sie je Quelle abschaltet. Bis dahin D2 = offen.
 void WorldSession::HandleSetExcludedChatCensorSources(WorldPackets::Misc::SetExcludedChatCensorSources& setExcludedChatCensorSources)
 {
     _excludedChatCensorSources = setExcludedChatCensorSources.Sources;
