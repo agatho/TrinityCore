@@ -1023,10 +1023,10 @@ class TC_GAME_API WorldSession
             TimePoint ExpireTime;
         };
 
-        void SendSuggestedInvite(Group* group, Player* suggester, Player* target);
+        bool SendSuggestedInvite(Group* group, Player* suggester, Player* target);
         bool SendInviteConfirmation(Player* leader, Group* group, Player* target, Player* referredBy);
         bool AddPendingInviteConfirmation(PendingInviteConfirmation confirmation);
-        Optional<PendingInviteConfirmation> TakePendingInviteConfirmation(ObjectGuid applicantGuid);
+        Optional<PendingInviteConfirmation> TakePendingInviteConfirmation(ObjectGuid applicantGuid, ObjectGuid partyGuid);
         // Answer to SMSG_CONFIRM_PARTY_INVITE, reached from HandleQuickJoinRespondToInvite. Note
         // that the client swaps the two guids on the way back: the first guid of the response is
         // SMSG_CONFIRM_PARTY_INVITE.ApplicantGUID, the second is its PartyGUID (writer RVA

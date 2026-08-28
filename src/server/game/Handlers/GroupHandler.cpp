@@ -129,11 +129,16 @@ static PartyResult CheckPartyInviteEligibility(Player const* inviter, Player con
 // UNVERIFIED: the split itself. Both messages exist and both are addressed to the leader, but no
 // recording shows which one retail picks for which case, and the client cannot be asked - it simply
 // renders whichever arrives. See AGENT_BRIEF_W4_GRUPPE_PARTY.md O-A.
-void WorldSession::SendSuggestedInvite(Group* group, Player* suggester, Player* target)
+// Returns false only when the suggestion could not be handed on at all, which is the caller's
+// signal to answer the suggester with ERR_NOT_LEADER. A repetition swallowed by the cooldown
+// returns true on purpose: the server dropped it as a duplicate of one it DID deliver a moment
+// ago, and answering that with an error would put back exactly the false line this return value
+// exists to remove.
+bool WorldSession::SendSuggestedInvite(Group* group, Player* suggester, Player* target)
 {
     Player* leader = ObjectAccessor::FindConnectedPlayer(group->GetLeaderGUID());
     if (!leader)
-        return;
+        return false;                       // nobody to suggest to - the suggester gets the error line
 
     // One suggestion per cooldown and session, counted on the SUGGESTER. This path is the only one
     // in the invite flow where a packet is produced at a THIRD player on somebody else's command:
@@ -153,7 +158,7 @@ void WorldSession::SendSuggestedInvite(Group* group, Player* suggester, Player* 
     // silence where retail shows him the throttle line. He is not misinformed, only uninformed.
     TimePoint const now = GameTime::Now();
     if (now < _nextSuggestedInviteTime)
-        return;
+        return true;
 
     _nextSuggestedInviteTime = now + SuggestedInviteCooldown;
 
@@ -161,7 +166,7 @@ void WorldSession::SendSuggestedInvite(Group* group, Player* suggester, Player* 
     // outstanding dialogs is all the client holds, so the fifth would be dropped clientside. Better
     // one line in the chat frame than a suggestion that vanishes.
     if (!group->IsFull() && SendInviteConfirmation(leader, group, target, suggester))
-        return;
+        return true;
 
     WorldPackets::Party::SuggestInviteInform suggestInviteInform;
     // UNVERIFIED: name order. ERR_INFORM_SUGGEST_INVITE_SS takes two %s and the client passes
@@ -171,6 +176,7 @@ void WorldSession::SendSuggestedInvite(Group* group, Player* suggester, Player* 
     suggestInviteInform.SuggesterName = suggester->GetName();
     suggestInviteInform.TargetName = target->GetName();
     leader->SendDirectMessage(suggestInviteInform.Write());
+    return true;
 }
 
 // Asks a group leader to confirm inviting target. referredBy set produces confirmationType 2
@@ -251,12 +257,16 @@ bool WorldSession::AddPendingInviteConfirmation(PendingInviteConfirmation confir
     return true;
 }
 
-Optional<WorldSession::PendingInviteConfirmation> WorldSession::TakePendingInviteConfirmation(ObjectGuid applicantGuid)
+// Both guids are part of the key, and deliberately so: matching on the applicant alone and
+// checking the party afterwards would let an answer carrying a wrong PartyGUID consume the ticket
+// and return it unused, so the leader's real Accept would then find nothing and do nothing. Here a
+// mismatch simply finds no ticket and leaves the open confirmation standing.
+Optional<WorldSession::PendingInviteConfirmation> WorldSession::TakePendingInviteConfirmation(ObjectGuid applicantGuid, ObjectGuid partyGuid)
 {
     TimePoint const now = GameTime::Now();
     auto itr = std::ranges::find_if(_pendingInviteConfirmations, [&](PendingInviteConfirmation const& pending)
     {
-        return pending.ApplicantGUID == applicantGuid && pending.ExpireTime > now;
+        return pending.ApplicantGUID == applicantGuid && pending.PartyGUID == partyGuid && pending.ExpireTime > now;
     });
 
     if (itr == _pendingInviteConfirmations.end())
@@ -283,15 +293,12 @@ void WorldSession::HandleQuickJoinRespondToInvite(WorldPackets::Party::QuickJoin
 
 void WorldSession::HandleInviteConfirmationResponse(ObjectGuid applicantGuid, ObjectGuid partyGuid, bool accept)
 {
-    Optional<PendingInviteConfirmation> confirmation = TakePendingInviteConfirmation(applicantGuid);
-    if (!confirmation)
-        return;                             // unknown, already answered or expired
-
     // The client echoes back both guids we sent, so a mismatch is not something a well behaved
-    // client produces. Answering it anyway would let a crafted packet redirect the confirmation at
-    // a different group.
-    if (confirmation->PartyGUID != partyGuid)
-        return;
+    // client produces - it is looked up by both so that a crafted one cannot spend somebody's
+    // ticket by naming the wrong group, see TakePendingInviteConfirmation.
+    Optional<PendingInviteConfirmation> confirmation = TakePendingInviteConfirmation(applicantGuid, partyGuid);
+    if (!confirmation)
+        return;                             // unknown, wrong group, already answered or expired
 
     Player* leader = GetPlayer();
     if (!leader)
@@ -402,13 +409,22 @@ void WorldSession::HandlePartyInviteOpcode(WorldPackets::Party::PartyInviteClien
         {
             if (group->IsCreated())
             {
-                SendPartyResult(PARTY_OP_INVITE, "", ERR_NOT_LEADER);
-
                 // This is the "Suggest Invite" path: the client of a member who may not invite still
                 // sends CMSG_PARTY_INVITE (Blizzard_UnitPopup/Mainline/UnitPopupUtils.lua:94-106,
                 // GetDisplayedInviteType in Blizzard_LFGUtil/Mainline/LFGUtil.lua:88-111). Retail
                 // forwards the suggestion to the leader; before this it was dropped on the floor.
-                SendSuggestedInvite(group, invitingPlayer, invitedPlayer);
+                //
+                // ERR_NOT_LEADER goes out only when the suggestion could NOT be handed on. The
+                // member's own UI labels this button "Suggest Invite", so on the path where the
+                // suggestion reaches the leader, telling him "you are not the leader" reports a
+                // failure for an action that worked. Retail's answer to the suggester on that path
+                // is GameError 82 ERR_SUGGEST_INVITE_PLAYER_S (SharedDefines.h, brief 7.3), which
+                // carries a %s; SMSG_DISPLAY_GAME_ERROR has no string carrying ctor form (brief 1.4
+                // F3), so it cannot be sent from this tree. The suggester therefore gets no
+                // confirmation - silence where retail confirms, which is a named gap, rather than
+                // an error where retail confirms, which was a wrong statement.
+                if (!SendSuggestedInvite(group, invitingPlayer, invitedPlayer))
+                    SendPartyResult(PARTY_OP_INVITE, "", ERR_NOT_LEADER);
             }
             return;
         }

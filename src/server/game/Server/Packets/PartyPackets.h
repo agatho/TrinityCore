@@ -815,6 +815,11 @@ namespace WorldPackets
         // Carries no payload at all - the client consumer (RVA 0x1E20110) is two instructions and
         // unconditionally shows ERR_UNINVITE_YOU ("you have been removed"). It therefore goes to the
         // removed player only, never to the remaining group.
+        //
+        // The wire (0 bytes) and the effect above are measured at build 12.1.0.69382. UNVERIFIED:
+        // when retail sends it. No recording of this opcode exists, and SMSG_GROUP_UNINVITE would
+        // fit a server initiated removal just as well, so the trigger chosen in Group::RemoveMember
+        // is a decision of this branch, not a reconstruction of retail (brief 7.2, 11.1 O-B).
         class GroupAutoKick final : public ServerPacket
         {
         public:

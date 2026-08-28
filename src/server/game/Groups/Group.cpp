@@ -580,6 +580,16 @@ bool Group::RemoveMember(ObjectGuid guid, RemoveMethod method /*= GROUP_REMOVEME
     // the branch. Without this the last removal of a three member party would be the one that stays
     // silent. GROUP_UNINVITE has that same gap for the manual kick; it is left alone because
     // changing the manual kick is not this change's business.
+    //
+    // UNVERIFIED: that retail sends SMSG_GROUP_AUTO_KICK at THIS trigger, or at any trigger. What
+    // the packet means is measured; what makes retail send it is not. There is no recording of the
+    // opcode (brief 10), no server side trigger anywhere in this tree (brief 1.4 F5) and no UI text
+    // that names one (brief 9.7). Retail may just as well answer a server initiated removal with
+    // the SMSG_GROUP_UNINVITE this tree already sends and keep this opcode for a case nobody has
+    // seen. Binding it to GROUP_REMOVEMETHOD_AUTO is therefore a decision, not a reconstruction
+    // (brief 7.2, 11.1 O-B); it needs a recording of a server initiated removal to settle. The
+    // decision is deliberately narrow: GROUP_REMOVEMETHOD_AUTO has exactly one caller (.group
+    // remove, cs_group.cpp), so a wrong guess here misinforms nobody but a GM's target.
     if (player && method == GROUP_REMOVEMETHOD_AUTO)
         player->SendDirectMessage(WorldPackets::Party::GroupAutoKick().Write());
 
