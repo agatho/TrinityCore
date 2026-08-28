@@ -582,6 +582,7 @@ namespace WorldPackets
         class PartyInvite;
         class PartyInviteResponse;
         class PartyUninvite;
+        class QuickJoinRespondToInvite;
         class GroupDecline;
         class RequestPartyMemberStats;
         class PartyMemberFullState;
@@ -1019,16 +1020,14 @@ class TC_GAME_API WorldSession
         };
 
         void SendSuggestedInvite(Group* group, Player* suggester, Player* target);
-        void SendInviteConfirmation(Player* leader, Group* group, Player* target, Player* referredBy);
+        bool SendInviteConfirmation(Player* leader, Group* group, Player* target, Player* referredBy);
         bool AddPendingInviteConfirmation(PendingInviteConfirmation confirmation);
         Optional<PendingInviteConfirmation> TakePendingInviteConfirmation(ObjectGuid applicantGuid);
-        // Answer to SMSG_CONFIRM_PARTY_INVITE. The caller is the handler of
-        // CMSG_QUICK_JOIN_RESPOND_TO_INVITE (opcode 0x430130), which lives with the CMSG family
-        // 0x43 and is therefore not registered on this branch - the round trip closes on
-        // integration. Note that the client swaps the two guids on the way back: the first guid of
-        // the response is SMSG_CONFIRM_PARTY_INVITE.ApplicantGUID, the second is its PartyGUID
-        // (writer RVA 0x6AF830, response builder RVA 0x21981D0).
-        void HandleInviteConfirmationResponse(ObjectGuid applicantGuid, bool accept);
+        // Answer to SMSG_CONFIRM_PARTY_INVITE, reached from HandleQuickJoinRespondToInvite. Note
+        // that the client swaps the two guids on the way back: the first guid of the response is
+        // SMSG_CONFIRM_PARTY_INVITE.ApplicantGUID, the second is its PartyGUID (writer RVA
+        // 0x6AF830, response builder RVA 0x21981D0).
+        void HandleInviteConfirmationResponse(ObjectGuid applicantGuid, ObjectGuid partyGuid, bool accept);
 
         void SendAuthResponse(uint32 code, bool queued, uint32 queuePos = 0);
         void SendClientCacheVersion(uint32 version);
@@ -1432,6 +1431,7 @@ class TC_GAME_API WorldSession
 
         void HandlePartyInviteOpcode(WorldPackets::Party::PartyInviteClient& packet);
         void HandlePartyInviteResponseOpcode(WorldPackets::Party::PartyInviteResponse& packet);
+        void HandleQuickJoinRespondToInvite(WorldPackets::Party::QuickJoinRespondToInvite& packet);
         void HandlePartyUninviteOpcode(WorldPackets::Party::PartyUninvite& packet);
         void HandleSetPartyLeaderOpcode(WorldPackets::Party::SetPartyLeader& packet);
         void HandleSetRoleOpcode(WorldPackets::Party::SetRole& packet);

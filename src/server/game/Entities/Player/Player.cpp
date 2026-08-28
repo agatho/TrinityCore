@@ -26026,6 +26026,12 @@ Optional<WorldPackets::Party::SummonRaidMemberValidateReason> Player::ValidateSu
     if (!IsAlive())
         return Reason::DeadOrGhost;
 
+    // UNREACHABLE in this tree, kept as the guard it will be the day cross realm exists: both
+    // players hang off the same worldserver instance, so VirtualPlayerRealm is the same value for
+    // both and the comparison is constantly false. Reason::RealmMismatch (1) therefore never goes
+    // out today. Reason::Offline (5) cannot be produced either - the only caller is
+    // Spell::EffectSummonPlayer, which requires unitTarget to be a player object present in the
+    // world. Of the five wire reasons only 2, 3 and 4 are producible; see the status file.
     if (Player const* playerSummoner = summoner->ToPlayer())
         if (*playerSummoner->m_playerData->VirtualPlayerRealm != *m_playerData->VirtualPlayerRealm)
             return Reason::RealmMismatch;

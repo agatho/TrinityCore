@@ -160,6 +160,28 @@ namespace WorldPackets
             std::string Name;                       // client buffer is 306 bytes, clamped on write
         };
 
+        // The answer to SMSG_CONFIRM_PARTY_INVITE - Accept/Decline of the leader's confirmation
+        // dialog, sent by C.RespondToInviteConfirmation(guid, accept) (GameDialogDefs.lua:336/339).
+        // Writer RVA 0x6AF830 (0x6AF7C0 payload), response builder RVA 0x21981D0, build
+        // 12.1.0.69382. 5..37 bytes.
+        //
+        // THE TWO GUIDS COME BACK SWAPPED. The client keys its pending queue on the applicant guid,
+        // and that key is written first: wire guid #1 is SMSG_CONFIRM_PARTY_INVITE.ApplicantGUID
+        // (its field 2), wire guid #2 is SMSG_CONFIRM_PARTY_INVITE.PartyGUID (its field 1). A
+        // server that assumes the order of the SMSG assigns the answer to the wrong applicant.
+        // The client additionally checks that the key carries HighGuid::Player before sending.
+        class QuickJoinRespondToInvite final : public ClientPacket
+        {
+        public:
+            explicit QuickJoinRespondToInvite(WorldPacket&& packet) : ClientPacket(CMSG_QUICK_JOIN_RESPOND_TO_INVITE, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid ApplicantGUID;       // wire guid #1
+            ObjectGuid PartyGUID;           // wire guid #2
+            bool Accept = false;
+        };
+
         class PartyInviteResponse final : public ClientPacket
         {
         public:

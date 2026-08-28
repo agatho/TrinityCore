@@ -7132,7 +7132,7 @@ enum RemoveMethod : uint8
     GROUP_REMOVEMETHOD_KICK     = 1,
     GROUP_REMOVEMETHOD_LEAVE    = 2,
     GROUP_REMOVEMETHOD_KICK_LFG = 3,
-    GROUP_REMOVEMETHOD_AUTO     = 4     // server removed the member on its own, no kicker
+    GROUP_REMOVEMETHOD_AUTO     = 4     // removal came from outside the group - no kicker to name
 };
 
 enum ActivateTaxiReply

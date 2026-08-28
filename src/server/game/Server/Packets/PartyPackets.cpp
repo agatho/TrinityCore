@@ -179,6 +179,15 @@ WorldPacket const* ConfirmPartyInvite::Write()
     return &_worldPacket;
 }
 
+void QuickJoinRespondToInvite::Read()
+{
+    // 0x6AF830 - two packed guids and one bit, in this order. See the header for the swap.
+    _worldPacket >> ApplicantGUID;
+    _worldPacket >> PartyGUID;
+    _worldPacket >> Bits<1>(Accept);
+    _worldPacket.ResetBitPos();
+}
+
 void PartyInviteResponse::Read()
 {
     _worldPacket >> OptionalInit(PartyIndex);

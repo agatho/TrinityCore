@@ -571,6 +571,18 @@ bool Group::RemoveMember(ObjectGuid guid, RemoveMethod method /*= GROUP_REMOVEME
     if (player)
         player->FailCriteria(CriteriaFailEvent::ModifyPartyStatus, 0);
 
+    // Removed by the server itself, so there is no kicker to name. The message carries no payload;
+    // the client answers it with ERR_UNINVITE_YOU in the chat frame (consumer RVA 0x1E20110 at
+    // build 12.1.0.69382). It goes to the removed player only - sending it to the group would tell
+    // everybody they had been removed.
+    // Sent here, ahead of the group size branch, on purpose: a removal that leaves fewer than two
+    // members falls into the Disband() branch below, which never reaches the notifications inside
+    // the branch. Without this the last removal of a three member party would be the one that stays
+    // silent. GROUP_UNINVITE has that same gap for the manual kick; it is left alone because
+    // changing the manual kick is not this change's business.
+    if (player && method == GROUP_REMOVEMETHOD_AUTO)
+        player->SendDirectMessage(WorldPackets::Party::GroupAutoKick().Write());
+
     // remove member and change leader (if need) only if strong more 2 members _before_ member remove (BG/BF allow 1 member group)
     if (GetMembersCount() > ((isBGGroup() || isLFGGroup() || isBFGroup()) ? 1u : 2u))
     {
@@ -595,12 +607,6 @@ bool Group::RemoveMember(ObjectGuid guid, RemoveMethod method /*= GROUP_REMOVEME
 
             if (method == GROUP_REMOVEMETHOD_KICK || method == GROUP_REMOVEMETHOD_KICK_LFG)
                 player->SendDirectMessage(WorldPackets::Party::GroupUninvite().Write());
-            else if (method == GROUP_REMOVEMETHOD_AUTO)
-                // Removed by the server itself, so there is no kicker to name. The message carries
-                // no payload; the client answers it with ERR_UNINVITE_YOU in the chat frame
-                // (consumer RVA 0x1E20110 at build 12.1.0.69382). It goes to the removed player
-                // only - sending it to the group would tell everybody they had been removed.
-                player->SendDirectMessage(WorldPackets::Party::GroupAutoKick().Write());
 
             _homebindIfInstance(player);
         }

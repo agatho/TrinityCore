@@ -368,7 +368,11 @@ public:
             return false;
         }
 
-        group->RemoveMember(guid);
+        // GROUP_REMOVEMETHOD_AUTO, so the removed player is told with SMSG_GROUP_AUTO_KICK instead
+        // of dropping out of the party frame without a word. This is the one removal in this tree
+        // that fits the message: it comes from outside the group, so there is no kicker to name,
+        // the removed player did not ask for it, and they are normally online to receive it.
+        group->RemoveMember(guid, GROUP_REMOVEMETHOD_AUTO);
         return true;
     }
 

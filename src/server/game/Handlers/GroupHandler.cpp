@@ -82,7 +82,8 @@ static uint8 GetPartyRequestJoinRelation(Player const* leader, Player const* ref
 //     CMSG_QUICK_JOIN_RESPOND_TO_INVITE back.
 //   * group is full  -> SMSG_SUGGEST_INVITE_INFORM, a plain chat line
 //     (ERR_INFORM_SUGGEST_INVITE_SS, consumer RVA 0x1E20770). There is nothing to confirm, so the
-//     leader is only informed.
+//     leader is only informed. The same line covers the case where the leader already holds the
+//     four confirmations the client can keep.
 // UNVERIFIED: the split itself. Both messages exist and both are addressed to the leader, but no
 // recording shows which one retail picks for which case, and the client cannot be asked - it simply
 // renders whichever arrives. See AGENT_BRIEF_W4_GRUPPE_PARTY.md O-A.
@@ -92,34 +93,41 @@ void WorldSession::SendSuggestedInvite(Group* group, Player* suggester, Player* 
     if (!leader)
         return;
 
-    if (group->IsFull())
-    {
-        WorldPackets::Party::SuggestInviteInform suggestInviteInform;
-        // UNVERIFIED: name order. ERR_INFORM_SUGGEST_INVITE_SS takes two %s and the client passes
-        // both through unchanged, so the binary cannot decide it. (suggester, target) follows the
-        // argument order of INVITE_CONFIRMATION_SUGGEST in LFGUtil.lua:270 and the reading of the
-        // neighbouring GameError codes 81..85 as one direction.
-        suggestInviteInform.SuggesterName = suggester->GetName();
-        suggestInviteInform.TargetName = target->GetName();
-        leader->SendDirectMessage(suggestInviteInform.Write());
+    // The chat line is also the fallback when the leader's confirmation queue is already full: four
+    // outstanding dialogs is all the client holds, so the fifth would be dropped clientside. Better
+    // one line in the chat frame than a suggestion that vanishes.
+    if (!group->IsFull() && SendInviteConfirmation(leader, group, target, suggester))
         return;
-    }
 
-    SendInviteConfirmation(leader, group, target, suggester);
+    WorldPackets::Party::SuggestInviteInform suggestInviteInform;
+    // UNVERIFIED: name order. ERR_INFORM_SUGGEST_INVITE_SS takes two %s and the client passes
+    // both through unchanged, so the binary cannot decide it. (suggester, target) follows the
+    // argument order of INVITE_CONFIRMATION_SUGGEST in LFGUtil.lua:270 and the reading of the
+    // neighbouring GameError codes 81..85 as one direction.
+    suggestInviteInform.SuggesterName = suggester->GetName();
+    suggestInviteInform.TargetName = target->GetName();
+    leader->SendDirectMessage(suggestInviteInform.Write());
 }
 
 // Asks a group leader to confirm inviting target. referredBy set produces confirmationType 2
 // (SUGGEST), leaving it empty produces 3 (QUEUE_WARNING); type 1 (REQUEST) additionally needs
 // ShowChatLine and belongs to the quick join flow.
-void WorldSession::SendInviteConfirmation(Player* leader, Group* group, Player* target, Player* referredBy)
+bool WorldSession::SendInviteConfirmation(Player* leader, Group* group, Player* target, Player* referredBy)
 {
     WorldPackets::Party::ConfirmPartyInvite confirmPartyInvite;
     confirmPartyInvite.PartyGUID = group->GetGUID();
     confirmPartyInvite.InitializeApplicant(target);
 
     confirmPartyInvite.IsCrossFaction = leader->GetTeam() != target->GetTeam();
-    // A sixth member turns a party into a raid; the client shows LFG_LIST_CONVERT_TO_RAID_WARNING.
-    confirmPartyInvite.WillConvertToRaid = !group->isRaidGroup() && group->GetMembersCount() >= MAX_GROUP_SIZE;
+
+    // WillConvertToRaid is false in this tree, and that is a measured constant rather than an
+    // oversight. The flag means "accepting this turns your party into a raid", which needs the
+    // party to already hold MAX_GROUP_SIZE members - but TrinityCore has no convert-on-invite at
+    // all: Group::AddMember refuses the sixth member with ERR_GROUP_FULL, and this dialog is only
+    // ever built for a group that is not full, because SendSuggestedInvite routes the full group to
+    // the chat line instead. Setting the bit would promise the client the
+    // LFG_LIST_CONVERT_TO_RAID_WARNING and then have the accept path answer ERR_GROUP_FULL.
+    confirmPartyInvite.WillConvertToRaid = false;
 
     // Queues the applicant is stuck in. The client hands these to Lua through
     // C_PartyInfo.GetInviteConfirmationInvalidQueues and formats the queue warning from them.
@@ -149,9 +157,10 @@ void WorldSession::SendInviteConfirmation(Player* leader, Group* group, Player* 
             .PartyGUID = confirmPartyInvite.PartyGUID,
             .ReferredByGUID = confirmPartyInvite.ReferredByGUID,
             .ExpireTime = GameTime::Now() + PendingInviteConfirmationTimeout }))
-        return;     // leader already has four unanswered confirmations, the client would drop this one
+        return false;   // leader already has four unanswered confirmations, the client would drop this one
 
     leader->SendDirectMessage(confirmPartyInvite.Write());
+    return true;
 }
 
 bool WorldSession::AddPendingInviteConfirmation(PendingInviteConfirmation confirmation)
@@ -185,11 +194,31 @@ Optional<WorldSession::PendingInviteConfirmation> WorldSession::TakePendingInvit
     return confirmation;
 }
 
-void WorldSession::HandleInviteConfirmationResponse(ObjectGuid applicantGuid, bool accept)
+// CMSG_QUICK_JOIN_RESPOND_TO_INVITE (0x430130) - the leader pressed Accept or Decline in the
+// GROUP_INVITE_CONFIRMATION dialog. This closes the round trip that SMSG_CONFIRM_PARTY_INVITE
+// opens, so it is registered here, next to the send side, rather than left to the CMSG family
+// sweep: the copy of this opcode on feature/cmsg-sweep answers with a TC_LOG_DEBUG and its comment
+// states the round trip cannot be built in the worldserver - which the measurement of the client
+// disproves (AGENT_BRIEF_W4_GRUPPE_PARTY.md 2 K1). See registrierung/w4_gruppe_party.frag.json:
+// when the branches are merged, THIS registration and this body are the ones to keep, and the
+// MiscPackets/MiscHandler copy is the one to drop.
+void WorldSession::HandleQuickJoinRespondToInvite(WorldPackets::Party::QuickJoinRespondToInvite& packet)
+{
+    // Mind the order - the client sends the applicant guid first, see PartyPackets.h.
+    HandleInviteConfirmationResponse(packet.ApplicantGUID, packet.PartyGUID, packet.Accept);
+}
+
+void WorldSession::HandleInviteConfirmationResponse(ObjectGuid applicantGuid, ObjectGuid partyGuid, bool accept)
 {
     Optional<PendingInviteConfirmation> confirmation = TakePendingInviteConfirmation(applicantGuid);
     if (!confirmation)
         return;                             // unknown, already answered or expired
+
+    // The client echoes back both guids we sent, so a mismatch is not something a well behaved
+    // client produces. Answering it anyway would let a crafted packet redirect the confirmation at
+    // a different group.
+    if (confirmation->PartyGUID != partyGuid)
+        return;
 
     Player* leader = GetPlayer();
     if (!leader)
