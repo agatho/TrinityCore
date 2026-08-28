@@ -25,7 +25,7 @@ namespace WorldPackets::PerksProgram
 struct PerksVendorItem
 {
     int32 VendorItemID = 0;
-    int32 MountID = 0;
+    int32 MountID = 0;             // Mount.db2 row id (NOT the teaching spell) -- the client feeds it to C_MountJournal.GetMountInfoByID
     int32 BattlePetSpeciesID = 0;
     int32 TransmogSetID = 0;
     int32 ItemModifiedAppearanceID = 0;

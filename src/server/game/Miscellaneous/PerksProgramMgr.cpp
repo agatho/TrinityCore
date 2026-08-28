@@ -40,12 +40,6 @@ void PerksProgramMgr::BuildVendorList()
     _vendorItems.clear();
     _catalogue.clear();
 
-    // Spells that teach a mount, so a vendor item's teaching effect can be mapped back to its mount.
-    std::unordered_set<int32> mountSpells;
-    for (MountEntry const* mount : sMountStore)
-        if (mount->SourceSpellID > 0)
-            mountSpells.insert(mount->SourceSpellID);
-
     // Default modified appearance (modifier 0) per item, for transmog/ensemble vendor items.
     std::unordered_map<uint32, int32> itemAppearance;
     for (ItemModifiedAppearanceEntry const* appearance : sItemModifiedAppearanceStore)
@@ -98,10 +92,22 @@ void PerksProgramMgr::BuildVendorList()
             if (sDB2Manager.IsToyItem(entry->ItemID))
                 vendorItem.ToyID = entry->ItemID;
 
+            // MountID is a Mount.db2 ROW id on the wire, not the teaching spell. The client hands the field
+            // straight to C_MountJournal.GetMountInfoByID(data.mountID) (Blizzard_PerksProgramModel.lua:370,
+            // :602) and to C_MountJournal.GetAllCreatureDisplayIDsForMountID(itemInfo.mountID)
+            // (Blizzard_PerksProgram.lua:474). The two id spaces are distinct -- the same API carries
+            // C_MountJournal.GetMountFromSpell(spellID) -> mountID (MountJournalDocumentation.lua:249) purely to
+            // translate between them, and GetMountInfoByID is MayReturnNothing, so a spell id there yields
+            // nothing: every mount in the listing would arrive without name, icon and model.
+            //
+            // The item only gives us the teaching spell, so translate here. Everything on the account-collection
+            // side (CollectionMgr::AddMount/RemoveMount/GetAccountMounts and the stored purchase record) stays
+            // keyed by the spell and translates back with DB2Manager::GetMountById -- see PerksProgramHandler.
             if (ItemTemplate const* proto = sObjectMgr->GetItemTemplate(entry->ItemID))
                 for (ItemEffectEntry const* effect : proto->Effects)
-                    if (mountSpells.count(effect->SpellID))
-                        vendorItem.MountID = effect->SpellID;
+                    if (effect->SpellID > 0)   // _mountsBySpellId also holds an entry for spell 0
+                        if (MountEntry const* mount = sDB2Manager.GetMount(uint32(effect->SpellID)))
+                            vendorItem.MountID = int32(mount->ID);
         }
 
         _catalogue[int32(entry->ID)] = vendorItem;
@@ -124,10 +130,18 @@ void PerksProgramMgr::BuildVendorList()
 // Reload()) passes through here, and everything downstream already reacts correctly. Reload() clears _loaded,
 // which lands in the same rebuild and bumps the same generation, so an operator reload reaches open windows too.
 //
-// Pointer lifetime: GetVendorItem hands out pointers into _vendorItems, which a rebuild invalidates. That is
-// safe because the period is derived from GameTime, which is fixed for the whole world tick: the stamp is
-// updated in the same call that rebuilds, so at most ONE rebuild can happen per tick and it happens on the
-// first access of that tick -- before any handler has been given a pointer to hold.
+// Thread and pointer lifetime: a rebuild clears _vendorItems and _catalogue, so it must never run while another
+// thread walks them. Everything that can reach a rebuild is a packet handler -- the Perks handlers themselves and
+// the gossip select that opens the vendor -- and every one of those is registered PROCESS_THREADUNSAFE
+// (Opcodes.cpp), which confines them to the world thread's session update. CMSG_PERKS_PROGRAM_SET_FROZEN_VENDOR_ITEM
+// was the exception: it stood on PROCESS_INPLACE, which also runs under MapSessionFilter, i.e. on a map thread in
+// parallel with the world thread. That was harmless while the listing was built exactly once, and is not harmless
+// now that it is rebuilt at runtime -- hence it is THREADUNSAFE too, and reader and rebuilder are the same thread.
+// The only caller outside that set, PerksProgramActivityMgr, uses GetCurrentPeriod alone, which reads no container.
+//
+// Within that thread the handed-out pointers survive their handler: the period comes from GameTime, which is
+// fixed for the whole world tick, and the stamp is updated in the same call that rebuilds -- so at most ONE
+// rebuild can happen per tick and it happens on the first access of that tick, before any pointer is issued.
 void PerksProgramMgr::EnsureCurrent()
 {
     uint64 periodStart = 0;

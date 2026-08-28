@@ -237,9 +237,10 @@ void WorldSession::HandlePerksProgramItemsRefreshed(WorldPackets::PerksProgram::
 }
 
 // Sends SMSG_PERKS_PROGRAM_ACTIVITY_UPDATE: the current Trading Post period plus the player's
-// completed activities for it. Completed-activity tracking (deriving completion from each
-// PerksActivity's CriteriaTree and awarding threshold tender) is a separate phase, so today the
-// completed set is empty — the client still needs the period to show the activity countdown.
+// completed activities for it. Both parts are filled: the period comes from PerksProgramMgr, the completed
+// set from PerksProgramActivityMgr, which derives completion from each PerksActivity's CriteriaTree and
+// awards the threshold tender. The period alone already drives the client's activity countdown, so this is
+// also sent while the completed set is still empty.
 void WorldSession::SendPerksProgramActivityUpdate()
 {
     WorldPackets::PerksProgram::PerksProgramActivityUpdate activityUpdate;
@@ -294,6 +295,20 @@ void WorldSession::HandlePerksProgramRequestPendingRewards(WorldPackets::PerksPr
     SendPacket(response.Write());
 }
 
+// PerksVendorItem::MountID is a Mount.db2 row id -- that is what the client's mount journal calls expect and
+// what PerksProgramMgr::BuildVendorList therefore writes. The account collection speaks the other id space:
+// CollectionMgr::AddMount, GetAccountMounts, RemoveMount and the stored PerksProgramPurchaseData::MountID are all
+// keyed by the TEACHING SPELL. This is the single translation point between the two; it returns 0 for "no mount"
+// and for a mount row that teaches nothing.
+static uint32 GetPerksMountSpell(int32 mountId)
+{
+    if (mountId <= 0)
+        return 0;
+
+    MountEntry const* mount = sDB2Manager.GetMountById(uint32(mountId));
+    return mount && mount->SourceSpellID > 0 ? uint32(mount->SourceSpellID) : 0;
+}
+
 // Resolves an offered, grantable Trading Post vendor item WITHOUT charging or granting. Returns nullptr if the
 // item is not currently offered, is disabled, has an invalid price, or resolves to no reward the server can grant
 // (a battle pet / illusion / transmog set / warband scene, which BuildVendorList does not yet resolve -- see G2).
@@ -303,7 +318,9 @@ static WorldPackets::PerksProgram::PerksVendorItem const* ResolvePerksPurchase(i
     if (!item || item->Disabled || item->Price < 0)
         return nullptr;
 
-    if (!item->MountID && !item->ToyID && !item->ItemModifiedAppearanceID)
+    // A mount only counts as grantable when its row still resolves to a teaching spell -- otherwise the grant
+    // below would charge Trader's Tender and hand out nothing.
+    if (!GetPerksMountSpell(item->MountID) && !item->ToyID && !item->ItemModifiedAppearanceID)
         return nullptr;
 
     return item;
@@ -313,7 +330,7 @@ static WorldPackets::PerksProgram::PerksVendorItem const* ResolvePerksPurchase(i
 // would burn Trader's Tender and stack a redundant purchase record, so reject it (G11).
 static bool IsPerksRewardOwned(CollectionMgr* collectionMgr, WorldPackets::PerksProgram::PerksVendorItem const* item)
 {
-    if (item->MountID && collectionMgr->GetAccountMounts().contains(uint32(item->MountID)))
+    if (uint32 mountSpell = GetPerksMountSpell(item->MountID); mountSpell && collectionMgr->GetAccountMounts().contains(mountSpell))
         return true;
     if (item->ToyID && collectionMgr->HasToy(uint32(item->ToyID)))
         return true;
@@ -328,8 +345,9 @@ static bool IsPerksRewardOwned(CollectionMgr* collectionMgr, WorldPackets::Perks
 static void GrantPerksPurchase(WorldSession* session, Player* player, int32 vendorItemId, WorldPackets::PerksProgram::PerksVendorItem const* item)
 {
     CollectionMgr* collectionMgr = session->GetCollectionMgr();
-    if (item->MountID)
-        collectionMgr->AddMount(uint32(item->MountID), MOUNT_STATUS_NONE);
+    uint32 const mountSpell = GetPerksMountSpell(item->MountID);
+    if (mountSpell)
+        collectionMgr->AddMount(mountSpell, MOUNT_STATUS_NONE);
     if (item->ToyID)
         collectionMgr->AddToy(uint32(item->ToyID), false, false);
     if (item->ItemModifiedAppearanceID)
@@ -338,7 +356,7 @@ static void GrantPerksPurchase(WorldSession* session, Player* player, int32 vend
 
     // Record the purchase so it can later be refunded (price paid + the exact collectible to revoke + the
     // purchasing character, so only that character can refund it).
-    collectionMgr->AddPerksProgramPurchase(vendorItemId, item->Price, item->MountID, item->ToyID, player->GetGUID().GetCounter());
+    collectionMgr->AddPerksProgramPurchase(vendorItemId, item->Price, int32(mountSpell), item->ToyID, player->GetGUID().GetCounter());
 }
 
 // Validates a single Trading Post vendor item, deducts its Trader's Tender cost and grants the resolved
