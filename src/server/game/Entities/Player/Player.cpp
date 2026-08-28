@@ -3500,7 +3500,21 @@ bool Player::ResetTalents(bool involuntarily /*= false*/)
     CharacterDatabase.CommitTransaction(trans);
 
     if (involuntarily)
+    {
+        // IsPet is false: this method only unlearns the character's own talents.
+        // The notice goes out last, after the talents are gone and saved - that matches the two
+        // captured retail sequences (SMSG_UPDATE_ACTION_BUTTONS -> SMSG_LEARNED_SPELLS ->
+        // SMSG_TALENTS_INVOLUNTARILY_RESET), in which the client uses it as a display trigger,
+        // not as an announcement.
+        // UNVERIFIED: both captures also show the forced reset wrapped in SMSG_SUSPEND_TOKEN ...
+        // CMSG_SUSPEND_TOKEN_RESPONSE - retail halts the client while it rewrites talents/spells.
+        // That bracket is deliberately NOT built here: in TrinityCore SMSG_SUSPEND_TOKEN belongs
+        // to the teleport state machine alone (its only send site is Player::TeleportTo, and
+        // WorldSession::HandleSuspendTokenResponse drops any response that does not arrive in
+        // TeleportState::WaitingForSuspendTokenResponse), so sending it from a talent reset would
+        // desync that state machine. The send order below therefore deviates from the recording.
         SendDirectMessage(WorldPackets::Talent::TalentsInvoluntarilyReset(false).Write());
+    }
 
     return true;
 }
