@@ -316,7 +316,8 @@ class TC_GAME_API Group
         Milliseconds GetInstanceAbandonVoteCooldown() const { return m_instanceAbandonVoteCooldown; }
 
         // Instance group state
-        void SendInstanceGroupSizeChanged() const;
+        // excludedMember is left out of the count and gets no message - used while he is being removed from the map
+        void SendInstanceGroupSizeChanged(ObjectGuid excludedMember = ObjectGuid::Empty) const;
 
         // Raid Markers
         void AddRaidMarker(uint8 markerId, uint32 mapId, float positionX, float positionY, float positionZ, ObjectGuid transportGuid = ObjectGuid::Empty);

@@ -3069,15 +3069,25 @@ void InstanceMap::RemovePlayerFromMap(Player* player, bool remove)
 
     Group* group = player->GetGroup();
     bool wasOwningGroup = group && group == GetOwningGroup();
+    // Read before the base call: with remove == true it runs Map::DeleteFromWorld(Player*), which deletes the
+    // object (WorldSession::LogoutPlayer is that caller). The Group itself outlives it - ~Player only unlinks
+    // the GroupReference and never erases the member slot - so the guid is all that has to be carried across.
+    ObjectGuid const leaverGuid = player->GetGUID();
 
     Map::RemovePlayerFromMap(player, remove);
+    // player may be a dangling pointer from here on - use leaverGuid instead
 
     if (wasOwningGroup)
     {
         // Leaving the instance while a vote is running aborts it - SMSG_INSTANCE_ABANDON_VOTE_PLAYER_LEFT,
         // which is deliberately not the same as a failed SMSG_INSTANCE_ABANDON_VOTE_COMPLETED.
-        group->CancelInstanceAbandonVoteForLeaver(player->GetGUID());
-        group->SendInstanceGroupSizeChanged();
+        group->CancelInstanceAbandonVoteForLeaver(leaverGuid);
+        // The leaver has to be excluded by hand: Map::RemovePlayerFromMap does not clear m_currMap - only
+        // WorldObject::ResetMap does, and on the teleport path (remove == false) that happens ticks later at
+        // the client ack in MovementHandler. Without the exclusion GetGroupInstanceMap still reports him as
+        // standing in this instance, every remaining member would be told a size one too high, and he himself
+        // would get a count for the instance he is leaving. No later sender corrects it on the normal way out.
+        group->SendInstanceGroupSizeChanged(leaverGuid);
     }
 }
 

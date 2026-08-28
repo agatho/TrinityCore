@@ -1835,21 +1835,29 @@ void Group::SendInstanceAbandonVoteStateTo(Player* player) const
     }
 }
 
-void Group::SendInstanceGroupSizeChanged() const
+void Group::SendInstanceGroupSizeChanged(ObjectGuid excludedMember /*= ObjectGuid::Empty*/) const
 {
+    // excludedMember is the member who is being removed from an instance map right now. He still looks like he
+    // is standing in it - Map::RemovePlayerFromMap leaves m_currMap set, WorldObject::ResetMap is what clears
+    // it and on the teleport path that only happens at the client ack - so he has to be left out of both the
+    // count and the recipients, otherwise everyone else sees a size one too high.
     // The client caches the number in a global and shows it as "size / maxPlayers"
     // (InstanceDifficulty.lua:139-150), so it is the number of group members inside that instance.
     std::map<Map const*, uint32> playersPerInstance;
     for (MemberSlot const& member : m_memberSlots)
-        if (Player* player = ObjectAccessor::FindConnectedPlayer(member.guid))
-            if (InstanceMap const* instanceMap = GetGroupInstanceMap(player, this))
-                ++playersPerInstance[instanceMap];
+        if (member.guid != excludedMember)
+            if (Player* player = ObjectAccessor::FindConnectedPlayer(member.guid))
+                if (InstanceMap const* instanceMap = GetGroupInstanceMap(player, this))
+                    ++playersPerInstance[instanceMap];
 
     if (playersPerInstance.empty())
         return;
 
     for (MemberSlot const& member : m_memberSlots)
     {
+        if (member.guid == excludedMember)
+            continue;
+
         Player* player = ObjectAccessor::FindConnectedPlayer(member.guid);
         if (!player)
             continue;
