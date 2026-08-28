@@ -249,6 +249,7 @@ namespace WorldPackets
         class StartChallengeMode;
         class ResetChallengeMode;
         class MythicPlusRequestMapStats;
+        class RequestLeaders;
         class RequestWeeklyRewards;
         class ClaimWeeklyReward;
     }
@@ -1905,6 +1906,7 @@ class TC_GAME_API WorldSession
         void HandleStartChallengeMode(WorldPackets::ChallengeMode::StartChallengeMode& startChallengeMode);
         void HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetChallengeMode& resetChallengeMode);
         void HandleMythicPlusRequestMapStats(WorldPackets::ChallengeMode::MythicPlusRequestMapStats& request);
+        void HandleChallengeModeRequestLeaders(WorldPackets::ChallengeMode::RequestLeaders& request);
         // CMSG_REQUEST_WEEKLY_REWARDS / CMSG_CLAIM_WEEKLY_REWARD are bound to the WorldPackets::WeeklyRewards
         // overloads (WeeklyRewardHandler.cpp), which serve all three vault rows - see ChallengeModeHandler.cpp.
 

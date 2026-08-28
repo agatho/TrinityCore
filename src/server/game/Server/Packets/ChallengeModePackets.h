@@ -158,6 +158,61 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // CMSG_CHALLENGE_MODE_REQUEST_LEADERS (0x2D0002). Wire = the MEASURED client write order
+        // (SUBPLAN_kleinfamilien_2A_63_2D section 2): the two 64-bit update stamps come FIRST, then the two
+        // ids -- the reverse of TrinityCore's historical { int32 MapId; int32 ChallengeModeId; Timestamp
+        // LastGuildUpdate; Timestamp LastRealmUpdate }. Reading TC's field order swaps the values on the wire.
+        //   uint64 LastGuildUpdate; uint64 LastRealmUpdate; uint32 MapId; uint32 ChallengeModeId.
+        // UNVERIFIED: only the byte ORDER is measured. The field MEANINGS (which u64 is the guild vs the realm
+        // stamp) are carried over from TrinityCore, not measured; and this is not client-verifiable in this run
+        // (no 69465 client). The order fix is the point -- it is this unit's one found deviation from TC.
+        class RequestLeaders final : public ClientPacket
+        {
+        public:
+            explicit RequestLeaders(WorldPacket&& packet) : ClientPacket(CMSG_CHALLENGE_MODE_REQUEST_LEADERS, std::move(packet)) { }
+
+            void Read() override;
+
+            uint64 LastGuildUpdate = 0;
+            uint64 LastRealmUpdate = 0;
+            int32 MapId = 0;
+            int32 ChallengeModeId = 0;
+        };
+
+        // The two answers to CMSG_CHALLENGE_MODE_REQUEST_LEADERS: SMSG_CHALLENGE_MODE_REQUEST_LEADERS_RESULT
+        // (0x4500B8) and SMSG_CHALLENGE_MODE_REQUEST_LEADERBOARD_RESULT (0x4500B9). Both live in the collector
+        // family 0x45 and were unassigned (cut rest_kern_weltzustand); taken here so the request/response set
+        // stays together (DoD 4.3). This branch stores no challenge leaderboard records, so both go out with
+        // empty leader lists -- a valid "no leaders yet" board.
+        // UNVERIFIED (whole element layout): no client deserializer RVA for these two was available in this run
+        // and the per-attempt member layout is not in the mythic subplan, so only a minimal, self-consistent
+        // header is emitted (the request context + an empty count). If the real header differs the client drops
+        // the packet on its length check; with zero leaders nothing is mis-rendered. The full member layout must
+        // be sourced from a 69465 client reader before this is blizzlike-complete.
+        class ChallengeModeRequestLeadersResult final : public ServerPacket
+        {
+        public:
+            explicit ChallengeModeRequestLeadersResult() : ServerPacket(SMSG_CHALLENGE_MODE_REQUEST_LEADERS_RESULT, 24) { }
+            WorldPacket const* Write() override;
+
+            int32 MapId = 0;
+            int32 ChallengeModeId = 0;
+            uint32 LastGuildUpdate = 0;
+            uint32 LastRealmUpdate = 0;
+            // GuildLeaders / RealmLeaders arrays -- empty (no record storage); emitted as two zero counts.
+        };
+
+        class ChallengeModeRequestLeaderboardResult final : public ServerPacket
+        {
+        public:
+            explicit ChallengeModeRequestLeaderboardResult() : ServerPacket(SMSG_CHALLENGE_MODE_REQUEST_LEADERBOARD_RESULT, 16) { }
+            WorldPacket const* Write() override;
+
+            int32 MapId = 0;
+            int32 ChallengeModeId = 0;
+            // Leaderboard rows -- empty (no record storage); emitted as one zero count.
+        };
+
         // One member row of a dungeon best run. Wire (client deserializer sub_7FF729166F60 @68275, byte-aligned):
         //   uint64 Field0; PackedGuid PlayerGUID; PackedGuid OwnerGUID; uint32 x3; uint8 Flag; uint32 x3.
         struct MythicPlusMapStatMember

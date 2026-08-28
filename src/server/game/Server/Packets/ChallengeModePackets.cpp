@@ -248,4 +248,33 @@ WorldPacket const* WeeklyRewardClaimResult::Write()
     _worldPacket << uint8(Result);
     return &_worldPacket;
 }
+
+void RequestLeaders::Read()
+{
+    // Measured client write order (subplan 2.2): the two update stamps first, then the two ids.
+    _worldPacket >> LastGuildUpdate;    // uint64
+    _worldPacket >> LastRealmUpdate;    // uint64
+    _worldPacket >> MapId;              // int32
+    _worldPacket >> ChallengeModeId;    // int32
+}
+
+WorldPacket const* ChallengeModeRequestLeadersResult::Write()
+{
+    // Minimal, self-consistent header + two empty leader arrays. Full member layout UNVERIFIED (see header).
+    _worldPacket << MapId;
+    _worldPacket << ChallengeModeId;
+    _worldPacket << LastGuildUpdate;
+    _worldPacket << LastRealmUpdate;
+    _worldPacket << uint32(0);          // GuildLeaders count (no record storage on this branch)
+    _worldPacket << uint32(0);          // RealmLeaders count
+    return &_worldPacket;
+}
+
+WorldPacket const* ChallengeModeRequestLeaderboardResult::Write()
+{
+    _worldPacket << MapId;
+    _worldPacket << ChallengeModeId;
+    _worldPacket << uint32(0);          // leaderboard row count (no record storage on this branch)
+    return &_worldPacket;
+}
 }
