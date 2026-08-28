@@ -275,6 +275,10 @@ void WorldSession::HandleClassTalentsSetUsesSharedActionBars(WorldPackets::Trait
 // answer. CMSG_CLASS_TALENTS_NOTIFY_VALIDATION_FAILED in particular is the only channel on which the
 // client reports that a configuration the server sent did not validate locally - without recording
 // it, every such mismatch stays silent on the server side.
+// UNVERIFIED: recording is all these two handlers do, and what retail does instead is not derivable.
+// A notification without an answer leaves no trace in the client of what the receiver changed, and
+// neither opcode has a Lua event or a C_Traits binding that would name a follow up. Absence of
+// evidence is not evidence that retail does nothing - the effect is unknown, not empty.
 void WorldSession::HandleClassTalentsNotifyEmptyConfig(WorldPackets::Traits::ClassTalentsNotifyEmptyConfig const& classTalentsNotifyEmptyConfig)
 {
     TC_LOG_DEBUG("network.opcode", "CMSG_CLASS_TALENTS_NOTIFY_EMPTY_CONFIG: Player '{}' ({}) reports trait config {} as empty",

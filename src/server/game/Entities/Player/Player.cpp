@@ -14176,6 +14176,18 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
                 break;
             }
 
+            // The gossip option and UNIT_NPC_FLAG_ARTIFACT_POWER_RESPEC are two independent database
+            // columns, but WorldSession::HandleConfirmArtifactRespec only accepts the answer from an
+            // npc that carries the flag. Offering the prompt without it produces a popup that can
+            // only ever be refused, so the mismatch is caught here where it can still be named.
+            if (!GetNPCIfCanInteractWith(guid, UNIT_NPC_FLAG_ARTIFACT_POWER_RESPEC, UNIT_NPC_FLAG_2_NONE))
+            {
+                TC_LOG_ERROR("sql.sql", "Creature {} offers gossip option GossipOptionNpc::ArtifactRespec but does not have "
+                    "UNIT_NPC_FLAG_ARTIFACT_POWER_RESPEC - the artifact respec cannot be confirmed at this npc.", guid.ToString());
+                SendDirectMessage(WorldPackets::Misc::DisplayGameError(GameError::ERR_CANT_DO_THAT_RIGHT_NOW).Write());
+                break;
+            }
+
             PlayerTalkClass->SendCloseGossip();
 
             WorldPackets::Artifact::ArtifactRespecPrompt artifactRespecPrompt;

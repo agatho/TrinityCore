@@ -114,8 +114,13 @@ public:
 };
 
 // CMSG_CLASS_TALENTS_NOTIFY_EMPTY_CONFIG (0x3D00C7), writer 0x6CD620: a single uint32, 4 bytes.
-// A client to server diagnostic with no answer: the client reports that a trait configuration it
-// holds is empty.
+// The client waits for no answer: no opcode of family 0x45 or 0x3D registers a consumer that this
+// message could reach, and there is no Lua event and no C_Traits binding for it (the whole
+// wow-ui-source tree does not mention it).
+// UNVERIFIED: what retail changes on its side when this arrives is not derivable from the client -
+// a one way notification carries no evidence of the receiver's effect. The handler records it
+// rather than inventing one. See ClassTalentsNotifyValidationFailed and
+// TraitsTalentTestUnlearnSpells, which stand on the same evidence.
 class ClassTalentsNotifyEmptyConfig final : public ClientPacket
 {
 public:
@@ -128,7 +133,11 @@ public:
 
 // CMSG_CLASS_TALENTS_NOTIFY_VALIDATION_FAILED (0x3D02C6), writer 0x6D2550: a single uint32, 4 bytes.
 // Confirmed on the wire: one captured packet in C:\sniff, 4 bytes, d3 b9 51 06 -> 0x0651B9D3.
-// The client reports that a configuration the server sent did not validate locally. No answer.
+// The client reports that a configuration the server sent did not validate locally. It waits for no
+// answer - same evidence as ClassTalentsNotifyEmptyConfig: no consumer, no Lua event, no binding.
+// UNVERIFIED: what retail changes on its side when this arrives is not derivable from the client.
+// Logged at error level because it marks a real server/client disagreement, but the logging is this
+// implementation's choice, not a measured retail behaviour.
 class ClassTalentsNotifyValidationFailed final : public ClientPacket
 {
 public:
