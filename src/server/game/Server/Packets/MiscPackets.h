@@ -1392,7 +1392,27 @@ namespace WorldPackets
         };
 
         // Element von CMSG_ADDON_LIST, Serializer 0x69FDE0, Client-Typ JamCliAddOnInfo (88 Byte).
-        // Beide Laengen sind 10 Bit und schliessen die NUL EIN (Klemmung des Senders auf 511).
+        // Beide Laengen sind 10 Bit und schliessen die NUL EIN.
+        //
+        // Der Elementkopf ist GENAU 3 Byte. Die Schreibfolge des Subplans
+        // ('bitflush bits2 bitflush u8 bits2 u8*2 FLUSH bytes*2') zaehlt drei Write<uint8>
+        // - am Serializer sind es zwei ausgefuehrte. Aufgeloest an 0x69FDE0:
+        //   1. Write<uint8>((Name.len+1) >> 2) - obere 8 der 10 Bit, direkt in den Strom,
+        //      weil der Bitakkumulator am Elementanfang leer ist.
+        //   2. WriteBits((Name.len+1) & 3, 2) - 0x5D4A20, Akkumulator = 2 Bit.
+        //   3. (Version.len+1) >> 2: EIN logischer Write<uint8>, im Dekompilat als
+        //      'if (pending) ... else ...' mit ZWEI Write<uint8>-Aufrufen sichtbar. Genau
+        //      einer laeuft - der if-Zweig schiebt das Byte durch den Akkumulator
+        //      ((v8 >> pending) | (accum << (8-pending))), der else-Zweig schreibt direkt.
+        //   4. WriteBits((Version.len+1) & 3, 2), dann Flag1 und Flag2 als je 1 Bit.
+        //      Die Write<uint8> in den Zweigen 'v13 == 8' bzw. 'v13 == 7' sind der inline
+        //      ausgeschriebene Uebertrag von 0x5D4A20 (dort steht derselbe Aufruf). Der
+        //      Akkumulator steht hier auf 4 bzw. 5 Bit, keiner der beiden Zweige laeuft.
+        //   5. FlushBits 0x5D4EA0, Fall 6 -> ein Byte, LSB-seitig mit 2 Null-Bit gepolstert.
+        //      Das ist MSB-first und deckt sich mit ByteBuffer::ReadBits.
+        // Summe 10 + 10 + 1 + 1 = 22 Bit -> 3 Byte. Danach Name und Version als je
+        // (len+1) Rohbytes ueber 0x35B01C0, und nur wenn das Laengenfeld > 0 ist.
+        // Das Laengenfeld ist 10 Bit breit, also hoechstens 1023 Byte je Zeichenkette.
         struct AddonInfo
         {
             std::string Name;
@@ -1401,7 +1421,13 @@ namespace WorldPackets
             bool Flag2 = false;
         };
 
-        // Writer 0x6A1C70. Die drei Kopffelder sind Echos aus SMSG_ADDON_LIST_REQUEST.
+        // Writer 0x6A1C70 (Opcode-Immediate 4390916 = 0x430004; Rumpf ohne Immediate 0x6A1BB0).
+        // Die drei Kopffelder sind Echos aus SMSG_ADDON_LIST_REQUEST.
+        // Laengenrechnung, ohne Sniff gefuehrt: Kopf = ObjectGuid (2..18, Primitive 0x36012E0,
+        // dieselbe wie in StartSpectatorWarGame 25..57) + uint32 + uint32 + uint8 + uint32 Count
+        // = 13 feste Byte -> 15..31 bei Count 0. Je Element 3 Byte Kopf, dazu 0 oder 2..1023 Byte
+        // je Zeichenkette -> 3..2049. Mit der serverseitigen Schranke von 512 Elementen:
+        // min..max = 15..1049119.
         class AddonList final : public ClientPacket
         {
         public:

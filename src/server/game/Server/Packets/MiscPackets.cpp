@@ -1027,7 +1027,12 @@ void AddonList::Read()
     _worldPacket >> Size<uint32>(AddOns);
 
     // Element 0x69FDE0 (JamCliAddOnInfo, 88 Byte). Beide Laengen sind 10 Bit und
-    // schliessen die NUL EIN (Sender klemmt auf 511, 511 + NUL = 512 -> 10 Bit).
+    // schliessen die NUL EIN. Der Elementkopf ist genau 3 Byte: 10 + 10 + 1 + 1 = 22 Bit,
+    // LSB-seitig mit 2 Null-Bit gepolstert (FlushBits 0x5D4EA0, Fall 6). Die drei
+    // Write<uint8> der Subplanzeile sind zwei ausgefuehrte - der dritte ist der else-Zweig
+    // desselben Bytes bzw. der inline ausgeschriebene Uebertrag von WriteBits 0x5D4A20,
+    // der bei 4 bzw. 5 anstehenden Bit nicht laeuft. Herleitung am Serializer in
+    // MiscPackets.h ueber der Struktur AddonInfo.
     for (AddonInfo& addon : AddOns)
     {
 
