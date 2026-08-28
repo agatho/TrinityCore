@@ -3475,10 +3475,12 @@ bool Player::ResetTalents(bool involuntarily /*= false*/)
 
     RemovePet(nullptr, PET_SAVE_NOT_IN_SLOT, true);
 
-    // Whether this call actually takes a talent away, decided per talent right before RemoveTalent
-    // marks it. The condition is the same one RemoveTalent uses to write PLAYERSPELL_REMOVED, so the
-    // flag is set exactly when a learned talent is really lost - not when the loop merely walks the
-    // whole class talent list. It gates the involuntarily notice at the end of this method.
+    // Whether this call actually takes a talent away, read back from the talent map after each
+    // RemoveTalent instead of predicting its outcome: RemoveTalent returns without marking anything
+    // when the talent's SpellID is missing from the spell store (DB2 and spell_dbc out of step), so
+    // a talent being learned beforehand is not enough. The flag is set exactly when a learned talent
+    // is really gone - not when the loop merely walks the whole class talent list. It gates the
+    // involuntarily notice at the end of this method.
     bool removedAnyTalent = false;
 
     for (uint32 talentId = 0; talentId < sTalentStore.GetNumRows(); ++talentId)
@@ -3499,10 +3501,18 @@ bool Player::ResetTalents(bool involuntarily /*= false*/)
 
         PlayerTalentMap const* talentMap = GetTalentMap(GetActiveTalentGroup());
         PlayerTalentMap::const_iterator learnedTalent = talentMap->find(talentInfo->ID);
-        if (learnedTalent != talentMap->end() && learnedTalent->second != PLAYERSPELL_REMOVED)
-            removedAnyTalent = true;
+        bool wasLearned = learnedTalent != talentMap->end() && learnedTalent->second != PLAYERSPELL_REMOVED;
 
         RemoveTalent(talentInfo);
+
+        // Ask the map again rather than assume RemoveTalent did the marking - it bails out before
+        // writing PLAYERSPELL_REMOVED when sSpellMgr has no SpellInfo for talent->SpellID.
+        if (wasLearned)
+        {
+            learnedTalent = talentMap->find(talentInfo->ID);
+            if (learnedTalent != talentMap->end() && learnedTalent->second == PLAYERSPELL_REMOVED)
+                removedAnyTalent = true;
+        }
     }
 
     CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
@@ -27783,15 +27793,26 @@ void Player::ResetTalentSpecialization()
     {
         SendUpdatePrimarySpec();
 
-        // This is the one path on which the server changes the specialization without the player
-        // asking for it, so it is the send site of SMSG_SPEC_INVOLUNTARILY_CHANGED - unlike
-        // ActivateTalentGroup, whose only caller is the player cast Spell::EffectActivateSpec.
-        // IsPet is false: the pet specialization is not touched here. The client shows GlobalStrings
-        // 32100 ("Your Specialization was changed because it has been disabled.") via
-        // StaticPopup_Show (EventImplementation.lua:580-582).
-        // The order matches the captured retail order of the twin SMSG_TALENTS_INVOLUNTARILY_RESET:
-        // state first (spells, action buttons, talent data), the notice last.
-        SendDirectMessage(WorldPackets::Talent::SpecInvoluntarilyChanged(false).Write());
+        // ChrSpecialization::None means the character had no specialization to be taken away, so
+        // there is nothing involuntary to announce. That is not a corner case: Player::Create calls
+        // InitTalentForLevel() before it assigns the default specialization at all, and
+        // InitTalentForLevel() lands here for every character below MIN_SPECIALIZATION_LEVEL - so
+        // without this the popup would fire for every newly created character, at a session that is
+        // still on the character select screen. The same holds for a stored primarySpecialization of
+        // 0 on login (Player::LoadFromDB). SendUpdatePrimarySpec above still goes out in that case:
+        // the cached value really did change from 0 to the default spec.
+        if (previousSpec != ChrSpecialization::None)
+        {
+            // This is the one path on which the server changes the specialization without the player
+            // asking for it, so it is the send site of SMSG_SPEC_INVOLUNTARILY_CHANGED - unlike
+            // ActivateTalentGroup, whose only caller is the player cast Spell::EffectActivateSpec.
+            // IsPet is false: the pet specialization is not touched here. The client shows
+            // GlobalStrings 32100 ("Your Specialization was changed because it has been disabled.")
+            // via StaticPopup_Show (EventImplementation.lua:580-582).
+            // The order matches the captured retail order of the twin SMSG_TALENTS_INVOLUNTARILY_RESET:
+            // state first (spells, action buttons, talent data), the notice last.
+            SendDirectMessage(WorldPackets::Talent::SpecInvoluntarilyChanged(false).Write());
+        }
     }
 
     UpdateItemSetAuras(this, false);
