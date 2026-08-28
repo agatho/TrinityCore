@@ -815,6 +815,25 @@ void Group::Disband(bool hideDestroy /* = false */)
 
         SendUpdateDestroyGroupToPlayer(player);
 
+        // The third way out of RemoveMember - the two-man dungeon party where one leaves - ends here, and
+        // without this the survivor keeps the old party size on screen forever. Group.cpp:707 only runs in the
+        // branch that keeps the group alive, and InstanceMap::RemovePlayerFromMap cannot catch up later: its
+        // sender hangs on player->GetGroup(), which is the nullptr set right above by the time he walks out.
+        // The next correction would be his next instance entry (Map.cpp:3041). SendUpdateDestroyGroupToPlayer
+        // does not cover it either - if it did, Group.cpp:707 would be dead code.
+        // The value is 1 and not a recount: he has no group from here on, which is exactly the group-less
+        // branch of InstanceMap::AddPlayerToMap - alone in the instance he is one. The client keeps the number
+        // in a global (0x6808EE8) with a single writer and no reset (AGENT_BRIEF 7.6), so nothing but a sent
+        // packet moves it.
+        // Asked after the unlink on purpose: in the BG/BF branch RemoveFromBattlegroundOrBattlefieldRaid puts
+        // him back into his original party, and that group's own size is none of this group's business.
+        if (!player->GetGroup() && GetPlayerInstanceMap(player))
+        {
+            WorldPackets::Instance::InstanceGroupSizeChanged groupSizeChanged;
+            groupSizeChanged.GroupSize = 1;
+            player->SendDirectMessage(groupSizeChanged.Write());
+        }
+
         _homebindIfInstance(player);
     }
 

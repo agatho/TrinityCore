@@ -313,6 +313,18 @@ namespace WorldPackets
 
         // Opens the "vote to abandon instance" dialog on every group member.
         // Client reader 0x5E4820, consumer 0x2192960 (fires INSTANCE_ABANDON_VOTE_STARTED).
+        // Which of the two packed guids is which is settled by that consumer, not guessed from the sibling
+        // packet. sub_7FF783162960 (12.1 client 69382, decompiled) does exactly two guid comparisons:
+        //   group scan over the two-entry table 0x5778530: (a1+40, a1+48) == (group+360, group+368)
+        //   member loop over group+376:                    member[+14] = ((a1+56, a1+64) == (member+80, +88))
+        // So the FIRST packed guid is the group and the SECOND is the initiator, whom the client thereby
+        // pre-marks as having voted yes. Swapped, the group scan would miss and no dialog would open at all.
+        // Cross-checked against AGENT_BRIEF 7.2 [M], which reports the same offsets.
+        // INSTANCE_ABANDON_VOTE_WIRE_68275.md lists the opposite order ("PackedGuid Instigator; PackedGuid
+        // VoteGuid?") and is deliberately NOT followed: that note predates the consumer trace, marks its own
+        // second guid with a question mark and states in "Why NOT built" that "the meanings of the two
+        // guids-vs-vote-id ... cannot be determined" from the deserializer alone. It records field TYPES, which
+        // agree; it does not record assignment. Same resolution as the CMSG conflict of round 6.
         class InstanceAbandonVoteStarted final : public ServerPacket
         {
         public:
@@ -321,8 +333,8 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             uint8 PartyIndex = 0;                   // UNVERIFIED: read by the client (struct +32) but never used by any consumer, no lua enum exists for it
-            ObjectGuid PartyGUID;
-            ObjectGuid InitiatorGUID;               // client marks this member as having voted yes, the server must count it the same way
+            ObjectGuid PartyGUID;                   // struct +40, group lookup key
+            ObjectGuid InitiatorGUID;               // struct +56, compared against every member guid: the client marks this member as having voted yes, the server must count it the same way
             Duration<Milliseconds, uint64> VoteDuration; // a duration of 0 shows no dialog at all (InstanceAbandon.lua:200-201)
             uint32 VotesRequired = 0;               // UNVERIFIED: name from C_PartyInfo.GetInstanceAbandonVoteRequirements()
             uint32 KeystoneOwnerVoteWeight = 0;     // UNVERIFIED: dito
@@ -331,6 +343,14 @@ namespace WorldPackets
         // Carries somebody else's vote. Named after the lua event it raises (INSTANCE_ABANDON_VOTE_UPDATED) because
         // the CMSG of the same opcode name is already InstanceAbandonVoteResponse.
         // Client reader 0x5E4940, consumer 0x2192A60. This is the only vote message without the leading uint8.
+        // Guid assignment read off that consumer the same way, sub_7FF783162A60 (12.1 client 69382, decompiled):
+        //   group scan over the same table 0x5778530: (a1+32, a1+40) == (group+360, group+368)
+        //   member loop:                              (a1+48, a1+56) == (member+80, member+88)
+        // then member[+14] = (bit == 0) + 1, i.e. 1 = agreed, 2 = refused. FIRST guid group, SECOND guid voter;
+        // swapped, the member search would never hit and no vote would ever be displayed.
+        // Cross-checked against AGENT_BRIEF 7.3 [M]. INSTANCE_ABANDON_VOTE_WIRE_68275.md's "PackedGuid Voter;
+        // PackedGuid VoteGuid" is rejected for the reason given above: it reads types out of the deserializer
+        // and says so itself.
         class InstanceAbandonVoteUpdated final : public ServerPacket
         {
         public:
@@ -338,8 +358,8 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
-            ObjectGuid PartyGUID;
-            ObjectGuid VoterGUID;
+            ObjectGuid PartyGUID;                   // struct +32, group lookup key
+            ObjectGuid VoterGUID;                   // struct +48, searched in the group's member slots
             bool Accept = false;
         };
 
