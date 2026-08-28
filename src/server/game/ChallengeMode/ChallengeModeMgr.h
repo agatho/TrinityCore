@@ -19,6 +19,7 @@
 #define ChallengeModeMgr_h__
 
 #include "Define.h"
+#include "Optional.h"
 #include <array>
 #include <unordered_map>
 #include <vector>
