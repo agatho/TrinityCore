@@ -9,3 +9,9 @@ CREATE TABLE IF NOT EXISTS `challenge_mode_enemy_forces` (
   `comment` VARCHAR(255) DEFAULT NULL,
   PRIMARY KEY (`challengeModeId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Mythic+ enemy forces requirements';
+
+-- --- merged: upstream/TDB additions under the same filename (add/add union) ---
+
+-- Update creature_template
+UPDATE `creature_template` SET `faction`=7, `unit_flags`=0x100 WHERE `entry`=42383; -- Transient
+UPDATE `creature_template` SET `faction`=7, `unit_flags`=0x100 WHERE `entry`=42391; -- West Plains Drifter
