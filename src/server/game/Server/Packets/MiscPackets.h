@@ -30,6 +30,9 @@
 #include "WowTime.h"
 #include <array>
 #include <map>
+#include <span>
+#include <string>
+#include <vector>
 
 enum class CountdownTimerType : int32;
 enum class DisplayToastType : uint8;
@@ -1043,6 +1046,568 @@ namespace WorldPackets
 
             bool IsFullUpdate = false;
             WarbandSceneCollectionContainer const* WarbandScenes = nullptr;
+        };
+
+        // ------------------------------------------------------------------------------------
+        // Einheit w4_cmsg_43_3D - Sendeseite der Sammelfamilien 0x43 / 0x3D, Phase A.
+        // Alle Feldfolgen stammen aus dem Client-Serializer des Builds 12.1.0.69382
+        // (ImageBase 0x7FF780FD0000, Writer-RVA je Klasse angegeben). Wo kein Sniff-Paket
+        // vorliegt, steht die Laengenrechnung min..max im Kommentar - siehe DoD D1.
+        // ------------------------------------------------------------------------------------
+
+        // Writer 0x6CBEA0 - leere Nutzlast (Write<uint32>(0x3D0032); return 1).
+        class UsedFollow final : public ClientPacket
+        {
+        public:
+            explicit UsedFollow(WorldPacket&& packet) : ClientPacket(CMSG_USED_FOLLOW, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // Writer 0x6D29C0 - leere Nutzlast.
+        class SeamlessTransferComplete final : public ClientPacket
+        {
+        public:
+            explicit SeamlessTransferComplete(WorldPacket&& packet) : ClientPacket(CMSG_SEAMLESS_TRANSFER_COMPLETE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // Writer 0x6D1870 - leere Nutzlast.
+        class ReportServerLag final : public ClientPacket
+        {
+        public:
+            explicit ReportServerLag(WorldPacket&& packet) : ClientPacket(CMSG_REPORT_SERVER_LAG, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // Writer 0x6CD470 - leere Nutzlast.
+        class ResetChallengeModeCheat final : public ClientPacket
+        {
+        public:
+            explicit ResetChallengeModeCheat(WorldPacket&& packet) : ClientPacket(CMSG_RESET_CHALLENGE_MODE_CHEAT, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // Writer 0x6D2710 - leere Nutzlast. Lua C_SpectatingUI.LeaveSpectateMode().
+        class SpectateEnd final : public ClientPacket
+        {
+        public:
+            explicit SpectateEnd(WorldPacket&& packet) : ClientPacket(CMSG_SPECTATE_END, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // Writer 0x6D2650 - ein eingebettetes Bit + FlushBits, 1 Byte.
+        // Lua C_SpectatingUI.SpectateChange(nextTarget: bool).
+        class SpectateChange final : public ClientPacket
+        {
+        public:
+            explicit SpectateChange(WorldPacket&& packet) : ClientPacket(CMSG_SPECTATE_CHANGE, std::move(packet)) { }
+
+            void Read() override;
+
+            bool NextTarget = false;
+        };
+
+        // Writer 0x6D26C0 - gepackte ObjectGuid, 2..18 Byte.
+        class SpectateSetNextTarget final : public ClientPacket
+        {
+        public:
+            explicit SpectateSetNextTarget(WorldPacket&& packet) : ClientPacket(CMSG_SPECTATE_SET_NEXT_TARGET, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid Target;
+        };
+
+        // Writer 0x6AB1E0 - ein eingebettetes Bit + FlushBits, 1 Byte.
+        class LowLevelRaid1 final : public ClientPacket
+        {
+        public:
+            explicit LowLevelRaid1(WorldPacket&& packet) : ClientPacket(CMSG_LOW_LEVEL_RAID1, std::move(packet)) { }
+
+            void Read() override;
+
+            bool Enable = false;
+        };
+
+        // Writer 0x6AFAD0 - ein eingebettetes Bit + FlushBits, 1 Byte.
+        // Am Draht belegt: 37 Pakete, konstant 1 Byte.
+        class QuickJoinAutoAcceptRequests final : public ClientPacket
+        {
+        public:
+            explicit QuickJoinAutoAcceptRequests(WorldPacket&& packet) : ClientPacket(CMSG_QUICK_JOIN_AUTO_ACCEPT_REQUESTS, std::move(packet)) { }
+
+            void Read() override;
+
+            bool AutoAccept = false;
+        };
+
+        // Writer 0x6A3600 - ein eingebettetes Bit + FlushBits, 1 Byte.
+        // Beide Sendestellen setzen konstant 1; das Objektfeld ist ein uint8, der Draht ein Bit
+        // (Rumpfbyte 0x80, nicht 0x01).
+        class RequestChatLogin final : public ClientPacket
+        {
+        public:
+            explicit RequestChatLogin(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_CHAT_LOGIN, std::move(packet)) { }
+
+            void Read() override;
+
+            bool Login = false;
+        };
+
+        // Writer 0x6CD620 - ein uint32.
+        class ClassTalentsNotifyEmptyConfig final : public ClientPacket
+        {
+        public:
+            explicit ClassTalentsNotifyEmptyConfig(WorldPacket&& packet) : ClientPacket(CMSG_CLASS_TALENTS_NOTIFY_EMPTY_CONFIG, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 ConfigID = 0;
+        };
+
+        // Writer 0x6D2550 - ein uint32. Am Draht belegt: 1 Paket, konstant 4 Byte.
+        class ClassTalentsNotifyValidationFailed final : public ClientPacket
+        {
+        public:
+            explicit ClassTalentsNotifyValidationFailed(WorldPacket&& packet) : ClientPacket(CMSG_CLASS_TALENTS_NOTIFY_VALIDATION_FAILED, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 ConfigID = 0;
+        };
+
+        // Writer 0x6D21F0 - leere Nutzlast.
+        class TraitsTalentTestUnlearnSpells final : public ClientPacket
+        {
+        public:
+            explicit TraitsTalentTestUnlearnSpells(WorldPacket&& packet) : ClientPacket(CMSG_TRAITS_TALENT_TEST_UNLEARN_SPELLS, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // Writer 0x6AAA60 - ein uint32.
+        class GMTicketAcknowledgeSurvey final : public ClientPacket
+        {
+        public:
+            explicit GMTicketAcknowledgeSurvey(WorldPacket&& packet) : ClientPacket(CMSG_GM_TICKET_ACKNOWLEDGE_SURVEY, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 CaseIndex = 0;
+        };
+
+        // Writer 0x6CEF70 - gepackte ObjectGuid.
+        class AddAccountCosmetic final : public ClientPacket
+        {
+        public:
+            explicit AddAccountCosmetic(WorldPacket&& packet) : ClientPacket(CMSG_ADD_ACCOUNT_COSMETIC, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid ItemGUID;
+        };
+
+        // Writer 0x6D0550 - gepackte ObjectGuid (der Handwerks-NPC).
+        class UpdateCraftingNpcRecipes final : public ClientPacket
+        {
+        public:
+            explicit UpdateCraftingNpcRecipes(WorldPacket&& packet) : ClientPacket(CMSG_UPDATE_CRAFTING_NPC_RECIPES, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid NpcGUID;
+        };
+
+        // Writer 0x6D1710 - guid + uint32. Lua C_IslandsQueue.QueueForIsland(difficultyID);
+        // die GUID ist der Warteschlangen-NPC.
+        class IslandQueue final : public ClientPacket
+        {
+        public:
+            explicit IslandQueue(WorldPacket&& packet) : ClientPacket(CMSG_ISLAND_QUEUE, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid NpcGUID;
+            uint32 DifficultyID = 0;
+        };
+
+        // Writer 0x6ABE20 - guid + uint32 + uint32.
+        // Ausgeloest durch Klick auf einen "trade:"-Chat-Hyperlink (ItemRef.lua:46).
+        class ShowTradeSkill final : public ClientPacket
+        {
+        public:
+            explicit ShowTradeSkill(WorldPacket&& packet) : ClientPacket(CMSG_SHOW_TRADE_SKILL, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid PlayerGUID;
+            uint32 SpellID = 0;
+            uint32 SkillLineID = 0;
+        };
+
+        // ------------------------------------------------------------------------------------
+        // KORREKTUR gegen Subplan UND Brief - der folgenreichste Befund dieser Einheit.
+        //
+        // Subplan und Brief fuehren CMSG_QUEST_DRIVEN_SCENARIO_STATE_CHANGE mit Writer 0x6D3160
+        // und der Nutzlast "guid u32 u32", und der Brief erklaert den Wertunterschied zum Baum
+        // (0x3D02EB im Analysebuild gegen 0x3D02F6 im Baum) mit einer Umnummerierung durch fuenf
+        // in 69404 eingefuegte Discord-Opcodes. BEIDES IST FALSCH, und zwar nachpruefbar:
+        //
+        //  * Es gab keine Umnummerierung. Die Discord-Opcodes stehen bereits im 69382-Abbild
+        //    (0x3D02EC..0x3D02F0, u.a. C_Discord.GuildLink / GuildUnlink / SetGuildSetting mit
+        //    ihren Usage-Strings). Ein Durchlauf ueber ALLE 2698 Opcode-Getter-Thunks des Abbilds
+        //    reproduziert die Nummerierung des Baums fuer den ganzen Block 0x3D02Dx..0x3D030x.
+        //  * Writer 0x6D3160 schreibt das Immediate 3998443 = 0x3D02EB, und 0x3D02EB ist
+        //    CMSG_TRANSFER_CURRENCY_FROM_ACCOUNT_CHARACTER - belegt an der Lua-Glue 0xDC0210 mit
+        //    dem Usage-String "C_CurrencyInfo.RequestCurrencyFromAccountCharacter(
+        //    sourceCharacterGUID, currencyID, quantity)" und am Registerfluss der drei Argumente
+        //    auf msg+0x20 / +0x30 / +0x34. Dieser Opcode gehoert NICHT zu dieser Einheit.
+        //  * Der echte Writer ist 0x6D3660, Immediate 3998454 = 0x3D02F6, Vtable 0x3C01558,
+        //    Opcode-Getter 0x6D37B0 (je genau ein Treffer im ganzen Abbild). Sein Destruktor
+        //    0x6DD2C0 gibt zwei Arrays frei, deren Allokator-Literale
+        //    WowGetRawTypeName<struct JamScenarioStageInfo> und <struct JamScenarioCurrencyInfo>
+        //    tragen - das ist die harte Typbindung, keine Namensaehnlichkeit. Die Sendestelle
+        //    0x20F55A0 schlaegt zusaetzlich in QuestDrivenScenario.db2 und ScenarioStep.db2 nach.
+        //
+        // Der Schaden ohne diese Korrektur waere still gewesen: eine Feldliste aus drei Feldern
+        // fuer eine Nachricht mit mindestens 38 Byte fester Breite - der Parser haette bei jedem
+        // Paket ueberlaufen.
+        //
+        // Draht (Writer 0x6D3660): keine Bits, kein Flush, keine Zeichenketten, keine gepackte
+        // GUID. Feste Breite 38 Byte, dazu 24 Byte je Stufe und 8 Byte je Waehrungspaar.
+        // ------------------------------------------------------------------------------------
+
+        // Element, Client-Typ JamScenarioStageInfo, 24 Byte.
+        struct ScenarioStageInfo
+        {
+            int64 StartTime = 0;                // Unix-Sekunden (GetSystemTimeAsFileTime + Bias)
+            int64 EndTime = 0;                  // Unix-Sekunden, -1 als Ueberlaufmarke moeglich
+            uint32 Field16 = 0;                 // UNVERIFIED: auf dem beobachteten Pfad immer 0
+            uint32 StepOrderIndex = 0;          // ScenarioStep.OrderIndex (DB2-Feld 8, 8 Bit)
+        };
+
+        // Element, Client-Typ JamScenarioCurrencyInfo, 8 Byte - ein {Schluessel, Wert}-Paar aus
+        // einer chained_hash_node<pair<int,int>>.
+        struct ScenarioCurrencyInfo
+        {
+            uint32 CurrencyID = 0;
+            uint32 Quantity = 0;
+        };
+
+        // Writer 0x6D3660 (NICHT 0x6D3160 - siehe Kommentarblock oben).
+        class QuestDrivenScenarioStateChange final : public ClientPacket
+        {
+        public:
+            explicit QuestDrivenScenarioStateChange(WorldPacket&& packet) : ClientPacket(CMSG_QUEST_DRIVEN_SCENARIO_STATE_CHANGE, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 StateChangeType = 0;          // an den Aufrufstellen 0..4 beobachtet
+            uint32 ScenarioID = 0;              // Globale 0x680A730, ueber SMSG_SCENARIO_STATE
+                                                // (0x4500D4, ScenarioID@+0x30) gegengeprueft
+            uint32 QuestDrivenScenarioID = 0;   // QuestDrivenScenario.db2, Satz-ID
+            int64 Field48 = 0;                  // UNVERIFIED: Szenario-Singleton +0x18,
+                                                // vermutlich Startzeit
+            int64 ClientUnixTime = 0;           // Unix-Sekunden
+            uint32 Field64 = 0;                 // UNVERIFIED: Singleton +0x0C
+            uint8 Field68 = 0;                  // UNVERIFIED: Singleton +0x10, boolesch
+            Array<ScenarioStageInfo, 64> Stages;
+            Array<ScenarioCurrencyInfo, 64> Currencies;
+        };
+
+        // Writer 0x6D2740 - uint32 VOR der GUID.
+        // Lua C_WorldLootObject.OnWorldLootObjectClick(unitToken, isLeftClick).
+        class WorldLootObjectClick final : public ClientPacket
+        {
+        public:
+            explicit WorldLootObjectClick(WorldPacket&& packet) : ClientPacket(CMSG_WORLD_LOOT_OBJECT_CLICK, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 ClickType = 0;
+            ObjectGuid ObjectGUID;
+        };
+
+        // Writer 0x6D1B90 - alle fuenf Felder stammen aus EINER angehaengten Struktur:
+        // uint32 @+0, dann vier uint8 @+4..+7. Lua
+        // C_LegendaryCrafting.UpgradeRuneforgeLegendary(runeforgeLegendary: ItemLocation,
+        // upgradeItem: ItemLocation) - die vier uint8 sind zwei ItemLocations (Tasche, Platz).
+        class UpgradeRuneforgeLegendary final : public ClientPacket
+        {
+        public:
+            explicit UpgradeRuneforgeLegendary(WorldPacket&& packet) : ClientPacket(CMSG_UPGRADE_RUNEFORGE_LEGENDARY, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Field0 = 0;
+            uint8 LegendaryBagSlot = 0;
+            uint8 LegendarySlot = 0;
+            uint8 UpgradeItemBagSlot = 0;
+            uint8 UpgradeItemSlot = 0;
+        };
+
+        // Writer 0x6AFB60 - ein uint8. Am Draht belegt: 22 Pakete, konstant 1 Byte.
+        // Enum.ExcludedCensorSources als Bitmaske: 1 Friends, 2 Guild, 4..128 Reserve1..6.
+        class SetExcludedChatCensorSources final : public ClientPacket
+        {
+        public:
+            explicit SetExcludedChatCensorSources(WorldPacket&& packet) : ClientPacket(CMSG_SET_EXCLUDED_CHAT_CENSOR_SOURCES, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 Sources = 0;
+        };
+
+        // Writer 0x6A83E0 - Hausmuster der 0x43-Gruppenopcodes:
+        //   bit has(PartyIndex); bit Silence; FlushBits; guid Target; if (has) uint8 PartyIndex
+        // Die Nachricht hat dadurch ZWEI Groessen: 3..20 Byte.
+        class SilenceTalkerInParty final : public ClientPacket
+        {
+        public:
+            explicit SilenceTalkerInParty(WorldPacket&& packet) : ClientPacket(CMSG_SILENCE_PARTY_TALKER, std::move(packet)) { }
+
+            void Read() override;
+
+            Optional<uint8> PartyIndex;
+            bool Silence = false;
+            ObjectGuid Target;
+        };
+
+        // Writer 0x6A2940 - uint32 Kind; uint32 Size; byte Data[Size].
+        // Am Draht belegt: 1398 Pakete, 40..16280 Byte -> 8 + Size geht auf.
+        class Warden3Data final : public ClientPacket
+        {
+        public:
+            explicit Warden3Data(WorldPacket&& packet) : ClientPacket(CMSG_WARDEN3_DATA, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Kind = 0;
+            std::span<uint8> Data;
+        };
+
+        // Element von CMSG_ADDON_LIST, Serializer 0x69FDE0, Client-Typ JamCliAddOnInfo (88 Byte).
+        // Beide Laengen sind 10 Bit und schliessen die NUL EIN (Klemmung des Senders auf 511).
+        struct AddonInfo
+        {
+            std::string Name;
+            std::string Version;
+            bool Flag1 = false;
+            bool Flag2 = false;
+        };
+
+        // Writer 0x6A1C70. Die drei Kopffelder sind Echos aus SMSG_ADDON_LIST_REQUEST.
+        class AddonList final : public ClientPacket
+        {
+        public:
+            explicit AddonList(WorldPacket&& packet) : ClientPacket(CMSG_ADDON_LIST, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid RequestGUID;
+            uint32 Field30 = 0;
+            uint32 Field38 = 0;
+            uint8 Field34 = 0;
+            Array<AddonInfo, 512> AddOns;   // der Client deckelt nicht - Schranke serverseitig
+        };
+
+        // Writer 0x6AE330 -> Rumpf 0x6AD300, Fuellfunktion 0x20B530.
+        // 294 Byte im Sniff (12.1.0.69273_preyandwqpart1.pkt), Feldliste gegen dieses Paket
+        // byteweise nachgerechnet: 141 Byte feste Breite + 104 Bit Bit-Sektion (13 Byte)
+        // + 140 Byte Rohbytes = 294. Die zehn Zeichenketten stehen OHNE NUL am Draht.
+        class EngineSurvey final : public ClientPacket
+        {
+        public:
+            explicit EngineSurvey(WorldPacket&& packet) : ClientPacket(CMSG_ENGINE_SURVEY, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 SurveyVersion = 0;               // CVar "engineSurvey", Registrar 0x126B60
+            uint32 SurveyPatch = 0;                 // CVar "engineSurveyPatch", Registrar 0x126C20
+            uint32 CpuVendorID = 0;                 // CPU-Info-Singleton 0x2D3B70
+            uint32 CpuPackages = 0;                 // belegtes Paket: 1
+            uint32 CpuCores = 0;                    // belegtes Paket: 6   (Ryzen 5 3600)
+            uint32 CpuThreads = 0;                  // belegtes Paket: 12  (Ryzen 5 3600)
+            uint8 Const2 = 0;                       // UNVERIFIED: im belegten Paket konstant 2
+            uint8 CpuField1C = 0;
+            uint32 Reserved0 = 0;                   // UNVERIFIED: im belegten Paket konstant 0
+            uint8 OsField0 = 0;                     // OS-Info-Singleton 0x2CC8C0
+            uint32 OsMajorVersion = 0;              // belegtes Paket: 10
+            uint32 OsMinorVersion = 0;              // belegtes Paket: 0
+            uint32 OsField10 = 0;                   // UNVERIFIED: belegtes Paket 7663, passt in
+                                                    // der Reihenfolge nicht zu RtlGetVersion
+            uint32 OsBuildNumber = 0;               // belegtes Paket: 19045 (Windows 10 22H2)
+            uint64 PhysicalMemory = 0;              // belegtes Paket: 0x7FBB29000 = 31,9 GiB
+            uint32 Field240 = 0;
+            uint8 MonitorCountMinusOne = 0;
+            uint32 DesktopWidth = 0;
+            uint32 DesktopHeight = 0;
+            uint32 MonitorWidth = 0;
+            uint32 MonitorHeight = 0;
+            uint32 GpuVendorID = 0;                 // PCI-Vendor  (belegt: 0x10DE NVIDIA)
+            uint32 GpuDeviceID = 0;                 // PCI-Device  (belegt: 0x1D01 GT 1030)
+            uint8 GxField0 = 0;
+            uint8 GxField1 = 0;
+            uint8 GxField2 = 0;
+            uint8 GxField3 = 0;
+            uint64 DedicatedVideoMemory = 0;        // belegtes Paket: 1967 (MB, GT 1030)
+            uint64 SharedSystemMemory = 0;          // belegtes Paket: 16349 (MB)
+            uint32 GxApi = 0;
+            uint8 OsField4 = 0;                     // UNVERIFIED: Herkunft nicht aufgeloest
+            uint32 OsField18 = 0;
+            uint32 OsField1C = 0;
+            uint32 OsField20 = 0;
+            uint32 OsField24 = 0;
+            uint64 CpuFeatureMask = 0;
+            uint32 CpuExtra = 0;
+            uint16 CpuField14 = 0;
+            uint8 CpuField16 = 0;
+            uint8 CpuField17 = 0;
+
+            std::array<bool, 44> Flags = { };
+
+            std::string CpuVendor;                  // Puffer 64  (belegt: "AuthenticAMD")
+            std::string CpuBrand;                   // Puffer 64  (belegt: CPUID-Brandstring)
+            std::string GpuName;                    // Puffer 64  (belegt: Adaptername)
+            std::string OsName;                     // Puffer 128
+            std::string OsExtra;                    // Puffer 64
+            std::string BaseBoardManufacturer;      // Puffer 128, HKLM\...\BIOS\BaseBoardManufacturer
+            std::string BaseBoardProduct;           // Puffer 128, ...\BaseBoardProduct
+            std::string BiosVendor;                 // Puffer 128, ...\BIOSVendor
+            std::string BiosReleaseDate;            // Puffer 16,  ...\BIOSReleaseDate
+            std::string BiosVersion;                // Puffer 16,  ...\BIOSVersion
+        };
+
+        // Ein Eintrag von CMSG_START_SPECTATOR_WAR_GAME. Der Writer 0x6A2150 schreibt ZWEI
+        // ausgeschriebene Bloecke, keine Schleife - es gibt keinen Count am Draht.
+        struct SpectatorWarGamePlayer
+        {
+            ObjectGuid PlayerGUID;
+            uint32 VirtualRealmAddress = 0;     // UNVERIFIED: Name geraten, Breite/Position belegt
+            uint16 RealmIndex = 0;              // UNVERIFIED: Name geraten, Breite/Position belegt
+        };
+
+        // Writer 0x6A2150 - 25..57 Byte.
+        // Das abschliessende "FLUSH" des Subplans ist ein echtes 1-Bit-Feld (Objekt +0x58).
+        class StartSpectatorWarGame final : public ClientPacket
+        {
+        public:
+            explicit StartSpectatorWarGame(WorldPacket&& packet) : ClientPacket(CMSG_START_SPECTATOR_WAR_GAME, std::move(packet)) { }
+
+            void Read() override;
+
+            std::array<SpectatorWarGamePlayer, 2> Players = { };
+            uint64 QueueID = 0;
+            bool TournamentRules = false;
+        };
+
+        // Writer 0x6AF830 - 5..37 Byte. Auch hier ist das "FLUSH" ein echtes Bit (Objekt +0x40).
+        // Lua C.RespondToInviteConfirmation(guid, accept), Sender 0x21981D0.
+        class QuickJoinRespondToInvite final : public ClientPacket
+        {
+        public:
+            explicit QuickJoinRespondToInvite(WorldPacket&& packet) : ClientPacket(CMSG_QUICK_JOIN_RESPOND_TO_INVITE, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid QueueGUID;
+            ObjectGuid ApplicantGUID;
+            bool Accept = false;
+        };
+
+        // Writer 0x6AF6B0 - 11 .. 27+18*n Byte.
+        // Lua C_SocialQueue.SignalToastDisplayed(groupGUID, priority) - daher der float.
+        class QuickJoinSignalToastDisplayed final : public ClientPacket
+        {
+        public:
+            explicit QuickJoinSignalToastDisplayed(WorldPacket&& packet) : ClientPacket(CMSG_QUICK_JOIN_SIGNAL_TOAST_DISPLAYED, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid GroupGUID;
+            float Priority = 0.0f;
+            Array<ObjectGuid, 100> Members;     // der Client deckelt Count NICHT - Schranke ist serverseitig
+            bool Flag0 = false;                 // UNVERIFIED: Bedeutung offen (Objekt +0x50)
+            bool Flag1 = false;                 // UNVERIFIED: Bedeutung offen (Objekt +0x51)
+        };
+
+        // Writer 0x6AFA80 -> Rumpf 0x6AF8C0 - 18..597 Byte.
+        // Bit-Sektion: bits<9> lenName; bits<9> lenRealm; 1 Bit -> genau 3 Byte.
+        // Die "bitflush" des Subplans sind die oberen acht Bit je 9-Bit-Laenge, kein Padding.
+        // Lua C_PartyInfo.RequestInviteFromUnit(targetName, tank, healer, dps);
+        // die drei Rollen liegen als Maske im uint8 (2 Tank, 4 Healer, 8 Damage).
+        class QuickJoinRequestInvite final : public ClientPacket
+        {
+        public:
+            explicit QuickJoinRequestInvite(WorldPacket&& packet) : ClientPacket(CMSG_QUICK_JOIN_REQUEST_INVITE, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 QueueID = 0;
+            ObjectGuid GroupGUID;
+            uint64 ClubID = 0;                  // UNVERIFIED: Bedeutung offen (Objekt +0x268)
+            uint8 Roles = 0;
+            bool Flag = false;                  // UNVERIFIED: Bedeutung offen (Objekt +0x271)
+            std::string TargetName;             // Puffer 306
+            std::string TargetRealm;            // Puffer 257
+        };
+
+        // Writer 0x6B15B0 -> Rumpf 0x6B1420 - 13..592 Byte.
+        // NICHT baugleich zum Geschwister 0x430131: die Bit-Sektion hat nur 18 Bit (kein drittes
+        // Bit), Objekt +0x268 ist ein uint32 statt uint64, und das Rollen-Byte fehlt ganz.
+        // Beide Bit-Sektionen sind trotzdem 3 Byte lang - wer sie fuer baugleich haelt, verliert
+        // danach genau 5 Byte und verschiebt beide Zeichenketten.
+        class QuickJoinRequestInviteWithConfirmation final : public ClientPacket
+        {
+        public:
+            explicit QuickJoinRequestInviteWithConfirmation(WorldPacket&& packet) : ClientPacket(CMSG_QUICK_JOIN_REQUEST_INVITE_WITH_CONFIRMATION, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 QueueID = 0;
+            ObjectGuid GroupGUID;
+            uint32 RequestID = 0;               // monoton steigender Clientzaehler, 0x2 12E92F0:103
+            std::string TargetName;             // Puffer 306
+            std::string TargetRealm;            // Puffer 257
+        };
+
+        // 0x4502CC. Die definierte Abschaltmeldung des Warden3-Kanals.
+        // Draht am Reader 0x606F30 nachgelesen: er nimmt den REST des Pakets als
+        // undurchsichtigen Block (sub 0x35AF730 mit *(buf+20) - *(buf+24) Byte). Eine LEERE
+        // Nutzlast ist damit gueltig - der Reader akzeptiert jede Laenge einschliesslich 0.
+        // Die Zuordnung ist doppelt belegt: Opcode-Getter 0x606FA0 schreibt 4522700 = 0x4502CC,
+        // und die Registrierung 0x226436 haengt den Konsumenten 0x1CE2CD0 an dieses Global.
+        // UNVERIFIED: der Konsument liegt nicht im Dekompilat-Cache. Dass der Client nach dieser
+        // Nachricht aufhoert, CMSG_WARDEN3_DATA zu senden, ist NICHT am Konsumenten belegt,
+        // sondern aus dem Namen und der Gegennachricht SMSG_WARDEN3_ENABLED (0x4502CB, im Sniff
+        // 15 Pakete a 4 Byte) abgeleitet.
+        class Warden3Disabled final : public ServerPacket
+        {
+        public:
+            explicit Warden3Disabled() : ServerPacket(SMSG_WARDEN3_DISABLED, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        // Writer 0x6B2860 - 9..~16 MB theoretisch, an der Erzeugerstelle 58..74 Byte.
+        // bits24 traegt die Laenge INKLUSIVE NUL; der FlushBits danach schreibt NULL Byte,
+        // weil 24 mod 8 == 0 - wer ein Fuellbyte einplant, verschiebt alles Nachfolgende.
+        // Der String ist Base64 einer 36-Zeichen-UUID, an der Erzeugerstelle also 48 Zeichen.
+        class ServerValidationSignatureRequest final : public ClientPacket
+        {
+        public:
+            explicit ServerValidationSignatureRequest(WorldPacket&& packet) : ClientPacket(CMSG_SERVER_VALIDATION_SIGNATURE_REQUEST, std::move(packet)) { }
+
+            void Read() override;
+
+            std::string Signature;
+            uint32 RequestID = 0;               // UNVERIFIED: Anfrage-/Kontextkennung, Semantik offen
+            ObjectGuid Guid;
         };
     }
 }

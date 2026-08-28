@@ -197,6 +197,66 @@ namespace WorldPackets
     {
         class ChangeRealmTicket;
         class Request;
+
+        // Einheit w4_cmsg_43_3D, Block B4 (Bnet-Praesenz / Community)
+        class AddBattlenetFriend;
+        class BattlenetChallengeResponse;
+        class ClubPresenceSubscribe;
+        class SendCharacterClubInvitation;
+        class RequestCharacterGuildFollowInfo;
+        class SaveAccountDataExport;
+        class RequestRealmGuildMasterInfo;
+    }
+
+    // Einheit w4_cmsg_43_3D, Block B8 (Bleep, Token-Proxy)
+    namespace Bleep
+    {
+        class FetchBleepProxies;
+        class BleepPong;
+        class RefreshBleepTokens;
+        class ExpireBleepTokens;
+    }
+
+    // Einheit w4_cmsg_43_3D, Block B5 (Live-Region-Kopie)
+    namespace LiveRegion
+    {
+        class GetAccountCharacterList;
+        class CharacterCopy;
+        class AccountRestore;
+        class KeyBindingsCopy;
+    }
+
+    // Einheit w4_cmsg_43_3D, Block B6 (Lobby-Matchmaker) und B7 (WoW Labs)
+    namespace LobbyMatchmaker
+    {
+        class LobbyMatchmakerPartyInvite;
+        class LobbyMatchmakerAcceptPartyInvite;
+        class LobbyMatchmakerRejectPartyInvite;
+        class LobbyMatchmakerPartyUninvite;
+        class LobbyMatchmakerLeaveParty;
+        class LobbyMatchmakerSetPartyPlaylistEntry;
+        class LobbyMatchmakerSetPlayerReady;
+        class LobbyMatchmakerEnterQueue;
+        class LobbyMatchmakerQueueProposalResponse;
+        class LobbyMatchmakerAbandonQueue;
+        class LobbyMatchmakerCreateCharacter;
+        class RegisterFastLogin;
+    }
+
+    // Einheit w4_cmsg_43_3D, Block B9 (Voice-Chat)
+    namespace VoiceChat
+    {
+        class VoiceChatLogin;
+        class VoiceChannelSttTokenRequest;
+        class VoiceChatJoinChannel;
+    }
+
+    // Einheit w4_cmsg_43_3D, Block B7 (WoW Labs / Plunderstorm)
+    namespace WowLabs
+    {
+        class QuerySelectedWowLabsArea;
+        class QueryWowLabsAreaInfo;
+        class SelectWowLabsArea;
     }
 
     namespace BattlePet
@@ -539,6 +599,40 @@ namespace WorldPackets
         class RequestLatestSplashScreen;
         class QueryCountdownTimer;
         class SetCurrencyFlags;
+
+        // Einheit w4_cmsg_43_3D - Sendeseite der Sammelfamilien 0x43 / 0x3D
+        class UsedFollow;
+        class SeamlessTransferComplete;
+        class ReportServerLag;
+        class ResetChallengeModeCheat;
+        class SpectateEnd;
+        class SpectateChange;
+        class SpectateSetNextTarget;
+        class LowLevelRaid1;
+        class QuickJoinAutoAcceptRequests;
+        class RequestChatLogin;
+        class ClassTalentsNotifyEmptyConfig;
+        class ClassTalentsNotifyValidationFailed;
+        class TraitsTalentTestUnlearnSpells;
+        class GMTicketAcknowledgeSurvey;
+        class AddAccountCosmetic;
+        class UpdateCraftingNpcRecipes;
+        class IslandQueue;
+        class ShowTradeSkill;
+        class QuestDrivenScenarioStateChange;
+        class WorldLootObjectClick;
+        class UpgradeRuneforgeLegendary;
+        class SetExcludedChatCensorSources;
+        class SilenceTalkerInParty;
+        class Warden3Data;
+        class AddonList;
+        class EngineSurvey;
+        class StartSpectatorWarGame;
+        class QuickJoinRespondToInvite;
+        class QuickJoinSignalToastDisplayed;
+        class QuickJoinRequestInvite;
+        class QuickJoinRequestInviteWithConfirmation;
+        class ServerValidationSignatureRequest;
     }
 
     namespace Movement
@@ -1915,6 +2009,99 @@ class TC_GAME_API WorldSession
 
         void HandleSocialContractRequest(WorldPackets::Social::SocialContractRequest& socialContractRequest);
 
+        // ----------------------------------------------------------------------------------
+        // Einheit w4_cmsg_43_3D - Sendeseite der Sammelfamilien 0x43 / 0x3D, Phase A.
+        // Belege je Handler in Handlers/MiscHandler.cpp, BattlenetHandler.cpp,
+        // LiveRegionHandler.cpp und BleepHandler.cpp.
+        // ----------------------------------------------------------------------------------
+
+        // Track A - der Server haelt den Zustand bereits (oder haelt ihn ausdruecklich nicht)
+        void HandleUsedFollow(WorldPackets::Misc::UsedFollow& usedFollow);
+        void HandleSeamlessTransferComplete(WorldPackets::Misc::SeamlessTransferComplete& seamlessTransferComplete);
+        void HandleResetChallengeModeCheat(WorldPackets::Misc::ResetChallengeModeCheat& resetChallengeModeCheat);
+        void HandleClassTalentsNotifyEmptyConfig(WorldPackets::Misc::ClassTalentsNotifyEmptyConfig& classTalentsNotifyEmptyConfig);
+        void HandleClassTalentsNotifyValidationFailed(WorldPackets::Misc::ClassTalentsNotifyValidationFailed& classTalentsNotifyValidationFailed);
+        void HandleTraitsTalentTestUnlearnSpells(WorldPackets::Misc::TraitsTalentTestUnlearnSpells& traitsTalentTestUnlearnSpells);
+        void HandleAddAccountCosmetic(WorldPackets::Misc::AddAccountCosmetic& addAccountCosmetic);
+        void HandleUpdateCraftingNpcRecipes(WorldPackets::Misc::UpdateCraftingNpcRecipes& updateCraftingNpcRecipes);
+        void HandleIslandQueue(WorldPackets::Misc::IslandQueue& islandQueue);
+        void HandleShowTradeSkill(WorldPackets::Misc::ShowTradeSkill& showTradeSkill);
+        void HandleQuestDrivenScenarioStateChange(WorldPackets::Misc::QuestDrivenScenarioStateChange& questDrivenScenarioStateChange);
+        void HandleWorldLootObjectClick(WorldPackets::Misc::WorldLootObjectClick& worldLootObjectClick);
+        void HandleUpgradeRuneforgeLegendary(WorldPackets::Misc::UpgradeRuneforgeLegendary& upgradeRuneforgeLegendary);
+        void HandleSetExcludedChatCensorSources(WorldPackets::Misc::SetExcludedChatCensorSources& setExcludedChatCensorSources);
+        void HandleSilenceTalkerInParty(WorldPackets::Misc::SilenceTalkerInParty& silenceTalkerInParty);
+        void HandleAddonList(WorldPackets::Misc::AddonList& addonList);
+        void HandleStartSpectatorWarGame(WorldPackets::Misc::StartSpectatorWarGame& startSpectatorWarGame);
+        void HandleLowLevelRaid1(WorldPackets::Misc::LowLevelRaid1& lowLevelRaid1);
+        void HandleSpectateChange(WorldPackets::Misc::SpectateChange& spectateChange);
+        void HandleSpectateSetNextTarget(WorldPackets::Misc::SpectateSetNextTarget& spectateSetNextTarget);
+        void HandleSpectateEnd(WorldPackets::Misc::SpectateEnd& spectateEnd);
+        void HandleQuickJoinAutoAcceptRequests(WorldPackets::Misc::QuickJoinAutoAcceptRequests& quickJoinAutoAcceptRequests);
+        void HandleQuickJoinSignalToastDisplayed(WorldPackets::Misc::QuickJoinSignalToastDisplayed& quickJoinSignalToastDisplayed);
+        void HandleQuickJoinRespondToInvite(WorldPackets::Misc::QuickJoinRespondToInvite& quickJoinRespondToInvite);
+        void HandleQuickJoinRequestInvite(WorldPackets::Misc::QuickJoinRequestInvite& quickJoinRequestInvite);
+        void HandleQuickJoinRequestInviteWithConfirmation(WorldPackets::Misc::QuickJoinRequestInviteWithConfirmation& quickJoinRequestInviteWithConfirmation);
+
+        // B3 - Telemetrie & Support
+        void HandleReportServerLag(WorldPackets::Misc::ReportServerLag& reportServerLag);
+        void HandleGMTicketAcknowledgeSurvey(WorldPackets::Misc::GMTicketAcknowledgeSurvey& gmTicketAcknowledgeSurvey);
+        void HandleEngineSurvey(WorldPackets::Misc::EngineSurvey& engineSurvey);
+        void HandleServerValidationSignatureRequest(WorldPackets::Misc::ServerValidationSignatureRequest& serverValidationSignatureRequest);
+        // characters.client_telemetry.kind - siehe TRACK_B_dienste.md Abschnitt B3
+        static constexpr uint8 TELEMETRY_KIND_ENGINE_SURVEY = 1;
+        static constexpr uint8 TELEMETRY_KIND_SERVER_LAG    = 2;
+        void StoreClientTelemetry(uint8 kind, std::string const& payload);
+
+        // B11 - Warden3
+        void HandleWarden3Data(WorldPackets::Misc::Warden3Data& warden3Data);
+
+        // B4 - Bnet-Praesenz / Community
+        void HandleRequestChatLogin(WorldPackets::Misc::RequestChatLogin& requestChatLogin);
+        void HandleAddBattlenetFriend(WorldPackets::Battlenet::AddBattlenetFriend& addBattlenetFriend);
+        void HandleBattlenetChallengeResponse(WorldPackets::Battlenet::BattlenetChallengeResponse& battlenetChallengeResponse);
+        void HandleClubPresenceSubscribe(WorldPackets::Battlenet::ClubPresenceSubscribe& clubPresenceSubscribe);
+        void HandleSendCharacterClubInvitation(WorldPackets::Battlenet::SendCharacterClubInvitation& sendCharacterClubInvitation);
+        void HandleRequestCharacterGuildFollowInfo(WorldPackets::Battlenet::RequestCharacterGuildFollowInfo& requestCharacterGuildFollowInfo);
+        void HandleSaveAccountDataExport(WorldPackets::Battlenet::SaveAccountDataExport& saveAccountDataExport);
+        void HandleRequestRealmGuildMasterInfo(WorldPackets::Battlenet::RequestRealmGuildMasterInfo& requestRealmGuildMasterInfo);
+
+        // B5 - Live-Region-Kopie
+        void HandleLiveRegionGetAccountCharacterList(WorldPackets::LiveRegion::GetAccountCharacterList& getAccountCharacterList);
+        void HandleLiveRegionCharacterCopy(WorldPackets::LiveRegion::CharacterCopy& characterCopy);
+        void HandleLiveRegionAccountRestore(WorldPackets::LiveRegion::AccountRestore& accountRestore);
+        void HandleLiveRegionKeyBindingsCopy(WorldPackets::LiveRegion::KeyBindingsCopy& keyBindingsCopy);
+
+        // B8 - Bleep
+        void HandleFetchBleepProxies(WorldPackets::Bleep::FetchBleepProxies& fetchBleepProxies);
+        void HandleBleepPong(WorldPackets::Bleep::BleepPong& bleepPong);
+        void HandleRefreshBleepTokens(WorldPackets::Bleep::RefreshBleepTokens& refreshBleepTokens);
+        void HandleExpireBleepTokens(WorldPackets::Bleep::ExpireBleepTokens& expireBleepTokens);
+
+        // B6 - Lobby-Matchmaker
+        void HandleLobbyMatchmakerPartyInvite(WorldPackets::LobbyMatchmaker::LobbyMatchmakerPartyInvite& lobbyMatchmakerPartyInvite);
+        void HandleLobbyMatchmakerAcceptPartyInvite(WorldPackets::LobbyMatchmaker::LobbyMatchmakerAcceptPartyInvite& lobbyMatchmakerAcceptPartyInvite);
+        void HandleLobbyMatchmakerRejectPartyInvite(WorldPackets::LobbyMatchmaker::LobbyMatchmakerRejectPartyInvite& lobbyMatchmakerRejectPartyInvite);
+        void HandleLobbyMatchmakerPartyUninvite(WorldPackets::LobbyMatchmaker::LobbyMatchmakerPartyUninvite& lobbyMatchmakerPartyUninvite);
+        void HandleLobbyMatchmakerLeaveParty(WorldPackets::LobbyMatchmaker::LobbyMatchmakerLeaveParty& lobbyMatchmakerLeaveParty);
+        void HandleLobbyMatchmakerSetPartyPlaylistEntry(WorldPackets::LobbyMatchmaker::LobbyMatchmakerSetPartyPlaylistEntry& lobbyMatchmakerSetPartyPlaylistEntry);
+        void HandleLobbyMatchmakerSetPlayerReady(WorldPackets::LobbyMatchmaker::LobbyMatchmakerSetPlayerReady& lobbyMatchmakerSetPlayerReady);
+        void HandleLobbyMatchmakerEnterQueue(WorldPackets::LobbyMatchmaker::LobbyMatchmakerEnterQueue& lobbyMatchmakerEnterQueue);
+        void HandleLobbyMatchmakerQueueProposalResponse(WorldPackets::LobbyMatchmaker::LobbyMatchmakerQueueProposalResponse& lobbyMatchmakerQueueProposalResponse);
+        void HandleLobbyMatchmakerAbandonQueue(WorldPackets::LobbyMatchmaker::LobbyMatchmakerAbandonQueue& lobbyMatchmakerAbandonQueue);
+        void HandleLobbyMatchmakerCreateCharacter(WorldPackets::LobbyMatchmaker::LobbyMatchmakerCreateCharacter& lobbyMatchmakerCreateCharacter);
+        void HandleRegisterFastLogin(WorldPackets::LobbyMatchmaker::RegisterFastLogin& registerFastLogin);
+
+        // B9 - Voice-Chat
+        void HandleVoiceChatLogin(WorldPackets::VoiceChat::VoiceChatLogin& voiceChatLogin);
+        void HandleVoiceChannelSttTokenRequest(WorldPackets::VoiceChat::VoiceChannelSttTokenRequest& voiceChannelSttTokenRequest);
+        void HandleVoiceChatJoinChannel(WorldPackets::VoiceChat::VoiceChatJoinChannel& voiceChatJoinChannel);
+
+        // B7 - WoW Labs / Plunderstorm
+        void HandleQuerySelectedWowLabsArea(WorldPackets::WowLabs::QuerySelectedWowLabsArea& querySelectedWowLabsArea);
+        void HandleQueryWowLabsAreaInfo(WorldPackets::WowLabs::QueryWowLabsAreaInfo& queryWowLabsAreaInfo);
+        void HandleSelectWowLabsArea(WorldPackets::WowLabs::SelectWowLabsArea& selectWowLabsArea);
+
         union ConnectToKey
         {
             struct
@@ -2057,6 +2244,18 @@ class TC_GAME_API WorldSession
         std::unique_ptr<CollectionMgr> _collectionMgr;
 
         ConnectToKey _instanceConnectKey;
+
+        // Einheit w4_cmsg_43_3D - Sitzungszustand der Sammelfamilien 0x43 / 0x3D.
+        // Alle drei sind bewusst FLUECHTIG (DoD D4): der Client haelt sie als CVar bzw. als
+        // UI-Zustand und sendet sie nach jedem Login erneut - CMSG_SET_EXCLUDED_CHAT_CENSOR_SOURCES
+        // ist mit 22 Paketen ueber vier Builds genau so am Draht belegt.
+        uint8 _excludedChatCensorSources;    // Enum.ExcludedCensorSources als Bitmaske
+        bool _quickJoinAutoAcceptRequests;
+        bool _lowLevelRaid;
+
+        // Der Baum hat kein Anti-Cheat. SMSG_WARDEN3_DISABLED geht genau EINMAL je Sitzung
+        // hinaus - der Client schickt sonst rund 1400 Datenpakete ins Leere.
+        bool _warden3DisabledSent;
 
         WorldSession(WorldSession const& right) = delete;
         WorldSession& operator=(WorldSession const& right) = delete;
