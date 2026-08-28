@@ -918,11 +918,17 @@ void InstanceScript::SendBossKillCredit(uint32 encounterId)
 
 // remainingDelay converts the stored offset into the time that is still left, which is what the late joiner
 // message needs (consumer 0x21053C0 measures against the client's own clock).
-// dropElapsed decides what happens to an entry that is already due. On the list messages it is dropped,
-// because that consumer discards it anyway. On a single event message it must NOT be dropped: that message
-// announces a state change of an event the client already holds, and the client keeps the event past its
-// delay - dropping it there would swallow the change without a trace. The remaining delay is clamped to zero
-// instead, which is the honest value for an event whose countdown has run out.
+// dropElapsed decides what happens to an entry that is already due, and it does NOT follow from the message
+// kind - it follows from whether the receiver already holds the event.
+//   drop   - the late joiner sync, whose consumer (0x21053C0) discards a due event anyway, so carrying it
+//            would only add bytes. The receiver holds nothing yet, so nothing can be lost.
+//   keep   - every message that goes to a client which already holds the event: the two single event
+//            messages, and the replacement list that ClearEncounterTimeline sends for the encounters that
+//            are still running. The client keeps an event past its delay, so dropping it there takes the
+//            event away instead of updating it. The remaining delay is clamped to zero instead, which is the
+//            honest value for an event whose countdown has run out.
+// On the arming messages (sequence, append, respawn) the flag never comes into play - they are built with
+// remainingDelay = false, and nothing is due at the moment it is queued.
 bool InstanceScript::BuildEncounterTimelineEvent(EncounterTimelineEventState const& state,
     WorldPackets::Instance::EncounterTimelineEvent& timelineEvent, bool remainingDelay, bool dropElapsed) const
 {
@@ -972,13 +978,13 @@ bool InstanceScript::BuildEncounterTimelineEvent(EncounterTimelineEventState con
     return true;
 }
 
-void InstanceScript::BuildEncounterTimelineEvents(std::vector<WorldPackets::Instance::EncounterTimelineEvent>& events, bool remainingDelay, std::size_t fromIndex /*= 0*/) const
+void InstanceScript::BuildEncounterTimelineEvents(std::vector<WorldPackets::Instance::EncounterTimelineEvent>& events, bool remainingDelay, bool dropElapsed, std::size_t fromIndex /*= 0*/) const
 {
     events.reserve(_encounterTimeline.size() - std::min(fromIndex, _encounterTimeline.size()));
     for (std::size_t i = fromIndex; i < _encounterTimeline.size(); ++i)
     {
         WorldPackets::Instance::EncounterTimelineEvent& timelineEvent = events.emplace_back();
-        if (!BuildEncounterTimelineEvent(_encounterTimeline[i], timelineEvent, remainingDelay, true))
+        if (!BuildEncounterTimelineEvent(_encounterTimeline[i], timelineEvent, remainingDelay, dropElapsed))
             events.pop_back();
     }
 }
@@ -995,6 +1001,18 @@ EncounterTimelineEventState* InstanceScript::FindEncounterTimelineEvent(uint32 e
     return itr != _encounterTimeline.end() ? &*itr : nullptr;
 }
 
+// NOT REACHABLE ON THIS BRANCH, and this is the single gate that makes it so. The whole encounter timeline -
+// all six opcodes, SEQUENCE, APPEND, RESPAWN, BLOCKED_CHANGED, CAST_UPDATE and TIMELINE_SYNC - hangs off
+// _encounterTimeline, and the only thing that ever fills _encounterTimeline is the world table
+// `instance_encounter_timeline`. This unit creates that table (sql/updates/world/master/2026_08_28_00_world.sql)
+// and ships no rows in it, because no source says which EncounterEvent.db2 row belongs to which point of
+// which boss - not the DB2, not the client, not the lua. With no rows the early return below fires for every
+// encounter of every instance, _encounterTimeline stays empty, and every send site returns before writing a
+// packet: SendEncounterTimelineTo and UpdateEncounterTimeline on the empty check, ClearEncounterTimeline on
+// its removed == 0 check, and the arming messages here.
+// The code path is complete and the wire layout is derived; what is missing is content, not code. Filling the
+// table by hand makes all six reachable at once. Until somebody does, D2 is untested for the six - see
+// status/w4_instanz_vote.json, d2_offen at each of them.
 void InstanceScript::StartEncounterTimeline(uint32 dungeonEncounterId, ObjectGuid casterGuid)
 {
     std::span<EncounterTimelineTemplate const> events = sEncounterTimelineMgr->GetEncounterTimeline(dungeonEncounterId);
@@ -1041,7 +1059,7 @@ void InstanceScript::StartEncounterTimeline(uint32 dungeonEncounterId, ObjectGui
     AddEncounterTimelineEvents(events, casterGuid, dungeonEncounterId);
 
     WorldPackets::Instance::InstanceEncounterEventSequence sequence;
-    BuildEncounterTimelineEvents(sequence.Events, false);
+    BuildEncounterTimelineEvents(sequence.Events, false, true);
     instance->SendToPlayers(sequence.Write());
 }
 
@@ -1066,7 +1084,7 @@ void InstanceScript::AppendEncounterTimelineEvents(std::span<EncounterTimelineTe
     AddEncounterTimelineEvents(events, casterGuid, dungeonEncounterId);
 
     WorldPackets::Instance::InstanceEncounterEventAppend append;
-    BuildEncounterTimelineEvents(append.Events, false, firstNew);
+    BuildEncounterTimelineEvents(append.Events, false, true, firstNew);
     instance->SendToPlayers(append.Write());
 }
 
@@ -1100,7 +1118,7 @@ void InstanceScript::RespawnEncounterTimeline(uint32 dungeonEncounterId, ObjectG
     // SEQUENCE and RESPAWN share handler 0x2105360 and are indistinguishable for the client; the difference
     // is purely server side (respawn timers instead of the in-encounter timeline).
     WorldPackets::Instance::InstanceEncounterEventRespawn respawn;
-    BuildEncounterTimelineEvents(respawn.Events, false);
+    BuildEncounterTimelineEvents(respawn.Events, false, true);
     instance->SendToPlayers(respawn.Write());
 }
 
@@ -1128,8 +1146,13 @@ void InstanceScript::ClearEncounterTimeline(uint32 dungeonEncounterId)
     // The list message replaces what the client holds, so what is left over has to go with it. An empty list
     // is the signal "clear the timeline" and really is sent by retail - eight times in the capture corpus,
     // three of them on the same tick as SMSG_ENCOUNTER_END. Sending nothing is wrong.
+    // dropElapsed is false here, and that is the whole point of this call. The leftovers belong to a boss
+    // that is still being fought, the client still holds them, and it keeps an event past its delay. Dropping
+    // the already due ones out of the replacement list would take exactly those events off the client while
+    // the server goes on tracking them - every later BLOCKED_CHANGED and CAST_UPDATE for them would then land
+    // nowhere, because the consumer looks them up by EventID + CasterGUID (0x2105980) and no longer has them.
     WorldPackets::Instance::InstanceEncounterEventSequence sequence;
-    BuildEncounterTimelineEvents(sequence.Events, true);
+    BuildEncounterTimelineEvents(sequence.Events, true, false);
     instance->SendToPlayers(sequence.Write());
 }
 
@@ -1234,7 +1257,7 @@ void InstanceScript::SendEncounterTimelineTo(Player* player) const
 
     WorldPackets::Instance::InstanceEncounterTimelineSync sync;
     sync.EncounterGUID = _encounterTimelineGuid;
-    BuildEncounterTimelineEvents(sync.Events, true);
+    BuildEncounterTimelineEvents(sync.Events, true, true);
     if (sync.Events.empty())
         return;
 

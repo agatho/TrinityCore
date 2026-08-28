@@ -2994,11 +2994,32 @@ bool InstanceMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
 
     if (Group* group = player->GetGroup())
     {
-        // SMSG_DIFFERENT_INSTANCE_FROM_PARTY - the group is bound to another instance id of this very map.
+        // SMSG_DIFFERENT_INSTANCE_FROM_PARTY - a party member stands in another copy of this very map.
         // Payload-less signal, consumer 0x209AA20 only raises ENTERED_DIFFERENT_INSTANCE_FROM_PARTY, which
         // no Blizzard addon listens to; it exists for third party addons.
-        uint32 groupInstanceId = group->GetRecentInstanceId(GetId());
-        if (groupInstanceId && groupInstanceId != GetInstanceId())
+        // The question is deliberately asked of the members and not of Group::GetRecentInstanceId(): the
+        // cached value is already overwritten by the time this runs. MapManager::CreateMap calls
+        // Group::SetRecentInstance unconditionally whenever the target map has to be created (MapManager.cpp
+        // :232) and Group::SetRecentInstance overwrites without a test, while the call order in
+        // WorldSession::HandleMoveWorldportAck is CreateMap first, AddPlayerToMap second - so in the ordinary
+        // case (first one in, target instance not loaded yet) both sides of the comparison would be equal and
+        // the message would never go out. Where the members actually are cannot be stale.
+        bool differentInstanceFromParty = false;
+        for (Group::MemberSlot const& member : group->GetMemberSlots())
+        {
+            if (member.guid == player->GetGUID())
+                continue;
+
+            Player const* otherMember = ObjectAccessor::FindConnectedPlayer(member.guid);
+            Map const* otherMap = otherMember ? otherMember->FindMap() : nullptr;
+            if (otherMap && otherMap->IsDungeon() && otherMap->GetId() == GetId() && otherMap->GetInstanceId() != GetInstanceId())
+            {
+                differentInstanceFromParty = true;
+                break;
+            }
+        }
+
+        if (differentInstanceFromParty)
             player->SendDirectMessage(WorldPackets::Instance::DifferentInstanceFromParty().Write());
 
         group->SendInstanceGroupSizeChanged();

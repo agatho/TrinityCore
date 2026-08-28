@@ -395,7 +395,7 @@ class TC_GAME_API InstanceScript : public ZoneScript
 
         // Encounter timeline
         bool BuildEncounterTimelineEvent(EncounterTimelineEventState const& state, WorldPackets::Instance::EncounterTimelineEvent& timelineEvent, bool remainingDelay, bool dropElapsed) const;
-        void BuildEncounterTimelineEvents(std::vector<WorldPackets::Instance::EncounterTimelineEvent>& events, bool remainingDelay, std::size_t fromIndex = 0) const;
+        void BuildEncounterTimelineEvents(std::vector<WorldPackets::Instance::EncounterTimelineEvent>& events, bool remainingDelay, bool dropElapsed, std::size_t fromIndex = 0) const;
         void AddEncounterTimelineEvents(std::span<EncounterTimelineTemplate const> events, ObjectGuid casterGuid, uint32 dungeonEncounterId);
         EncounterTimelineEventState* FindEncounterTimelineEvent(uint32 encounterEventId, ObjectGuid casterGuid);
         void SendEncounterTimelineEventBlockedChanged(EncounterTimelineEventState const& state) const;
