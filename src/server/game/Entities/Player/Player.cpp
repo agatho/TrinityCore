@@ -3475,6 +3475,12 @@ bool Player::ResetTalents(bool involuntarily /*= false*/)
 
     RemovePet(nullptr, PET_SAVE_NOT_IN_SLOT, true);
 
+    // Whether this call actually takes a talent away, decided per talent right before RemoveTalent
+    // marks it. The condition is the same one RemoveTalent uses to write PLAYERSPELL_REMOVED, so the
+    // flag is set exactly when a learned talent is really lost - not when the loop merely walks the
+    // whole class talent list. It gates the involuntarily notice at the end of this method.
+    bool removedAnyTalent = false;
+
     for (uint32 talentId = 0; talentId < sTalentStore.GetNumRows(); ++talentId)
     {
         TalentEntry const* talentInfo = sTalentStore.LookupEntry(talentId);
@@ -3491,6 +3497,11 @@ bool Player::ResetTalents(bool involuntarily /*= false*/)
         if (talentInfo->SpellID == 0)
             continue;
 
+        PlayerTalentMap const* talentMap = GetTalentMap(GetActiveTalentGroup());
+        PlayerTalentMap::const_iterator learnedTalent = talentMap->find(talentInfo->ID);
+        if (learnedTalent != talentMap->end() && learnedTalent->second != PLAYERSPELL_REMOVED)
+            removedAnyTalent = true;
+
         RemoveTalent(talentInfo);
     }
 
@@ -3499,7 +3510,16 @@ bool Player::ResetTalents(bool involuntarily /*= false*/)
     _SaveSpells(trans);
     CharacterDatabase.CommitTransaction(trans);
 
-    if (involuntarily)
+    // Only report a reset that actually happened. Player::InitTalentForLevel() calls
+    // ResetTalents(true) unconditionally for every character below level 15, and it is itself called
+    // from Player::GiveLevel (every level up) and from Player::LoadFromDB (every login) - so an
+    // unconditional notice would pop the dialog on levels 2..15 and on every single login of a low
+    // level character that never had a talent to lose. Retail does not do that. The same guard is
+    // built for the twin SMSG_SPEC_INVOLUNTARILY_CHANGED in Player::ResetTalentSpecialization.
+    // The other two involuntarily callers, the AT_LOGIN_RESET_TALENTS path in
+    // WorldSession::HandlePlayerLogin and the .reset talents command, are covered by the same rule:
+    // they announce a reset only when there was something to reset.
+    if (involuntarily && removedAnyTalent)
     {
         // IsPet is false: this method only unlearns the character's own talents.
         // The notice goes out last, after the talents are gone and saved - that matches the two
@@ -14216,9 +14236,14 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             // the block below does: GossipOptionNpcToInteractionType maps ArtifactRespec (21) to
             // PlayerInteractionType::ArtifactForge (38) and, through GossipOptionNPCInteraction or
             // NPCInteractionOpenResult, tells the client about it - it is the only place in the core
-            // that ever sets that type. Without it every SMSG_CLOSE_ARTIFACT_FORGE the server sends
-            // afterwards is a no-op, because its consumer (0x2329870) clears the interaction with the
-            // checkType byte set, i.e. only while 38 really is the active one. The three refusals in
+            // that ever sets that type. It is needed on this path in particular: unlike the GameObject
+            // forge, the respec prompt does not open the interaction on the client either - its
+            // consumer sub_7FF7832F98B0 only stores the npc guid in xmmword_7FF7877E0360 and fires the
+            // Lua event, it never calls the interaction setter sub_7FF78323C490 the way the
+            // SMSG_OPEN_ARTIFACT_FORGE consumer does (see ArtifactPackets.h). Without this block every
+            // SMSG_CLOSE_ARTIFACT_FORGE the server sends on the gossip path is therefore a no-op,
+            // because its consumer (0x2329870) clears the interaction with the checkType byte set,
+            // i.e. only while 38 really is the active one. The three refusals in
             // WorldSession::HandleConfirmArtifactRespec answer that way, so the interaction has to be
             // open for them to land. Order is harmless: the client opens the frame from the prompt
             // event itself (ShowArtifactFrame, EventImplementation.lua:526-534), the message that

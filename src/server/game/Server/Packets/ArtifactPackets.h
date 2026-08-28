@@ -99,6 +99,27 @@ namespace WorldPackets
         //     call 0x7FF78323A4D0                ; ClearInteraction(type, checkType)
         // Both messages therefore carry no payload the client can use, and both are idempotent: the
         // checkType byte makes the client ignore them unless the artifact forge is the open frame.
+        //
+        // Which sends make the forge the open frame - the point that decides whether a send site can
+        // work at all. There are two, and only the first one is server bookkeeping:
+        //   1. PlayerInteractionType::ArtifactForge in the core's own _interactionData, set from the
+        //      GossipOptionNpc::ArtifactRespec block in Player::OnGossipSelect and announced to the
+        //      client through SMSG_GOSSIP_OPTION_NPC_INTERACTION / SMSG_NPC_INTERACTION_OPEN_RESULT.
+        //   2. SMSG_OPEN_ARTIFACT_FORGE (0x45024E) itself. Its consumer sub_7FF7832F9780 (RVA
+        //      0x2329780, reached over hook slot qword_7FF7855FC8C8, whose dispatch stub 0x5FF6D0
+        //      sits next to the opcode getter 0x5FF6E0 that returns 4522574 = 0x45024E) ends with
+        //          v3 = sub_7FF781274DC0();                       // PlayerInteractionManager
+        //          return sub_7FF78323C490(v3, &guids, 0x26u, ...) // 0x26 == 38 == ArtifactForge
+        //      sub_7FF78323C490 is the setter counterpart of the ClearInteraction above: it forwards
+        //      the type to sub_7FF78323A240, which writes *(_DWORD *)(mgr + 48) = type - the very
+        //      field ClearInteraction compares against (`*(_DWORD *)(a1 + 48) == (_DWORD)a2`). Its
+        //      other 20 call sites pass 3, 5, 6, 10, 11, 31, 32, 33, 57, 60, 79, i.e. the same
+        //      PlayerInteractionType enum (ArtifactForge = 38,
+        //      PlayerInteractionManagerConstantsDocumentation.lua:51).
+        // So the client opens the interaction on its own the moment the forge GameObject sends
+        // SMSG_OPEN_ARTIFACT_FORGE - the core does not have to, and does not, set type 38 for that
+        // path. Every CloseArtifactForge that follows an opened forge therefore lands; see the send
+        // sites in WorldSession::HandleArtifactAddPower and WorldSession::HandleArtifactSetAppearance.
         class CloseArtifactForge final : public ServerPacket
         {
         public:
@@ -111,6 +132,14 @@ namespace WorldPackets
         // here - a code on the wire would not reach the UI. The only matching string,
         // ARTIFACT_TRAITS_NO_FORGE_ERROR (GlobalStrings 35246), is set client side in
         // Blizzard_ArtifactPowerButton.lua:66.
+        // The send site is the failure branch of GameObject::Use, which returns before
+        // SMSG_OPEN_ARTIFACT_FORGE goes out. That does not make the message inert: the interaction it
+        // clears is not opened by this use of the forge but survives from an earlier one, and the
+        // client keeps it until something closes it. The reachable sequence is
+        //   use forge with the artifact equipped -> SMSG_OPEN_ARTIFACT_FORGE -> interaction 38 active
+        //   -> unequip the artifact (the ARTIFACTS_ALL_WEAPONS_..._EQUIPPED_PASSIVE aura goes away)
+        //   -> use the forge again -> this branch -> the stale frame is torn down.
+        // The unconditional half of the consumer, byte_7FF785C6B3E8 = 0, runs either way.
         // UNVERIFIED: whether retail nevertheless puts bytes on the wire cannot be decided offline
         // (0 captured packets). Sent empty; a later capture can add fields without changing the effect.
         class ArtifactForgeError final : public ServerPacket

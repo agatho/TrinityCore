@@ -35,6 +35,10 @@ void WorldSession::HandleArtifactAddPower(WorldPackets::Artifact::ArtifactAddPow
         // instead of leaving it open on a forge that is gone or out of range. The message is safe to
         // send unconditionally: its consumer clears the interaction only if ArtifactForge (38) is the
         // active one (checkType byte, see ArtifactPackets.h).
+        // And it does land here rather than being a no-op. ForgeGUID reaches the client only through
+        // SMSG_OPEN_ARTIFACT_FORGE, so reaching this handler means that message was consumed - and its
+        // consumer sets interaction 38 itself, sub_7FF7832F9780 -> sub_7FF78323C490(mgr, guids, 0x26).
+        // The core never sets type 38 for the GameObject forge; the client does. See ArtifactPackets.h.
         SendPacket(WorldPackets::Artifact::CloseArtifactForge().Write());
         return;
     }
@@ -167,6 +171,7 @@ void WorldSession::HandleArtifactSetAppearance(WorldPackets::Artifact::ArtifactS
 {
     if (!_player->GetGameObjectIfCanInteractWith(artifactSetAppearance.ForgeGUID, GAMEOBJECT_TYPE_ITEM_FORGE))
     {
+        // Same case and same reasoning as in HandleArtifactAddPower above.
         SendPacket(WorldPackets::Artifact::CloseArtifactForge().Write());
         return;
     }

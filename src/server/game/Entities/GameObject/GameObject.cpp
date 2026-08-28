@@ -3418,6 +3418,12 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
                         // The forge could not be opened. SMSG_ARTIFACT_FORGE_ERROR shares its consumer
                         // with SMSG_CLOSE_ARTIFACT_FORGE and makes sure a stale artifact frame is not
                         // left open; it is a no-op if the frame is not the active interaction.
+                        // Stale is the case this branch is for: no SMSG_OPEN_ARTIFACT_FORGE goes out
+                        // below, so the interaction that gets cleared here is the one an *earlier*
+                        // use of the forge opened - the client sets type 38 from that message itself
+                        // (ArtifactPackets.h) and keeps it until something clears it. Losing the
+                        // artifact between two uses of the same forge is exactly how that state is
+                        // reached.
                         player->SendDirectMessage(WorldPackets::Artifact::ArtifactForgeError().Write());
                         return;
                     }
