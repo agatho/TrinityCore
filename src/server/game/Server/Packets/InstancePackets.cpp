@@ -354,8 +354,18 @@ WorldPacket const* InstanceEncounterEventCastUpdate::Write()
     return &_worldPacket;
 }
 
+void StartInstanceAbandonVote::Read()
+{
+    _worldPacket >> OptionalInit(PartyIndex);
+    if (PartyIndex)
+        _worldPacket >> *PartyIndex;
+}
+
 void InstanceAbandonVoteResponse::Read()
 {
+    _worldPacket >> OptionalInit(PartyIndex);
     _worldPacket >> Bits<1>(Accept);
+    if (PartyIndex)
+        _worldPacket >> *PartyIndex;
 }
 }

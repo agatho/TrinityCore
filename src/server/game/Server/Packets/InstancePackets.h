@@ -20,6 +20,7 @@
 
 #include "Packet.h"
 #include "ObjectGuid.h"
+#include "Optional.h"
 #include "PacketUtilities.h"
 #include <vector>
 
@@ -525,17 +526,25 @@ namespace WorldPackets
             bool IsBlockedByCondition = false;
         };
 
-        // Payload-less by construction: C_PartyInfo.StartInstanceAbandonVote() takes no arguments
-        // (PartyInfoDocumentation.lua:590) and is HasRestrictions, so no other form can be produced.
+        // C_PartyInfo.StartInstanceAbandonVote() takes no arguments (PartyInfoDocumentation.lua:590), but the
+        // PartyIndex is not a Lua argument - the client takes it from the party context, exactly as it does for the
+        // equally argument-less C_PartyInfo.DoReadyCheck(). Client serializer sub_7FF781675A80 (opcode immediate
+        // 4391008 = 0x430060) is instruction-for-instruction the same function as CMSG_DO_READY_CHECK's
+        // sub_7FF781675940: one presence bit, bit flush, then the uint8 only if the bit was set.
         class StartInstanceAbandonVote final : public ClientPacket
         {
         public:
             explicit StartInstanceAbandonVote(WorldPacket&& packet) : ClientPacket(CMSG_START_INSTANCE_ABANDON_VOTE, std::move(packet)) { }
 
-            void Read() override { }
+            void Read() override;
+
+            Optional<uint8> PartyIndex;
         };
 
-        // C_PartyInfo.SetInstanceAbandonVoteResponse(response) takes exactly one bool (PartyInfoDocumentation.lua:550).
+        // C_PartyInfo.SetInstanceAbandonVoteResponse(response) takes exactly one bool (PartyInfoDocumentation.lua:550);
+        // the PartyIndex again comes from the party context, not from Lua. Client serializer sub_7FF781675B00 (opcode
+        // immediate 4391009 = 0x430061) is the same function as CMSG_READY_CHECK_RESPONSE's sub_7FF7816759C0:
+        // presence bit, response bit, bit flush, then the uint8 only if the presence bit was set.
         class InstanceAbandonVoteResponse final : public ClientPacket
         {
         public:
@@ -543,6 +552,7 @@ namespace WorldPackets
 
             void Read() override;
 
+            Optional<uint8> PartyIndex;
             bool Accept = false;
         };
     }

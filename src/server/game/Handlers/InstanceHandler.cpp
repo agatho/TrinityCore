@@ -22,12 +22,14 @@
 #include "WorldSession.h"
 
 // C_PartyInfo.StartInstanceAbandonVote() - no arguments, HasRestrictions (PartyInfoDocumentation.lua:590).
+// The wire packet still carries the optional PartyIndex the client fills in from the party context, so the
+// group is resolved through it exactly as for CMSG_DO_READY_CHECK (GroupHandler.cpp HandleDoReadyCheckOpcode).
 // The UI greys the entry out and shows the reason as a tooltip, so this path is only reachable through a
 // macro, the /abandon slash command or a race. Both refusals therefore have to be answered with the game
 // error the client already has a text for, otherwise the failure is silent (DEFINITION_OF_DONE D3).
-void WorldSession::HandleStartInstanceAbandonVote(WorldPackets::Instance::StartInstanceAbandonVote& /*packet*/)
+void WorldSession::HandleStartInstanceAbandonVote(WorldPackets::Instance::StartInstanceAbandonVote& packet)
 {
-    Group* group = _player->GetGroup();
+    Group* group = _player->GetGroup(packet.PartyIndex);
     if (!group)
     {
         SendPacket(WorldPackets::Misc::DisplayGameError(GameError::ERR_VOTE_TO_ABANDON_NOT_YET).Write());
@@ -44,12 +46,13 @@ void WorldSession::HandleStartInstanceAbandonVote(WorldPackets::Instance::StartI
     group->StartInstanceAbandonVote(_player->GetGUID());
 }
 
-// C_PartyInfo.SetInstanceAbandonVoteResponse(response) - one bool (PartyInfoDocumentation.lua:550).
+// C_PartyInfo.SetInstanceAbandonVoteResponse(response) - one bool (PartyInfoDocumentation.lua:550), plus the
+// optional PartyIndex from the party context, as in HandleReadyCheckResponseOpcode.
 // The client answers optimistically (InstanceAbandon.lua:179-190) and never repeats a vote, so there is no
 // error text for a rejected response; a double vote, a stale vote or a non member is simply dropped.
 void WorldSession::HandleInstanceAbandonVoteResponse(WorldPackets::Instance::InstanceAbandonVoteResponse& packet)
 {
-    Group* group = _player->GetGroup();
+    Group* group = _player->GetGroup(packet.PartyIndex);
     if (!group || !group->IsInstanceAbandonVoteInProgress())
         return;
 
