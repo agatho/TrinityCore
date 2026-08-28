@@ -123,7 +123,9 @@ void WorldSession::SendPerksProgramDisabled(bool disabled)
 }
 
 // Sends SMSG_PERKS_PROGRAM_VENDOR_UPDATE -- but only when the listing this session was last given has actually
-// been rebuilt since (a Trading Post rotation rollover, or an operator Reload()). The message is a full REPLACE,
+// been rebuilt since -- which in this tree means one thing only: the Trading Post rotation rollover in
+// PerksProgramMgr::EnsureCurrent. (PerksProgramMgr::Reload would rebuild too, but it has no caller anywhere in
+// src/, so it is not a live trigger.) The message is a full REPLACE,
 // not an update: it enters the client's merge routine (client RVA 0x253DC00) with flag 0, which clears the
 // vendor map before refilling it.
 //

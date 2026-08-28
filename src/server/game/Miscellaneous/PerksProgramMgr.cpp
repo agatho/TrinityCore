@@ -126,9 +126,11 @@ void PerksProgramMgr::BuildVendorList()
 //
 // With the DB2 data alone the rebuilt set is usually identical -- BuildVendorList derives "current" from the
 // highest PerksMonth present in the tables, which does not advance by itself. That is a property of the data,
-// not of this check: whatever supplies a live rotation later (a calendar table, a rotation script calling
-// Reload()) passes through here, and everything downstream already reacts correctly. Reload() clears _loaded,
-// which lands in the same rebuild and bumps the same generation, so an operator reload reaches open windows too.
+// not of this check: whatever supplies a live rotation later (a calendar table, or a caller for the so far
+// unreachable Reload()) passes through here, and everything downstream already reacts correctly. Today there is
+// no such supplier -- this period check is the single runtime path into BuildVendorList, so with the current data
+// SMSG_PERKS_PROGRAM_VENDOR_UPDATE goes out at most once per calendar month, to sessions that cross the period
+// boundary with the window open, and it then carries the same offering it already carried.
 //
 // Thread and pointer lifetime: a rebuild clears _vendorItems and _catalogue, so it must never run while another
 // thread walks them. Everything that can reach a rebuild is a packet handler -- the Perks handlers themselves and

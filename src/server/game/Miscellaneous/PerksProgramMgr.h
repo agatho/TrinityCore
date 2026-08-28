@@ -50,10 +50,13 @@ public:
 
     // Counts how often the listing has been (re)built. A session stamps the listing it last handed a client
     // with this value; when it moves on, that client's copy is stale and has to be replaced with
-    // SMSG_PERKS_PROGRAM_VENDOR_UPDATE. A rotation rollover and an explicit Reload() both bump it, and those are
-    // the only runtime moments the offering changes -- so they are the only moments that message is due.
+    // SMSG_PERKS_PROGRAM_VENDOR_UPDATE. The rotation rollover in EnsureCurrent is the ONLY thing that bumps it
+    // at runtime in this tree -- so it is the only moment that message is due.
     uint32 GetListingGeneration();
 
+    // Inherited from the base implementation and currently unreachable: grep over src/ finds no caller for
+    // Reload() (nor for sPerksProgramMgr->Reload) anywhere. It would land in the same rebuild as the rollover
+    // and bump the same generation, but until something calls it, it is not a trigger -- do not cite it as one.
     void Reload() { _loaded = false; }
 
 private:
