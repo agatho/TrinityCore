@@ -69,6 +69,21 @@ static InstanceMap* GetGroupInstanceMap(Player const* player, Group const* group
     return instanceMap;
 }
 
+// The instance the player currently stands in, whoever it belongs to. Deliberately not GetGroupInstanceMap:
+// the number the client shows is how many party members stand in this very copy, and ownership is a separate
+// bookkeeping. A copy created without a group has no owner at all (MapManager.cpp:110 calls TrySetOwningGroup
+// only when a group asked for the map), and Group::Create claims it for the leader's map alone (Group.cpp:233)
+// - so a member can well be standing in an instance his group does not own. Asking for the owner there would
+// send him nothing, and nothing leaves the client on the number of the instance he was in before.
+static InstanceMap* GetPlayerInstanceMap(Player const* player)
+{
+    if (!player)
+        return nullptr;
+
+    Map* map = player->FindMap();
+    return map ? map->ToInstanceMap() : nullptr;
+}
+
 Seconds Group::CountdownInfo::GetTimeLeft() const
 {
     return Seconds(std::max<time_t>(_endTime - GameTime::GetGameTime(), 0));
@@ -1847,7 +1862,7 @@ void Group::SendInstanceGroupSizeChanged(ObjectGuid excludedMember /*= ObjectGui
     for (MemberSlot const& member : m_memberSlots)
         if (member.guid != excludedMember)
             if (Player* player = ObjectAccessor::FindConnectedPlayer(member.guid))
-                if (InstanceMap const* instanceMap = GetGroupInstanceMap(player, this))
+                if (InstanceMap const* instanceMap = GetPlayerInstanceMap(player))
                     ++playersPerInstance[instanceMap];
 
     if (playersPerInstance.empty())
@@ -1862,7 +1877,7 @@ void Group::SendInstanceGroupSizeChanged(ObjectGuid excludedMember /*= ObjectGui
         if (!player)
             continue;
 
-        InstanceMap const* instanceMap = GetGroupInstanceMap(player, this);
+        InstanceMap const* instanceMap = GetPlayerInstanceMap(player);
         if (!instanceMap)
             continue;
 

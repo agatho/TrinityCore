@@ -3022,11 +3022,25 @@ bool InstanceMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
         if (differentInstanceFromParty)
             player->SendDirectMessage(WorldPackets::Instance::DifferentInstanceFromParty().Write());
 
+        // Reaches the arriving player himself as well - he is one of the member slots, and Map::AddPlayerToMap
+        // above has already set his m_currMap, so he is counted for this instance.
         group->SendInstanceGroupSizeChanged();
 
         // InstanceAbandon.lua:146-148 re-checks the dialog on PLAYER_ENTERING_WORLD but cannot restore the
         // state on its own - a vote that is still running has to be replayed to the arriving player.
         group->SendInstanceAbandonVoteStateTo(player);
+    }
+    else
+    {
+        // Without a group there is no broadcast, and the client cannot fill the number in himself: it lives in
+        // a global (0x6808EE8) with exactly one writer - this opcode's consumer 0x2098A20 - and four readers,
+        // none of which resets it (AGENT_BRIEF 7.6). GetInstanceInfo() hands the cached value out as
+        // instanceGroupSize, and InstanceDifficulty.lua:139-150 prints it for every instanceType ~= "none",
+        // blanking only on 0. So a player who enters alone after a group run would keep reading 5.
+        // Alone in the instance he is exactly one.
+        WorldPackets::Instance::InstanceGroupSizeChanged groupSizeChanged;
+        groupSizeChanged.GroupSize = 1;
+        player->SendDirectMessage(groupSizeChanged.Write());
     }
 
     return true;
@@ -3081,10 +3095,18 @@ void InstanceMap::RemovePlayerFromMap(Player* player, bool remove)
     {
         // Leaving the instance while a vote is running aborts it - SMSG_INSTANCE_ABANDON_VOTE_PLAYER_LEFT,
         // which is deliberately not the same as a failed SMSG_INSTANCE_ABANDON_VOTE_COMPLETED.
+        // This one does belong to the owning group: the vote is held over its instance.
         group->CancelInstanceAbandonVoteForLeaver(leaverGuid);
+    }
+
+    // The size, unlike the vote, is not tied to ownership - it is what the remaining party members see on
+    // screen, and they see it in every copy they stand in. Gating this on wasOwningGroup would leave a group
+    // that does not own its instance on the departed member's count, with no later sender to correct it.
+    if (group)
+    {
         // The leaver has to be excluded by hand: Map::RemovePlayerFromMap does not clear m_currMap - only
         // WorldObject::ResetMap does, and on the teleport path (remove == false) that happens ticks later at
-        // the client ack in MovementHandler. Without the exclusion GetGroupInstanceMap still reports him as
+        // the client ack in MovementHandler. Without the exclusion GetPlayerInstanceMap still reports him as
         // standing in this instance, every remaining member would be told a size one too high, and he himself
         // would get a count for the instance he is leaving. No later sender corrects it on the normal way out.
         group->SendInstanceGroupSizeChanged(leaverGuid);
