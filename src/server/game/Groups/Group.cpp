@@ -595,6 +595,12 @@ bool Group::RemoveMember(ObjectGuid guid, RemoveMethod method /*= GROUP_REMOVEME
 
             if (method == GROUP_REMOVEMETHOD_KICK || method == GROUP_REMOVEMETHOD_KICK_LFG)
                 player->SendDirectMessage(WorldPackets::Party::GroupUninvite().Write());
+            else if (method == GROUP_REMOVEMETHOD_AUTO)
+                // Removed by the server itself, so there is no kicker to name. The message carries
+                // no payload; the client answers it with ERR_UNINVITE_YOU in the chat frame
+                // (consumer RVA 0x1E20110 at build 12.1.0.69382). It goes to the removed player
+                // only - sending it to the group would tell everybody they had been removed.
+                player->SendDirectMessage(WorldPackets::Party::GroupAutoKick().Write());
 
             _homebindIfInstance(player);
         }

@@ -95,6 +95,71 @@ namespace WorldPackets
             std::vector<uint32> LfgSlots;
         };
 
+        // Asks the group leader to confirm an invite that a third party set in motion; it does not
+        // confirm anything by itself. The client queues it (ring buffer of 4, class
+        // ClientConfirmPartyInvite, 832 bytes) and fires GROUP_INVITE_CONFIRMATION without payload;
+        // the UI then pulls the values back through GetInviteConfirmationInfo() and
+        // C_PartyInfo.GetInviteReferralInfo(). The answer arrives as
+        // CMSG_QUICK_JOIN_RESPOND_TO_INVITE - with the two guids swapped, see WorldSession.
+        //
+        // There is no confirmationType on the wire. The client derives it:
+        //   ShowChatLine set                -> 1 LE_INVITE_CONFIRMATION_REQUEST
+        //   else ReferredByGUID not empty   -> 2 LE_INVITE_CONFIRMATION_SUGGEST
+        //   else                            -> 3 LE_INVITE_CONFIRMATION_QUEUE_WARNING
+        // ShowChatLine additionally triggers the ERR_REQUESTED_INVITE_TO_GROUP_SS chat line; the two
+        // effects cannot be separated.
+        //
+        // Layout from reader RVA 0x605BF0 -> 0x605880 at build 12.1.0.69382, verified field by field
+        // against the decompiled body. Read order is authoritative and is reproduced exactly below.
+        class ConfirmPartyInvite final : public ServerPacket
+        {
+        public:
+            explicit ConfirmPartyInvite() : ServerPacket(SMSG_CONFIRM_PARTY_INVITE, 16 + 16 + 12 + 2 + 16 + 17 + 2 + 18 + 2 + 12) { }
+
+            WorldPacket const* Write() override;
+
+            // Fills the fields the invite confirmation tooltip needs. Leaving Level, SpecID or
+            // ItemLevel at 0 leaves the client tooltip stuck on RETRIEVING_DATA.
+            void InitializeApplicant(Player const* applicant);
+
+            // Must carry HighGuid::Party (or LMMParty) - the client validates the high type while
+            // copying the message and drops entries that carry anything else. Comes back as the
+            // second guid of CMSG_QUICK_JOIN_RESPOND_TO_INVITE.
+            ObjectGuid PartyGUID;
+            // Must carry HighGuid::Player - validated the same way, and additionally checked in the
+            // response path. This is the queue key the UI answers with, so it has to be unique per
+            // outstanding confirmation. Comes back as the first guid of the response.
+            ObjectGuid ApplicantGUID;
+
+            // Queues the applicant cannot be pulled out of; handed to Lua by
+            // C_PartyInfo.GetInviteConfirmationInvalidQueues. Empty is the normal case.
+            std::vector<uint32> InvalidLFG;         // LFGDungeons.ID
+            std::vector<uint32> InvalidLFGList;     // premade group finder listing ids
+            std::vector<uint64> InvalidPvP;         // battleground / arena queue ids
+
+            bool ShowChatLine = false;              // -> confirmationType 1 plus a chat line
+            bool Unused801 = false;                 // read by the client, never queried by the UI
+
+            ObjectGuid ReferredByGUID;              // set -> confirmationType 2
+            uint32 ReferralUnused776 = 0;
+            uint64 ReferredByClubID = 0;
+            uint8 ReferralRelation = 0;             // Enum.PartyRequestJoinRelation
+            uint32 ReferralUnused796 = 0;
+            std::string ReferredByName;             // clamped to 306 on write
+            uint64 ReferralUnused808 = 0;
+
+            uint8 Level = 0;
+            uint32 SpecID = 0;                      // ChrSpecialization.ID
+            uint32 ItemLevel = 0;
+            uint8 FactionGroupMask = 0;             // FactionGroup mask, not a row id
+            uint8 Unused830 = 0;
+
+            bool RolesInvalid = false;
+            bool WillConvertToRaid = false;
+            bool IsCrossFaction = false;
+            std::string Name;                       // client buffer is 306 bytes, clamped on write
+        };
+
         class PartyInviteResponse final : public ClientPacket
         {
         public:
@@ -508,6 +573,38 @@ namespace WorldPackets
             std::string Name;
         };
 
+        // Sent to every member of a group that holds a premade group finder listing when the
+        // leadership changes. The client (LFGListMgr consumer at 12.1.0.69382 RVA 0x24DEB10) fires
+        // LFG_GROUP_DELISTED_LEADERSHIP_CHANGE unconditionally and offers to drop the listing, and
+        // additionally LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE when NewLeaderGUID matches its own
+        // reference guid. Listing name and the 60 second delist grace are produced by the client,
+        // not carried on the wire.
+        class PartyNotifyLFGLeaderChange final : public ServerPacket
+        {
+        public:
+            explicit PartyNotifyLFGLeaderChange() : ServerPacket(SMSG_PARTY_NOTIFY_LFG_LEADER_CHANGE, 16) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid NewLeaderGUID;
+        };
+
+        // Sent to the group leader when a player without invite permission asks for somebody to be
+        // invited. Both strings are display text, not identifiers: the client (consumer at RVA
+        // 0x1E20770) shows ERR_INFORM_SUGGEST_INVITE_SS (two names) or ERR_INFORM_SUGGEST_INVITE_S
+        // (SuggesterName only) in the chat frame. An empty SuggesterName makes the client do nothing.
+        class SuggestInviteInform final : public ServerPacket
+        {
+        public:
+            explicit SuggestInviteInform() : ServerPacket(SMSG_SUGGEST_INVITE_INFORM, 3 + 12 + 12) { }
+
+            WorldPacket const* Write() override;
+
+            // client buffer is 306 bytes, both are clamped on write
+            std::string SuggesterName;
+            std::string TargetName;
+        };
+
         struct LeaverInfo
         {
             ObjectGuid BnetAccountGUID;
@@ -686,6 +783,18 @@ namespace WorldPackets
             WorldPacket const* Write() override { return &_worldPacket; }
         };
 
+        // Sent to the player the server removed from a group on its own initiative (no kicker).
+        // Carries no payload at all - the client consumer (RVA 0x1E20110) is two instructions and
+        // unconditionally shows ERR_UNINVITE_YOU ("you have been removed"). It therefore goes to the
+        // removed player only, never to the remaining group.
+        class GroupAutoKick final : public ServerPacket
+        {
+        public:
+            explicit GroupAutoKick() : ServerPacket(SMSG_GROUP_AUTO_KICK, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
         class BroadcastSummonCast final : public ServerPacket
         {
         public:
@@ -705,6 +814,39 @@ namespace WorldPackets
 
             ObjectGuid Target;
             bool Accepted = false;
+        };
+
+        // Values of SummonRaidMemberValidateEntry::Reason. Taken from the comparison chain of the
+        // client consumer at 12.1.0.69382 RVA 0x1E2E860, which turns each value into a GlobalStrings
+        // lookup and one chat line per player. There is no Lua enum for this - the names below are
+        // the GlobalStrings keys themselves.
+        enum class SummonRaidMemberValidateReason : uint8
+        {
+            None            = 0,    // consumer falls through - produces no output at all, never send this
+            RealmMismatch   = 1,    // RAID_SUMMON_FAILED_REALM_MISMATCH
+            RaidLocked      = 2,    // RAID_SUMMON_FAILED_RAID_LOCKED
+            MapCondition    = 3,    // RAID_SUMMON_FAILED_MAP_CONDITION
+            DeadOrGhost     = 4,    // RAID_SUMMON_FAILED_DEAD_OR_GHOST
+            Offline         = 5     // RAID_SUMMON_FAILED_OFFLINE
+        };
+
+        struct SummonRaidMemberValidateEntry
+        {
+            ObjectGuid PlayerGUID;
+            SummonRaidMemberValidateReason Reason = SummonRaidMemberValidateReason::None;
+        };
+
+        // Sent to the summoner listing, per target player, why that player is not being summoned.
+        // The client resolves every PlayerGUID through its name cache and prints one chat line each;
+        // a guid the receiver cannot resolve stays silent, and so does Reason::None.
+        class SummonRaidMemberValidateFailed final : public ServerPacket
+        {
+        public:
+            explicit SummonRaidMemberValidateFailed() : ServerPacket(SMSG_SUMMON_RAID_MEMBER_VALIDATE_FAILED, 4 + 17) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<SummonRaidMemberValidateEntry> Entries;
         };
 
         class SetRestrictPingsToAssistants final : public ClientPacket

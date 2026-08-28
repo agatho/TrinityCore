@@ -18,9 +18,11 @@
 #include "WorldSession.h"
 #include "Common.h"
 #include "DatabaseEnv.h"
+#include "GameTime.h"
 #include "Group.h"
 #include "GroupMgr.h"
 #include "LFG.h"
+#include "LFGMgr.h"
 #include "Log.h"
 #include "Loot.h"
 #include "MiscPackets.h"
@@ -29,6 +31,7 @@
 #include "Player.h"
 #include "SocialMgr.h"
 #include "World.h"
+#include <algorithm>
 
 class Aura;
 
@@ -54,6 +57,183 @@ void WorldSession::SendPartyResult(PartyOperation operation, const std::string& 
     packet.ResultGUID = ObjectGuid::Empty;
 
     SendPacket(packet.Write());
+}
+
+// Maps how the leader knows the player who suggested the invite onto Enum.PartyRequestJoinRelation
+// (PartyConstantsDocumentation.lua:22-38). The client uses it to pick between the
+// INVITE_CONFIRMATION_REQUEST_FRIEND / _GUILD / _COMMUNITY wordings.
+static uint8 GetPartyRequestJoinRelation(Player const* leader, Player const* referredBy)
+{
+    if (leader->GetSocial()->HasFriend(referredBy->GetGUID()))
+        return 1;                           // Enum.PartyRequestJoinRelation.Friend
+
+    if (leader->GetGuildId() && leader->GetGuildId() == referredBy->GetGuildId())
+        return 2;                           // Enum.PartyRequestJoinRelation.Guild
+
+    return 0;                               // Enum.PartyRequestJoinRelation.None
+}
+
+// Forwards a suggested invite from a member without invite rights to the group leader.
+//
+// Two different messages carry this, split by whether the leader can still act on the suggestion:
+//   * group has room -> SMSG_CONFIRM_PARTY_INVITE with ReferredByGUID set, which the client turns
+//     into confirmationType 2 (LE_INVITE_CONFIRMATION_SUGGEST) and shows as an Accept/Decline
+//     dialog built from INVITE_CONFIRMATION_SUGGEST (LFGUtil.lua:270). Answering it sends
+//     CMSG_QUICK_JOIN_RESPOND_TO_INVITE back.
+//   * group is full  -> SMSG_SUGGEST_INVITE_INFORM, a plain chat line
+//     (ERR_INFORM_SUGGEST_INVITE_SS, consumer RVA 0x1E20770). There is nothing to confirm, so the
+//     leader is only informed.
+// UNVERIFIED: the split itself. Both messages exist and both are addressed to the leader, but no
+// recording shows which one retail picks for which case, and the client cannot be asked - it simply
+// renders whichever arrives. See AGENT_BRIEF_W4_GRUPPE_PARTY.md O-A.
+void WorldSession::SendSuggestedInvite(Group* group, Player* suggester, Player* target)
+{
+    Player* leader = ObjectAccessor::FindConnectedPlayer(group->GetLeaderGUID());
+    if (!leader)
+        return;
+
+    if (group->IsFull())
+    {
+        WorldPackets::Party::SuggestInviteInform suggestInviteInform;
+        // UNVERIFIED: name order. ERR_INFORM_SUGGEST_INVITE_SS takes two %s and the client passes
+        // both through unchanged, so the binary cannot decide it. (suggester, target) follows the
+        // argument order of INVITE_CONFIRMATION_SUGGEST in LFGUtil.lua:270 and the reading of the
+        // neighbouring GameError codes 81..85 as one direction.
+        suggestInviteInform.SuggesterName = suggester->GetName();
+        suggestInviteInform.TargetName = target->GetName();
+        leader->SendDirectMessage(suggestInviteInform.Write());
+        return;
+    }
+
+    SendInviteConfirmation(leader, group, target, suggester);
+}
+
+// Asks a group leader to confirm inviting target. referredBy set produces confirmationType 2
+// (SUGGEST), leaving it empty produces 3 (QUEUE_WARNING); type 1 (REQUEST) additionally needs
+// ShowChatLine and belongs to the quick join flow.
+void WorldSession::SendInviteConfirmation(Player* leader, Group* group, Player* target, Player* referredBy)
+{
+    WorldPackets::Party::ConfirmPartyInvite confirmPartyInvite;
+    confirmPartyInvite.PartyGUID = group->GetGUID();
+    confirmPartyInvite.InitializeApplicant(target);
+
+    confirmPartyInvite.IsCrossFaction = leader->GetTeam() != target->GetTeam();
+    // A sixth member turns a party into a raid; the client shows LFG_LIST_CONVERT_TO_RAID_WARNING.
+    confirmPartyInvite.WillConvertToRaid = !group->isRaidGroup() && group->GetMembersCount() >= MAX_GROUP_SIZE;
+
+    // Queues the applicant is stuck in. The client hands these to Lua through
+    // C_PartyInfo.GetInviteConfirmationInvalidQueues and formats the queue warning from them.
+    if (sLFGMgr->GetState(target->GetGUID()) == lfg::LFG_STATE_QUEUED)
+        for (uint32 dungeonId : sLFGMgr->GetSelectedDungeons(target->GetGUID()))
+            confirmPartyInvite.InvalidLFG.push_back(dungeonId);
+
+    // UNVERIFIED: InvalidLFGList stays empty because the premade group finder (C_LFGList) does not
+    // exist in this tree; InvalidPvP stays empty because the wire ids the client expects for the
+    // battleground queues are not decoded. Both may legitimately be empty - that is the normal case.
+
+    if (referredBy)
+    {
+        confirmPartyInvite.ReferredByGUID = referredBy->GetGUID();
+        confirmPartyInvite.ReferredByName = referredBy->GetName();
+        confirmPartyInvite.ReferralRelation = GetPartyRequestJoinRelation(leader, referredBy);
+        // UNVERIFIED: ReferredByClubID and the three unnamed referral numbers (wire offsets +776,
+        // +796, +808) are sent as 0. C_PartyInfo.GetInviteReferralInfo reads them, but its
+        // evaluation is not readable in the memory image, so their meaning is unknown. Zero does not
+        // make the client discard the message; it only affects which of the seven
+        // INVITE_CONFIRMATION_REQUEST_* wordings is chosen.
+    }
+
+    WorldSession* leaderSession = leader->GetSession();
+    if (!leaderSession->AddPendingInviteConfirmation({
+            .ApplicantGUID = confirmPartyInvite.ApplicantGUID,
+            .PartyGUID = confirmPartyInvite.PartyGUID,
+            .ReferredByGUID = confirmPartyInvite.ReferredByGUID,
+            .ExpireTime = GameTime::Now() + PendingInviteConfirmationTimeout }))
+        return;     // leader already has four unanswered confirmations, the client would drop this one
+
+    leader->SendDirectMessage(confirmPartyInvite.Write());
+}
+
+bool WorldSession::AddPendingInviteConfirmation(PendingInviteConfirmation confirmation)
+{
+    TimePoint const now = GameTime::Now();
+    std::erase_if(_pendingInviteConfirmations, [&](PendingInviteConfirmation const& pending)
+    {
+        return pending.ExpireTime <= now || pending.ApplicantGUID == confirmation.ApplicantGUID;
+    });
+
+    if (_pendingInviteConfirmations.size() >= MaxPendingInviteConfirmations)
+        return false;
+
+    _pendingInviteConfirmations.push_back(confirmation);
+    return true;
+}
+
+Optional<WorldSession::PendingInviteConfirmation> WorldSession::TakePendingInviteConfirmation(ObjectGuid applicantGuid)
+{
+    TimePoint const now = GameTime::Now();
+    auto itr = std::ranges::find_if(_pendingInviteConfirmations, [&](PendingInviteConfirmation const& pending)
+    {
+        return pending.ApplicantGUID == applicantGuid && pending.ExpireTime > now;
+    });
+
+    if (itr == _pendingInviteConfirmations.end())
+        return {};
+
+    PendingInviteConfirmation confirmation = *itr;
+    _pendingInviteConfirmations.erase(itr);
+    return confirmation;
+}
+
+void WorldSession::HandleInviteConfirmationResponse(ObjectGuid applicantGuid, bool accept)
+{
+    Optional<PendingInviteConfirmation> confirmation = TakePendingInviteConfirmation(applicantGuid);
+    if (!confirmation)
+        return;                             // unknown, already answered or expired
+
+    Player* leader = GetPlayer();
+    if (!leader)
+        return;
+
+    Group* group = sGroupMgr->GetGroupByGUID(confirmation->PartyGUID);
+    if (!group || !group->IsLeader(leader->GetGUID()))
+        return;
+
+    Player* target = ObjectAccessor::FindConnectedPlayer(applicantGuid);
+    if (!target)
+    {
+        SendPartyResult(PARTY_OP_INVITE, "", ERR_BAD_PLAYER_NAME_S);
+        return;
+    }
+
+    if (!accept)
+    {
+        // Tell whoever suggested the invite that the leader turned it down.
+        if (Player* referredBy = ObjectAccessor::FindConnectedPlayer(confirmation->ReferredByGUID))
+            referredBy->GetSession()->SendPartyResult(PARTY_OP_INVITE, target->GetName(), ERR_INVITE_RESTRICTED);
+        return;
+    }
+
+    if (group->IsFull())
+    {
+        SendPartyResult(PARTY_OP_INVITE, "", ERR_GROUP_FULL);
+        return;
+    }
+
+    if (target->GetGroup() || target->GetGroupInvite())
+    {
+        SendPartyResult(PARTY_OP_INVITE, target->GetName(), ERR_ALREADY_IN_GROUP_S);
+        return;
+    }
+
+    if (!group->AddInvite(target))
+        return;
+
+    WorldPackets::Party::PartyInvite partyInvite;
+    partyInvite.Initialize(leader, 0, true);
+    target->SendDirectMessage(partyInvite.Write());
+
+    SendPartyResult(PARTY_OP_INVITE, target->GetName(), ERR_PARTY_RESULT_OK);
 }
 
 void WorldSession::HandlePartyInviteOpcode(WorldPackets::Party::PartyInviteClient& packet)
@@ -139,7 +319,15 @@ void WorldSession::HandlePartyInviteOpcode(WorldPackets::Party::PartyInviteClien
         if (!group->IsLeader(invitingPlayer->GetGUID()) && !group->IsAssistant(invitingPlayer->GetGUID()))
         {
             if (group->IsCreated())
+            {
                 SendPartyResult(PARTY_OP_INVITE, "", ERR_NOT_LEADER);
+
+                // This is the "Suggest Invite" path: the client of a member who may not invite still
+                // sends CMSG_PARTY_INVITE (Blizzard_UnitPopup/Mainline/UnitPopupUtils.lua:94-106,
+                // GetDisplayedInviteType in Blizzard_LFGUtil/Mainline/LFGUtil.lua:88-111). Retail
+                // forwards the suggestion to the leader; before this it was dropped on the floor.
+                SendSuggestedInvite(group, invitingPlayer, invitedPlayer);
+            }
             return;
         }
         // not have place

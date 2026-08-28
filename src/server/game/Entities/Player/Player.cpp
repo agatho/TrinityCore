@@ -26017,18 +26017,67 @@ bool Player::HasSummonPending() const
     return m_summon_expire >= GameTime::GetGameTime();
 }
 
+Optional<WorldPackets::Party::SummonRaidMemberValidateReason> Player::ValidateSummonRequestFrom(Unit* summoner) const
+{
+    using Reason = WorldPackets::Party::SummonRaidMemberValidateReason;
+
+    // Dead or in ghost form. Retail refuses the summon here and names the reason; TrinityCore used
+    // to summon the corpse walker silently.
+    if (!IsAlive())
+        return Reason::DeadOrGhost;
+
+    if (Player const* playerSummoner = summoner->ToPlayer())
+        if (*playerSummoner->m_playerData->VirtualPlayerRealm != *m_playerData->VirtualPlayerRealm)
+            return Reason::RealmMismatch;
+
+    // Everything the destination map itself refuses. The two lock reasons get their own client
+    // string, the remainder collapses into the generic map condition.
+    if (TransferAbortParams denyReason = Map::PlayerCannotEnter(summoner->GetMapId(), const_cast<Player*>(this)))
+    {
+        switch (denyReason.Reason)
+        {
+            case TRANSFER_ABORT_LOCKED_TO_DIFFERENT_INSTANCE:
+            case TRANSFER_ABORT_ALREADY_COMPLETED_ENCOUNTER:
+                return Reason::RaidLocked;
+            default:
+                return Reason::MapCondition;
+        }
+    }
+
+    return {};
+}
+
 void Player::SendSummonRequestFrom(Unit* summoner)
 {
     if (!summoner)
         return;
 
-    // Player already has active summon request
+    // Player already has active summon request.
+    // UNVERIFIED: the client enum (RVA 0x1E2E860) has no value for "already pending", so retail
+    // presumably stays silent here as well. Kept silent rather than inventing a reason code.
     if (HasSummonPending())
         return;
 
     // Evil Twin (ignore player summon, but hide this for summoner)
+    // UNVERIFIED: no client reason code matches this either, and the existing comment says the
+    // refusal is deliberately hidden from the summoner, so nothing is reported.
     if (HasAura(23445))
         return;
+
+    // Tell the summoner, per target player, why this one is not coming along. The client resolves
+    // each guid through its name cache and prints one chat line per entry; a reason of 0 and a guid
+    // the receiver cannot resolve both stay silent, so neither is ever sent.
+    // Reason enum from the consumer comparison chain at RVA 0x1E2E860, build 12.1.0.69382.
+    if (Optional<WorldPackets::Party::SummonRaidMemberValidateReason> failure = ValidateSummonRequestFrom(summoner))
+    {
+        if (Player* playerSummoner = summoner->ToPlayer())
+        {
+            WorldPackets::Party::SummonRaidMemberValidateFailed validateFailed;
+            validateFailed.Entries.push_back({ .PlayerGUID = GetGUID(), .Reason = *failure });
+            playerSummoner->SendDirectMessage(validateFailed.Write());
+        }
+        return;
+    }
 
     m_summon_expire = GameTime::GetGameTime() + MAX_PLAYER_SUMMON_DELAY;
     m_summon_location.Location.WorldRelocate(*summoner);

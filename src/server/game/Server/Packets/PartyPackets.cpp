@@ -99,6 +99,86 @@ void PartyInvite::Initialize(Player const* inviter, int32 proposedRoles, bool ca
         InviterRealm = Auth::VirtualRealmInfo(realm->Id.GetAddress(), true, false, realm->Name, realm->NormalizedName);
 }
 
+namespace
+{
+// The client name buffer behind SMSG_CONFIRM_PARTY_INVITE.Name is 306 bytes and the reader
+// terminates it itself with buf[len] = 0, so 305 characters is the largest value that still fits.
+// C_PartyInfo.ConfirmInviteUnit independently rejects anything from 0x132 = 306 upwards. The 9 bit
+// length field would carry up to 511, so the server has to clamp rather than let the client
+// overrun its buffer.
+constexpr std::size_t ConfirmPartyInviteMaxNameLength = 305;
+
+std::string_view ClampConfirmName(std::string const& name)
+{
+    return std::string_view(name).substr(0, ConfirmPartyInviteMaxNameLength);
+}
+}
+
+void ConfirmPartyInvite::InitializeApplicant(Player const* applicant)
+{
+    ApplicantGUID = applicant->GetGUID();
+    Name = applicant->GetName();
+    Level = applicant->GetLevel();
+    SpecID = uint32(applicant->GetPrimarySpecialization());
+    ItemLevel = uint32(applicant->GetAverageItemLevel());
+    FactionGroupMask = Player::GetFactionGroupForRace(applicant->GetRace());
+}
+
+WorldPacket const* ConfirmPartyInvite::Write()
+{
+    std::string_view const referredByName = ClampConfirmName(ReferredByName);
+    std::string_view const name = ClampConfirmName(Name);
+
+    _worldPacket << PartyGUID;
+    _worldPacket << ApplicantGUID;
+
+    _worldPacket << Size<uint32>(InvalidLFG);
+    _worldPacket << Size<uint32>(InvalidLFGList);
+    _worldPacket << Size<uint32>(InvalidPvP);
+
+    for (uint32 lfgDungeonId : InvalidLFG)
+        _worldPacket << uint32(lfgDungeonId);
+
+    for (uint32 lfgListId : InvalidLFGList)
+        _worldPacket << uint32(lfgListId);
+
+    for (uint64 pvpQueueId : InvalidPvP)
+        _worldPacket << uint64(pvpQueueId);
+
+    // bit section 1: 9 bit length, two flags, 5 pad bits - two bytes
+    _worldPacket << SizedString::BitsSize<9>(referredByName);
+    _worldPacket << Bits<1>(ShowChatLine);
+    _worldPacket << Bits<1>(Unused801);
+    _worldPacket.FlushBits();
+
+    _worldPacket << ReferredByGUID;
+    _worldPacket << uint32(ReferralUnused776);
+    _worldPacket << uint64(ReferredByClubID);
+    _worldPacket << uint8(ReferralRelation);
+    _worldPacket << uint32(ReferralUnused796);
+
+    _worldPacket << SizedString::Data(referredByName);
+
+    _worldPacket << uint64(ReferralUnused808);
+    _worldPacket << uint8(Level);
+    _worldPacket << uint32(SpecID);
+    _worldPacket << uint32(ItemLevel);
+    _worldPacket << uint8(FactionGroupMask);
+    _worldPacket << uint8(Unused830);
+
+    // bit section 2: 9 bit length, three flags, 4 pad bits - two bytes
+    _worldPacket << SizedString::BitsSize<9>(name);
+    _worldPacket << Bits<1>(RolesInvalid);
+    _worldPacket << Bits<1>(WillConvertToRaid);
+    _worldPacket << Bits<1>(IsCrossFaction);
+    // explicit, because an empty Name must still produce the two byte section
+    _worldPacket.FlushBits();
+
+    _worldPacket << SizedString::Data(name);
+
+    return &_worldPacket;
+}
+
 void PartyInviteResponse::Read()
 {
     _worldPacket >> OptionalInit(PartyIndex);
@@ -459,6 +539,46 @@ WorldPacket const* GroupNewLeader::Write()
     _worldPacket << SizedString::BitsSize<9>(Name);
 
     _worldPacket << SizedString::Data(Name);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* PartyNotifyLFGLeaderChange::Write()
+{
+    _worldPacket << NewLeaderGUID;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* SuggestInviteInform::Write()
+{
+    // Both length fields are 9 bits and share one 3 byte bit section; the client reads them as
+    // (B0 << 1) | (B1 >> 7) and ((B1 << 2) & 0x1FE) | (B2 >> 6). Reader RVA 0x5FE970 at build
+    // 12.1.0.69382. The two target buffers are 306 and 310 bytes and the reader NUL terminates in
+    // place, so the last usable lengths are 305 and 309.
+    std::string_view const suggesterName = std::string_view(SuggesterName).substr(0, 305);
+    std::string_view const targetName = std::string_view(TargetName).substr(0, 309);
+
+    _worldPacket << SizedString::BitsSize<9>(suggesterName);
+    _worldPacket << SizedString::BitsSize<9>(targetName);
+    // explicit, because two empty strings must still produce the 3 byte section
+    _worldPacket.FlushBits();
+
+    _worldPacket << SizedString::Data(suggesterName);
+    _worldPacket << SizedString::Data(targetName);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* SummonRaidMemberValidateFailed::Write()
+{
+    _worldPacket << Size<uint32>(Entries);
+
+    for (SummonRaidMemberValidateEntry const& entry : Entries)
+    {
+        _worldPacket << entry.PlayerGUID;
+        _worldPacket << uint8(entry.Reason);
+    }
 
     return &_worldPacket;
 }

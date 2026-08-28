@@ -41,6 +41,7 @@
 class BlackMarketEntry;
 class CollectionMgr;
 class Creature;
+class Group;
 class InstanceLock;
 class Item;
 class LoginQueryHolder;
@@ -999,6 +1000,35 @@ class TC_GAME_API WorldSession
         void SendPetNameInvalid(uint32 error, std::string const& name, Optional<DeclinedName> const& declinedName);
         void SendPartyResult(PartyOperation operation, std::string const& member, PartyResult res, uint32 val = 0);
         void SendQueryTimeResponse();
+
+        // Invite confirmations that this session's player, as group leader, has been asked about
+        // with SMSG_CONFIRM_PARTY_INVITE and has not answered yet. Pure session state - the guids
+        // are tickets and must not survive a relog, so nothing of this is persisted.
+        // The client keeps at most four outstanding confirmations (ring buffer, allocator RVA
+        // 0x2198990 at build 12.1.0.69382) and silently drops anything beyond that, so the server
+        // refuses to send a fifth instead of losing it.
+        static constexpr std::size_t MaxPendingInviteConfirmations = 4;
+        static constexpr Seconds PendingInviteConfirmationTimeout = Seconds(120);
+
+        struct PendingInviteConfirmation
+        {
+            ObjectGuid ApplicantGUID;       // queue key, HighGuid::Player
+            ObjectGuid PartyGUID;
+            ObjectGuid ReferredByGUID;
+            TimePoint ExpireTime;
+        };
+
+        void SendSuggestedInvite(Group* group, Player* suggester, Player* target);
+        void SendInviteConfirmation(Player* leader, Group* group, Player* target, Player* referredBy);
+        bool AddPendingInviteConfirmation(PendingInviteConfirmation confirmation);
+        Optional<PendingInviteConfirmation> TakePendingInviteConfirmation(ObjectGuid applicantGuid);
+        // Answer to SMSG_CONFIRM_PARTY_INVITE. The caller is the handler of
+        // CMSG_QUICK_JOIN_RESPOND_TO_INVITE (opcode 0x430130), which lives with the CMSG family
+        // 0x43 and is therefore not registered on this branch - the round trip closes on
+        // integration. Note that the client swaps the two guids on the way back: the first guid of
+        // the response is SMSG_CONFIRM_PARTY_INVITE.ApplicantGUID, the second is its PartyGUID
+        // (writer RVA 0x6AF830, response builder RVA 0x21981D0).
+        void HandleInviteConfirmationResponse(ObjectGuid applicantGuid, bool accept);
 
         void SendAuthResponse(uint32 code, bool queued, uint32 queuePos = 0);
         void SendClientCacheVersion(uint32 version);
@@ -2051,6 +2081,8 @@ class TC_GAME_API WorldSession
 
         // Packets cooldown
         time_t _calendarEventCreationCooldown;
+
+        std::vector<PendingInviteConfirmation> _pendingInviteConfirmations;
 
         std::unique_ptr<BattlePets::BattlePetMgr> _battlePetMgr;
 

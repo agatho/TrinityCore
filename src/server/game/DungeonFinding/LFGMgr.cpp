@@ -991,7 +991,10 @@ void LFGMgr::MakeNewGroup(LfgProposal const& proposal)
 
         Group* group = player->GetGroup();
         if (group && group != grp)
-            group->RemoveMember(player->GetGUID());
+            // The player did not ask for this and nobody kicked them - the proposal moved them into
+            // the dungeon group. GROUP_REMOVEMETHOD_AUTO makes Group::RemoveMember tell them with
+            // SMSG_GROUP_AUTO_KICK; before this the removal was completely silent on their client.
+            group->RemoveMember(player->GetGUID(), GROUP_REMOVEMETHOD_AUTO);
 
         if (!grp)
         {

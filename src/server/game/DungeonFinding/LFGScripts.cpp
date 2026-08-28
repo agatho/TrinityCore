@@ -26,6 +26,7 @@
 #include "Log.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
+#include "PartyPackets.h"
 #include "Player.h"
 #include "QueryPackets.h"
 #include "ScriptMgr.h"
@@ -226,6 +227,25 @@ void LFGGroupScript::OnChangeLeader(Group* group, ObjectGuid newLeaderGuid, Obje
         gguid.ToString(), newLeaderGuid.ToString(), oldLeaderGuid.ToString());
 
     sLFGMgr->SetLeader(gguid, newLeaderGuid);
+
+    // A group listing does not survive its leader changing hands. The client (consumer RVA
+    // 0x24DEB10 at build 12.1.0.69382) fires LFG_GROUP_DELISTED_LEADERSHIP_CHANGE, shows
+    // PREMADE_GROUP_LEADER_CHANGE_DELIST_WARNING and drops the listing unless the new leader
+    // actively keeps it; listing name and the 60 second grace are produced by the client itself.
+    // The message therefore has to reach every member, not only the new leader - otherwise a single
+    // client delists while the rest keep showing the entry.
+    //
+    // UNVERIFIED: the precondition. Retail keys this on an active premade group finder listing
+    // (C_LFGList), which does not exist in this tree, so the closest state we can actually observe
+    // is used instead: the group is queued or browsing. Sending it for a group that holds no
+    // listing at all would pop the delist warning for nothing.
+    LfgState state = sLFGMgr->GetState(gguid);
+    if (state == LFG_STATE_QUEUED || state == LFG_STATE_RAIDBROWSER)
+    {
+        WorldPackets::Party::PartyNotifyLFGLeaderChange notifyLeaderChange;
+        notifyLeaderChange.NewLeaderGUID = newLeaderGuid;
+        group->BroadcastPacket(notifyLeaderChange.Write(), false);
+    }
 }
 
 void LFGGroupScript::OnInviteMember(Group* group, ObjectGuid guid)
