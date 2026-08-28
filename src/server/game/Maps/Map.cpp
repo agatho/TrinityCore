@@ -3019,6 +3019,7 @@ void InstanceMap::Update(uint32 t_diff)
     {
         i_data->Update(t_diff);
         i_data->UpdateCombatResurrection(t_diff);
+        i_data->UpdateEncounterTimeline(t_diff);
     }
 
     if (i_scenario)

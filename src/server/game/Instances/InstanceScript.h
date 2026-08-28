@@ -317,12 +317,16 @@ class TC_GAME_API InstanceScript : public ZoneScript
         // resolve, and it keys its own lookups on the server assigned EventInstanceID (never 0).
         void StartEncounterTimeline(uint32 dungeonEncounterId, ObjectGuid casterGuid);
         void StartEncounterTimelineForBoss(uint32 bossId, ObjectGuid casterGuid);
-        void AppendEncounterTimelineEvents(std::span<EncounterTimelineTemplate const> events, ObjectGuid casterGuid);
+        void AppendEncounterTimelineEvents(std::span<EncounterTimelineTemplate const> events, ObjectGuid casterGuid, uint32 dungeonEncounterId);
         void RespawnEncounterTimeline(uint32 dungeonEncounterId, ObjectGuid casterGuid);
-        void ClearEncounterTimeline();
+        void ClearEncounterTimeline(uint32 dungeonEncounterId);
         void SetEncounterTimelineEventBlocked(uint32 encounterEventId, ObjectGuid casterGuid, bool blocked);
         void SetEncounterTimelineEventPaused(uint32 encounterEventId, ObjectGuid casterGuid, bool paused);
         void SendEncounterTimelineTo(Player* player) const;
+        // Derives the blocked and paused flag of every queued event from its caster. Called from
+        // InstanceMap::Update, not from InstanceScript::Update - a script override must not be able to
+        // silence the timeline by not calling its base.
+        void UpdateEncounterTimeline(uint32 diff);
 
         // ReCheck PhaseTemplate related conditions
         void UpdatePhasing();
@@ -390,13 +394,17 @@ class TC_GAME_API InstanceScript : public ZoneScript
         bool _combatResurrectionTimerStarted;
 
         // Encounter timeline
+        bool BuildEncounterTimelineEvent(EncounterTimelineEventState const& state, WorldPackets::Instance::EncounterTimelineEvent& timelineEvent, bool remainingDelay, bool dropElapsed) const;
         void BuildEncounterTimelineEvents(std::vector<WorldPackets::Instance::EncounterTimelineEvent>& events, bool remainingDelay, std::size_t fromIndex = 0) const;
-        void AddEncounterTimelineEvents(std::span<EncounterTimelineTemplate const> events, ObjectGuid casterGuid);
+        void AddEncounterTimelineEvents(std::span<EncounterTimelineTemplate const> events, ObjectGuid casterGuid, uint32 dungeonEncounterId);
         EncounterTimelineEventState* FindEncounterTimelineEvent(uint32 encounterEventId, ObjectGuid casterGuid);
+        void SendEncounterTimelineEventBlockedChanged(EncounterTimelineEventState const& state) const;
+        void SendEncounterTimelineEventCastUpdate(EncounterTimelineEventState const& state) const;
 
         std::vector<EncounterTimelineEventState> _encounterTimeline;
         uint32 _nextEncounterTimelineEventInstanceId;
         ObjectGuid _encounterTimelineGuid;
+        std::set<uint32> _armedEncounterTimelines;  // DungeonEncounterIDs armed at least once - the second arming is a respawn
 
     #ifdef TRINITY_API_USE_DYNAMIC_LINKING
         // Strong reference to the associated script module

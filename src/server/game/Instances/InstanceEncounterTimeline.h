@@ -42,6 +42,7 @@ struct EncounterTimelineEventState
 {
     uint32 EventInstanceID = 0;                      // server assigned, never 0 (ENCOUNTER_TIMELINE_INVALID_EVENT)
     uint32 EncounterEventID = 0;                     // EncounterEvent.ID
+    uint32 DungeonEncounterID = 0;                   // the encounter this entry was queued for - the unit of clearing
     ObjectGuid CasterGUID;
     Milliseconds Delay = Milliseconds::zero();
     Milliseconds Duration = Milliseconds::zero();

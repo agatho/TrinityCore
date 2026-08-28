@@ -1629,6 +1629,21 @@ bool Group::CanStartInstanceAbandonVote(Player const* starter, GameError* denyRe
         return false;
     }
 
+    // The vote exists only inside a mythic keystone run. Both client entry points are gated on
+    // ChallengeModeRestrictionsActive() - the menu entry (UnitPopupSharedButtonMixins.lua:970) and the
+    // /abandon command (SlashCommandsOverrides.lua:133) - and the flag behind it is the one SendUpdate
+    // fills from InstanceMap::IsMythicPlus(). The client gate is not a server check, though: a macro or a
+    // race reaches this handler anyway, and without this line a passed vote would teleport a whole raid or
+    // a normal dungeon group out of its instance, which retail never does.
+    // ERR_VOTE_TO_ABANDON_NOT_YET is the fallback of the two codes the client knows - outside a keystone
+    // run the UI never offers the entry, so retail has no text for this refusal at all.
+    if (!instanceMap->IsMythicPlus())
+    {
+        if (denyReason)
+            *denyReason = GameError::ERR_VOTE_TO_ABANDON_NOT_YET;
+        return false;
+    }
+
     // UnitPopupSharedButtonMixins.lua:1003-1005 returns exactly this error while an encounter is running
     if (InstanceScript const* instanceScript = instanceMap->GetInstanceScript())
     {

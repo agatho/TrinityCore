@@ -1045,6 +1045,13 @@ void WorldSession::UpdateInstanceEnterTimes()
 // the only comparable number this tree has.
 static constexpr Seconds INSTANCE_LEAVER_PENALTY_DURATION = Minutes(30);
 
+// UNVERIFIED: the client states the rule but not the number - a player is "considered a leaver for
+// repeatedly abandoning mythic+ groups" (InstanceLeaverInfoDocumentation.lua:11-19). No DB2, no CVar and no
+// lua constant carries the count, and the client never learns it either; it only asks
+// C_InstanceLeaver.IsPlayerLeaver(). Two is the smallest count the word "repeatedly" permits, so the first
+// abandon is counted and forgiven and every one after it carries the penalty.
+static constexpr uint32 INSTANCE_LEAVER_PENALTY_THRESHOLD = 2;
+
 void WorldSession::LoadChallengeModeHistory(PreparedQueryResult result)
 {
     if (!result)
@@ -1073,23 +1080,40 @@ bool WorldSession::IsInstanceLeaver() const
 
 void WorldSession::SetInstanceLeaver(bool apply)
 {
-    if (apply == IsInstanceLeaver())
-        return;
+    bool const wasLeaver = IsInstanceLeaver();
 
     if (apply)
     {
+        // Counted first and counted unconditionally - also while an earlier penalty is still running, because
+        // otherwise "repeatedly" could never be measured. The count is what the threshold is tested against;
+        // it is the only reason the column exists.
         ++_challengeModeTotalLeaves;
+
+        if (_challengeModeTotalLeaves < INSTANCE_LEAVER_PENALTY_THRESHOLD)
+        {
+            // Below the threshold nothing but the count changes - no penalty, and therefore no message.
+            SaveChallengeModeHistory();
+            return;
+        }
+
         _challengeModeLastLeaverPenalty = INSTANCE_LEAVER_PENALTY_DURATION;
         _challengeModeLeaverPenaltyExpiration = GameTime::GetSystemTime() + INSTANCE_LEAVER_PENALTY_DURATION;
     }
     else
     {
+        if (!wasLeaver)
+            return;
+
         _challengeModeLastLeaverPenalty = Seconds::zero();
         _challengeModeLeaverPenaltyExpiration = SystemTimePoint();
     }
 
     SaveChallengeModeHistory();
-    SendInstanceLeaverState();
+
+    // The two messages are edge triggered on the client - 0x24B6050 and 0x24B5FD0 set and clear one bool -
+    // so only a real transition is announced. Extending a running penalty is persisted but not resent.
+    if (IsInstanceLeaver() != wasLeaver)
+        SendInstanceLeaverState();
 }
 
 void WorldSession::SendInstanceLeaverState()

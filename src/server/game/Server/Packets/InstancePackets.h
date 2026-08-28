@@ -427,7 +427,10 @@ namespace WorldPackets
             uint32 Unused25 = 0;                    // UNVERIFIED: 0 in the whole capture corpus
             uint32 IconFileID = 0;                  // 0 is legal, the client then falls back to the spell icon
             ObjectGuid CasterGUID;
-            uint32 TimeQueuedMS = 0;
+            uint32 TimeQueuedMS = 0;                // UNVERIFIED: milliseconds, but no consumer was found that
+                                                    // reads it, so the epoch it counts from is a guess. Filled
+                                                    // from the server's monotonic clock (host start), truncated
+                                                    // to 32 bits and therefore wrapping after ~49.7 days
             uint32 Icons = 0;                       // Enum.EncounterEventIconmask
             WorldPackets::Duration<Milliseconds, uint32> Duration;  // qualified: the member name hides the template
             WorldPackets::Duration<Milliseconds, uint32> MaxQueueDuration; // measured as Delay + Duration in 64 of 64 captured events
