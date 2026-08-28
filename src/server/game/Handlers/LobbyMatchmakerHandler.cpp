@@ -40,6 +40,17 @@
 // "diese Einladung/Partei gibt es nicht" - richtig fuer einen Realm, der keine Lobbypartei fuehrt.
 // 4 ist ENTER_QUEUE_FAILED und gehoert zur Warteschlange, nicht zur Partei.
 //
+// Diese Begruendung ist eine ABLEITUNG, keine Messung, und die Grenze verlaeuft mitten durch den
+// Block. Am Konsumenten 0x22BEB0 belegt ist nur, WELCHE Werte der Kanal ueberhaupt kennt (0..6
+// sichtbar, 7..15 stumm verworfen). Fuer die drei Einladungsopcodes (PARTY_INVITE,
+// ACCEPT_PARTY_INVITE, PARTY_UNINVITE) deckt sich die Aussage von PARTY_INVITE_INVALID mit dem,
+// was der Spieler getan hat. Fuer REJECT_PARTY_INVITE, LEAVE_PARTY, SET_PARTY_PLAYLIST_ENTRY und
+// SET_PLAYER_READY tut sie das NICHT: der Spieler bekommt beim Umlegen des Bereitschaftsschalters
+// einen Text ueber eine ungueltige Einladung (ERR_WOW_LABS_PARTY_ERROR_TYPE_PARTY_INVITE_INVALID,
+// GameError 1183). DASS Retail auf diese vier ueberhaupt ueber den Fehlerkanal antwortet und mit
+// welchem der sechs Werte, ist weder mit RVA noch mit Lua-Datei noch mit Aufnahme belegt - die
+// vier Stellen tragen deshalb // UNVERIFIED:, und D5 steht fuer sie auf "teil".
+//
 // WAS DIESER BLOCK NICHT TUT: SMSG_LOBBY_MATCHMAKER_PARTY_INFO senden. Der vollstaendige
 // Parteizustand ist gelesen (Reader 0x60CDE0, Element 232 Byte), aber ein Server ohne Partei hat
 // nichts hineinzuschreiben, und ein leeres PARTY_INFO wuerde dem Client eine Partei melden, die
@@ -98,6 +109,9 @@ void WorldSession::HandleLobbyMatchmakerRejectPartyInvite(WorldPackets::LobbyMat
     TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_REJECT_PARTY_INVITE from {} target {} - no lobby matchmaker service",
         GetPlayerInfo(), lobbyMatchmakerRejectPartyInvite.TargetGUID.ToString());
 
+    // UNVERIFIED: dass Retail hier ueberhaupt ueber SMSG_WOW_LABS_PARTY_ERROR antwortet und
+    // mit welchem Wert - eine Ablehnung ist keine ungueltige Einladung. Abgeleitet, nicht am
+    // Konsumenten gemessen; belegt ist nur, dass 0..6 sichtbar und 7..15 stumm sind.
     SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
 }
 
@@ -115,6 +129,9 @@ void WorldSession::HandleLobbyMatchmakerLeaveParty(WorldPackets::LobbyMatchmaker
 {
     TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_LEAVE_PARTY from {} - no lobby matchmaker service", GetPlayerInfo());
 
+    // UNVERIFIED: dass Retail hier ueberhaupt ueber SMSG_WOW_LABS_PARTY_ERROR antwortet und
+    // mit welchem Wert - ein Verlassen ist keine ungueltige Einladung. Abgeleitet, nicht am
+    // Konsumenten gemessen; belegt ist nur, dass 0..6 sichtbar und 7..15 stumm sind.
     SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
 }
 
@@ -125,6 +142,9 @@ void WorldSession::HandleLobbyMatchmakerSetPartyPlaylistEntry(WorldPackets::Lobb
     TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_SET_PARTY_PLAYLIST_ENTRY from {} playlist {} - no lobby matchmaker service",
         GetPlayerInfo(), lobbyMatchmakerSetPartyPlaylistEntry.PlaylistEntryID);
 
+    // UNVERIFIED: dass Retail hier ueberhaupt ueber SMSG_WOW_LABS_PARTY_ERROR antwortet und
+    // mit welchem Wert - eine Playlistwahl ist keine Einladung. Abgeleitet, nicht am
+    // Konsumenten gemessen; belegt ist nur, dass 0..6 sichtbar und 7..15 stumm sind.
     SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
 }
 
@@ -134,6 +154,9 @@ void WorldSession::HandleLobbyMatchmakerSetPlayerReady(WorldPackets::LobbyMatchm
     TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_SET_PLAYER_READY from {} ready {} - no lobby matchmaker service",
         GetPlayerInfo(), lobbyMatchmakerSetPlayerReady.IsReady);
 
+    // UNVERIFIED: dass Retail hier ueberhaupt ueber SMSG_WOW_LABS_PARTY_ERROR antwortet und
+    // mit welchem Wert - ein Bereitschaftsschalter ist keine Einladung. Abgeleitet, nicht am
+    // Konsumenten gemessen; belegt ist nur, dass 0..6 sichtbar und 7..15 stumm sind.
     SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
 }
 

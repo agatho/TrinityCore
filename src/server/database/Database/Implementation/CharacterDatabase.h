@@ -673,9 +673,6 @@ enum CharacterDatabaseStatements : uint32
     CHAR_DEL_CHARACTER_BANK_TAB_SETTINGS,
     CHAR_INS_CHARACTER_BANK_TAB_SETTINGS,
 
-    // Einheit w4_cmsg_43_3D, Block B3 - Client-Telemetrie
-    CHAR_INS_CLIENT_TELEMETRY,
-
     MAX_CHARACTERDATABASE_STATEMENTS
 };
 

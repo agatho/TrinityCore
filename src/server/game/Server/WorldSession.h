@@ -2048,10 +2048,8 @@ class TC_GAME_API WorldSession
         void HandleGMTicketAcknowledgeSurvey(WorldPackets::Misc::GMTicketAcknowledgeSurvey& gmTicketAcknowledgeSurvey);
         void HandleEngineSurvey(WorldPackets::Misc::EngineSurvey& engineSurvey);
         void HandleServerValidationSignatureRequest(WorldPackets::Misc::ServerValidationSignatureRequest& serverValidationSignatureRequest);
-        // characters.client_telemetry.kind - siehe TRACK_B_dienste.md Abschnitt B3
-        static constexpr uint8 TELEMETRY_KIND_ENGINE_SURVEY = 1;
-        static constexpr uint8 TELEMETRY_KIND_SERVER_LAG    = 2;
-        void StoreClientTelemetry(uint8 kind, std::string const& payload);
+        // Mindestabstand zweier protokollierter CMSG_REPORT_SERVER_LAG derselben Sitzung, in Sekunden.
+        static constexpr time_t REPORT_SERVER_LAG_INTERVAL = 10;
 
         // B11 - Warden3
         void HandleWarden3Data(WorldPackets::Misc::Warden3Data& warden3Data);
@@ -2254,6 +2252,18 @@ class TC_GAME_API WorldSession
         // PLAYER_FLAGS_LOW_LEVEL_RAID_ENABLED in characters.playerFlags.
         uint8 _excludedChatCensorSources;    // Enum.ExcludedCensorSources als Bitmaske
         bool _quickJoinAutoAcceptRequests;
+
+        // B3 - Entprellung von CMSG_ENGINE_SURVEY. Retail sendet das 294-Byte-Hardwareprofil
+        // genau einmal je (Schema-Version, Client-Patch) und damit hoechstens einmal je Sitzung;
+        // jede Wiederholung wird verworfen. Das Profil selbst wird NICHT abgelegt (D4 fluechtig),
+        // solange es keinen Auswertungspfad gibt - siehe MiscHandler.cpp, Blockkopf B3.
+        bool _engineSurveyReceived;
+
+        // B3 - Drossel fuer CMSG_REPORT_SERVER_LAG. Bewusst eine Sitzungsdrossel und KEIN Eintrag
+        // in DosProtection::GetMaxPacketCounterAllowed: der Eintrag drosselt nicht, er verwirft das
+        // ueberzaehlige Paket ungelesen und trennt die Sitzung (Vorgabe POLICY_KICK). GMReportLag
+        // haengt an einem Knopf, und ein Doppelklick darf keinen Spieler die Sitzung kosten.
+        time_t _lastReportServerLagTime;
 
         // Der Baum hat kein Anti-Cheat. SMSG_WARDEN3_DISABLED geht genau EINMAL je Sitzung
         // hinaus - der Client schickt sonst rund 1400 Datenpakete ins Leere.

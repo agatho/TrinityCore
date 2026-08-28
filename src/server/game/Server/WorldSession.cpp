@@ -152,6 +152,8 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     // Einheit w4_cmsg_43_3D - fluechtiger Sitzungszustand der Sammelfamilien 0x43 / 0x3D
     _excludedChatCensorSources(0),
     _quickJoinAutoAcceptRequests(false),
+    _engineSurveyReceived(false),
+    _lastReportServerLagTime(0),
     _warden3DisabledSent(false)
 {
     if (m_Socket[CONNECTION_TYPE_REALM])

@@ -1648,31 +1648,50 @@ void WorldSession::HandleQuestDrivenScenarioStateChange(WorldPackets::Misc::Ques
 }
 
 // --- B3: Telemetrie & Support -------------------------------------------------------------------
-
-// Gemeinsamer Ablagepfad. Datenmodell nach TRACK_B_dienste.md Abschnitt B3:
-// characters.client_telemetry (account_id, character_guid, kind, recorded_at, payload).
-void WorldSession::StoreClientTelemetry(uint8 kind, std::string const& payload)
-{
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CLIENT_TELEMETRY);
-    stmt->setUInt32(0, GetAccountId());
-    if (_player)
-        stmt->setUInt64(1, _player->GetGUID().GetCounter());
-    else
-        stmt->setNull(1);
-    stmt->setUInt8(2, kind);
-    stmt->setInt64(3, GameTime::GetGameTime());
-    stmt->setString(4, payload);
-    CharacterDatabase.Execute(stmt);
-}
+//
+// D4 - Persistenz: FLUECHTIG, und das ist eine Korrektur gegenueber dem ersten Stand dieser
+// Einheit. Der hatte characters.client_telemetry angelegt und beide Meldungen dort abgelegt.
+// Damit galt fuer B3 genau die Konstruktion, die dieselbe Einheit fuer B5 zwei Dateien weiter
+// ausdruecklich zurueckweist (LiveRegionHandler.cpp): eine Tabelle, in die nur geschrieben und
+// aus der nie gelesen wird, ist kein geloestes D4, sondern ein leerer Migrationssatz. Es gab
+// keinen SELECT, keinen Ladepfad und keine Loeschung in AccountMgr::DeleteAccount - die Zeilen
+// haetten geloeschte Konten ueberlebt und waeren unbegrenzt gewachsen. Der Massstab muss in
+// beide Richtungen derselbe sein, deshalb ist die Tabelle zurueckgenommen; sie gehoert in
+// dieselbe Aenderung wie der Auswertungspfad, der sie liest.
+//
+// Bis dahin sind die beiden Meldungen Protokollhandler wie die uebrigen 51 - mit Entprellung,
+// weil beide vom Client aus ausloesbar sind und der Standardwert der DoS-Bremse 100 Pakete je
+// Sekunde und Sitzung betraegt (WorldSession::DosProtection::GetMaxPacketCounterAllowed).
+//
+// WARUM DIE ENTPRELLUNG HIER STEHT UND NICHT IN GetMaxPacketCounterAllowed: ein Eintrag dort ist
+// KEINE Drossel. Ab dem ersten ueberzaehligen Paket verwirft DosProtection::EvaluateOpcode es
+// ungelesen und trennt bei der Vorgabepolitik POLICY_KICK die Sitzung; der Zaehler laeuft dabei je
+// KALENDERSEKUNDE, ein Stoss von N+1 innerhalb einer beliebigen Sekunde genuegt also. Fuer
+// CMSG_REPORT_SERVER_LAG, das an dem Lua-Knopf GMReportLag haengt, waere ein enger Eintrag damit
+// ein Doppelklick-Kick eines ehrlichen Spielers - und der einzige Hinweis darauf waere dieselbe
+// "AntiDOS: flooding packet"-Warnung, die eine echte Flut auch erzeugt. Beide Handler kosten nach
+// der Ruecknahme der Tabelle nichts mehr als ein TC_LOG_DEBUG, dessen Argumente bei abgeschaltetem
+// Protokoll gar nicht erst ausgewertet werden (TC_LOG_MESSAGE_BODY prueft GetEnabledLogger zuerst).
+// Die Last, gegen die entprellt wird, ist damit die des PROTOKOLLS, nicht die des Weltthreads -
+// und dagegen ist eine Sitzungsdrossel das richtige Mittel: sie verwirft die Wiederholung, ohne
+// irgendjemanden zu trennen.
 
 // 0x3D0273, Writer 0x6D1870, leere Nutzlast.
 // WIDERSPRUCH, der nicht weggeglaettet wird: der Serializer ist leer, das Lua-Binding heisst aber
 // GMReportLag(number) und nimmt einen Parameter. Entweder gehoert GMReportLag zu einem anderen
 // Opcode, oder der Parameter waehlt clientseitig aus mehreren Meldungen aus. Am Draht kommt
-// jedenfalls nichts an; ablegbar sind nur Zeitpunkt und Absender.
+// jedenfalls nichts an; verwertbar sind nur Zeitpunkt und Absender.
 void WorldSession::HandleReportServerLag(WorldPackets::Misc::ReportServerLag& /*reportServerLag*/)
 {
-    StoreClientTelemetry(TELEMETRY_KIND_SERVER_LAG, "{}");
+    // Sitzungsdrossel: hoechstens eine Meldung je REPORT_SERVER_LAG_INTERVAL. Kein DosProtection-
+    // Eintrag, Begruendung im Blockkopf oben.
+    time_t const now = GameTime::GetGameTime();
+    if (now - _lastReportServerLagTime < REPORT_SERVER_LAG_INTERVAL)
+        return;
+
+    _lastReportServerLagTime = now;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_REPORT_SERVER_LAG from {} latency {}ms", GetPlayerInfo(), GetLatency());
 }
 
 // 0x4300BD, Writer 0x6AAA60, ein uint32.
@@ -1689,35 +1708,37 @@ void WorldSession::HandleGMTicketAcknowledgeSurvey(WorldPackets::Misc::GMTicketA
 // Hardware- und Engineprofil, 294 Byte im Sniff. Der Client sendet es EINMAL je
 // (Schema-Version 8, Client-Patch): 0x210940 baut und sendet nur, wenn engineSurvey < 8 oder
 // engineSurveyPatch != aktueller Patch, und setzt danach beide CVars.
-// Kein Gegenstueck - reine Telemetrie. D4: dauerhaft, characters.client_telemetry.
+// Kein Gegenstueck - reine Telemetrie. D4: FLUECHTIG, siehe den Blockkopf oben.
+//
+// Die Retail-Invariante wird hier NACHGEPRUEFT und nicht nur beschrieben: eine Sitzung, die das
+// Profil ein zweites Mal schickt, ist per Analyse kein Retail-Client. Die Wiederholung wird
+// verworfen, damit eine 294-Byte-Nutzlast nicht 100 Mal je Sekunde durch den Handler laeuft.
 void WorldSession::HandleEngineSurvey(WorldPackets::Misc::EngineSurvey& engineSurvey)
 {
-    std::ostringstream payload;
-    payload << "{\"surveyVersion\":" << engineSurvey.SurveyVersion
-            << ",\"surveyPatch\":" << engineSurvey.SurveyPatch
-            << ",\"cpuVendor\":\"" << engineSurvey.CpuVendor
-            << "\",\"cpuBrand\":\"" << engineSurvey.CpuBrand
-            << "\",\"cpuCores\":" << engineSurvey.CpuCores
-            << ",\"cpuThreads\":" << engineSurvey.CpuThreads
-            << ",\"physicalMemory\":" << engineSurvey.PhysicalMemory
-            << ",\"gpuName\":\"" << engineSurvey.GpuName
-            << "\",\"gpuVendorId\":" << engineSurvey.GpuVendorID
-            << ",\"gpuDeviceId\":" << engineSurvey.GpuDeviceID
-            << ",\"dedicatedVideoMemory\":" << engineSurvey.DedicatedVideoMemory
-            << ",\"osName\":\"" << engineSurvey.OsName
-            << "\",\"osBuild\":" << engineSurvey.OsBuildNumber
-            << ",\"desktop\":\"" << engineSurvey.DesktopWidth << 'x' << engineSurvey.DesktopHeight
-            << "\",\"monitor\":\"" << engineSurvey.MonitorWidth << 'x' << engineSurvey.MonitorHeight
-            << "\",\"monitors\":" << uint32(engineSurvey.MonitorCountMinusOne) + 1
-            << ",\"biosVendor\":\"" << engineSurvey.BiosVendor
-            << "\",\"biosVersion\":\"" << engineSurvey.BiosVersion
-            << "\",\"baseBoard\":\"" << engineSurvey.BaseBoardManufacturer << ' ' << engineSurvey.BaseBoardProduct
-            << "\"}";
+    if (_engineSurveyReceived)
+    {
+        TC_LOG_DEBUG("network.opcode", "CMSG_ENGINE_SURVEY from {} - repeated in the same session, dropped", GetPlayerInfo());
+        return;
+    }
 
-    StoreClientTelemetry(TELEMETRY_KIND_ENGINE_SURVEY, payload.str());
+    _engineSurveyReceived = true;
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_ENGINE_SURVEY from {} version {} patch {}",
-        GetPlayerInfo(), engineSurvey.SurveyVersion, engineSurvey.SurveyPatch);
+    std::ostringstream profile;
+    profile << engineSurvey.CpuVendor << ' ' << engineSurvey.CpuBrand
+            << " (" << engineSurvey.CpuCores << 'C' << engineSurvey.CpuThreads << "T)"
+            << ", ram " << engineSurvey.PhysicalMemory
+            << ", gpu " << engineSurvey.GpuName
+            << " [" << engineSurvey.GpuVendorID << ':' << engineSurvey.GpuDeviceID << ']'
+            << " vram " << engineSurvey.DedicatedVideoMemory
+            << ", os " << engineSurvey.OsName << " build " << engineSurvey.OsBuildNumber
+            << ", desktop " << engineSurvey.DesktopWidth << 'x' << engineSurvey.DesktopHeight
+            << ", monitor " << engineSurvey.MonitorWidth << 'x' << engineSurvey.MonitorHeight
+            << " (" << uint32(engineSurvey.MonitorCountMinusOne) + 1 << ')'
+            << ", board " << engineSurvey.BaseBoardManufacturer << ' ' << engineSurvey.BaseBoardProduct
+            << ", bios " << engineSurvey.BiosVendor << ' ' << engineSurvey.BiosVersion;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_ENGINE_SURVEY from {} version {} patch {}: {}",
+        GetPlayerInfo(), engineSurvey.SurveyVersion, engineSurvey.SurveyPatch, profile.str());
 }
 
 // 0x430197, Writer 0x6B2860 - bits24 Laenge INKLUSIVE NUL, dann uint32 und guid, dann die Bytes.
