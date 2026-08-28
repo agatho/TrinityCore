@@ -16,6 +16,7 @@
  */
 
 #include "WorldSession.h"
+#include "CharacterCache.h"
 #include "Common.h"
 #include "DatabaseEnv.h"
 #include "GameTime.h"
@@ -129,11 +130,13 @@ static PartyResult CheckPartyInviteEligibility(Player const* inviter, Player con
 // UNVERIFIED: the split itself. Both messages exist and both are addressed to the leader, but no
 // recording shows which one retail picks for which case, and the client cannot be asked - it simply
 // renders whichever arrives. See AGENT_BRIEF_W4_GRUPPE_PARTY.md O-A.
-// Returns false only when the suggestion could not be handed on at all, which is the caller's
-// signal to answer the suggester with ERR_NOT_LEADER. A repetition swallowed by the cooldown
-// returns true on purpose: the server dropped it as a duplicate of one it DID deliver a moment
-// ago, and answering that with an error would put back exactly the false line this return value
-// exists to remove.
+// Returns false whenever the suggestion was not handed on, which is the caller's signal to answer
+// the suggester with ERR_NOT_LEADER. Exactly one case is swallowed and still reported as handled:
+// a REPETITION for the same target inside the running cooldown, because the leader already has
+// that very suggestion in front of him, so the server dropped a duplicate of one it did deliver a
+// moment ago and answering that with an error would put back the false line this return value
+// exists to remove. A suggestion for a DIFFERENT target inside the same window is not a duplicate,
+// nothing was delivered for it, and it therefore returns false - see the cooldown below.
 bool WorldSession::SendSuggestedInvite(Group* group, Player* suggester, Player* target)
 {
     Player* leader = ObjectAccessor::FindConnectedPlayer(group->GetLeaderGUID());
@@ -150,17 +153,39 @@ bool WorldSession::SendSuggestedInvite(Group* group, Player* suggester, Player* 
     // The interval is a server side choice with no measured counterpart; nothing in the client
     // prescribes one.
     //
-    // GAP, named rather than left implicit: retail answers the refused repetition with
+    // GAP, named rather than left implicit: retail answers a refused group action with
     // SMSG_GROUP_ACTION_THROTTLED (0x450024), the immediate neighbour of
     // SMSG_SUMMON_RAID_MEMBER_VALIDATE_FAILED and part of this same flow. That opcode sits in
     // rest_kern_weltzustand of zuschnitt_0x45.json and is NOT in this unit's cut (brief 1.3 O5),
-    // which requires a written change to extend. Until it is built, the throttled suggester gets
-    // silence where retail shows him the throttle line. He is not misinformed, only uninformed.
+    // which requires a written change to extend. Until it is built, this tree has no throttle line
+    // to show and has to answer with what it does have.
+    //
+    // The window is therefore split by WHAT was suppressed, because the two cases owe the suggester
+    // different answers and lumping them together answered both with silence:
     TimePoint const now = GameTime::Now();
     if (now < _nextSuggestedInviteTime)
-        return true;
+    {
+        // Same target again: a genuine repetition of a suggestion that WAS delivered, and the
+        // leader is still looking at it. Swallowed, and reported as handled - there is nothing to
+        // report a failure about.
+        if (_lastSuggestedInviteTarget == target->GetGUID())
+            return true;
+
+        // A different target: not a duplicate, nothing was delivered for it, and the suggester's
+        // own UI labels the button "Suggest Invite", so silence here reads as success. Reported as
+        // not handed on instead, which is what false means here.
+        // UNVERIFIED: ERR_NOT_LEADER as the stand-in for the missing throttle line. No recording
+        // shows a party result for a throttled suggestion, and none can be expected - the interval
+        // is ours. It is at least true of the suggester, it is the same line he already gets when
+        // the leader is offline, and unlike silence it does not claim the suggestion went through.
+        return false;
+    }
 
     _nextSuggestedInviteTime = now + SuggestedInviteCooldown;
+    // Set unconditionally: past this point every path below delivers something to the leader - the
+    // confirmation dialog or the chat line - so the next call really does have a delivered
+    // suggestion to be a repetition of.
+    _lastSuggestedInviteTarget = target->GetGUID();
 
     // The chat line is also the fallback when the leader's confirmation queue is already full: four
     // outstanding dialogs is all the client holds, so the fifth would be dropped clientside. Better
@@ -261,12 +286,14 @@ bool WorldSession::AddPendingInviteConfirmation(PendingInviteConfirmation confir
 // checking the party afterwards would let an answer carrying a wrong PartyGUID consume the ticket
 // and return it unused, so the leader's real Accept would then find nothing and do nothing. Here a
 // mismatch simply finds no ticket and leaves the open confirmation standing.
+// ExpireTime is deliberately NOT part of the match: a ticket that ran out is still handed out, and
+// the caller answers the leader instead of dropping his click on the floor. Filtering it here would
+// make "expired" indistinguishable from "never existed".
 Optional<WorldSession::PendingInviteConfirmation> WorldSession::TakePendingInviteConfirmation(ObjectGuid applicantGuid, ObjectGuid partyGuid)
 {
-    TimePoint const now = GameTime::Now();
     auto itr = std::ranges::find_if(_pendingInviteConfirmations, [&](PendingInviteConfirmation const& pending)
     {
-        return pending.ApplicantGUID == applicantGuid && pending.PartyGUID == partyGuid && pending.ExpireTime > now;
+        return pending.ApplicantGUID == applicantGuid && pending.PartyGUID == partyGuid;
     });
 
     if (itr == _pendingInviteConfirmations.end())
@@ -275,6 +302,29 @@ Optional<WorldSession::PendingInviteConfirmation> WorldSession::TakePendingInvit
     PendingInviteConfirmation confirmation = *itr;
     _pendingInviteConfirmations.erase(itr);
     return confirmation;
+}
+
+// Drops everything this session holds for the two party flows above. Called from
+// WorldSession::LogoutPlayer, and that placement is the whole point: the WorldSession is NOT the
+// character. In TrinityCore it outlives a logout - it stays up for the character selection and
+// then takes on a different character of the same account - so without this the state below is
+// inherited by whoever logs in next on this account.
+//
+// The consequence was not a wrong invite - HandleInviteConfirmationResponse re-checks
+// group->IsLeader for the CURRENT player, so a stale ticket cannot be redeemed - but the four
+// ticket slots stayed occupied for the new character for up to PendingInviteConfirmationTimeout,
+// and they were only reclaimed by the erase_if of the NEXT AddPendingInviteConfirmation. Inside
+// that window the new character could not be asked to confirm anything at all. The suggestion
+// cooldown was inherited the same way, which let one character's suggestion silence the next
+// character's.
+//
+// This is what makes the "must not survive a relog" in the declaration of
+// _pendingInviteConfirmations true of the code and not only of the comment.
+void WorldSession::ClearPendingPartyInviteState()
+{
+    _pendingInviteConfirmations.clear();
+    _nextSuggestedInviteTime = TimePoint::min();
+    _lastSuggestedInviteTarget.Clear();
 }
 
 // CMSG_QUICK_JOIN_RESPOND_TO_INVITE (0x430130) - the leader pressed Accept or Decline in the
@@ -298,7 +348,7 @@ void WorldSession::HandleInviteConfirmationResponse(ObjectGuid applicantGuid, Ob
     // ticket by naming the wrong group, see TakePendingInviteConfirmation.
     Optional<PendingInviteConfirmation> confirmation = TakePendingInviteConfirmation(applicantGuid, partyGuid);
     if (!confirmation)
-        return;                             // unknown, wrong group, already answered or expired
+        return;                             // unknown, wrong group or already answered
 
     Player* leader = GetPlayer();
     if (!leader)
@@ -308,13 +358,33 @@ void WorldSession::HandleInviteConfirmationResponse(ObjectGuid applicantGuid, Ob
     if (!group || !group->IsLeader(leader->GetGUID()))
         return;
 
-    Player* target = ObjectAccessor::FindConnectedPlayer(applicantGuid);
-    if (!target)
+    // The name comes from the cache, not from a Player object. Every line below needs it, and two
+    // of them - the decline and the expiry - must go out even when the applicant is no longer
+    // online. Taking it from a lookup that may fail is what put an empty %s into the leader's chat
+    // frame ("No player named  is currently playing").
+    std::string applicantName;
+    sCharacterCache->GetCharacterNameByGuid(applicantGuid, applicantName);
+
+    // The ticket ran out under an open dialog. The client is not known to close that dialog by
+    // itself (see PendingInviteConfirmationTimeout), so this is a click the leader really made and
+    // it gets an answer instead of a silent return: he learns the invite did not happen, and the
+    // suggester learns it too, exactly as on a decline - from his side the outcome is the same.
+    // UNVERIFIED: the code. There is no measured party result for a lapsed confirmation, and none
+    // can be measured - the timeout is ours. ERR_INVITE_RESTRICTED is the same "not allowed, no
+    // reason given" stand-in the decline path uses below, chosen for consistency and guessed.
+    if (confirmation->ExpireTime <= GameTime::Now())
     {
-        SendPartyResult(PARTY_OP_INVITE, "", ERR_BAD_PLAYER_NAME_S);
+        SendPartyResult(PARTY_OP_INVITE, applicantName, ERR_INVITE_RESTRICTED);
+        if (Player* referredBy = ObjectAccessor::FindConnectedPlayer(confirmation->ReferredByGUID))
+            referredBy->GetSession()->SendPartyResult(PARTY_OP_INVITE, applicantName, ERR_INVITE_RESTRICTED);
         return;
     }
 
+    // Declining comes BEFORE the applicant is looked up, and that order is the point: a refusal
+    // cannot fail and must not depend on the applicant still being online. With the lookup first,
+    // an applicant who logged out while the dialog stood open turned the leader's Decline into
+    // ERR_BAD_PLAYER_NAME_S - an error for an action that succeeded. Nothing here needs a Player,
+    // only the name for the line to the suggester.
     if (!accept)
     {
         // Tell whoever suggested the invite that the leader turned it down.
@@ -326,7 +396,14 @@ void WorldSession::HandleInviteConfirmationResponse(ObjectGuid applicantGuid, Ob
         // guess. It also collides with the level requirement in CheckPartyInviteEligibility, so the
         // suggester sees the same line for two unrelated causes.
         if (Player* referredBy = ObjectAccessor::FindConnectedPlayer(confirmation->ReferredByGUID))
-            referredBy->GetSession()->SendPartyResult(PARTY_OP_INVITE, target->GetName(), ERR_INVITE_RESTRICTED);
+            referredBy->GetSession()->SendPartyResult(PARTY_OP_INVITE, applicantName, ERR_INVITE_RESTRICTED);
+        return;
+    }
+
+    Player* target = ObjectAccessor::FindConnectedPlayer(applicantGuid);
+    if (!target)
+    {
+        SendPartyResult(PARTY_OP_INVITE, applicantName, ERR_BAD_PLAYER_NAME_S);
         return;
     }
 

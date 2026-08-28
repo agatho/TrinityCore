@@ -1009,6 +1009,14 @@ class TC_GAME_API WorldSession
         // 0x2198990 at build 12.1.0.69382) and silently drops anything beyond that, so the server
         // refuses to send a fifth instead of losing it.
         static constexpr std::size_t MaxPendingInviteConfirmations = 4;
+        // How long a ticket stays answerable. A server side choice like SuggestedInviteCooldown -
+        // the client prescribes no lifetime - but unlike the cooldown it is load bearing: it is the
+        // only thing that frees the four slots above again when a leader never answers at all.
+        // UNVERIFIED: whether the client closes the GROUP_INVITE_CONFIRMATION dialog by itself, and
+        // after how long. No timer for it is readable in the memory image at build 12.1.0.69382 and
+        // no recording shows one, so the dialog may outlive the ticket on screen. Because of that an
+        // answer arriving after the ticket ran out is ANSWERED, not dropped - see
+        // HandleInviteConfirmationResponse. The 120 s themselves are picked, not measured.
         static constexpr Seconds PendingInviteConfirmationTimeout = Seconds(120);
         // How often this session may make the leader's client show a suggested invite. A server
         // side choice - the client prescribes no interval - and the only bound on a message that
@@ -1026,12 +1034,18 @@ class TC_GAME_API WorldSession
         bool SendSuggestedInvite(Group* group, Player* suggester, Player* target);
         bool SendInviteConfirmation(Player* leader, Group* group, Player* target, Player* referredBy);
         bool AddPendingInviteConfirmation(PendingInviteConfirmation confirmation);
+        // Consumes the ticket matching BOTH guids and returns it even when it has already run out;
+        // the caller decides what an expired one means. Returning nothing therefore says "no such
+        // ticket", never "too late", so that lateness can be reported instead of swallowed.
         Optional<PendingInviteConfirmation> TakePendingInviteConfirmation(ObjectGuid applicantGuid, ObjectGuid partyGuid);
         // Answer to SMSG_CONFIRM_PARTY_INVITE, reached from HandleQuickJoinRespondToInvite. Note
         // that the client swaps the two guids on the way back: the first guid of the response is
         // SMSG_CONFIRM_PARTY_INVITE.ApplicantGUID, the second is its PartyGUID (writer RVA
         // 0x6AF830, response builder RVA 0x21981D0).
         void HandleInviteConfirmationResponse(ObjectGuid applicantGuid, ObjectGuid partyGuid, bool accept);
+        // Called from LogoutPlayer. The session survives the character, the tickets must not - see
+        // the definition in GroupHandler.cpp.
+        void ClearPendingPartyInviteState();
 
         void SendAuthResponse(uint32 code, bool queued, uint32 queuePos = 0);
         void SendClientCacheVersion(uint32 version);
@@ -2088,6 +2102,10 @@ class TC_GAME_API WorldSession
 
         std::vector<PendingInviteConfirmation> _pendingInviteConfirmations;
         TimePoint _nextSuggestedInviteTime = TimePoint::min();
+        // Who the suggestion that opened the running cooldown was about. Without it the cooldown
+        // cannot tell a repetition from an unrelated second suggestion and swallows both in
+        // silence; with it only the repetition is swallowed. See SendSuggestedInvite.
+        ObjectGuid _lastSuggestedInviteTarget;
 
         std::unique_ptr<BattlePets::BattlePetMgr> _battlePetMgr;
 

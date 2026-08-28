@@ -26023,6 +26023,37 @@ Optional<WorldPackets::Party::SummonRaidMemberValidateReason> Player::ValidateSu
 
     // Dead or in ghost form. Retail refuses the summon here and names the reason; TrinityCore used
     // to summon the corpse walker silently.
+    //
+    // This is the one reason of the five that is actually producible on this tree, and the step
+    // that decides it is the spell, so the spell is named rather than assumed:
+    //
+    //   * The only spell in the client data carrying SPELL_EFFECT_SUMMON_PLAYER (85) is 7720
+    //     "Ritual of Summoning". Full scan of SpellEffect.db2 (WOWSTATIC_12_0_7_67808, layout
+    //     0x5362E3D4): exactly one row with Effect == 85, SpellID 7720, EffectIndex 0,
+    //     ImplicitTarget [0, 0]. Both gameobject paths in GameObject::Use reach it through it -
+    //     spell 61994 / 59782 only place the TRANS_DOOR portal (GO 179944), whose ritual then
+    //     casts 7720.
+    //   * Spell 7720 does NOT allow a dead target. SpellMisc.Attributes = 0x10000000
+    //     (SPELL_ATTR0_NOT_IN_COMBAT_ONLY_PEACEFUL), 0x100 (SPELL_ATTR1_ONLY_PEACEFUL_TARGETS),
+    //     0x4 (SPELL_ATTR2_IGNORE_LINE_OF_SIGHT), rest zero - SPELL_ATTR2_ALLOW_DEAD_TARGET (0x1)
+    //     is absent; it has no SpellTargetRestrictions row at all, so Targets == 0 and none of
+    //     TARGET_FLAG_CORPSE_ALLY / CORPSE_ENEMY / UNIT_DEAD is set; and neither implicit target is
+    //     a corpse type. SpellInfo::IsAllowingDeadTarget() is therefore false, and
+    //     SpellInfo::CheckTarget would answer SPELL_FAILED_TARGETS_DEAD.
+    //   * It never gets asked about the summoned player. SPELL_EFFECT_SUMMON_PLAYER is one of the
+    //     two effects Spell::SelectEffectTypeImplicitTargets short-circuits: it resolves
+    //     m_caster->ToPlayer()->GetTarget() - the caster's SELECTION, not the explicit spell target
+    //     - and hands that guid to Map::AddFarSpellCallback, which calls HandleEffects directly.
+    //     AddUnitTarget, and with it CheckTarget, is skipped by design ("target is not stored in
+    //     target map for those spells"); the only surviving filter is IsImmunedToSpellEffect. The
+    //     explicit unit target that CheckTarget does see is the player who clicked the ritual
+    //     portal, who is necessarily alive and is not the one being summoned.
+    //   * The effect specific block for SPELL_EFFECT_SUMMON_PLAYER in Spell::CheckCast requires a
+    //     selection, refuses the caster himself, requires the same raid (except 48955), refuses a
+    //     pending summon and checks the instance lock. It does not check IsAlive.
+    //
+    // So a summoner whose selection is a dead raid member completes the ritual, EffectSummonPlayer
+    // runs on that dead player, and this branch fires. The send site exists.
     if (!IsAlive())
         return Reason::DeadOrGhost;
 

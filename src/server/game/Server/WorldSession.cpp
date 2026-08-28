@@ -700,6 +700,11 @@ void WorldSession::LogoutPlayer(bool save)
         m_Socket[CONNECTION_TYPE_INSTANCE].reset();
     }
 
+    // Party invite tickets and the suggestion cooldown belong to the character that just left, not
+    // to the session, which stays up for the character selection and may take on another character
+    // of this account. See WorldSession::ClearPendingPartyInviteState in GroupHandler.cpp.
+    ClearPendingPartyInviteState();
+
     m_playerLogout = false;
     m_playerSave = false;
     m_playerRecentlyLogout = true;
