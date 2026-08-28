@@ -189,7 +189,7 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_DEL_CHARACTER_FAVORITE_AUCTION, "DELETE FROM character_favorite_auctions WHERE guid = ? AND `order` = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_CHARACTER_FAVORITE_AUCTIONS_BY_CHAR, "DELETE FROM character_favorite_auctions WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_ACCOUNT_INSTANCELOCKTIMES, "SELECT instanceId, releaseTime FROM account_instance_times WHERE accountId = ?", CONNECTION_ASYNC);
-    PrepareStatement(CHAR_SEL_ACCOUNT_CHALLENGE_MODE_HISTORY, "SELECT totalLeaves, lastLeaverPenalty, leaverPenaltyExpiration FROM account_challenge_mode_history WHERE accountId = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_ACCOUNT_CHALLENGE_MODE_HISTORY, "SELECT totalLeaves, leaverPenaltyExpiration FROM account_challenge_mode_history WHERE accountId = ?", CONNECTION_ASYNC);
 
     PrepareStatement(CHAR_SEL_CHARACTER_ACTIONS_SPEC, "SELECT button, action, type FROM character_action WHERE guid = ? AND spec = ? AND traitConfigId = ? ORDER BY button", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_MAILITEMS, "SELECT " SelectItemInstanceContent ", ii.owner_guid, m.id FROM mail_items mi INNER JOIN mail m ON mi.mail_id = m.id LEFT JOIN item_instance ii ON mi.item_guid = ii.guid LEFT JOIN item_instance_gems ig ON ii.guid = ig.itemGuid LEFT JOIN item_instance_transmog iit ON ii.guid = iit.itemGuid LEFT JOIN item_instance_modifiers im ON ii.guid = im.itemGuid WHERE m.receiver = ?", CONNECTION_BOTH);
@@ -287,7 +287,7 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_UPD_ACCOUNT_BY_GUID, "UPDATE characters SET account = ? WHERE guid = ?", CONNECTION_SYNCH);
     PrepareStatement(CHAR_DEL_ACCOUNT_INSTANCE_LOCK_TIMES, "DELETE FROM account_instance_times WHERE accountId = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_INS_ACCOUNT_INSTANCE_LOCK_TIMES, "INSERT INTO account_instance_times (accountId, instanceId, releaseTime) VALUES (?, ?, ?)", CONNECTION_ASYNC);
-    PrepareStatement(CHAR_REP_ACCOUNT_CHALLENGE_MODE_HISTORY, "REPLACE INTO account_challenge_mode_history (accountId, totalLeaves, lastLeaverPenalty, leaverPenaltyExpiration) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_REP_ACCOUNT_CHALLENGE_MODE_HISTORY, "REPLACE INTO account_challenge_mode_history (accountId, totalLeaves, leaverPenaltyExpiration) VALUES (?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_MATCH_MAKER_RATING, "SELECT matchMakerRating FROM character_arena_stats WHERE guid = ? AND slot = ?", CONNECTION_SYNCH);
     PrepareStatement(CHAR_SEL_CHARACTER_COUNT, "SELECT account, COUNT(guid) FROM characters WHERE account = ? GROUP BY account", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_NAME_BY_GUID, "UPDATE characters SET name = ? WHERE guid = ?", CONNECTION_ASYNC);

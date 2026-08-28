@@ -600,6 +600,11 @@ bool Group::RemoveMember(ObjectGuid guid, RemoveMethod method /*= GROUP_REMOVEME
     if (player && m_instanceAbandonShutdownTimer == Milliseconds::zero()
         && (method == GROUP_REMOVEMETHOD_DEFAULT || method == GROUP_REMOVEMETHOD_LEAVE))
     {
+        // NOT REACHABLE ON THIS BRANCH: Map::IsMythicPlus() tests i_spawnMode == DIFFICULTY_MYTHIC_KEYSTONE
+        // and no writer in this tree ever sets that difficulty - CMSG_START_CHALLENGE_MODE is STATUS_UNHANDLED
+        // and HandleSetDungeonDifficultyOpcode rejects every difficulty without DIFFICULTY_FLAG_CAN_SELECT.
+        // The gate is retail semantics and stays; the keystone lifecycle is feature/mythic-plus. Until it
+        // lands, SMSG_SET_INSTANCE_LEAVER has no reachable send site and its effect is untested.
         if (InstanceMap const* instanceMap = GetGroupInstanceMap(player, this))
             if (instanceMap->IsMythicPlus())
                 player->GetSession()->SetInstanceLeaver(true);
@@ -1637,6 +1642,10 @@ bool Group::CanStartInstanceAbandonVote(Player const* starter, GameError* denyRe
     // a normal dungeon group out of its instance, which retail never does.
     // ERR_VOTE_TO_ABANDON_NOT_YET is the fallback of the two codes the client knows - outside a keystone
     // run the UI never offers the entry, so retail has no text for this refusal at all.
+    // NOT REACHABLE ON THIS BRANCH: nothing in this tree sets DIFFICULTY_MYTHIC_KEYSTONE, so IsMythicPlus()
+    // is always false and this handler answers every request with the refusal below. That makes the four vote
+    // SMSG unreachable too. The condition is retail semantics and is deliberately kept - the missing piece is
+    // the keystone lifecycle on feature/mythic-plus, not this check.
     if (!instanceMap->IsMythicPlus())
     {
         if (denyReason)

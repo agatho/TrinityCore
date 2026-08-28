@@ -137,7 +137,6 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _tutorials(),
     _tutorialsChanged(TUTORIALS_FLAG_NONE),
     _challengeModeTotalLeaves(0),
-    _challengeModeLastLeaverPenalty(Seconds::zero()),
     _filterAddonMessages(false),
     recruiterId(recruiter),
     isRecruiter(isARecruiter),
@@ -528,6 +527,10 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
     //logout procedure should happen only in World::UpdateSessions() method!!!
     if (updater.ProcessUnsafe())
     {
+        // Only on the world tick, not on the map filter: this is account state, every session passes here
+        // exactly once per tick (character select included), and the map pass would only duplicate the work.
+        UpdateInstanceLeaverState();
+
         ///- If necessary, log the player out
         if (ShouldLogOut(currentTime) && m_playerLoading.IsEmpty())
             LogoutPlayer(true);
@@ -1059,8 +1062,7 @@ void WorldSession::LoadChallengeModeHistory(PreparedQueryResult result)
 
     Field* fields = result->Fetch();
     _challengeModeTotalLeaves = fields[0].GetUInt32();
-    _challengeModeLastLeaverPenalty = Seconds(fields[1].GetUInt64());
-    _challengeModeLeaverPenaltyExpiration = SystemTimePoint::clock::from_time_t(fields[2].GetUInt64());
+    _challengeModeLeaverPenaltyExpiration = SystemTimePoint::clock::from_time_t(fields[1].GetUInt64());
 }
 
 void WorldSession::SaveChallengeModeHistory() const
@@ -1068,8 +1070,7 @@ void WorldSession::SaveChallengeModeHistory() const
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_ACCOUNT_CHALLENGE_MODE_HISTORY);
     stmt->setUInt32(0, GetAccountId());
     stmt->setUInt32(1, _challengeModeTotalLeaves);
-    stmt->setUInt64(2, _challengeModeLastLeaverPenalty.count());
-    stmt->setUInt64(3, SystemTimePoint::clock::to_time_t(_challengeModeLeaverPenaltyExpiration));
+    stmt->setUInt64(2, SystemTimePoint::clock::to_time_t(_challengeModeLeaverPenaltyExpiration));
     CharacterDatabase.Execute(stmt);
 }
 
@@ -1096,24 +1097,43 @@ void WorldSession::SetInstanceLeaver(bool apply)
             return;
         }
 
-        _challengeModeLastLeaverPenalty = INSTANCE_LEAVER_PENALTY_DURATION;
         _challengeModeLeaverPenaltyExpiration = GameTime::GetSystemTime() + INSTANCE_LEAVER_PENALTY_DURATION;
     }
     else
     {
-        if (!wasLeaver)
+        // Keyed on the stored timepoint and not on IsInstanceLeaver(): the expiry path clears a penalty that
+        // has already lapsed, so the flag is false at that moment and testing it would swallow the reset.
+        // The leave count deliberately survives - it is what "repeatedly" is measured on.
+        if (_challengeModeLeaverPenaltyExpiration == SystemTimePoint())
             return;
 
-        _challengeModeLastLeaverPenalty = Seconds::zero();
         _challengeModeLeaverPenaltyExpiration = SystemTimePoint();
     }
 
     SaveChallengeModeHistory();
 
-    // The two messages are edge triggered on the client - 0x24B6050 and 0x24B5FD0 set and clear one bool -
-    // so only a real transition is announced. Extending a running penalty is persisted but not resent.
-    if (IsInstanceLeaver() != wasLeaver)
+    // The two messages are edge triggered on the client - 0x24B6050 and 0x24B5FD0 set and clear one bool - so
+    // only a real transition is announced. Extending a running penalty is persisted but not resent. Clearing
+    // always is one: either the penalty was still running, or it has lapsed and the client still holds it.
+    if (!apply || IsInstanceLeaver() != wasLeaver)
         SendInstanceLeaverState();
+}
+
+// The penalty ends by the clock and by nothing else: no aura, no event and no other tick observes
+// _challengeModeLeaverPenaltyExpiration. Without this the server considers the account clean again while the
+// client keeps showing the deserter state - both messages are edge triggered (consumers 0x24B6050 / 0x24B5FD0
+// set and clear one bool), so nobody would ever clear it - and C_InstanceLeaver.IsPlayerLeaver() would keep the
+// mythic+ entries locked (LFGList.lua:1382, :2965) until the next login.
+void WorldSession::UpdateInstanceLeaverState()
+{
+    // Never flagged, or the expiry was already announced - SetInstanceLeaver(false) resets the timepoint.
+    if (_challengeModeLeaverPenaltyExpiration == SystemTimePoint())
+        return;
+
+    if (IsInstanceLeaver())
+        return;
+
+    SetInstanceLeaver(false);
 }
 
 void WorldSession::SendInstanceLeaverState()

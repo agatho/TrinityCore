@@ -1109,10 +1109,18 @@ void InstanceScript::RespawnEncounterTimeline(uint32 dungeonEncounterId, ObjectG
 // while it is still being fought.
 void InstanceScript::ClearEncounterTimeline(uint32 dungeonEncounterId)
 {
-    std::erase_if(_encounterTimeline, [dungeonEncounterId](EncounterTimelineEventState const& state)
+    std::size_t const removed = std::erase_if(_encounterTimeline, [dungeonEncounterId](EncounterTimelineEventState const& state)
     {
         return state.DungeonEncounterID == dungeonEncounterId;
     });
+
+    // Nothing was armed for this encounter, so the client holds nothing that this call could clear. Called
+    // from SetBossState for FAIL and DONE, this is the normal case for every boss of every instance that has
+    // no rows in instance_encounter_timeline - announcing an empty timeline there would put a count-0
+    // SEQUENCE on the wire for a timeline that never existed. The corpus evidence for the empty list comes
+    // from encounters that HAD one; it does not carry the unconditional case.
+    if (!removed)
+        return;
 
     if (_encounterTimeline.empty())
         _encounterTimelineGuid.Clear();

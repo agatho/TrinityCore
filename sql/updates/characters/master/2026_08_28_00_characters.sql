@@ -10,7 +10,6 @@ DROP TABLE IF EXISTS `account_challenge_mode_history`;
 CREATE TABLE `account_challenge_mode_history` (
   `accountId` int unsigned NOT NULL,
   `totalLeaves` int unsigned NOT NULL DEFAULT '0',
-  `lastLeaverPenalty` bigint unsigned NOT NULL DEFAULT '0' COMMENT 'duration of the last penalty in seconds',
   `leaverPenaltyExpiration` bigint unsigned NOT NULL DEFAULT '0' COMMENT 'unix time the penalty expires, 0 = never flagged',
   PRIMARY KEY (`accountId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

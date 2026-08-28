@@ -1129,6 +1129,7 @@ class TC_GAME_API WorldSession
         bool IsInstanceLeaver() const;
         void SetInstanceLeaver(bool apply);
         void SendInstanceLeaverState();
+        void UpdateInstanceLeaverState();
 
         struct PlayerDataAccount
         {
@@ -2045,7 +2046,6 @@ class TC_GAME_API WorldSession
         std::unordered_map<uint32 /*instanceId*/, SystemTimePoint/*releaseTime*/> _instanceResetTimes;
 
         uint32 _challengeModeTotalLeaves;
-        Seconds _challengeModeLastLeaverPenalty;
         SystemTimePoint _challengeModeLeaverPenaltyExpiration;
 
         PlayerDataAccount _playerDataAccount;
