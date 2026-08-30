@@ -180,6 +180,16 @@ void BattlegroundMgr::Update(uint32 diff)
                 GetBattlegroundQueue(ratedBgQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
 
             m_NextRatedArenaUpdate = ratedUpdateTimer;
+            // Battleground Blitz is a rated queue too and needs the same periodic sweep. Without it the
+            // queue is only ever re-evaluated by the ScheduleQueueUpdate a join or a leave triggers, so a
+            // queue that could not form a match at join time (for example the healer quota was not met yet)
+            // would sit idle until the next player happens to join, rather than retrying on its own.
+            BattlegroundQueueTypeId blitzQueueId = BGQueueTypeId(BATTLEGROUND_BLITZ, BattlegroundQueueIdType::RatedBattlegroundBlitz, true, 0);
+            for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
+                GetBattlegroundQueue(blitzQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
+
+            // Rated battlegrounds are matched by CheckPremadeMatch, which only runs when something
+            // schedules an update. Sweep it on the same timer so a queue that could not pair two
             // premades at join time retries instead of sitting idle.
             BattlegroundQueueTypeId ratedBgQueueId = BGQueueTypeId(BATTLEGROUND_RATED_BG, BattlegroundQueueIdType::Battleground, true, 0);
             for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
@@ -297,6 +307,60 @@ void BattlegroundMgr::PortPlayerToBattleground(Player* player, Battleground* bg,
     // and BattlegroundQueue::ResolveProposal for the solo queue - so a corpse entering is handled the same way
     // whichever queue it came from. See the note in HandleBattleFieldPortOpcode for why no path refuses the port
     // of a dead player instead.
+    if (!player->IsAlive())
+    {
+        player->ResurrectPlayer(1.0f);
+        player->SpawnCorpseBones();
+    }
+    // stop taxi flight at port
+    player->FinishTaxiFlight();
+
+    WorldPackets::Battleground::BattlefieldStatusActive battlefieldStatus;
+    BuildBattlegroundStatusActive(&battlefieldStatus, bg, player, ticketId, player->GetBattlegroundQueueJoinTime(queueId), queueId);
+    player->SendDirectMessage(battlefieldStatus.Write());
+
+    // remove battleground queue status from BGmgr
+    sBattlegroundMgr->GetBattlegroundQueue(queueId).RemovePlayer(player->GetGUID(), false);
+    // this is still needed here if battleground "jumping" shouldn't add deserter debuff
+    // also this is required to prevent stuck at old battleground after SetBattlegroundId set to new
+    if (Battleground* currentBg = player->GetBattleground())
+        currentBg->RemovePlayerAtLeave(player->GetGUID(), false, true);
+
+    // set the destination instance id
+    player->SetBattlegroundId(bg->GetInstanceID(), bg->GetTypeID(), queueId);
+    // set the destination team
+    player->SetBGTeam(team);
+
+    SendToBattleground(player, bg);
+
+    TC_LOG_DEBUG("bg.battleground", "Battleground: player {} ({}) joined battle for bg {}, bgtype {}, queue {{ BattlemasterListId: {}, Type: {}, Rated: {}, TeamSize: {} }}.",
+        player->GetName(), player->GetGUID().ToString(), bg->GetInstanceID(), bg->GetTypeID(),
+        queueId.BattlemasterListId, uint32(queueId.Type), queueId.Rated ? "true" : "false", uint32(queueId.TeamSize));
+}
+
+void BattlegroundMgr::BuildBattlegroundStatusWaitForGroups(WorldPackets::Battleground::BattlefieldStatusWaitForGroups* battlefieldStatus, Player const* player, uint32 ticketId, uint32 joinTime, BattlegroundQueueTypeId queueId,
+    uint32 mapId, uint32 timeout, std::array<uint8, 2> const& slotsPerSide, std::array<uint8, 2> const& awaitedPerSide, WorldPackets::Battleground::PvpRoleQueueCounts const& roles)
+{
+    BuildBattlegroundStatusHeader(&battlefieldStatus->Hdr, player, ticketId, joinTime, queueId);
+    battlefieldStatus->Mapid = mapId;
+    battlefieldStatus->Timeout = timeout;
+    battlefieldStatus->SlotsPerSide = slotsPerSide;
+    battlefieldStatus->AwaitedPerSide = awaitedPerSide;
+    battlefieldStatus->Roles = roles;
+}
+
+void BattlegroundMgr::BuildBattlegroundStatusGroupProposalFailed(WorldPackets::Battleground::BattlefieldStatusGroupProposalFailed* battlefieldStatus, Player const* player, uint32 ticketId, uint32 joinTime, BattlegroundQueueTypeId queueId,
+    WorldPackets::Battleground::PvpRoleQueueCounts const& roles)
+{
+    BuildBattlegroundStatusHeader(&battlefieldStatus->Hdr, player, ticketId, joinTime, queueId);
+    battlefieldStatus->Roles = roles;
+}
+
+void BattlegroundMgr::PortPlayerToBattleground(Player* player, Battleground* bg, Team team, BattlegroundQueueTypeId queueId, uint32 ticketId)
+{
+    if (!player->InBattleground())
+        player->SetBattlegroundEntryPoint();
+
     // resurrect the player
     if (!player->IsAlive())
     {
@@ -592,6 +656,17 @@ void BattlegroundMgr::LoadBattlegroundTemplates()
 
         if (bgTemplate.Id != BATTLEGROUND_AA && bgTemplate.Id != BATTLEGROUND_BLITZ
             && bgTemplate.Id != BATTLEGROUND_RATED_10_VS_10 && !IsRandomBattleground(bgTemplate.Id) && !isMultiMapBrawl)
+        // Aggregate templates (All Arenas, the random-BG pools, Battleground Blitz, multi-map brawls) never
+        // spawn anyone themselves: CreateNewBattleground resolves their BattlemasterListXMap maps back to the
+        // individual single-map templates, which carry the real start locations. Requiring a WorldSafeLocs id
+        // here would mean inventing one that is never used, and a wrong id silently drops the whole template.
+        //
+        // A brawl only qualifies when it really is multi-map - the single-map brawl rows (PvpBrawl 12-16, the
+        // per-map Deep Six entries) point at one map each and would then register themselves over that map's own
+        // template two lines below, hijacking normal queues for it.
+        bool const isMultiMapBrawl = bgTemplate.MapIDs.size() > 1 && bl->GetFlags().HasFlag(BattlemasterListFlags::IsBrawl);
+
+        if (bgTemplate.Id != BATTLEGROUND_AA && bgTemplate.Id != BATTLEGROUND_BLITZ
             && bgTemplate.Id != BATTLEGROUND_RATED_BG && !IsRandomBattleground(bgTemplate.Id) && !isMultiMapBrawl)
         {
             uint32 startId = fields[1].GetUInt32();

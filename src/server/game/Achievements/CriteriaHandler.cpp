@@ -3991,8 +3991,6 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
                 return false;
             break;
         }
-        case ModifierTreeType::GarrisonHasPermanentTalent: // 290 NYI
-            return false;
         case ModifierTreeType::HasActiveSoulbind: // 291
             if (referencePlayer->m_playerData->SoulbindID != int32(reqValue))
                 return false;
