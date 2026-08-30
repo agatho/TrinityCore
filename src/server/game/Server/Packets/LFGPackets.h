@@ -767,6 +767,23 @@ namespace WorldPackets
             lfg::LfgTeleportResult Reason;
         };
 
+        // SMSG_OPEN_LFG_DUNGEON_FINDER (0x560015): makes the client open its native dungeon/group finder panel
+        // preselected to the given LFGDungeons.db2 id. Used to surface the BfA warfront war-table assault entry,
+        // whose "Join Battle" button then sends CMSG_DF_JOIN back with slot = dungeonID | (TypeID << 24).
+        //
+        // !! INFERRED (needs sniff validation): no serializer and no 0x811C9DC5 reflection descriptor for this
+        // opcode was recovered offline; a single uint32 dungeon id is the asserted body. Senders must gate this
+        // behind a config opt-in (see WarfrontMgr::IsNativeUiEnabled / Warfront.NativeUI.Enable).
+        class OpenLfgDungeonFinder final : public ServerPacket
+        {
+        public:
+            explicit OpenLfgDungeonFinder(uint32 dungeonId = 0) : ServerPacket(SMSG_OPEN_LFG_DUNGEON_FINDER, 4), DungeonID(dungeonId) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 DungeonID;   // INFERRED (needs sniff validation)
+        };
+
         // Dispatcher case 5636127 (0x56001F) inside the 0x56 group dispatcher @ RVA 0x739420 is a single
         // RideTicket read and nothing else; the registered handler @ RVA 0x2301A90 copies msg+0x20..+0x48
         // (guid 16 + id 4 + type 4 + time 8 + bit) into a global and fires SHOW_LFG_EXPAND_SEARCH_PROMPT,

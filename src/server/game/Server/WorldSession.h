@@ -899,6 +899,10 @@ namespace WorldPackets
         class SetContactNotes;
         class SocialContractRequest;
         class AcceptSocialContract;
+    namespace Contribution
+    {
+        class ContributionContribute;
+        class ContributionLastUpdateRequest;
     }
     namespace Movement
     {
@@ -2001,6 +2005,9 @@ class TC_GAME_API WorldSession
         void HandleRecentAllyRequestData(WorldPackets::Social::RecentAllyRequestData& packet);
         void HandleRecentAllySetNote(WorldPackets::Social::RecentAllySetNote& packet);
         void HandleAcceptSocialContract(WorldPackets::Social::AcceptSocialContract& acceptSocialContract);
+        // Contribution
+        void HandleContributionContribute(WorldPackets::Contribution::ContributionContribute& contribute);
+        void HandleContributionLastUpdateRequest(WorldPackets::Contribution::ContributionLastUpdateRequest& request);
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);

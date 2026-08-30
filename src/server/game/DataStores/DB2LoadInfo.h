@@ -8967,8 +8967,8 @@ struct ExteriorComponentTypeLoadInfo
 struct ExteriorComponentLoadInfo
 {
     // Field order must match metadata (IndexField=2, ID is 3rd meta field).
-    // 12.0.5 added Field_12 (signed INT) Ã¢â‚¬â€� Meta grew from 13 to 14 entries,
-    // FileFieldCount 12Ã¢â€ â€™13, ParentIndexField 12Ã¢â€ â€™13, LayoutHash 0x027A2F44Ã¢â€ â€™0x53EA0925.
+    // 12.0.5 added Field_12 (signed INT) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Meta grew from 13 to 14 entries,
+    // FileFieldCount 12ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢13, ParentIndexField 12ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢13, LayoutHash 0x027A2F44ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢0x53EA0925.
     static constexpr DB2FieldMeta Fields[16] =
     {
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
@@ -8985,7 +8985,7 @@ struct ExteriorComponentLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_9" },
         { .IsSigned = true, .Type = FT_INT, .Name = "GameObjectID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_11" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },                   // NEW in 12.0.5 Ã¢â‚¬â€� per WoWDBDefs: references Item.ID
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },                   // NEW in 12.0.5 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ per WoWDBDefs: references Item.ID
         { .IsSigned = false, .Type = FT_INT, .Name = "HouseExteriorWmoDataID" },  // ParentIndexField - must be unsigned
     };
 
