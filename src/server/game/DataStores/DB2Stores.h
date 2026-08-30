@@ -665,6 +665,8 @@ public:
     MapDifficultyEntry const* GetDefaultMapDifficulty(uint32 mapId) const;
     MapDifficultyEntry const* GetMapDifficultyData(uint32 mapId, Difficulty difficulty) const;
     MapDifficultyEntry const* GetDownscaledMapDifficultyData(uint32 mapId, Difficulty difficulty) const;
+    using DelvesSeasonXSpellContainer = std::vector<DelvesSeasonXSpellEntry const*>;
+    DelvesSeasonXSpellContainer const* GetDelvesSeasonSpells(uint32 delvesSeasonId) const;
     MapDifficultyConditionsContainer const* GetMapDifficultyConditions(uint32 mapDifficultyId) const;
     MountEntry const* GetMount(uint32 spellId) const;
     MountEntry const* GetMountById(uint32 id) const;
