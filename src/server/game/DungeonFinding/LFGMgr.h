@@ -26,6 +26,7 @@
 #include "LFGPlayerData.h"
 #include <span>
 #include <unordered_map>
+#include <vector>
 
 class Group;
 class Player;
@@ -56,6 +57,15 @@ enum LFGMgrEnum
     LFG_TIME_ROLECHECK                           = 45,
     LFG_TIME_BOOT                                = 120,
     LFG_TIME_PROPOSAL                            = 45,
+    // Seconds a queue entry must have been waiting before its leader is offered the "expand your
+    // search?" prompt (SMSG_LFG_EXPAND_SEARCH_PROMPT). Evaluated on the existing queue-status sweep,
+    // so the effective granularity is LFG_QUEUEUPDATE_INTERVAL.
+    // UNVERIFIED: the number itself. Retail's threshold is server-side and nothing in the client carries
+    // it - SHOW_LFG_EXPAND_SEARCH_PROMPT is payloadless (LFGFrame.lua:265-266) and the popup has no timer
+    // (StaticPopupDialogs["LFG_QUEUE_EXPAND"].timeout = 0, LFGFrame.lua:88-97). 120 is chosen to match
+    // LFG_TIME_BOOT, the family's other two-minute wait, not measured. Needs the recording named under
+    // aufnahme_noetig / "expand your search" in orchestrierung/status/lfg_5A.json.
+    LFG_TIME_EXPAND_SEARCH_PROMPT                = 120,
     LFG_QUEUEUPDATE_INTERVAL                     = 15 * IN_MILLISECONDS,
     LFG_SPELL_DUNGEON_COOLDOWN                   = 71328,
     LFG_SPELL_DUNGEON_DESERTER                   = 71041,
@@ -153,11 +163,30 @@ enum LfgRoleCheckState
     LFG_ROLECHECK_NO_ROLE                        = 6       // Someone selected no role
 };
 
+// SMSG_LFG_READY_CHECK_UPDATE.ReadyCheckStatus. The values 2..5 are read off the consumer's comparison
+// chain (client 12.1.0.69382, consumer @ RVA 0x24C2920): each one maps to exactly one GameError.
+// Careful: this is the LFG READINESS check, NOT the role check above and NOT the party ready check
+// (Group::StartReadyCheck) - four disjoint systems with four different dialogs.
+enum LfgReadyCheckState
+{
+    LFG_READYCHECK_DEFAULT                       = 0,      // Internal use = Not initialized.
+    // UNVERIFIED: the client only distinguishes 2, 3, 4 and 5. Every other value takes the fall-through
+    // path "fire LFG_READY_CHECK_UPDATE, then LFG_READY_CHECK_HIDE" with no error text - which is exactly
+    // what a successful finish needs. 1 is chosen to mirror LFG_ROLECHECK_FINISHED; any value outside
+    // 2..5 behaves identically on the wire.
+    LFG_READYCHECK_FINISHED                      = 1,      // Everyone answered ready -> dialog closes silently
+    LFG_READYCHECK_INITIALITING                  = 2,      // Running     -> ERR_LFG_READY_CHECK_INITIATED      (829)
+    LFG_READYCHECK_MISSING_ANSWER                = 3,      // Timed out   -> ERR_LFG_READY_CHECK_FAILED_TIMEOUT (804)
+    LFG_READYCHECK_ABORTED                       = 4,      // Aborted     -> ERR_LFG_READY_CHECK_ABORTED        (844)
+    LFG_READYCHECK_FAILED                        = 5       // Someone declined -> ERR_LFG_READY_CHECK_FAILED    (803)
+};
+
 // Forward declaration (just to have all typedef together)
 struct LFGDungeonData;
 struct LfgReward;
 struct LfgQueueInfo;
 struct LfgRoleCheck;
+struct LfgReadyCheck;
 struct LfgProposal;
 struct LfgProposalPlayer;
 struct LfgPlayerBoot;
@@ -168,6 +197,7 @@ typedef std::pair<LfgRewardContainer::const_iterator, LfgRewardContainer::const_
 typedef std::map<uint8, LfgDungeonSet> LfgCachedDungeonContainer;
 typedef std::map<ObjectGuid, LfgAnswer> LfgAnswerContainer;
 typedef std::map<ObjectGuid, LfgRoleCheck> LfgRoleCheckContainer;
+typedef std::map<ObjectGuid, LfgReadyCheck> LfgReadyCheckContainer;
 typedef std::map<uint32, LfgProposal> LfgProposalContainer;
 typedef std::map<ObjectGuid, LfgProposalPlayer> LfgProposalPlayerContainer;
 typedef std::map<ObjectGuid, LfgPlayerBoot> LfgPlayerBootContainer;
@@ -281,6 +311,21 @@ struct LfgRoleCheck
     LfgDungeonSet dungeons;                                /// Dungeons group is applying for (expanded random dungeons)
     uint32 rDungeonId;                                     /// Random Dungeon Id.
     ObjectGuid leader;                                     /// Leader of the group
+};
+
+/// Stores all readycheck info of a group the server asked "are you ready?".
+/// Feeds SMSG_LFG_READY_CHECK_UPDATE (0x5A0006) and SMSG_LFG_READY_CHECK_RESULT (0x5A001E).
+struct LfgReadyCheck
+{
+    time_t cancelTime;                                     /// Time when the readycheck will time out
+    LfgAnswerContainer answers;                            /// Player answers (LFG_ANSWER_PENDING / _DENY / _AGREE)
+    LfgReadyCheckState state;                              /// State of the readycheck
+    ObjectGuid leader;                                     /// Leader of the group
+    std::vector<uint64> bgQueueIDs;                        /// Non-empty turns the client dialog into the
+                                                           /// battleground variant; element 0 is read as a
+                                                           /// BattlemasterList key ((uint16)queueId)
+    uint8 partyIndex;                                      /// Echoed back by CMSG_DF_READY_CHECK_RESPONSE
+    bool isRequeue;                                        /// Payload of LFG_READY_CHECK_SHOW(isRequeue)
 };
 
 /// Stores information of a current vote to kick someone from a group
@@ -421,12 +466,36 @@ class TC_GAME_API LFGMgr
         void UpdateProposal(uint32 proposalId, ObjectGuid guid, bool accept);
         /// Updates the role check with player answer
         void UpdateRoleCheck(ObjectGuid gguid, ObjectGuid guid = ObjectGuid::Empty, uint8 roles = PLAYER_ROLE_NONE);
+        /// Starts an LFG readiness check for a group. bgQueueIDs non-empty makes the client render the
+        /// battleground variant of the dialog (see LfgReadyCheck::bgQueueIDs).
+        bool StartReadyCheck(ObjectGuid gguid, std::vector<uint64> bgQueueIDs = {}, bool isRequeue = false, uint8 partyIndex = 127);
+        /// Updates the readiness check with a player answer (CMSG_DF_READY_CHECK_RESPONSE)
+        void UpdateReadyCheck(ObjectGuid gguid, ObjectGuid guid, bool isReady);
+        /// Aborts a running readiness check (group broke up, dungeon left, ...) -> ERR_LFG_READY_CHECK_ABORTED
+        void AbortReadyCheck(ObjectGuid gguid);
+        /// Drops a player who left the group out of its running readiness check. Without this the departed
+        /// member's LFG_ANSWER_PENDING can never be answered, the check runs into its 45 s timeout and
+        /// FinishReadyCheck throws the REMAINING members out of every queue in bgQueueIDs - although all of
+        /// them agreed. Called from LFGGroupScript::OnRemoveMember.
+        void RemoveReadyCheckMember(ObjectGuid gguid, ObjectGuid guid);
+        /// Follows a group leader change into a running readiness check. Only SMSG_LFG_READY_CHECK_UPDATE
+        /// carries the member order and the client expects the leader in slot 0, so the check has to be told
+        /// about a promotion - it cannot re-read it from the group. Called from
+        /// LFGGroupScript::OnChangeLeader.
+        void SetReadyCheckLeader(ObjectGuid gguid, ObjectGuid leaderGuid);
+        /// True while a readiness check is running for that group
+        bool HasReadyCheck(ObjectGuid gguid) const;
+
+        /// Announces to everyone in an LFG instance that it is being shut down in `secondsRemaining`.
+        void SendInstanceShutdownCountdown(Map const* map, uint32 secondsRemaining) const;
         /// Sets player lfg roles
         void SetRoles(ObjectGuid guid, uint8 roles);
         /// Join Lfg with selected roles, dungeons and comment
         void JoinLfg(Player* player, uint8 roles, LfgDungeonSet& dungeons);
         /// Leaves lfg
         void LeaveLfg(ObjectGuid guid, bool disconnected = false);
+        /// CMSG_DF_CONFIRM_EXPAND_SEARCH: widen an already-queued entry's dungeon set without losing its place
+        void ConfirmExpandSearch(Player* player, WorldPackets::LFG::RideTicket const& ticket);
         /// Gets unique join queue data
         WorldPackets::LFG::RideTicket const* GetTicket(ObjectGuid guid) const;
 
@@ -468,6 +537,12 @@ class TC_GAME_API LFGMgr
         void _SaveToDB(ObjectGuid guid, uint32 db_guid);
         LFGDungeonData const* GetLFGDungeon(uint32 id);
 
+        // Readiness checks
+        void SendReadyCheckUpdate(LfgReadyCheck const& readyCheck) const;
+        void SendReadyCheckResult(LfgReadyCheck const& readyCheck, ObjectGuid guid, bool isReady) const;
+        void FinishReadyCheck(LfgReadyCheckContainer::iterator itReadyCheck, LfgReadyCheckState state);
+        void LeaveReadyCheckQueues(LfgReadyCheck const& readyCheck);
+
         // Proposals
         void RemoveProposal(LfgProposalContainer::iterator itProposal, LfgUpdateType type);
         void MakeNewGroup(LfgProposal const& proposal);
@@ -477,6 +552,10 @@ class TC_GAME_API LFGMgr
 
         LfgDungeonSet const& GetDungeonsByRandom(uint32 randomdungeon);
         LfgType GetDungeonType(uint32 dungeon);
+
+        // Expand search
+        void UpdateExpandSearchPrompts(time_t currTime);
+        LfgDungeonSet BuildExpandedDungeons(ObjectGuid pguid, LfgDungeonSet const& current, LfgLockMap* nowInvalid);
 
         void SendLfgBootProposalUpdate(ObjectGuid guid, LfgPlayerBoot const& boot);
         void SendLfgJoinResult(ObjectGuid guid, LfgJoinResultData const& data);
@@ -499,10 +578,12 @@ class TC_GAME_API LFGMgr
         LFGDungeonContainer LfgDungeonStore;
         // Rolecheck - Proposal - Vote Kicks
         LfgRoleCheckContainer RoleChecksStore;             /// Current Role checks
+        LfgReadyCheckContainer ReadyChecksStore;           /// Current LFG readiness checks
         LfgProposalContainer ProposalsStore;               /// Current Proposals
         LfgPlayerBootContainer BootsStore;                 /// Current player kicks
         LfgPlayerDataContainer PlayersStore;               /// Player data
         LfgGroupDataContainer GroupsStore;                 /// Group data
+        GuidSet ExpandSearchPromptedStore;                 /// Queue owners already offered SMSG_LFG_EXPAND_SEARCH_PROMPT
 };
 
 inline int32 format_as(LFGMgrEnum e) { return e; }
@@ -510,6 +591,7 @@ inline int32 format_as(LfgProposalState e) { return e; }
 inline uint8 format_as(LfgTeleportResult e) { return e; }
 inline int32 format_as(LfgJoinResult e) { return e; }
 inline int32 format_as(LfgRoleCheckState e) { return e; }
+inline int32 format_as(LfgReadyCheckState e) { return e; }
 } // namespace lfg
 
 #define sLFGMgr lfg::LFGMgr::instance()

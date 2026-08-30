@@ -16,6 +16,7 @@
  */
 
 #include "CharacterCache.h"
+#include "Config.h"
 #include "DB2Stores.h"
 #include "WorldSession.h"
 #include "GameTime.h"
@@ -111,6 +112,213 @@ void WorldSession::HandleDFGetSystemInfo(WorldPackets::LFG::DFGetSystemInfo& dfG
         SendLfgPlayerLockInfo();
     else
         SendLfgPartyLockInfo();
+
+    // SMSG_SET_DF_FAST_LAUNCH_RESULT is an unsolicited push with no request opcode, so the server has to
+    // pick its own moment. This one is the earliest point at which the group finder UI is provably up and
+    // listening: the client only issues CMSG_DF_GET_SYSTEM_INFO when it is building the LFD panel.
+    // Sent only when the option is on - the client global defaults to 0, so staying quiet is the correct
+    // no-op and matches the state of every character today.
+    // UNVERIFIED: retail's own trigger for this push. Nothing in the client image reveals it.
+    if (dfGetSystemInfo.Player && sConfigMgr->GetBoolDefault("DungeonFinder.FastLaunch", false))
+        SendSetDFFastLaunchResult(true);
+}
+
+void WorldSession::HandleDFConfirmExpandSearch(WorldPackets::LFG::DFConfirmExpandSearch& dfConfirmExpandSearch)
+{
+    TC_LOG_DEBUG("lfg", "CMSG_DF_CONFIRM_EXPAND_SEARCH {} accepted: {}", GetPlayerInfo(), dfConfirmExpandSearch.Accepted);
+
+    // A decline never reaches us - the client's LFG_QUEUE_EXPAND popup wires only its accept button to
+    // C_LFGInfo.ConfirmLfgExpandSearch (LFGFrame.lua:88-97). Honour the bit anyway rather than assuming it,
+    // and do nothing on a false: the prompt is one-shot per queue entry, so a decline simply leaves the
+    // queue as it was.
+    // UNVERIFIED: "one-shot per queue entry" is this server's send policy, not a measured one - see the
+    // docblock of LFGMgr::UpdateExpandSearchPrompts. Reading the bit is not affected by that; the bit is on
+    // the wire either way (client serializer RVA 0x6A40E0).
+    if (!dfConfirmExpandSearch.Accepted)
+        return;
+
+    sLFGMgr->ConfirmExpandSearch(GetPlayer(), dfConfirmExpandSearch.Ticket);
+}
+
+// CMSG_DF_READY_CHECK_RESPONSE (0x430048). Sent by the global Lua binding CompleteLFGReadyCheck(isReady)
+// (thunk RVA 0x24CCA50 -> body 0x24CC200), and only while a readiness check is actually running - the
+// client guards the send with `cmp byte [0x4D195C9], 2`, i.e. against the ReadyCheckStatus it last got
+// from SMSG_LFG_READY_CHECK_UPDATE. PartyIndex is that message's first uint8 echoed straight back.
+//
+// INERT TODAY, and knowingly so (audit 2026-08-27, lfg_5A round 4, finding 2): nothing in this tree starts
+// a readiness check, so no client is ever in the state that lets it send this, and UpdateReadyCheck below
+// returns from its first `if` for anything that arrives anyway. That is a D2 gap, not a finished opcode.
+// The reasoning, the prohibition on inventing a trigger, and the hand-off to family 0x3E
+// (CMSG_BATTLEMASTER_JOIN_SKIRMISH 0x3E00C1) are in the docblock of LFGMgr::StartReadyCheck.
+void WorldSession::HandleDFReadyCheckResponse(WorldPackets::LFG::DFReadyCheckResponse& dfReadyCheckResponse)
+{
+    TC_LOG_DEBUG("lfg", "CMSG_DF_READY_CHECK_RESPONSE {} isReady: {}", GetPlayerInfo(), dfReadyCheckResponse.IsReady);
+
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    Group const* group = player->GetGroup();
+    if (!group)
+        return;
+
+    sLFGMgr->UpdateReadyCheck(group->GetGUID(), player->GetGUID(), dfReadyCheckResponse.IsReady);
+}
+
+// CMSG_LFG_LOREWALKING_UPDATE_REQUEST (0x3D0259) -> SMSG_LFG_SUSPEND_LOREWALKING (0x5A0021).
+//
+// The client sends this with no Lua call at all: it arises inside the queue-status path (send site
+// RVA 0x24C15B9 in 0x24C0A70), which looks up the LFGDungeons record for Slots[0] & 0xFFFFF and puts a
+// 16-bit column of it on the wire. The request means "I want to queue for this dungeon - is Lorewalking
+// in my way?".
+//
+// The answer bit is INVERTED relative to the opcode name (consumer RVA 0x24C50A0, four instructions):
+//   Suspend == 1 -> silence, the player may queue
+//   Suspend == 0 -> GameError 832 ERR_LFG_LOREWALKING, the queue attempt is refused
+//
+// TrinityCore has no Lorewalking content, and - this is the honest version of an earlier claim here - it
+// has nowhere to keep the state either. CHARACTER_FLAG_4_LOGGED_OUT_WHILE_LOREWALKING (0x40) exists as an
+// enumerator in SharedDefines.h and nothing more: no CharacterFlags4 field on Player, no column on the
+// characters table, not one reference anywhere under src/server. So there is no flag to read, and the
+// refusal path CANNOT be exercised on this tree today. Only the success path is live.
+// What is built is the branch, funnelled through IsLorewalkingActive() below so that a later Lorewalking
+// implementation gives that one predicate a body and changes nothing else in this handler.
+//
+// Where the data for such an implementation would live: NOT in a Lorewalking DB2 and not in a column of
+// LFGDungeons, LFGDungeonGroup, GroupFinderCategory or ContentTuning (all four checked against the 12.1
+// layouts; a case-insensitive sweep of every .dbd finds no lorewalking field anywhere). The single data
+// anchor in the client is `lorewalkingCampaignID` at RVA 0x3C06260 - and that is not a CVar either: it
+// has no code xref and appears only in the 18-entry field-name table of the JAM telemetry struct
+// JamTelemetryCharacter, right beside chromieTimeID and timeRunningSeasonID. Lorewalking is a
+// Campaign.db2 id, reported per character alongside the two other alternate-progression modes.
+namespace
+{
+    // Is this character currently Lorewalking, so that queueing for `mapId` has to be refused?
+    // Always false, and not by oversight: the tree has no storage for the state at all (see above). This is
+    // the single place a Lorewalking implementation has to fill in - it would test the campaign
+    // (`lorewalkingCampaignID`, a Campaign.db2 id) against the dungeon's map.
+    // UNVERIFIED: retail's actual condition. No client evidence exists for it either - the client only reads
+    // the answer bit, it never computes the state itself.
+    //
+    // ACCEPTANCE, held open on purpose (audit 2026-08-27, lfg_5A, D3 gap on SMSG_LFG_SUSPEND_LOREWALKING):
+    // because this predicate returns a constant, only the SUCCESS answer
+    // (Suspend = 1) can currently go out. The refusal (Suspend = 0 -> GameError 832 ERR_LFG_LOREWALKING) is
+    // built and byte-correct but unreachable, and it stays that way until Lorewalking itself exists on this
+    // tree. Do NOT close the gap by inventing a condition here: a wrong predicate would refuse legitimate
+    // queue attempts, which is strictly worse than never refusing. The gap is recorded in
+    // orchestrierung/status/lfg_5A.json under dod_luecken.D3 and must not be dropped at acceptance.
+    bool IsLorewalkingActive(Player const* /*player*/, int32 /*mapId*/)
+    {
+        return false;
+    }
+}
+
+void WorldSession::HandleLFGLorewalkingUpdateRequest(WorldPackets::LFG::LFGLorewalkingUpdateRequest& lfgLorewalkingUpdateRequest)
+{
+    TC_LOG_DEBUG("lfg", "CMSG_LFG_LOREWALKING_UPDATE_REQUEST {} mapId: {}", GetPlayerInfo(), lfgLorewalkingUpdateRequest.MapID);
+
+    Player const* player = GetPlayer();
+    if (!player)
+        return;
+
+    // The payload is LFGDungeons.MapID of the slot the player wants to queue for (see LFGPackets.h for the
+    // DB2Meta walk that establishes it) - the map a Lorewalking implementation has to test the campaign
+    // against. Suspend is INVERTED: true lets the player queue, false raises GameError 832.
+    SendLfgSuspendLorewalking(!IsLorewalkingActive(player, lfgLorewalkingUpdateRequest.MapID));
+}
+
+// SMSG_LFG_SUSPEND_LOREWALKING (0x5A0021) - one byte, bit 7.
+void WorldSession::SendLfgSuspendLorewalking(bool suspend)
+{
+    TC_LOG_DEBUG("lfg", "SMSG_LFG_SUSPEND_LOREWALKING {} suspend: {}", GetPlayerInfo(), suspend);
+
+    WorldPackets::LFG::LFGSuspendLorewalking lfgSuspendLorewalking;
+    lfgSuspendLorewalking.Suspend = suspend;
+    SendPacket(lfgSuspendLorewalking.Write());
+}
+
+// SMSG_SET_DF_FAST_LAUNCH_RESULT (0x5A0012) - one byte, bit 7. Unsolicited server push; there is no
+// CMSG_SET_DF_FAST_LAUNCH, neither in TrinityCore nor in the client (see LFGPackets.h).
+// The flag bypasses an unlock gate on LFG activity entries client-side
+// (`(flags & 0x1000) == 0 || lfgFastLaunch || ...` in the Lua getter binding RVA 0x24D4ED0).
+void WorldSession::SendSetDFFastLaunchResult(bool lfgFastLaunch)
+{
+    TC_LOG_DEBUG("lfg", "SMSG_SET_DF_FAST_LAUNCH_RESULT {} lfgFastLaunch: {}", GetPlayerInfo(), lfgFastLaunch);
+
+    WorldPackets::LFG::SetDFFastLaunchResult setDFFastLaunchResult;
+    setDFFastLaunchResult.LfgFastLaunch = lfgFastLaunch;
+    SendPacket(setDFFastLaunchResult.Write());
+}
+
+// SMSG_LFG_READY_CHECK_UPDATE (0x5A0006).
+// Unreachable today: its only sender, LFGMgr::StartReadyCheck, has no caller. D2 is OPEN - see that
+// function's docblock and lfg_5A.json, dod_luecken.D2.
+void WorldSession::SendLfgReadyCheckUpdate(lfg::LfgReadyCheck const& readyCheck)
+{
+    TC_LOG_DEBUG("lfg", "SMSG_LFG_READY_CHECK_UPDATE {} state: {}", GetPlayerInfo(), readyCheck.state);
+
+    WorldPackets::LFG::LFGReadyCheckUpdate lfgReadyCheckUpdate;
+    // The client only ever echoes this byte back in CMSG_DF_READY_CHECK_RESPONSE; TrinityCore uses 127 as
+    // the "no party index" value for the sister opcode SMSG_LFG_ROLE_CHECK_UPDATE and StartReadyCheck
+    // defaults to the same.
+    lfgReadyCheckUpdate.PartyIndex = readyCheck.partyIndex;
+    lfgReadyCheckUpdate.ReadyCheckStatus = readyCheck.state;
+    lfgReadyCheckUpdate.BgQueueIDs = readyCheck.bgQueueIDs;
+    lfgReadyCheckUpdate.IsRequeue = readyCheck.isRequeue;
+
+    // Leader first, mirroring SendLfgRoleCheckUpdate - the client indexes the member list positionally
+    // in several places and expects the leader at slot 0.
+    lfg::LfgAnswerContainer::const_iterator itLeader = readyCheck.answers.find(readyCheck.leader);
+    if (itLeader != readyCheck.answers.end())
+        lfgReadyCheckUpdate.Members.emplace_back(itLeader->first, itLeader->second == lfg::LFG_ANSWER_AGREE);
+
+    for (lfg::LfgAnswerContainer::value_type const& answer : readyCheck.answers)
+    {
+        if (answer.first == readyCheck.leader)
+            continue;
+
+        lfgReadyCheckUpdate.Members.emplace_back(answer.first, answer.second == lfg::LFG_ANSWER_AGREE);
+    }
+
+    SendPacket(lfgReadyCheckUpdate.Write());
+}
+
+// SMSG_LFG_READY_CHECK_RESULT (0x5A001E). Unreachable today for the same reason as its sister message
+// above: no running check means no answer to report. D2 is OPEN - see LFGMgr::StartReadyCheck.
+// Both flanks are required (D3): a false additionally raises
+// GameError 831 ERR_LFG_PLAYER_DECLINED_READY_CHECK client-side and fires LFG_READY_CHECK_DECLINED
+// instead of LFG_READY_CHECK_PLAYER_IS_READY.
+void WorldSession::SendLfgReadyCheckResult(ObjectGuid guid, bool ready)
+{
+    TC_LOG_DEBUG("lfg", "SMSG_LFG_READY_CHECK_RESULT {} player: {} ready: {}", GetPlayerInfo(), guid.ToString(), ready);
+
+    WorldPackets::LFG::LFGReadyCheckResult lfgReadyCheckResult;
+    lfgReadyCheckResult.Player = guid;
+    lfgReadyCheckResult.Ready = ready;
+    SendPacket(lfgReadyCheckResult.Write());
+}
+
+// SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN (0x5A0009).
+//
+// The consumer (RVA 0x24C18C0) is fully decoded: it formats TimeLeft with INT_GENERAL_DURATION into the
+// GlobalString INSTANCE_SHUTDOWN_MESSAGE and prints it to the system chat.
+//
+// The only sender is LFGMgr::SendInstanceShutdownCountdown, and that one has NO caller: nothing in this
+// tree shuts an instance down while players are still inside it, so there is nothing this message could
+// truthfully announce. The full reasoning, the withdrawn round-2/3 trigger and the standing prohibition on
+// inventing a substitute are in the docblock of LFGMgr::SendInstanceShutdownCountdown.
+//
+// UNVERIFIED - the retail trigger. That retail sends this message when an LFG instance closes under its
+// occupants is inference from the consumer (a chat line built from INSTANCE_SHUTDOWN_MESSAGE), not from a
+// capture. D2 is consequently OPEN for this opcode; see lfg_5A.json, dod_luecken.D2 and aufnahme_noetig.
+void WorldSession::SendLfgInstanceShutdownCountdown(WorldPackets::LFG::RideTicket const& ticket, uint32 timeLeftSeconds)
+{
+    TC_LOG_DEBUG("lfg", "SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN {} timeLeft: {}", GetPlayerInfo(), timeLeftSeconds);
+
+    WorldPackets::LFG::LFGInstanceShutdownCountdown lfgInstanceShutdownCountdown;
+    lfgInstanceShutdownCountdown.Ticket = ticket;
+    lfgInstanceShutdownCountdown.TimeLeft = timeLeftSeconds;
+    SendPacket(lfgInstanceShutdownCountdown.Write());
 }
 
 void WorldSession::HandleDFGetJoinStatus(WorldPackets::LFG::DFGetJoinStatus& /*dfGetJoinStatus*/)
@@ -507,4 +715,25 @@ void WorldSession::SendLfgTeleportError(lfg::LfgTeleportResult err)
     TC_LOG_DEBUG("lfg", "SMSG_LFG_TELEPORT_DENIED {} reason: {}",
         GetPlayerInfo(), err);
     SendPacket(WorldPackets::LFG::LFGTeleportDenied(err).Write());
+}
+
+void WorldSession::SendLfgExpandSearchPrompt(WorldPackets::LFG::RideTicket const& ticket)
+{
+    TC_LOG_DEBUG("lfg", "SMSG_LFG_EXPAND_SEARCH_PROMPT {}", GetPlayerInfo());
+
+    WorldPackets::LFG::LFGExpandSearchPrompt expandSearchPrompt;
+    expandSearchPrompt.Ticket = ticket;
+    SendPacket(expandSearchPrompt.Write());
+}
+
+void WorldSession::SendLfgSlotInvalid(lfg::LfgSlotInvalidReason reason, int32 subReason1, int32 subReason2)
+{
+    TC_LOG_DEBUG("lfg", "SMSG_LFG_SLOT_INVALID {} reason: {}, sub: {}/{}",
+        GetPlayerInfo(), uint32(reason), subReason1, subReason2);
+
+    WorldPackets::LFG::LFGSlotInvalid slotInvalid;
+    slotInvalid.Reason = uint32(reason);
+    slotInvalid.SubReason1 = subReason1;
+    slotInvalid.SubReason2 = subReason2;
+    SendPacket(slotInvalid.Write());
 }

@@ -109,6 +109,12 @@ class TC_GAME_API LFGQueue
         void UpdateQueueTimers(uint8 queueId, time_t currTime);
         time_t GetJoinTime(ObjectGuid guid) const;
 
+        // Read-only views of a live queue entry. The expand-search path needs to know what an entry is
+        // currently queued for, and with which roles, so it can re-add it unchanged except for a wider
+        // dungeon set. Return nullptr when the guid has no queue data.
+        LfgDungeonSet const* GetQueuedDungeons(ObjectGuid guid) const;
+        LfgRolesMap const* GetQueuedRoles(ObjectGuid guid) const;
+
         // Find new group
         uint8 FindGroups();
 

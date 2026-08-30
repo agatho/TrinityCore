@@ -112,6 +112,25 @@ namespace WorldPackets
             bool Player = false;
         };
 
+        // Client serializer 12.0.7.68275 @ RVA 0x5D1980 (image base 0x7FF728AA0000):
+        //   write_u32(0x400036) ; write_PackedGuid(+0x20) ; write_u32(+0x30) ; write_u32(+0x34)
+        //   write_u64(+0x38)    ; WriteBit(+0x40) ; FlushBits          <- byte for byte a RideTicket
+        //   WriteBit(+0x48)     ; FlushBits
+        // The ticket is the one the client stashed from SMSG_LFG_EXPAND_SEARCH_PROMPT (handler @ RVA 0x2301A90
+        // copies the 40 bytes at msg+0x20 straight into a global), echoed back unchanged.
+        // In practice Accepted is always true: the LFG_QUEUE_EXPAND static popup wires OnAccept to
+        // C_LFGInfo.ConfirmLfgExpandSearch and gives button2 (NO) no handler at all, so a decline sends nothing.
+        class DFConfirmExpandSearch final : public ClientPacket
+        {
+        public:
+            explicit DFConfirmExpandSearch(WorldPacket&& packet) : ClientPacket(CMSG_DF_CONFIRM_EXPAND_SEARCH, std::move(packet)) { }
+
+            void Read() override;
+
+            RideTicket Ticket;
+            bool Accepted = false;
+        };
+
         class DFGetJoinStatus final : public ClientPacket
         {
         public:
@@ -119,6 +138,74 @@ namespace WorldPackets
 
             void Read() override { }
         };
+
+        // CMSG_DF_READY_CHECK_RESPONSE (0x430048) - Client 12.1.0.69382, serializer @ RVA 0x6A5240:
+        //   Write<uint32>(0x430048) ; bit has(PartyIndex) ; bit IsReady ; FlushBits ; if (has) Write<uint8>(PartyIndex)
+        // Payload is 1..2 bytes. The presence bit is written FIRST (it is the more significant bit of the
+        // accumulator), exactly like CMSG_SET_EVERYONE_IS_ASSISTANT (0x430046, serializer 0x6A5080) whose
+        // TrinityCore Read() (PartyPackets.cpp) already uses OptionalInit-then-flag ordering.
+        // Sender: the global Lua binding CompleteLFGReadyCheck(isReady) (thunk 0x24CCA50 -> body 0x24CC200).
+        // The client only sends while a ready check is running (`cmp byte [0x4D195C9], 2`) and echoes back the
+        // first uint8 of SMSG_LFG_READY_CHECK_UPDATE.
+        // UNVERIFIED: the NAME PartyIndex. Position and optionality are measured; the name is the reading that
+        // matches every other CMSG_DF_* message. The wire layout does not depend on it.
+        class DFReadyCheckResponse final : public ClientPacket
+        {
+        public:
+            explicit DFReadyCheckResponse(WorldPacket&& packet) : ClientPacket(CMSG_DF_READY_CHECK_RESPONSE, std::move(packet)) { }
+
+            void Read() override;
+
+            Optional<uint8> PartyIndex;
+            bool IsReady = false;
+        };
+
+        // CMSG_LFG_LOREWALKING_UPDATE_REQUEST (0x3D0259) - Client 12.1.0.69382, serializer @ RVA 0x6D1520:
+        //   Write<uint32>(0x3D0259) ; Write<uint32>(**(uint32**)(obj+32))
+        // Exactly one uint32 on the wire (the double indirection is a pointer-held field, not a second read).
+        // Send site 0x24C15B9 inside 0x24C0A70 (the routine that also processes SMSG_LFG_UPDATE_STATUS and
+        // the queue status). The client sends this with NO Lua call - it arises purely inside the
+        // queue-status path, gated on a bit-set membership test (bit 13 or bit 32 of a small uint32 vector
+        // hanging off a singleton; the same test gates the alternate-progression content filter at
+        // 0x2322810, so this is the Chromie-Time / Lorewalking family of gates).
+        //
+        // The payload is resolved, not guessed. At 0x24C0F29 the client fetches the LFGDungeons record for
+        // Slots[0] & 0xFFFFF and reads reflection index 9 through the 16-bit field getter, then sign-extends
+        // (`movsx ebx, ax`). The store at 0x655FCE0 is LFGDungeons: its DB2Meta at 0x3B17ED0 names it
+        // literally, carries FileDataID 1361033, 33 fields, 71 packed record bytes and layout hash
+        // 0x34B02DE8 - which is exactly the newest LAYOUT in WoWDBDefs/definitions/LFGDungeons.dbd. Walking
+        // the meta's packed-offset table at 0x3B181B0 yields per-field widths that match the .dbd column
+        // list byte for byte and terminate at 71, which establishes that reflection index N is the N-th
+        // non-ID .dbd column. Index 9 is therefore MapID<16>, at packed offset 0x18.
+        // Because MapID is SIGNED, a MapID of -1 arrives as 0xFFFFFFFF - hence int32, not uint32.
+        class LFGLorewalkingUpdateRequest final : public ClientPacket
+        {
+        public:
+            explicit LFGLorewalkingUpdateRequest(WorldPacket&& packet) : ClientPacket(CMSG_LFG_LOREWALKING_UPDATE_REQUEST, std::move(packet)) { }
+
+            void Read() override;
+
+            int32 MapID = 0;                // LFGDungeons.MapID of Slots[0], sign-extended from int16
+        };
+
+        // Two opcodes of family 0x5A are deliberately NOT built here, and this is the record of why.
+        //
+        //   0x5A0007  dispatcher case @ RVA 0x755AAD, hook slot 0x462ED20 = NULL, exactly 1 xref, no registrar
+        //   0x5A0013  dispatcher case @ RVA 0x7561DB, hook slot 0x462ED28 = NULL, exactly 1 xref, no registrar
+        //
+        // Both cases read no field at all: they take a raw pointer to the rest of the payload (0x35AF730,
+        // which copies nothing and does not even store the length) and hand it on, and both share the stub
+        // serializer 0x217F10 (`return 0;`). TrinityCore 12.1 gives neither a name.
+        //
+        // "NULL hook with exactly one xref and no registrar" is the signature of a consumer that lives in
+        // Blizzard's DEVELOPER build, not in the retail client. That does NOT mean the opcodes are unused -
+        // it means their counterpart is not in the public client, so their format cannot be derived
+        // offline: the field structure only comes into existence inside the consumer, and there is no
+        // consumer to read. (Contrast SMSG_OPEN_LFG_DUNGEON_FINDER, whose case is equally "raw" but whose
+        // consumer 0x24C4E30 dereferences the pointer as a uint32 - there "raw" was decidable.)
+        //
+        // Consequence for acceptance: step 3 of the verification loop - send it and watch the UI react -
+        // does not apply to these two. They are documented, not built.
 
         struct LFGBlackListSlot
         {
@@ -278,6 +365,155 @@ namespace WorldPackets
             bool IsRequeue = false;
         };
 
+        // One member row of SMSG_LFG_READY_CHECK_UPDATE. Element type ClientLFGReadyCheckUpdateMember
+        // (type-name literal @ RVA 0x3C22810, in-memory stride 24); there is no separate reader - the
+        // dispatcher case 0x755902 decodes it inline. Wire: PackedGuid + ONE byte (bit7 IsReady, bit6 Unk1).
+        // Note this is NOT the same shape as ClientLFGRoleCheckUpdateMember, which carries one byte more
+        // payload per member (guid, u8 RolesDesired, u8 Level, bit).
+        struct LFGReadyCheckUpdateMember
+        {
+            LFGReadyCheckUpdateMember() = default;
+            LFGReadyCheckUpdateMember(ObjectGuid guid, bool isReady) : Guid(guid), IsReady(isReady) { }
+
+            ObjectGuid Guid;
+            bool IsReady = false;
+            // UNVERIFIED: the second bit of every member (client struct offset +17) has no reader anywhere in
+            // the decompiled image - its meaning is unknown. Send 0 until a capture shows otherwise.
+            bool Unk1 = false;
+        };
+
+        // SMSG_LFG_READY_CHECK_UPDATE (0x5A0006) - Client 12.1.0.69382, dispatcher case @ RVA 0x755902,
+        // consumer @ RVA 0x24C2920 (hook slot 0x462ED10).
+        // Wire:  u8 PartyIndex ; u8 ReadyCheckStatus ; u32 BgQueueIDs.Count ; u32 Members.Count ;
+        //        BgQueueIDs[] (u64 each) ; Members[] ; one byte with bit7 = IsRequeue.
+        // Minimum 11 bytes (both counts zero). Each single-bit field occupies a whole byte - the client reads
+        // four separate Read<uint8> and masks them; there is no shared bit block and no FlushBits in the case.
+        //
+        // This is the LFG READINESS check - a fourth, disjoint system next to the LFG proposal
+        // (SMSG_LFG_PROPOSAL_UPDATE / LFGDungeonReadyPopup), the LFG role check
+        // (SMSG_LFG_ROLE_CHECK_UPDATE / LFDRoleCheckPopup) and the party ready check
+        // (WorldPackets::Party::ReadyCheckStarted / ReadyCheckFrame). Its dialog is LFGReadyCheckPopup.
+        //
+        // D3 - the consumer's comparison chain on ReadyCheckStatus (GameError via 0x209AD90):
+        //      2 -> ERR_LFG_READY_CHECK_INITIATED      (829) and, per ready member, LFG_READY_CHECK_PLAYER_IS_READY
+        //      3 -> ERR_LFG_READY_CHECK_FAILED_TIMEOUT (804)
+        //      4 -> ERR_LFG_READY_CHECK_ABORTED        (844)
+        //      5 -> ERR_LFG_READY_CHECK_FAILED         (803)
+        // Always: LFG_READY_CHECK_UPDATE. If Status == 2 AND the receiver's own member entry has IsReady == 0:
+        // LFG_READY_CHECK_SHOW(IsRequeue); otherwise LFG_READY_CHECK_HIDE. Any status outside 2..5 therefore
+        // closes the dialog without an error message - that is the "finished" case.
+        //
+        // BgQueueIDs is what turns this into the battleground variant: GetLFGReadyCheckUpdate (0x24CF010)
+        // returns (Status == 2, Count != 0) and the UI reads that as (readyCheckInProgress,
+        // readyCheckIsBattleground); GetLFGReadyCheckUpdateBattlegroundInfo (0x24CF100) takes BgQueueIDs[0]
+        // and uses (uint16)queueId as a BattlemasterList key. With an empty vector the client shows UNKNOWN as
+        // the queue name and creates no queue-status entry (LFGReadyCheck.lua:13-17, QueueStatusFrame.lua:671-680).
+        //
+        // UNVERIFIED: the field NAMES PartyIndex / ReadyCheckStatus / BgQueueIDs. They are taken from the
+        // sister opcode SMSG_LFG_ROLE_CHECK_UPDATE (0x5A0005, reader 0x754550), whose read sequence
+        // u8,u8,u32 cnt,u32 cnt,u32,u32 cnt,... maps one-to-one onto LFGRoleCheckUpdate below. IsRequeue is
+        // NOT a guess - the generated doc declares LFG_READY_CHECK_SHOW's payload as { Name="isRequeue" }.
+        class LFGReadyCheckUpdate final : public ServerPacket
+        {
+        public:
+            explicit LFGReadyCheckUpdate() : ServerPacket(SMSG_LFG_READY_CHECK_UPDATE, 1 + 1 + 4 + 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint8 PartyIndex = 0;
+            uint8 ReadyCheckStatus = 0;
+            std::vector<uint64> BgQueueIDs;
+            std::vector<LFGReadyCheckUpdateMember> Members;
+            bool IsRequeue = false;
+        };
+
+        // SMSG_LFG_READY_CHECK_RESULT (0x5A001E) - Client 12.1.0.69382, dispatcher case @ RVA 0x7567FA,
+        // consumer @ RVA 0x24C31D0. Wire: PackedGuid Player ; one byte with bit7 = Ready. 3..19 bytes.
+        // The field names are Blizzard's own: the consumer opens with the debug format string
+        //   "LFGMessage: READY_CHECK_RESULT - %s, Ready: %s"     (string @ RVA 0x3DAEE08)
+        // from the ...\Ui\LFGInfo.cpp string block. The first %s is the formatted GUID, not the name.
+        // The consumer resolves the player name from its character-name cache first: if that lookup
+        // fails, neither the event nor the GameError fires.
+        // D3 - there is NO Lua event named LFG_READY_CHECK_RESULT. The consumer branches:
+        //   Ready == true  -> LFG_READY_CHECK_PLAYER_IS_READY(name)
+        //   Ready == false -> GameError 831 ERR_LFG_PLAYER_DECLINED_READY_CHECK *and* LFG_READY_CHECK_DECLINED(name)
+        // Sending only the true flank leaves both the decline text and the decline event out.
+        class LFGReadyCheckResult final : public ServerPacket
+        {
+        public:
+            explicit LFGReadyCheckResult() : ServerPacket(SMSG_LFG_READY_CHECK_RESULT, 16 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Player;
+            bool Ready = false;
+        };
+
+        // SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN (0x5A0009) - Client 12.1.0.69382, dispatcher case @ RVA 0x755BAD,
+        // consumer @ RVA 0x24C18C0. Wire: RideTicket ; uint32 TimeLeft. 23..39 bytes.
+        // The consumer formats TimeLeft with INT_GENERAL_DURATION (duration formatter 0x36F49B0) into the
+        // GlobalString INSTANCE_SHUTDOWN_MESSAGE and prints it through the system-chat sink 0x20A7880
+        // (verified: 0x24C18C0 calls the duration formatter 0x36F49B0 at 0x24C1942 and 0x20A7880 at
+        // 0x24C196E; 0x20A7880 is a function start with 190 code xrefs, while the 0x2007880 this comment
+        // used to name is not a function start at all - it falls inside sub_2005D80 and has no xref).
+        // There is NO Lua event, no CVar and no UI state - the time formatting is what proves TimeLeft is a
+        // duration in SECONDS. Do not confuse this with INSTANCE_BOOT_START/_STOP (kick from the LFG instance
+        // group) or INSTANCE_ABANDON_VOTE_FINISHED (vote to abandon) - different systems, similar names.
+        class LFGInstanceShutdownCountdown final : public ServerPacket
+        {
+        public:
+            explicit LFGInstanceShutdownCountdown() : ServerPacket(SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN, 16 + 4 + 4 + 8 + 1 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            RideTicket Ticket;
+            uint32 TimeLeft = 0;            // seconds
+        };
+
+        // SMSG_LFG_SUSPEND_LOREWALKING (0x5A0021) - Client 12.1.0.69382, dispatcher case @ RVA 0x756942,
+        // consumer @ RVA 0x24C50A0. Wire: exactly ONE byte, bit7 = Suspend.
+        // The consumer is four instructions:
+        //     cmp byte ptr [rcx+0x20], 0 / jne ret / mov ecx, 0x340 (=832) / jmp 0x209AD90 (GameError)
+        // so Suspend == 0 raises GameError 832 ERR_LFG_LOREWALKING and Suspend == 1 is silent. No Lua event,
+        // no UI state, no global.
+        // The semantics are the INVERSE of what the name suggests: the bit does not ask the client to pause
+        // Lorewalking, it reports "Lorewalking is suspended, you may queue". A false is the REFUSAL and is
+        // what carries the error text.
+        // Lorewalking itself is a campaign-bound scenario mode that hides quests and blocks LFG queueing
+        // (TextureKit "lorewalking-scenario", CVar lorewalkingCampaignID @ RVA 0x3C06260,
+        // LOREWALKING_QUESTS_HIDDEN_HELP_TIP). It is NOT the "old raids in their original form" mode.
+        class LFGSuspendLorewalking final : public ServerPacket
+        {
+        public:
+            explicit LFGSuspendLorewalking() : ServerPacket(SMSG_LFG_SUSPEND_LOREWALKING, 1) { }
+
+            WorldPacket const* Write() override;
+
+            bool Suspend = false;
+        };
+
+        // SMSG_SET_DF_FAST_LAUNCH_RESULT (0x5A0012) - Client 12.1.0.69382, dispatcher case @ RVA 0x75617E,
+        // consumer @ RVA 0x24C4E70. Wire: exactly ONE byte, bit7 = LfgFastLaunch. The field name is literal:
+        // the consumer stores the bit into the global 0x4C9B57B and prints "lfgFastLaunch set to %s"
+        // (format string @ RVA 0x3DAEDF0) to the console.
+        // This is an UNSOLICITED server push. CMSG_SET_DF_FAST_LAUNCH does not exist - not in TrinityCore and
+        // not in the client: a full catalogue of the client's message classes (2684 classes off the shared
+        // vtable guard slot 0x7FF781687A40, containing all 1023 TC CMSG) has no unknown 1-bit message in
+        // families 0x43 or 0x3D, and the only xref of the format string is inside this receive handler.
+        // So the half pair is correct and is not a violation of the "never implement pairs alone" rule.
+        // Effect: the only other reader of the global is the Lua getter binding 0x24D4ED0 (the 22-field LFG
+        // activity table), in the chain `(flags & 0x1000) == 0 || lfgFastLaunch || ...`. The flag therefore
+        // BYPASSES AN UNLOCK GATE ON LFG ENTRIES - it is not a "fast start of the dungeon finder".
+        class SetDFFastLaunchResult final : public ServerPacket
+        {
+        public:
+            explicit SetDFFastLaunchResult() : ServerPacket(SMSG_SET_DF_FAST_LAUNCH_RESULT, 1) { }
+
+            WorldPacket const* Write() override;
+
+            bool LfgFastLaunch = false;
+        };
+
         class LFGJoinResult final : public ServerPacket
         {
         public:
@@ -426,6 +662,38 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             lfg::LfgTeleportResult Reason;
+        };
+
+        // Dispatcher case 5636127 (0x56001F) inside the 0x56 group dispatcher @ RVA 0x739420 is a single
+        // RideTicket read and nothing else; the registered handler @ RVA 0x2301A90 copies msg+0x20..+0x48
+        // (guid 16 + id 4 + type 4 + time 8 + bit) into a global and fires SHOW_LFG_EXPAND_SEARCH_PROMPT,
+        // which LFGInfoDocumentation.lua declares with an empty payload. So: ticket only.
+        class LFGExpandSearchPrompt final : public ServerPacket
+        {
+        public:
+            explicit LFGExpandSearchPrompt() : ServerPacket(SMSG_LFG_EXPAND_SEARCH_PROMPT, 16 + 4 + 4 + 8 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            RideTicket Ticket;
+        };
+
+        // Dispatcher case 5636116 (0x560014) only takes a reference to the remaining bytes - the parse is
+        // deferred to the handler. That handler (registration site RVA 0x1EE580E stores RVA 0x2301A40 into
+        // the slot at RVA 0x4404890) reads exactly three dwords off the tail:
+        //   eax = [payload+0] -> arg0 ; eax = [payload+4] -> arg1 ; eax = [payload+8] -> arg2
+        // and fires a three-number Lua event - LFG_INVALID_ERROR_MESSAGE(reason, subReason1, subReason2).
+        // Reason is Enum.LFGSlotInvalidReason (see lfg::LfgSlotInvalidReason).
+        class LFGSlotInvalid final : public ServerPacket
+        {
+        public:
+            explicit LFGSlotInvalid() : ServerPacket(SMSG_LFG_SLOT_INVALID, 4 + 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Reason = 0;
+            int32 SubReason1 = 0;
+            int32 SubReason2 = 0;
         };
     }
 }

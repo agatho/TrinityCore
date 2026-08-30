@@ -23,6 +23,9 @@
 #include "GameTime.h"
 #include "Group.h"
 #include "GroupMgr.h"
+#include "BattlegroundMgr.h"
+#include "BattlegroundPackets.h"
+#include "BattlegroundQueue.h"
 #include "InstanceLockMgr.h"
 #include "LFGGroupData.h"
 #include "LFGPlayerData.h"
@@ -37,6 +40,7 @@
 #include "SocialMgr.h"
 #include "World.h"
 #include "WorldSession.h"
+#include <algorithm>
 #include <sstream>
 
 namespace lfg
@@ -286,10 +290,28 @@ LFGMgr* LFGMgr::instance()
 
 void LFGMgr::Update(uint32 diff)
 {
+    time_t currTime = GameTime::GetGameTime();
+
+    // Remove obsolete readiness checks. A timeout is status 3, which the client turns into
+    // ERR_LFG_READY_CHECK_FAILED_TIMEOUT (804) and closes LFGReadyCheckPopup with.
+    //
+    // This sweep sits AHEAD of the LFG option gate below, and that is deliberate: a readiness check is not
+    // a dungeon-finder queue, and StartReadyCheck does not consult the option mask either. Behind the gate
+    // the lifecycle would be asymmetric - a check could be created on a realm with the dungeon finder
+    // switched off, but never expire and never be aborted. The popup would then stay open on every
+    // member's screen (only an update ever closes it), the entry would live in ReadyChecksStore until the
+    // next restart, and StartReadyCheck would refuse that group forever because the stale entry blocks it.
+    for (LfgReadyCheckContainer::iterator it = ReadyChecksStore.begin(); it != ReadyChecksStore.end();)
+    {
+        LfgReadyCheckContainer::iterator itReadyCheck = it++;
+        if (currTime < itReadyCheck->second.cancelTime)
+            continue;
+
+        FinishReadyCheck(itReadyCheck, LFG_READYCHECK_MISSING_ANSWER);
+    }
+
     if (!isOptionEnabled(LFG_OPTION_ENABLE_DUNGEON_FINDER | LFG_OPTION_ENABLE_RAID_BROWSER))
         return;
-
-    time_t currTime = GameTime::GetGameTime();
 
     // Remove obsolete role checks
     for (LfgRoleCheckContainer::iterator it = RoleChecksStore.begin(); it != RoleChecksStore.end();)
@@ -381,9 +403,339 @@ void LFGMgr::Update(uint32 diff)
         m_QueueTimer = 0;
         for (LfgQueueContainer::iterator it = QueuesStore.begin(); it != QueuesStore.end(); ++it)
             it->second.UpdateQueueTimers(it->first, currTime);
+
+        // Piggy-backed on the queue-status sweep on purpose: this is the one place that already runs over
+        // every live queue on a timer, and the prompt is a "you have been waiting a while" notification,
+        // so LFG_QUEUEUPDATE_INTERVAL granularity is the right resolution for it.
+        UpdateExpandSearchPrompts(currTime);
     }
     else
         m_QueueTimer += diff;
+}
+
+/**
+    Translates a TC LfgLockStatusType into the client's Enum.LFGSlotInvalidReason, which is what
+    SMSG_LFG_SLOT_INVALID's first dword is indexed by client side (LFG_INSTANCE_INVALID_CODES).
+
+    Two deliberate divergences from a straight cast:
+      - LFG_LOCKSTATUS_NO_SPEC is 14 in TC but NoSpec is 13 in the client enum, where 14 is
+        CannotRunAnyChildDungeon. A straight cast would tell the player the wrong thing.
+      - TC folds PlayerCondition failures into 1000 + the client's condition code. Retail sends
+        PlayerConditionFailed (19) with the condition code in SubReason1, which is what the client's
+        LFG_INSTANCE_CONDITION_FAILED_CODES table actually reads.
+*/
+static LfgSlotInvalidReason LockStatusToSlotInvalidReason(LfgLockInfoData const& info, int32& subReason1, int32& subReason2)
+{
+    subReason1 = 0;
+    subReason2 = 0;
+
+    switch (info.lockStatus)
+    {
+        case LFG_LOCKSTATUS_INSUFFICIENT_EXPANSION:
+            return LFG_SLOT_INVALID_EXPANSION_TOO_LOW;
+        case LFG_LOCKSTATUS_TOO_LOW_LEVEL:
+            return LFG_SLOT_INVALID_LEVEL_TOO_LOW;
+        case LFG_LOCKSTATUS_TOO_HIGH_LEVEL:
+            return LFG_SLOT_INVALID_LEVEL_TOO_HIGH;
+        case LFG_LOCKSTATUS_TOO_LOW_GEAR_SCORE:
+            subReason1 = int32(info.requiredItemLevel);
+            subReason2 = int32(info.currentItemLevel);
+            return LFG_SLOT_INVALID_GEAR_TOO_LOW;
+        case LFG_LOCKSTATUS_TOO_HIGH_GEAR_SCORE:
+            subReason1 = int32(info.requiredItemLevel);
+            subReason2 = int32(info.currentItemLevel);
+            return LFG_SLOT_INVALID_GEAR_TOO_HIGH;
+        case LFG_LOCKSTATUS_RAID_LOCKED:
+            return LFG_SLOT_INVALID_RAID_LOCKED;
+        case LFG_LOCKSTATUS_NO_SPEC:
+            return LFG_SLOT_INVALID_NO_SPEC;
+        case LFG_LOCKSTATUS_HAS_RESTRICTION:
+            return LFG_SLOT_INVALID_RESTRICTED;
+        default:
+            break;
+    }
+
+    if (info.lockStatus > 1000)
+    {
+        subReason1 = int32(info.lockStatus - 1000);
+        return LFG_SLOT_INVALID_PLAYER_CONDITION_FAILED;
+    }
+
+    return LFG_SLOT_INVALID_NONE;
+}
+
+/**
+    Builds the dungeon set an already queued entry would be widened to.
+
+    UNVERIFIED - and this is the load-bearing guess of the whole expand-search path: WHICH dungeons retail
+    adds is a pure server rule, and no source above TrinityCore in the arbiter order carries it. The client
+    contributes exactly two things and nothing else: a payloadless prompt event
+    (SHOW_LFG_EXPAND_SEARCH_PROMPT -> StaticPopup_Show("LFG_QUEUE_EXPAND"), LFGFrame.lua:88-97, :265-266)
+    and an argumentless confirmation (C_LFGInfo.ConfirmLfgExpandSearch, LFGInfoDocumentation.lua:86). The
+    12.1 binary holds no other trace of the feature - the only match for "ExpandSearch" in the image is that
+    API name. So the rule below is a construction, not a reading:
+
+        the widened set is the set the same queue would have covered had it been joined as a random for the
+        same LFGDungeons group, minus anything the requester cannot enter right now
+
+    It is built from data TC already owns and from behaviour TC already has, which is why it was chosen -
+    CachedDungeonMapStore, which LoadLFGDungeons fills per dungeon group and which JoinLfg already uses to
+    expand a random, and GetLockedDungeons, which is recomputed live. That makes it consistent with this
+    server, not with retail. A recording of a real prompt-and-accept would show what retail actually adds;
+    see aufnahme_noetig / "expand your search" in orchestrierung/status/lfg_5A.json.
+
+    Randoms are already expanded to their whole group by JoinLfg, so they have nothing to gain here; this
+    is for a specific-dungeon queue.
+
+   @param[in]     pguid      Player whose eligibility bounds the expansion
+   @param[in]     current    Dungeons the entry is queued for right now
+   @param[out]    nowInvalid If given, receives the currently queued dungeons that have since become locked
+   @returns The widened dungeon set (never contains anything locked for pguid)
+*/
+LfgDungeonSet LFGMgr::BuildExpandedDungeons(ObjectGuid pguid, LfgDungeonSet const& current, LfgLockMap* nowInvalid)
+{
+    LfgDungeonSet expanded = current;
+
+    std::set<uint8> groups;
+    for (uint32 dungeonId : current)
+        if (LFGDungeonData const* dungeon = GetLFGDungeon(dungeonId))
+            groups.insert(dungeon->group);
+
+    for (uint8 group : groups)
+    {
+        LfgCachedDungeonContainer::const_iterator itr = CachedDungeonMapStore.find(group);
+        if (itr != CachedDungeonMapStore.end())
+            expanded.insert(itr->second.begin(), itr->second.end());
+    }
+
+    for (auto const& lock : GetLockedDungeons(pguid))
+    {
+        uint32 const dungeonId = lock.first & 0x00FFFFFF;
+        expanded.erase(dungeonId);
+        if (nowInvalid && current.find(dungeonId) != current.end())
+            (*nowInvalid)[lock.first] = lock.second;
+    }
+
+    return expanded;
+}
+
+/**
+    Offers SMSG_LFG_EXPAND_SEARCH_PROMPT to the owner of every queue entry that has been waiting longer
+    than LFG_TIME_EXPAND_SEARCH_PROMPT and that would actually gain dungeons by being widened. Prompted
+    owners are remembered so the popup is offered once per queue entry rather than once per sweep, and
+    that memory is pruned in the same pass against the set of owners still queued.
+
+    UNVERIFIED: the send policy - both halves of it. "Once per queue entry" (ExpandSearchPromptedStore) and
+    "only when the widening would actually gain a dungeon" (the wouldGain test) are decisions taken here,
+    not read anywhere. Retail may well re-offer on an interval, or offer unconditionally and let the client
+    dismiss it; the popup is `exclusive = 1` with `timeout = 0` (LFGFrame.lua:88-97), so a repeat send would
+    not stack, which means the client cannot rule either policy out. What IS established is the direction
+    and the payload: the message carries only a RideTicket (case RVA 0x756878) and its event is payloadless,
+    so the client learns nothing from it except that it should ask. Only the leader is asked because a
+    non-leader cannot change a group's queue in this server at all - that half follows TrinityCore's own
+    contract (LFGMgr::JoinLfg, LFGMgr::LeaveLfg), arbiter rank 4, and is not a guess.
+    Settled by the recording under aufnahme_noetig / "expand your search" in status/lfg_5A.json.
+*/
+void LFGMgr::UpdateExpandSearchPrompts(time_t currTime)
+{
+    GuidSet stillQueued;
+
+    for (auto const& itr : PlayersStore)
+    {
+        ObjectGuid const pguid = itr.first;
+        if (itr.second.GetState() != LFG_STATE_QUEUED)
+            continue;
+
+        Player* player = ObjectAccessor::FindConnectedPlayer(pguid);
+        if (!player)
+            continue;
+
+        ObjectGuid const gguid = GetGroup(pguid);
+        if (!gguid.IsEmpty())
+        {
+            // Only the leader can act on the prompt, so only the leader is asked.
+            Group const* group = sGroupMgr->GetGroupByGUID(gguid);
+            if (!group || group->GetLeaderGUID() != pguid)
+                continue;
+        }
+
+        ObjectGuid const owner = gguid.IsEmpty() ? pguid : gguid;
+        stillQueued.insert(owner);
+
+        if (ExpandSearchPromptedStore.find(owner) != ExpandSearchPromptedStore.end())
+            continue;
+
+        LFGQueue& queue = GetQueue(owner);
+        time_t const joinTime = queue.GetJoinTime(owner);
+        if (!joinTime || currTime - joinTime < LFG_TIME_EXPAND_SEARCH_PROMPT)
+            continue;
+
+        LfgDungeonSet const* queued = queue.GetQueuedDungeons(owner);
+        if (!queued || queued->empty())
+            continue;
+
+        LfgDungeonSet const expanded = BuildExpandedDungeons(pguid, *queued, nullptr);
+        bool const wouldGain = std::any_of(expanded.begin(), expanded.end(),
+            [queued](uint32 dungeonId) { return queued->find(dungeonId) == queued->end(); });
+        if (!wouldGain)
+            continue;
+
+        WorldPackets::LFG::RideTicket const* ticket = GetTicket(pguid);
+        if (!ticket)
+            continue;
+
+        ExpandSearchPromptedStore.insert(owner);
+        TC_LOG_DEBUG("lfg.queue.expand", "Offering search expansion to {} (owner {}): queued for {} dungeons, {} available",
+            pguid.ToString(), owner.ToString(), uint32(queued->size()), uint32(expanded.size()));
+        player->GetSession()->SendLfgExpandSearchPrompt(*ticket);
+    }
+
+    std::erase_if(ExpandSearchPromptedStore, [&stillQueued](ObjectGuid const& guid)
+    {
+        return stillQueued.find(guid) == stillQueued.end();
+    });
+}
+
+/**
+    Handles CMSG_DF_CONFIRM_EXPAND_SEARCH: the player accepted the "expand your search?" popup.
+
+    The entry is rebuilt with the widened dungeon set but the *original* join time, so accepting costs
+    nothing in queue position - the join time is what wait-time averages and ordering key off. Any dungeon
+    the entry was already queued for that has since become unenterable is reported through
+    SMSG_LFG_SLOT_INVALID before the swap, so the player is told why his selection shrank rather than
+    silently losing slots.
+
+    UNVERIFIED: everything in that paragraph is this server's choice. CMSG_DF_CONFIRM_EXPAND_SEARCH carries
+    a ticket and a bit and nothing else (client writer RVA 0x6A40E0), and C_LFGInfo.ConfirmLfgExpandSearch
+    takes no arguments (LFGInfoDocumentation.lua:86), so the client states only THAT the player accepted -
+    never what the server owes him afterwards. Specifically unsourced:
+      * keeping the original join time (retail could just as well restart the wait),
+      * sending SMSG_LFG_SLOT_INVALID for dungeons that went stale. The message itself is not the guess -
+        its layout comes off the 68275 deferred handler (RVA 0x2301A40, three dwords; see LFGSlotInvalid in
+        LFGPackets.h), its event is LFG_INVALID_ERROR_MESSAGE(reason, subReason1, subReason2)
+        (LFGFrame.lua:261-264), and its reason enum matches lfg::LfgSlotInvalidReason position for position.
+        What is guessed is that retail sends it at THIS moment. Note also that the 69382 dispatcher only
+        hands the case a raw pointer and that build's consumer is outside the cfunc cache, so the layout is
+        carried by 68275 alone (AGENT_BRIEF_LFG_5A.md 7.9 I, question 7).
+    Settled by the recording under aufnahme_noetig / "expand your search" in status/lfg_5A.json.
+
+   @param[in]     player Player that accepted the prompt (must be the queue owner or the group leader)
+   @param[in]     ticket Ticket echoed back by the client; must match the one we issued
+*/
+void LFGMgr::ConfirmExpandSearch(Player* player, WorldPackets::LFG::RideTicket const& ticket)
+{
+    if (!player)
+        return;
+
+    ObjectGuid const pguid = player->GetGUID();
+
+    if (GetState(pguid) != LFG_STATE_QUEUED)
+    {
+        TC_LOG_DEBUG("lfg.queue.expand", "{} confirmed a search expansion while not queued - ignored", pguid.ToString());
+        return;
+    }
+
+    WorldPackets::LFG::RideTicket const* ourTicket = GetTicket(pguid);
+    if (!ourTicket || ourTicket->RequesterGuid != ticket.RequesterGuid || ourTicket->Id != ticket.Id)
+    {
+        TC_LOG_DEBUG("lfg.queue.expand", "{} confirmed a search expansion with a ticket we did not issue - ignored", pguid.ToString());
+        return;
+    }
+
+    ObjectGuid const gguid = GetGroup(pguid);
+    if (!gguid.IsEmpty())
+    {
+        Group const* group = sGroupMgr->GetGroupByGUID(gguid);
+        if (!group || group->GetLeaderGUID() != pguid)
+        {
+            TC_LOG_DEBUG("lfg.queue.expand", "{} is not the leader of {} - search expansion ignored", pguid.ToString(), gguid.ToString());
+            return;
+        }
+    }
+
+    ObjectGuid const owner = gguid.IsEmpty() ? pguid : gguid;
+    LFGQueue& queue = GetQueue(owner);
+
+    time_t const joinTime = queue.GetJoinTime(owner);
+    LfgDungeonSet const* queuedPtr = queue.GetQueuedDungeons(owner);
+    LfgRolesMap const* rolesPtr = queue.GetQueuedRoles(owner);
+    if (!joinTime || !queuedPtr || !rolesPtr)
+    {
+        TC_LOG_DEBUG("lfg.queue.expand", "No queue data for owner {} - search expansion ignored", owner.ToString());
+        return;
+    }
+
+    LfgDungeonSet const queued = *queuedPtr;
+    LfgRolesMap const roles = *rolesPtr;
+
+    LfgLockMap nowInvalid;
+    LfgDungeonSet expanded = BuildExpandedDungeons(pguid, queued, &nowInvalid);
+
+    GuidSet players;
+    if (gguid.IsEmpty())
+        players.insert(pguid);
+    else
+        players = GetPlayers(gguid);
+
+    // Trim to what the whole party can actually enter - the same routine JoinLfg uses, so an expanded
+    // queue can never end up holding a dungeon one member is locked out of.
+    LfgLockPartyMap lockMap;
+    std::vector<std::string_view> playersMissingRequirement;
+    GetCompatibleDungeons(&expanded, players, &lockMap, &playersMissingRequirement, false);
+
+    for (auto const& invalid : nowInvalid)
+    {
+        int32 subReason1 = 0;
+        int32 subReason2 = 0;
+        LfgSlotInvalidReason const reason = LockStatusToSlotInvalidReason(invalid.second, subReason1, subReason2);
+        TC_LOG_DEBUG("lfg.queue.expand", "Queued dungeon {} is no longer valid for {} (lock status {} -> reason {})",
+            invalid.first & 0x00FFFFFF, pguid.ToString(), invalid.second.lockStatus, uint32(reason));
+        player->GetSession()->SendLfgSlotInvalid(reason, subReason1, subReason2);
+    }
+
+    if (expanded.empty())
+    {
+        // Everything we could have offered is locked. Leaving the entry queued for nothing would be a lie;
+        // the SMSG_LFG_SLOT_INVALID lines above have already told the player why.
+        // UNVERIFIED: that dropping the WHOLE queue entry is retail's answer here. It is the only outcome
+        // this server can represent - a queue entry with an empty dungeon set is not a state LFGQueue has -
+        // but retail might instead keep the pre-expansion selection and merely refuse the widening. Nothing
+        // in the client decides it: the popup is already gone by then and no message reports the outcome of
+        // a confirmation. Accepting a prompt should not normally reach this branch at all, because
+        // UpdateExpandSearchPrompts only offers entries that would gain something; it is reachable when the
+        // player's locks change between the prompt and the answer.
+        TC_LOG_DEBUG("lfg.queue.expand", "Search expansion for owner {} left no valid dungeon - leaving queue", owner.ToString());
+        LeaveLfg(owner);
+        return;
+    }
+
+    if (expanded == queued)
+    {
+        // Nothing left to widen into (the queue can move between prompt and answer). Restate the queue so
+        // the client's popup closes against the real selection rather than against nothing.
+        // UNVERIFIED: the restate. No message reports "your expansion changed nothing", so this re-sends the
+        // selection the entry already had. Harmless if retail stays silent, and it keeps the client from
+        // sitting on a selection it thinks is about to change.
+        for (GuidSet::const_iterator it = players.begin(); it != players.end(); ++it)
+            SendLfgUpdateStatus(*it, LfgUpdateData(LFG_UPDATETYPE_ADDED_TO_QUEUE, queued), !gguid.IsEmpty());
+        return;
+    }
+
+    // Re-add with the original join time. AddToQueue(reAdd = false) is deliberate: the widened selection
+    // has to be re-tested against everyone already queued, and the ordering that actually matters - the
+    // join time, which drives wait-time averages - is carried across explicitly.
+    queue.RemoveFromQueue(owner);
+    queue.AddQueueData(owner, joinTime, expanded, roles);
+    queue.AddToQueue(owner, false);
+
+    for (GuidSet::const_iterator it = players.begin(); it != players.end(); ++it)
+    {
+        SetSelectedDungeons(*it, expanded);
+        SendLfgUpdateStatus(*it, LfgUpdateData(LFG_UPDATETYPE_ADDED_TO_QUEUE, expanded), !gguid.IsEmpty());
+    }
+
+    TC_LOG_INFO("lfg.queue.expand", "Owner {} expanded search from {} to {} dungeons, join time preserved",
+        owner.ToString(), uint32(queued.size()), uint32(expanded.size()));
 }
 
 /**
@@ -805,6 +1157,345 @@ void LFGMgr::UpdateRoleCheck(ObjectGuid gguid, ObjectGuid guid /* = ObjectGuid::
     {
         RestoreState(gguid, "Rolecheck Failed");
         RoleChecksStore.erase(itRoleCheck);
+    }
+}
+
+/**
+   Starts an LFG readiness check for a group.
+
+   Wire contract (client 12.1.0.69382): SMSG_LFG_READY_CHECK_UPDATE (0x5A0006) drives LFGReadyCheckPopup.
+   The consumer @ RVA 0x24C2920 shows the dialog only while ReadyCheckStatus == 2 AND the receiver's own
+   member entry still has IsReady == 0; every other combination hides it. The four terminal states each
+   carry their own GameError (829 / 804 / 844 / 803), so a check must always be closed out explicitly -
+   dropping it silently would leave the popup on screen.
+
+   UNVERIFIED - THE RETAIL TRIGGER, and this function HAS NO CALLER IN-TREE. That is a deliberate state,
+   not an oversight, and the next reader is asked not to "fix" it by attaching it to a working path.
+
+   What the client settles: the dialog only resolves a real queue name when readyCheckIsBattleground is
+   true (Blizzard_GroupFinder/Shared/LFGReadyCheck.lua:13-17), QueueStatusFrame.lua:671-680 creates its
+   status entry only then, and readyCheckIsBattleground is exactly "BgQueueIDs is not empty"
+   (GetLFGReadyCheckUpdate @ RVA 0x24CF010). So the check belongs to a PvP queue.
+
+   What the client also settles is WHICH one, and it is not one this tree has: Blizzard_PVPMatch/
+   PVPMatchResults.lua:227-229 gates its requeue button on LFG_READY_CHECK_SHOW / LFG_READY_CHECK_DECLINED,
+   and that button calls RequeueSkirmish() (PVPMatchResults.lua:492) = CMSG_BATTLEMASTER_JOIN_SKIRMISH
+   (0x3E00C1) - an opcode TrinityCore does not handle at all, in family 0x3E, i.e. another unit's work.
+
+   A previous revision of this branch borrowed WorldSession::HandleBattlemasterJoinArena as a stand-in
+   trigger. That was withdrawn on 2026-08-27 (audit finding 1 on lfg_5A) and must stay withdrawn: the
+   substitution is destructive, because FinishReadyCheck calls LeaveReadyCheckQueues for every outcome
+   except LFG_READYCHECK_FINISHED. Attached to a live rated queue that means every group whose members do
+   not all answer within LFG_TIME_ROLECHECK (45 s) is thrown out of the arena queue - a working, entirely
+   server-side path made dependent on client interaction, on a guess. Any future caller has to accept that
+   consequence for the queues it passes in, so only the queue whose OWN retail flow contains the check may
+   ever be wired here.
+
+   The same consequence has a second entrance, and a caller has to know about it: a member who LEAVES the
+   group during the check. Its LFG_ANSWER_PENDING would be unanswerable, the check would run into the 45 s
+   timeout and LeaveReadyCheckQueues would throw the remaining members - all of whom agreed - out of the
+   queues. LFGGroupScript::OnRemoveMember therefore calls RemoveReadyCheckMember, which drops the answer and
+   re-evaluates the check exactly as an answer does. Only OnDisband aborts the whole check. That path is not
+   optional bookkeeping; it is what keeps the two failure modes of this function to ONE - a real decline and
+   a real timeout.
+
+   ACCEPTANCE, held open on purpose (audit 2026-08-27, lfg_5A round 4, finding 2, D2 gap on
+   SMSG_LFG_READY_CHECK_UPDATE 0x5A0006, CMSG_DF_READY_CHECK_RESPONSE 0x430048 and
+   SMSG_LFG_READY_CHECK_RESULT 0x5A001E): this function has NO caller anywhere in the tree, and neither
+   does HasReadyCheck. ReadyChecksStore therefore stays empty for good, both SMSG are unreachable, and
+   WorldSession::HandleDFReadyCheckResponse returns from UpdateReadyCheck's first `if` for every packet it
+   ever receives. The wire is complete and correct (D1), the state machine is complete including all four
+   end states and their GameErrors (D3), but D2 is OPEN for all three opcodes and they are NOT acceptable.
+   The gap is recorded in orchestrierung/status/lfg_5A.json under dod_luecken.D2.
+
+   Do NOT close it with a substitute trigger - see the withdrawn arena trigger above. The one belonging
+   trigger, CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3E00C1), sits in family 0x3E, which is outside this unit
+   and, as of 2026-08-27, is not assigned to ANY unit in orchestrierung/familien.json. The link is carried
+   there under offene_serverarbeit, id lfg_bereitschaftscheck_ausloeser: whoever takes on 0x3E inherits
+   this gap together with the requeue capture named in lfg_5A.json, aufnahme_noetig.
+
+   @param[in]     gguid Group guid to start the readycheck for
+   @param[in]     bgQueueIDs Battleground queue ids; non-empty selects the battleground dialog variant
+   @param[in]     isRequeue Payload of LFG_READY_CHECK_SHOW(isRequeue)
+   @param[in]     partyIndex Value the client echoes back in CMSG_DF_READY_CHECK_RESPONSE
+   @return true if a check was started
+*/
+bool LFGMgr::StartReadyCheck(ObjectGuid gguid, std::vector<uint64> bgQueueIDs /*= {}*/, bool isRequeue /*= false*/, uint8 partyIndex /*= 127*/)
+{
+    if (!gguid.IsParty())
+        return false;
+
+    if (ReadyChecksStore.find(gguid) != ReadyChecksStore.end())
+        return false;
+
+    Group const* group = sGroupMgr->GetGroupByGUID(gguid);
+    if (!group)
+        return false;
+
+    LfgReadyCheck& readyCheck = ReadyChecksStore[gguid];
+    readyCheck.cancelTime = GameTime::GetGameTime() + LFG_TIME_ROLECHECK;
+    readyCheck.state = LFG_READYCHECK_INITIALITING;
+    readyCheck.leader = group->GetLeaderGUID();
+    readyCheck.bgQueueIDs = std::move(bgQueueIDs);
+    readyCheck.partyIndex = partyIndex;
+    readyCheck.isRequeue = isRequeue;
+
+    for (Group::MemberSlot const& slot : group->GetMemberSlots())
+        readyCheck.answers[slot.guid] = LFG_ANSWER_PENDING;
+
+    if (readyCheck.answers.empty())
+    {
+        ReadyChecksStore.erase(gguid);
+        return false;
+    }
+
+    SendReadyCheckUpdate(readyCheck);
+    return true;
+}
+
+bool LFGMgr::HasReadyCheck(ObjectGuid gguid) const
+{
+    return ReadyChecksStore.find(gguid) != ReadyChecksStore.end();
+}
+
+/**
+   Records one player's answer to a running readiness check (CMSG_DF_READY_CHECK_RESPONSE, 0x430048).
+
+   Every answer is broadcast as SMSG_LFG_READY_CHECK_RESULT, and BOTH flanks matter (D3):
+     Ready == true  -> LFG_READY_CHECK_PLAYER_IS_READY(name)
+     Ready == false -> GameError 831 ERR_LFG_PLAYER_DECLINED_READY_CHECK *and* LFG_READY_CHECK_DECLINED(name)
+   A decline fails the whole check (status 5), mirroring how a refused role fails a role check.
+
+   @param[in]     gguid Group guid the check belongs to
+   @param[in]     guid Player that answered
+   @param[in]     isReady The answer
+*/
+void LFGMgr::UpdateReadyCheck(ObjectGuid gguid, ObjectGuid guid, bool isReady)
+{
+    LfgReadyCheckContainer::iterator itReadyCheck = ReadyChecksStore.find(gguid);
+    if (itReadyCheck == ReadyChecksStore.end())
+        return;
+
+    LfgReadyCheck& readyCheck = itReadyCheck->second;
+    LfgAnswerContainer::iterator itAnswer = readyCheck.answers.find(guid);
+    if (itAnswer == readyCheck.answers.end())
+        return;
+
+    // An answer is final - a second CMSG for the same player must not restart the state machine.
+    if (itAnswer->second != LFG_ANSWER_PENDING)
+        return;
+
+    itAnswer->second = isReady ? LFG_ANSWER_AGREE : LFG_ANSWER_DENY;
+
+    // SMSG_LFG_READY_CHECK_RESULT goes to everyone in the check, including the answering player -
+    // the consumer needs it to print the "<name> is ready" / "<name> declined" line.
+    SendReadyCheckResult(readyCheck, guid, isReady);
+
+    if (!isReady)
+    {
+        FinishReadyCheck(itReadyCheck, LFG_READYCHECK_FAILED);
+        return;
+    }
+
+    bool const allReady = std::all_of(readyCheck.answers.begin(), readyCheck.answers.end(),
+        [](LfgAnswerContainer::value_type const& answer) { return answer.second == LFG_ANSWER_AGREE; });
+
+    if (allReady)
+    {
+        FinishReadyCheck(itReadyCheck, LFG_READYCHECK_FINISHED);
+        return;
+    }
+
+    // Still running: refresh everyone's dialog so members who already answered see their own popup
+    // disappear (the consumer hides it as soon as the receiver's own IsReady flag is set).
+    SendReadyCheckUpdate(readyCheck);
+}
+
+/**
+   Aborts a running readiness check -> status 4, ERR_LFG_READY_CHECK_ABORTED (844).
+*/
+void LFGMgr::AbortReadyCheck(ObjectGuid gguid)
+{
+    LfgReadyCheckContainer::iterator itReadyCheck = ReadyChecksStore.find(gguid);
+    if (itReadyCheck == ReadyChecksStore.end())
+        return;
+
+    FinishReadyCheck(itReadyCheck, LFG_READYCHECK_ABORTED);
+}
+
+/**
+   A member left the group while the check was running - take its answer out and carry on with the rest.
+
+   StartReadyCheck fills `answers` once from the member list and nothing used to maintain it afterwards, so a
+   departure left a permanently PENDING entry: std::all_of in UpdateReadyCheck could never come out true, the
+   check ran to its LFG_TIME_ROLECHECK timeout and FinishReadyCheck, seeing a state other than
+   LFG_READYCHECK_FINISHED, called LeaveReadyCheckQueues - the remaining members were dropped from every
+   queue in bgQueueIDs even though every one of them had agreed. That is the same destructive outcome the
+   withdrawn arena trigger was found for, reached without any trigger at all.
+
+   The three outcomes here are the three the state machine already has, no new ones:
+     - nobody left in the check   -> abort (the dialog has to be closed on the clients that still show it)
+     - everyone remaining agreed  -> the check is finished, which is what it would have been had the departed
+                                     member simply answered yes
+     - still someone pending      -> keep running, and refresh the dialog so the leaver disappears from it
+   A member that had already DECLINED cannot be reached here: that answer ends the check on the spot.
+
+   What this function deliberately does NOT do is fix up readyCheck.leader when the departing player was the
+   leader. Re-reading the group's leader here would be wrong, not merely useless: Group::RemoveMember fires
+   this hook at its very top (Group.cpp:551), long before it promotes the new leader (Group.cpp:626), so
+   GetLeaderGUID() still returns the player that is leaving. The promotion is picked up one step later, by
+   SetReadyCheckLeader from LFGGroupScript::OnChangeLeader - Group::RemoveMember reaches the new leader
+   through Group::ChangeLeader (Group.cpp:626), which fires OnGroupChangeLeader (Group.cpp:676) before it
+   touches anything else. So the update this function sends can still be missing slot 0, and the one
+   SetReadyCheckLeader sends right afterwards has it again.
+
+   @param[in]     gguid Group guid the check belongs to
+   @param[in]     guid Player that left the group
+*/
+void LFGMgr::RemoveReadyCheckMember(ObjectGuid gguid, ObjectGuid guid)
+{
+    LfgReadyCheckContainer::iterator itReadyCheck = ReadyChecksStore.find(gguid);
+    if (itReadyCheck == ReadyChecksStore.end())
+        return;
+
+    LfgReadyCheck& readyCheck = itReadyCheck->second;
+    if (!readyCheck.answers.erase(guid))
+        return;
+
+    if (readyCheck.answers.empty())
+    {
+        FinishReadyCheck(itReadyCheck, LFG_READYCHECK_ABORTED);
+        return;
+    }
+
+    bool const allReady = std::all_of(readyCheck.answers.begin(), readyCheck.answers.end(),
+        [](LfgAnswerContainer::value_type const& answer) { return answer.second == LFG_ANSWER_AGREE; });
+
+    if (allReady)
+    {
+        FinishReadyCheck(itReadyCheck, LFG_READYCHECK_FINISHED);
+        return;
+    }
+
+    SendReadyCheckUpdate(readyCheck);
+}
+
+/**
+   The group got a new leader while the check was running - carry that into the check and refresh the dialog.
+
+   readyCheck.leader is filled once by StartReadyCheck and decides ONE thing: which member
+   SendLfgReadyCheckUpdate puts into slot 0 of the member list, because the client reads that list
+   positionally and expects the leader first (LFGHandler.cpp, SendLfgReadyCheckUpdate; the same requirement
+   is spelled out in the tree for the sister message, LFGHandler.cpp:515-517 "Leader info MUST be sent 1st").
+   Nothing else in the check consults the field, so a promotion cannot break the state machine - it can only
+   make every following update name the wrong player as leader.
+
+   Both ways into a promotion end up here, and the second is the more common one:
+     - the leader LEFT       -> Group::RemoveMember erases the member slot and then picks a new leader via
+                                Group::ChangeLeader (Group.cpp:626). RemoveReadyCheckMember has already run
+                                at that point (OnGroupRemoveMember, Group.cpp:551) and its update went out
+                                without slot 0; this one puts it back.
+     - a plain LEADER CHANGE -> no member leaves, nobody is erased from `answers`, and without this hook the
+                                OLD leader would stay in the field and keep occupying slot 0 for the rest of
+                                the check. Four paths in the tree reach it: CMSG_SET_PARTY_LEADER
+                                (GroupHandler.cpp:306), the offline-leader timer (Group::Update ->
+                                Group::SelectNewPartyOrRaidLeader, Group.cpp:97/136), the `.group leader`
+                                command (cs_group.cpp:267) and the battleground leader pick
+                                (Battleground.cpp:1112).
+   Group::ChangeLeader fires OnGroupChangeLeader (Group.cpp:676) before it updates m_leaderGuid, so the hook
+   passes the new guid explicitly and GetLeaderGUID() must NOT be used to obtain it.
+
+   The refresh is skipped when the new leader does not take part in the check (nothing in the tree adds a
+   member to a running check, but a caller could): SendLfgReadyCheckUpdate leaves slot 0 out for an unknown
+   leader, so the message would be byte-identical to the previous one.
+
+   @param[in]     gguid Group guid the check belongs to
+   @param[in]     leaderGuid The new leader, as handed over by the hook
+*/
+void LFGMgr::SetReadyCheckLeader(ObjectGuid gguid, ObjectGuid leaderGuid)
+{
+    LfgReadyCheckContainer::iterator itReadyCheck = ReadyChecksStore.find(gguid);
+    if (itReadyCheck == ReadyChecksStore.end())
+        return;
+
+    LfgReadyCheck& readyCheck = itReadyCheck->second;
+    if (readyCheck.leader == leaderGuid)
+        return;
+
+    readyCheck.leader = leaderGuid;
+
+    if (readyCheck.answers.find(leaderGuid) == readyCheck.answers.end())
+        return;
+
+    SendReadyCheckUpdate(readyCheck);
+}
+
+/// Sends the current state of a readiness check to every member still in it.
+void LFGMgr::SendReadyCheckUpdate(LfgReadyCheck const& readyCheck) const
+{
+    for (LfgAnswerContainer::value_type const& answer : readyCheck.answers)
+        if (Player* player = ObjectAccessor::FindConnectedPlayer(answer.first))
+            player->GetSession()->SendLfgReadyCheckUpdate(readyCheck);
+}
+
+/// Sends one player's answer to every member of the check.
+void LFGMgr::SendReadyCheckResult(LfgReadyCheck const& readyCheck, ObjectGuid guid, bool isReady) const
+{
+    for (LfgAnswerContainer::value_type const& answer : readyCheck.answers)
+        if (Player* player = ObjectAccessor::FindConnectedPlayer(answer.first))
+            player->GetSession()->SendLfgReadyCheckResult(guid, isReady);
+}
+
+/// Pushes the terminal state out and drops the check. Erasing without sending would leave
+/// LFGReadyCheckPopup open on every client - only an update ever closes that dialog.
+/// A check that did NOT end in LFG_READYCHECK_FINISHED also has to undo what it was guarding: the group
+/// leaves the queues named in bgQueueIDs. Without that the check would be a dialog with no consequence -
+/// members could decline and the group would sit in the queue anyway.
+void LFGMgr::FinishReadyCheck(LfgReadyCheckContainer::iterator itReadyCheck, LfgReadyCheckState state)
+{
+    itReadyCheck->second.state = state;
+    SendReadyCheckUpdate(itReadyCheck->second);
+
+    if (state != LFG_READYCHECK_FINISHED)
+        LeaveReadyCheckQueues(itReadyCheck->second);
+
+    ReadyChecksStore.erase(itReadyCheck);
+}
+
+/**
+   Drops every member of a failed readiness check out of the battleground queues the check was about.
+
+   The consequence is not invented: Blizzard_PVPMatch/PVPMatchResults.lua:227-229 re-enables the requeue
+   button on LFG_READY_CHECK_DECLINED, i.e. after a refusal the group is NOT in the queue and may try
+   again. The sequence used here is the one CMSG_BATTLEFIELD_PORT already uses to leave a queue
+   (BattleGroundHandler.cpp): SMSG_BATTLEFIELD_STATUS_NONE, then Player::RemoveBattlegroundQueueId, then
+   BattlegroundQueue::RemovePlayer - in that order, because moving the first removal into the queue causes
+   known bugs (comment at the original site).
+
+   UNVERIFIED: that retail resolves a refusal by dropping the queue entry rather than by never creating it.
+   Both end with "the group is not queued"; which of the two retail does is not visible from the client.
+*/
+void LFGMgr::LeaveReadyCheckQueues(LfgReadyCheck const& readyCheck)
+{
+    for (uint64 packedQueueId : readyCheck.bgQueueIDs)
+    {
+        BattlegroundQueueTypeId const bgQueueTypeId = BattlegroundQueueTypeId::FromPacked(packedQueueId);
+        BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
+
+        for (LfgAnswerContainer::value_type const& answer : readyCheck.answers)
+        {
+            Player* player = ObjectAccessor::FindConnectedPlayer(answer.first);
+            if (!player || !player->InBattlegroundQueueForBattlegroundQueueType(bgQueueTypeId))
+                continue;
+
+            WorldPackets::Battleground::BattlefieldStatusNone battlefieldStatus;
+            BattlegroundMgr::BuildBattlegroundStatusNone(&battlefieldStatus, player,
+                player->GetBattlegroundQueueIndex(bgQueueTypeId), player->GetBattlegroundQueueJoinTime(bgQueueTypeId));
+            player->SendDirectMessage(battlefieldStatus.Write());
+
+            player->RemoveBattlegroundQueueId(bgQueueTypeId);
+            bgQueue.RemovePlayer(player->GetGUID(), true);
+        }
     }
 }
 
@@ -1912,6 +2603,11 @@ void LFGMgr::RemovePlayerData(ObjectGuid guid)
 void LFGMgr::RemoveGroupData(ObjectGuid guid)
 {
     TC_LOG_TRACE("lfg.data.group.remove", "Group: {}", guid.ToString());
+
+    // A readiness check must never outlive its group: the dialog is only ever closed by an update, so
+    // dropping the check silently would leave LFGReadyCheckPopup stuck on every member's screen.
+    AbortReadyCheck(guid);
+
     LfgGroupDataContainer::iterator it = GroupsStore.find(guid);
     if (it == GroupsStore.end())
         return;
@@ -2003,6 +2699,72 @@ bool LFGMgr::HasIgnore(ObjectGuid guid1, ObjectGuid guid2)
     return plr1 && plr2
         && (plr1->GetSocial()->HasIgnore(guid2, plr2->GetSession()->GetAccountGUID())
             || plr2->GetSocial()->HasIgnore(guid1, plr1->GetSession()->GetAccountGUID()));
+}
+
+/**
+   SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN (0x5A0009) to every player in an LFG instance that is winding
+   down while they are still inside it. (The opcode belongs to the dungeon finder, not to the premade
+   group finder - there is no SMSG_LFG_LIST_ prefix on it; Opcodes.h is the authority.)
+
+   The consumer (RVA 0x24C18C0) formats TimeLeft with INT_GENERAL_DURATION into the GlobalString
+   INSTANCE_SHUTDOWN_MESSAGE and prints it to the system chat - no Lua event, no CVar, no UI state. So the
+   whole effect is a chat line, and the unit of TimeLeft is seconds, proven by the duration formatting.
+
+   The message carries the player's own LFG ride ticket. Only somebody who queued through the dungeon
+   finder has one, which is also the filter: a player who walked into the same instance without queueing
+   gets no ticket and therefore no message. That is not a shortcut, it is what the field means - the ticket
+   names the queue entry the player rode in on.
+
+   NO CALLER, and that is the honest state of this opcode - see the ACCEPTANCE note below.
+
+   ACCEPTANCE, held open on purpose (audit 2026-08-27, lfg_5A round 4, finding 1, D2 gap on
+   SMSG_LFG_INSTANCE_SHUTDOWN_COUNTDOWN): there is no shutdown in this tree that this message could
+   truthfully announce, so it is built and byte-correct but has no trigger.
+   Round 2/3 hung it on InstanceMap::Reset(InstanceResetMethod::Expire), HavePlayers() branch. That was
+   wrong and is withdrawn: that branch does NOT shut the instance down. It ends in
+   `return InstanceResetResult::NotEmpty` without a single line that unloads the map, its caller
+   (InstanceMap::Update) only re-arms i_instanceExpireEvent, and the 60 s borrowed from the block below it
+   are PendingRaidLock::TimeUntilLock - the binding window after which the player is bound (SetPendingBind)
+   and the instance keeps running. Announcing a 60-second shutdown there tells the client something false.
+   Every path in this tree that actually unloads a map is an empty-map path with nobody left to receive the
+   message: InstanceMap::RemovePlayerFromMap arms m_unloadTimer only for the LAST player leaving
+   (`!m_unloadTimer && m_mapRefManager.size() == 1`), InstanceMap::Reset's else branch runs only when
+   !HavePlayers(), BattlegroundMap::SetUnload runs from the Battleground destructor, and
+   MapManager::DestroyMap refuses outright while HavePlayers(). Map::RemoveAllPlayers is an emergency path
+   that logs an error and teleports immediately - no countdown, and not a dungeon-finder concept.
+   Do NOT close this gap with a substitute trigger. That was tried once in this unit (the arena trigger of
+   round 2, withdrawn in round 3) and it damaged a working existing path. What retail winds down here is an
+   LFG instance closing under the player - a mechanism TrinityCore does not have at all, not a message it
+   is missing. Settling it needs the capture recorded in orchestrierung/status/lfg_5A.json under
+   aufnahme_noetig, and the missing server mechanism is carried in familien.json under
+   offene_serverarbeit (id lfg_instanz_abschaltung). The gap is recorded in dod_luecken.D2 and must not be
+   dropped at acceptance.
+
+   @param[in]     map Instance being shut down
+   @param[in]     secondsRemaining Time left, in seconds
+*/
+void LFGMgr::SendInstanceShutdownCountdown(Map const* map, uint32 secondsRemaining) const
+{
+    if (!map)
+        return;
+
+    for (MapReference const& ref : map->GetPlayers())
+    {
+        Player* player = ref.GetSource();
+        if (!player || !player->GetSession())
+            continue;
+
+        // The group's ticket if it queued as a group, otherwise the player's own.
+        WorldPackets::LFG::RideTicket const* ticket = nullptr;
+        if (Group const* group = player->GetGroup())
+            ticket = GetTicket(group->GetGUID());
+        if (!ticket)
+            ticket = GetTicket(player->GetGUID());
+        if (!ticket)
+            continue;
+
+        player->GetSession()->SendLfgInstanceShutdownCountdown(*ticket, secondsRemaining);
+    }
 }
 
 void LFGMgr::SendLfgRoleChosen(ObjectGuid guid, ObjectGuid pguid, uint8 roles)

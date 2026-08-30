@@ -51,6 +51,7 @@
 #include "InspectPackets.h"
 #include "InstancePackets.h"
 #include "ItemPackets.h"
+#include "LFGListPackets.h"
 #include "LFGPackets.h"
 #include "LiveRegionPackets.h"
 #include "LobbyMatchmakerPackets.h"
