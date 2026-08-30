@@ -119,7 +119,7 @@ enum ConditionTypes
     CONDITION_PRIVATE_OBJECT           = 57,                   // 0                      0              0                  true if entity is private object
     CONDITION_STRING_ID                = 58,
     CONDITION_LABEL                    = 59,                   // Label                  0              0                  true if creature/gameobject has specified Label in CreatureLabel.db2/GameObjectLabel.db2
-    // 60 is CONDITION_CHROMIE_TIME upstream (origin/integration carries it; this branch predates that merge).
+    CONDITION_CHROMIE_TIME             = 60,                   // ChromieTime            UiChromieTimeExpansionInfo id  0   true if player is in the given Chromie Time (0 = any)
     // Reserved so the ConditionTypeInfo table below stays index-aligned with these values and so a merge
     // into an assembly that has Chromie Time does not collide. Do NOT renumber 61/62 without also updating
     // sql/updates/world/master/2026_08_07_30_covenant_choice_conditions.sql, which encodes CONDITION_COVENANT.
