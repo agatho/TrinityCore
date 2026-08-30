@@ -32,6 +32,8 @@
 #include <map>
 #include <span>
 #include <string>
+#include <vector>
+#include <vector>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -188,10 +190,10 @@ namespace WorldPackets
         // character. Wire recovered byte-exact from a live 12.0.7 sniff (C:\sniff\b_pets12.0.7.pkt, a 3-entry
         // capture parses to the byte, 0 leftover): { u32 count; count x entry }, entry =
         // { PackedGuid Source; PackedGuid Dest; u32 CurrencyID; u32 Quantity; u32 Field3; u64 TransferTime }.
-        // (CurrencyID was a constant 1792 across the capture; Quantity/Field3 are the two per-transfer amounts —
+        // (CurrencyID was a constant 1792 across the capture; Quantity/Field3 are the two per-transfer amounts Ã¢â‚¬â€�
         // exact roles not offline-confirmable but they are only written when real entries exist.) TrinityCore does
         // not implement account currency transfer, so there is no transfer history to report and the reply is a bare
-        // header (count 0) — the truthful "no transfers" answer, which clears the client's transfer-history panel.
+        // header (count 0) Ã¢â‚¬â€� the truthful "no transfers" answer, which clears the client's transfer-history panel.
         class CurrencyTransferLog final : public ServerPacket
         {
         public:
@@ -339,8 +341,6 @@ namespace WorldPackets
         // Client -> server. "Everything up to and including MaxSequenceIndex is settled." Always
         // follows a CMSG_TIME_SYNC_RESPONSE_DROPPED (0x1896BA9), and in the recordings it always sits
         // immediately before the client restarts its counter at 0. Writer 0x69ADA0.
-        // Sent when the client throws away time sync work it had queued, typically around a map
-        // transfer. Everything up to and including MaxSequenceIndex will never be answered.
         class DiscardedTimeSyncAcks final : public ClientPacket
         {
         public:
@@ -380,6 +380,18 @@ namespace WorldPackets
 
             uint32 SequenceIndex = 0;
             uint32 ClientTime = 0; // Client ticks in ms
+        };
+
+        // Sent when the client throws away time sync work it had queued, typically around a map
+        // transfer. Everything up to and including MaxSequenceIndex will never be answered.
+        class DiscardedTimeSyncAcks final : public ClientPacket
+        {
+        public:
+            explicit DiscardedTimeSyncAcks(WorldPacket&& packet) : ClientPacket(CMSG_DISCARDED_TIME_SYNC_ACKS, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 MaxSequenceIndex = 0;
         };
 
         class TriggerCinematic final : public ServerPacket
@@ -1204,7 +1216,7 @@ namespace WorldPackets
 
             LevelLinkingResultType Result = LevelLinkingResultType::NoResult;
             /// UNVERIFIED: the client reads this GUID and then never uses it. Per
-            /// DEFINITION_OF_DONE §4.1 an unread field is a filler, but the server still has to put
+            /// DEFINITION_OF_DONE ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§4.1 an unread field is a filler, but the server still has to put
             /// something there; the party sync partner is the likely meaning (see
             /// REQUEST_INVITE_CONFIRMATION.partyLevelLink, PartyInfoDocumentation.lua:871-885).
             ObjectGuid PlayerGUID;
@@ -1287,6 +1299,73 @@ namespace WorldPackets
         // Cancels the SMSG_START_TIMER countdown of a given type. Wire (12.0.7/68275) is a single
         // uint32 carrying the CountdownTimerType - verified against the client deserializer for
         // SMSG_STOP_TIMER (0x42003E), which performs exactly one 4-byte read.
+        class StopTimer final : public ServerPacket
+        {
+        public:
+            explicit StopTimer() : ServerPacket(SMSG_STOP_TIMER, 4) { }
+
+            WorldPacket const* Write() override;
+
+            CountdownTimerType Type = {};
+        };
+
+        // One entry of the client's "world elapsed timer" list (client type name: JamElaspedTimer).
+        //
+        // Wire, derived from the 68275 client deserializers and cross-checked against the
+        // known-good SMSG_START_TIMER layout in the same extraction:
+        //     { int64 CurrentDuration; uint32 TimerID; }
+        // i.e. the 8-byte duration comes FIRST. (This is a field-order/width change from the
+        // 7.3.5-era layout, where TimerID came first and the duration was a uint32.)
+        //
+        // TimerID indexes WorldElapsedTimer.db2. The client reads the timer *type* from that DB2
+        // row - it is NOT on the wire - and Blizzard_ScenarioObjectiveTracker only renders rows
+        // whose Type is ChallengeMode(1) or ProvingGround(2). See ElapsedTimerMgr.h.
+        struct ElapsedTimer
+        {
+            Duration<Seconds> CurrentDuration;
+            uint32 TimerID = 0;
+        };
+
+        ByteBuffer& operator<<(ByteBuffer& data, ElapsedTimer const& timer);
+
+        // Starts (or re-bases) a single elapsed timer. CurrentDuration is the time already elapsed;
+        // the client free-runs its own clock from that baseline.
+        class StartElapsedTimer final : public ServerPacket
+        {
+        public:
+            explicit StartElapsedTimer() : ServerPacket(SMSG_START_ELAPSED_TIMER, 8 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ElapsedTimer Timer;
+        };
+
+        // Bulk form, used to resynchronise every active timer on zone-in / relog. The client's
+        // PLAYER_ENTERING_WORLD handler calls GetWorldElapsedTimers(), so this is the packet that
+        // repopulates that list.
+        class StartElapsedTimers final : public ServerPacket
+        {
+        public:
+            explicit StartElapsedTimers() : ServerPacket(SMSG_START_ELAPSED_TIMERS, 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<ElapsedTimer> Timers;
+        };
+
+        // Wire: { uint32 TimerID; bit KeepTimer; } - verified against the client deserializer,
+        // which reads the flag as the top bit of one byte (matching OptionalInit/FlushBits packing).
+        class StopElapsedTimer final : public ServerPacket
+        {
+        public:
+            explicit StopElapsedTimer() : ServerPacket(SMSG_STOP_ELAPSED_TIMER, 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 TimerID = 0;
+            bool KeepTimer = false;
+        };
+
         class StopTimer final : public ServerPacket
         {
         public:
@@ -1479,11 +1558,6 @@ namespace WorldPackets
         {
         public:
             explicit UsedFollow(WorldPacket&& packet) : ClientPacket(CMSG_USED_FOLLOW, std::move(packet)) { }
-        class RequestCurrencyDataForAccountCharacters final : public ClientPacket
-        {
-        public:
-            explicit RequestCurrencyDataForAccountCharacters(WorldPacket&& packet)
-                : ClientPacket(CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS, std::move(packet)) { }
 
             void Read() override { }
         };
@@ -1493,24 +1567,6 @@ namespace WorldPackets
         {
         public:
             explicit SeamlessTransferComplete(WorldPacket&& packet) : ClientPacket(CMSG_SEAMLESS_TRANSFER_COMPLETE, std::move(packet)) { }
-        class TransferCurrencyFromAccountCharacter final : public ClientPacket
-        {
-        public:
-            explicit TransferCurrencyFromAccountCharacter(WorldPacket&& packet)
-                : ClientPacket(CMSG_TRANSFER_CURRENCY_FROM_ACCOUNT_CHARACTER, std::move(packet)) { }
-
-            void Read() override;
-
-            ObjectGuid SourceCharacterGUID;
-            int32 CurrencyID = 0;
-            int32 Quantity = 0;
-        };
-
-        class GetCharacterCurrencyTransferLog final : public ClientPacket
-        {
-        public:
-            explicit GetCharacterCurrencyTransferLog(WorldPacket&& packet)
-                : ClientPacket(CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG, std::move(packet)) { }
 
             void Read() override { }
         };
@@ -1570,215 +1626,6 @@ namespace WorldPackets
         {
         public:
             explicit LowLevelRaid1(WorldPacket&& packet) : ClientPacket(CMSG_LOW_LEVEL_RAID1, std::move(packet)) { }
-        // GM / Cheat / Debug block - client 12.1.0.69382, families 0x45 (SMSG) and 0x3D (CMSG).
-        // Every wire layout below is taken from the client reader/writer, not from a recording:
-        // none of these eleven opcodes occurs in any of our 2.38M analysed sniff records
-        // (the situations that trigger them - GM account, kiosk client, developer build -
-        // were never recorded and are not obtainable). See AGENT_BRIEF_W4_GM_DEBUG.md.
-
-        // Enum.ConsoleColorType, ConsoleDocumentation.lua:219-240 (12 values).
-        // The client indexes its colour table at 0x4374620 with this value and performs
-        // NO range check (ConsoleGetColorFromType @ 0x0D38780) - values >= 12 read out of bounds.
-        enum class ConsoleColorType : uint32
-        {
-            DefaultColor        = 0,
-            InputColor          = 1,
-            EchoColor           = 2,
-            ErrorColor          = 3,
-            WarningColor        = 4,
-            GlobalColor         = 5,
-            AdminColor          = 6,
-            HighlightColor      = 7,
-            BackgroundColor     = 8,
-            ClickbufferColor    = 9,
-            PrivateColor        = 10,
-            DefaultGreen        = 11,
-
-            Max                 = 12
-        };
-
-        // Number of debug views the client knows, table at 0x43BD1C0, read by DebugViewName @ 0x1CDC460.
-        constexpr uint32 MAX_DEBUG_VIEWS = 40;
-
-        // Reader 0x5F5E10: Read<uint8> + shr 7 -> one bit, 1 byte on the wire.
-        // Consumer 0x1E1DAE0 writes "Godmode enabled"/"Godmode disabled" to the developer
-        // console and does nothing else - the message is the receipt, not the mechanism.
-        class GodMode final : public ServerPacket
-        {
-        public:
-            explicit GodMode(bool enable = false) : ServerPacket(SMSG_GOD_MODE, 1), Enable(enable) { }
-
-            WorldPacket const* Write() override;
-
-            bool Enable = false;
-        };
-
-        // Reader 0x5EE690, bit-identical to GodMode. Consumer 0x1E2EDF0 prints
-        // "Pet Godmode enabled"/"Pet Godmode disabled".
-        class PetGodMode final : public ServerPacket
-        {
-        public:
-            explicit PetGodMode(bool enable = false) : ServerPacket(SMSG_PET_GOD_MODE, 1), Enable(enable) { }
-
-            WorldPacket const* Write() override;
-
-            bool Enable = false;
-        };
-
-        // Reader 0x5F8C80, bit-identical to GodMode. Consumer 0x1DB7360 rebuilds every cooldown
-        // display: spellbook, shapeshift bar, bags, and fires the Lua event PET_BAR_UPDATE_COOLDOWN
-        // (hash 0xAE0EB1A02CFEB3DD, handled in PetActionBar.lua:88). It does not suppress cooldowns
-        // itself - that stays server side (Spell.cpp).
-        class CooldownCheat final : public ServerPacket
-        {
-        public:
-            explicit CooldownCheat(bool enable = false) : ServerPacket(SMSG_COOLDOWN_CHEAT, 1), Enable(enable) { }
-
-            WorldPacket const* Write() override;
-
-            bool Enable = false;
-        };
-
-        // Reader 0x5EA250: bits<14> length (including the terminating NUL), flush, uint32 colour,
-        // then the string. Consumer 0x1D26CD0 -> ConsoleWrite(COLOR_T, char const*) @ 0x32D240,
-        // which feeds the developer console, ConsoleLog.cpp and the Lua event
-        // CONSOLE_MESSAGE(message, colorType) handled in Blizzard_Console.lua:132-135.
-        // Payload is 6 bytes for empty text, at most 16389 bytes (14 bit length -> 16384 buffer).
-        class ConsoleWrite final : public ServerPacket
-        {
-        public:
-            explicit ConsoleWrite() : ServerPacket(SMSG_CONSOLE_WRITE, 2 + 4 + 128) { }
-
-            WorldPacket const* Write() override;
-
-            // 16384 byte buffer, length includes the NUL, and ReadDynString rejects a length
-            // whose last byte is not 0 - so 16382 payload characters is the hard maximum.
-            static constexpr std::size_t MaxTextLength = 16382;
-
-            std::string Text;
-            ConsoleColorType ColorType = ConsoleColorType::DefaultColor;
-        };
-
-        // Reader 0x5EE9E0 is the opaque message class (no Read<T> at all), so the payload is defined
-        // by the consumer 0x1CE3840: it reads exactly one float at offset 0 and stores it in the
-        // global 0x43BF260. The only reader of that global, 0x1CDB530, advances the world clock by
-        // one game minute per accumulated unit - the float is GAME MINUTES PER REAL SECOND, i.e. the
-        // runtime version of the NewSpeed field of SMSG_LOGIN_SET_TIME_SPEED, not a movement or
-        // animation rate. The client clamps to [1/60, 60]; 0.01666667f is real time and is exactly
-        // the value TrinityCore hardcodes at login (Player.cpp, SendInitialPacketsBeforeAddToMap).
-        class GameSpeedSet final : public ServerPacket
-        {
-        public:
-            explicit GameSpeedSet(float speed = 0.01666667f) : ServerPacket(SMSG_GAME_SPEED_SET, 4), Speed(speed) { }
-
-            WorldPacket const* Write() override;
-
-            static constexpr float MinSpeed = 0.01666667f;
-            static constexpr float MaxSpeed = 60.0f;
-
-            float Speed = 0.01666667f;
-        };
-
-        // Empty by design: the consumer 0x4EF5F0 never touches the payload. What it does instead is
-        // walk all 40 debug views and answer with one CMSG_SET_GAME_EVENT_DEBUG_VIEW_STATE(i, true)
-        // per view that has a local listener - a re-subscription after a server restart or resync.
-        // Do not send this without being able to receive the answer.
-        class DebugMenuManagerFullUpdate final : public ServerPacket
-        {
-        public:
-            explicit DebugMenuManagerFullUpdate() : ServerPacket(SMSG_DEBUG_MENU_MANAGER_FULL_UPDATE, 0) { }
-        class ChromieTimeSelectExpansion final : public ClientPacket
-        {
-        public:
-            explicit ChromieTimeSelectExpansion(WorldPacket&& packet) : ClientPacket(CMSG_CHROMIE_TIME_SELECT_EXPANSION, std::move(packet)) { }
-
-            void Read() override;
-
-            ObjectGuid Vendor;     // packed GUID of the Chromie NPC the player is interacting with
-            int32 ExpansionID = 0; // UIChromieTimeExpansionInfo.ID (NOT the Expansions enum)
-        };
-
-        class ChromieTimeSelectExpansionSuccess final : public ServerPacket
-        {
-        public:
-            ChromieTimeSelectExpansionSuccess() : ServerPacket(SMSG_CHROMIE_TIME_SELECT_EXPANSION_SUCCESS, 0) { }
-
-            WorldPacket const* Write() override { return &_worldPacket; }
-        };
-
-        // Reader 0x5DE620: three scalars, then BOTH array counts, then both array payloads.
-        // The obvious "count, array, count, array" order would produce a wrong wire format, and
-        // because the consumer is the deliberate no-op stub at 0x1D9E30 (bytes c2 00 00 = ret 0)
-        // the mistake would never surface. Payload is 20 + 4 * (Cooldowns + RuneTypes) bytes.
-        class RuneRegenDebug final : public ServerPacket
-        {
-        public:
-            explicit RuneRegenDebug() : ServerPacket(SMSG_RUNE_REGEN_DEBUG, 20) { }
-
-            WorldPacket const* Write() override;
-
-            // UNVERIFIED: the three scalars have no JAM descriptor, no consumer and no Lua side.
-            // The names below follow Player::ResyncRunes, which keeps exactly the two lists that
-            // the two arrays carry - that is an analogy, not a measurement.
-            uint32 RegenTimer = 0;
-            uint32 BaseCooldown = 0;
-            uint32 ActiveRuneMask = 0;
-            std::vector<int32> Cooldowns;   // UNVERIFIED: element meaning
-            std::vector<int32> RuneTypes;   // UNVERIFIED: element meaning
-        };
-
-        // Reader 0x5F9FC0: PackedGuid, bits<9> length, flush, then the raw characters.
-        // No NUL on the wire - the client appends it itself. The 9 bit width is confirmed twice:
-        // the reader folds two bytes as (B0 << 1) | (B1 >> 7), and the message object is 560 bytes
-        // with a 48 byte header, leaving exactly the 512 byte buffer that 9 bits address.
-        // Consumer is the no-op stub 0x1D9E30 - the retail client parses and discards this.
-        // UNVERIFIED: namespace of AnimName (open question F2). Neither AnimationData nor AnimKit
-        // carries animation names, so it stays undecided whether this is a DB2 backed name or a
-        // client internal one; the field is carried through verbatim.
-        class ForceAnim final : public ServerPacket
-        {
-        public:
-            explicit ForceAnim() : ServerPacket(SMSG_FORCE_ANIM, 18 + 2 + 32) { }
-
-            WorldPacket const* Write() override;
-
-            static constexpr std::size_t MaxAnimNameLength = 511;
-
-            ObjectGuid UnitGUID;
-            std::string AnimName;
-        };
-
-        // Reader 0x5FA0A0, field names from the JAM type ForceAnimationsData (tag 0x38951B8).
-        // Both array counts precede both payloads, same trap as RuneRegenDebug. Speed is a float:
-        // movss emission at 0x5FA17D/0x5FA18B, reader default 0x3F800000, JAM descriptor 0x37AB200
-        // (the float descriptor), and the field name all agree. BoneType is a full byte, not a bit.
-        // Consumer is the no-op stub 0x1D9E30.
-        class ForceAnimations final : public ServerPacket
-        {
-        public:
-            explicit ForceAnimations() : ServerPacket(SMSG_FORCE_ANIMATIONS, 18 + 17) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid UnitGUID;
-            std::vector<int32> AnimIDs;     // AnimationData::ID, DB2 FDID 1375431
-            std::vector<uint8> Variations;
-            uint32 LoopCount = 1;
-            float Speed = 1.0f;
-            uint8 BoneType = 0;
-        };
-
-        // Writer 0x6CD330 (body 0x6A35C0), identity proven through vtable slot 3 at 0x6CD390:
-        // mov dword ptr [rdx], 0x3d009a. One bit, 1 byte, and the client hardcodes it to true -
-        // there is no Kiosk.DisableGodMode, the state is meant to expire with the session.
-        // Sent from Lua Kiosk.EnableGodMode() (0x11684B0), called in
-        // Blizzard_Kiosk/Housing/Game.lua:186 after C_Housing.IsInsideHouse(): a kiosk visitor
-        // must not be able to die in the demo house. Gated on the kiosk mode flag inside the
-        // client, so a normal retail client never sends it.
-        class KioskEnableGodMode final : public ClientPacket
-        {
-        public:
-            explicit KioskEnableGodMode(WorldPacket&& packet) : ClientPacket(CMSG_KIOSK_ENABLE_GOD_MODE, std::move(packet)) { }
 
             void Read() override;
 
@@ -2267,6 +2114,244 @@ namespace WorldPackets
         {
         public:
             explicit Warden3Disabled() : ServerPacket(SMSG_WARDEN3_DISABLED, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        // Writer 0x6B2860 - 9..~16 MB theoretisch, an der Erzeugerstelle 58..74 Byte.
+        // bits24 traegt die Laenge INKLUSIVE NUL; der FlushBits danach schreibt NULL Byte,
+        // weil 24 mod 8 == 0 - wer ein Fuellbyte einplant, verschiebt alles Nachfolgende.
+        // Der String ist Base64 einer 36-Zeichen-UUID, an der Erzeugerstelle also 48 Zeichen.
+        class ServerValidationSignatureRequest final : public ClientPacket
+        {
+        public:
+            explicit ServerValidationSignatureRequest(WorldPacket&& packet) : ClientPacket(CMSG_SERVER_VALIDATION_SIGNATURE_REQUEST, std::move(packet)) { }
+
+            void Read() override;
+
+            std::string Signature;
+            uint32 RequestID = 0;               // UNVERIFIED: Anfrage-/Kontextkennung, Semantik offen
+            ObjectGuid Guid;
+        };
+
+        // GM / Cheat / Debug block - client 12.1.0.69382, families 0x45 (SMSG) and 0x3D (CMSG).
+        // Every wire layout below is taken from the client reader/writer, not from a recording:
+        // none of these eleven opcodes occurs in any of our 2.38M analysed sniff records
+        // (the situations that trigger them - GM account, kiosk client, developer build -
+        // were never recorded and are not obtainable). See AGENT_BRIEF_W4_GM_DEBUG.md.
+
+        // Enum.ConsoleColorType, ConsoleDocumentation.lua:219-240 (12 values).
+        // The client indexes its colour table at 0x4374620 with this value and performs
+        // NO range check (ConsoleGetColorFromType @ 0x0D38780) - values >= 12 read out of bounds.
+        enum class ConsoleColorType : uint32
+        {
+            DefaultColor        = 0,
+            InputColor          = 1,
+            EchoColor           = 2,
+            ErrorColor          = 3,
+            WarningColor        = 4,
+            GlobalColor         = 5,
+            AdminColor          = 6,
+            HighlightColor      = 7,
+            BackgroundColor     = 8,
+            ClickbufferColor    = 9,
+            PrivateColor        = 10,
+            DefaultGreen        = 11,
+
+            Max                 = 12
+        };
+
+        // Number of debug views the client knows, table at 0x43BD1C0, read by DebugViewName @ 0x1CDC460.
+        constexpr uint32 MAX_DEBUG_VIEWS = 40;
+
+        // Reader 0x5F5E10: Read<uint8> + shr 7 -> one bit, 1 byte on the wire.
+        // Consumer 0x1E1DAE0 writes "Godmode enabled"/"Godmode disabled" to the developer
+        // console and does nothing else - the message is the receipt, not the mechanism.
+        class GodMode final : public ServerPacket
+        {
+        public:
+            explicit GodMode(bool enable = false) : ServerPacket(SMSG_GOD_MODE, 1), Enable(enable) { }
+
+            WorldPacket const* Write() override;
+
+            bool Enable = false;
+        };
+
+        // Reader 0x5EE690, bit-identical to GodMode. Consumer 0x1E2EDF0 prints
+        // "Pet Godmode enabled"/"Pet Godmode disabled".
+        class PetGodMode final : public ServerPacket
+        {
+        public:
+            explicit PetGodMode(bool enable = false) : ServerPacket(SMSG_PET_GOD_MODE, 1), Enable(enable) { }
+
+            WorldPacket const* Write() override;
+
+            bool Enable = false;
+        };
+
+        // Reader 0x5F8C80, bit-identical to GodMode. Consumer 0x1DB7360 rebuilds every cooldown
+        // display: spellbook, shapeshift bar, bags, and fires the Lua event PET_BAR_UPDATE_COOLDOWN
+        // (hash 0xAE0EB1A02CFEB3DD, handled in PetActionBar.lua:88). It does not suppress cooldowns
+        // itself - that stays server side (Spell.cpp).
+        class CooldownCheat final : public ServerPacket
+        {
+        public:
+            explicit CooldownCheat(bool enable = false) : ServerPacket(SMSG_COOLDOWN_CHEAT, 1), Enable(enable) { }
+
+            WorldPacket const* Write() override;
+
+            bool Enable = false;
+        };
+
+        // Reader 0x5EA250: bits<14> length (including the terminating NUL), flush, uint32 colour,
+        // then the string. Consumer 0x1D26CD0 -> ConsoleWrite(COLOR_T, char const*) @ 0x32D240,
+        // which feeds the developer console, ConsoleLog.cpp and the Lua event
+        // CONSOLE_MESSAGE(message, colorType) handled in Blizzard_Console.lua:132-135.
+        // Payload is 6 bytes for empty text, at most 16389 bytes (14 bit length -> 16384 buffer).
+        class ConsoleWrite final : public ServerPacket
+        {
+        public:
+            explicit ConsoleWrite() : ServerPacket(SMSG_CONSOLE_WRITE, 2 + 4 + 128) { }
+
+            WorldPacket const* Write() override;
+
+            // 16384 byte buffer, length includes the NUL, and ReadDynString rejects a length
+            // whose last byte is not 0 - so 16382 payload characters is the hard maximum.
+            static constexpr std::size_t MaxTextLength = 16382;
+
+            std::string Text;
+            ConsoleColorType ColorType = ConsoleColorType::DefaultColor;
+        };
+
+        // Reader 0x5EE9E0 is the opaque message class (no Read<T> at all), so the payload is defined
+        // by the consumer 0x1CE3840: it reads exactly one float at offset 0 and stores it in the
+        // global 0x43BF260. The only reader of that global, 0x1CDB530, advances the world clock by
+        // one game minute per accumulated unit - the float is GAME MINUTES PER REAL SECOND, i.e. the
+        // runtime version of the NewSpeed field of SMSG_LOGIN_SET_TIME_SPEED, not a movement or
+        // animation rate. The client clamps to [1/60, 60]; 0.01666667f is real time and is exactly
+        // the value TrinityCore hardcodes at login (Player.cpp, SendInitialPacketsBeforeAddToMap).
+        class GameSpeedSet final : public ServerPacket
+        {
+        public:
+            explicit GameSpeedSet(float speed = 0.01666667f) : ServerPacket(SMSG_GAME_SPEED_SET, 4), Speed(speed) { }
+
+            WorldPacket const* Write() override;
+
+            static constexpr float MinSpeed = 0.01666667f;
+            static constexpr float MaxSpeed = 60.0f;
+
+            float Speed = 0.01666667f;
+        };
+
+        // Empty by design: the consumer 0x4EF5F0 never touches the payload. What it does instead is
+        // walk all 40 debug views and answer with one CMSG_SET_GAME_EVENT_DEBUG_VIEW_STATE(i, true)
+        // per view that has a local listener - a re-subscription after a server restart or resync.
+        // Do not send this without being able to receive the answer.
+        class DebugMenuManagerFullUpdate final : public ServerPacket
+        {
+        public:
+            explicit DebugMenuManagerFullUpdate() : ServerPacket(SMSG_DEBUG_MENU_MANAGER_FULL_UPDATE, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        // Reader 0x5DE620: three scalars, then BOTH array counts, then both array payloads.
+        // The obvious "count, array, count, array" order would produce a wrong wire format, and
+        // because the consumer is the deliberate no-op stub at 0x1D9E30 (bytes c2 00 00 = ret 0)
+        // the mistake would never surface. Payload is 20 + 4 * (Cooldowns + RuneTypes) bytes.
+        class RuneRegenDebug final : public ServerPacket
+        {
+        public:
+            explicit RuneRegenDebug() : ServerPacket(SMSG_RUNE_REGEN_DEBUG, 20) { }
+
+            WorldPacket const* Write() override;
+
+            // UNVERIFIED: the three scalars have no JAM descriptor, no consumer and no Lua side.
+            // The names below follow Player::ResyncRunes, which keeps exactly the two lists that
+            // the two arrays carry - that is an analogy, not a measurement.
+            uint32 RegenTimer = 0;
+            uint32 BaseCooldown = 0;
+            uint32 ActiveRuneMask = 0;
+            std::vector<int32> Cooldowns;   // UNVERIFIED: element meaning
+            std::vector<int32> RuneTypes;   // UNVERIFIED: element meaning
+        };
+
+        // Reader 0x5F9FC0: PackedGuid, bits<9> length, flush, then the raw characters.
+        // No NUL on the wire - the client appends it itself. The 9 bit width is confirmed twice:
+        // the reader folds two bytes as (B0 << 1) | (B1 >> 7), and the message object is 560 bytes
+        // with a 48 byte header, leaving exactly the 512 byte buffer that 9 bits address.
+        // Consumer is the no-op stub 0x1D9E30 - the retail client parses and discards this.
+        // UNVERIFIED: namespace of AnimName (open question F2). Neither AnimationData nor AnimKit
+        // carries animation names, so it stays undecided whether this is a DB2 backed name or a
+        // client internal one; the field is carried through verbatim.
+        class ForceAnim final : public ServerPacket
+        {
+        public:
+            explicit ForceAnim() : ServerPacket(SMSG_FORCE_ANIM, 18 + 2 + 32) { }
+
+            WorldPacket const* Write() override;
+
+            static constexpr std::size_t MaxAnimNameLength = 511;
+
+            ObjectGuid UnitGUID;
+            std::string AnimName;
+        };
+
+        // Reader 0x5FA0A0, field names from the JAM type ForceAnimationsData (tag 0x38951B8).
+        // Both array counts precede both payloads, same trap as RuneRegenDebug. Speed is a float:
+        // movss emission at 0x5FA17D/0x5FA18B, reader default 0x3F800000, JAM descriptor 0x37AB200
+        // (the float descriptor), and the field name all agree. BoneType is a full byte, not a bit.
+        // Consumer is the no-op stub 0x1D9E30.
+        class ForceAnimations final : public ServerPacket
+        {
+        public:
+            explicit ForceAnimations() : ServerPacket(SMSG_FORCE_ANIMATIONS, 18 + 17) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid UnitGUID;
+            std::vector<int32> AnimIDs;     // AnimationData::ID, DB2 FDID 1375431
+            std::vector<uint8> Variations;
+            uint32 LoopCount = 1;
+            float Speed = 1.0f;
+            uint8 BoneType = 0;
+        };
+
+        // Writer 0x6CD330 (body 0x6A35C0), identity proven through vtable slot 3 at 0x6CD390:
+        // mov dword ptr [rdx], 0x3d009a. One bit, 1 byte, and the client hardcodes it to true -
+        // there is no Kiosk.DisableGodMode, the state is meant to expire with the session.
+        // Sent from Lua Kiosk.EnableGodMode() (0x11684B0), called in
+        // Blizzard_Kiosk/Housing/Game.lua:186 after C_Housing.IsInsideHouse(): a kiosk visitor
+        // must not be able to die in the demo house. Gated on the kiosk mode flag inside the
+        // client, so a normal retail client never sends it.
+        class KioskEnableGodMode final : public ClientPacket
+        {
+        public:
+            explicit KioskEnableGodMode(WorldPacket&& packet) : ClientPacket(CMSG_KIOSK_ENABLE_GOD_MODE, std::move(packet)) { }
+
+            void Read() override;
+
+            bool Enable = false;
+        };
+
+        // Writer 0x6CCC40 (body 0x6A31A0): uint32 ViewIndex, then one bit State, then flush - 5 bytes.
+        // Despite the name this has nothing to do with game_event/GameEventMgr: ViewIndex is an index
+        // 0..39 into the compiled-in debug view table at 0x43BD1C0 ("Area Triggers", "AI Brain",
+        // "Behavior Tree", "Pathing", "Aura Debugger", ...), whose entries match the message set of
+        // family 0x4D. This is the subscription switch of the AI debug channel.
+        // Two senders: 0x4EF5F0 (the answer to SMSG_DEBUG_MENU_MANAGER_FULL_UPDATE) and 0x4EF456
+        // (a client console command of the form "<view name> <0|1>").
+        class SetGameEventDebugViewState final : public ClientPacket
+        {
+        public:
+            explicit SetGameEventDebugViewState(WorldPacket&& packet) : ClientPacket(CMSG_SET_GAME_EVENT_DEBUG_VIEW_STATE, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 ViewIndex = 0;
+            bool State = false;
+        };
+
         /*
          * Client family 0x64 (12.1.0.69382) - player state and UI remote control.
          *
@@ -2414,20 +2499,6 @@ namespace WorldPackets
             WorldPacket const* Write() override { return &_worldPacket; }
         };
 
-        // Writer 0x6B2860 - 9..~16 MB theoretisch, an der Erzeugerstelle 58..74 Byte.
-        // bits24 traegt die Laenge INKLUSIVE NUL; der FlushBits danach schreibt NULL Byte,
-        // weil 24 mod 8 == 0 - wer ein Fuellbyte einplant, verschiebt alles Nachfolgende.
-        // Der String ist Base64 einer 36-Zeichen-UUID, an der Erzeugerstelle also 48 Zeichen.
-        class ServerValidationSignatureRequest final : public ClientPacket
-        {
-        public:
-            explicit ServerValidationSignatureRequest(WorldPacket&& packet) : ClientPacket(CMSG_SERVER_VALIDATION_SIGNATURE_REQUEST, std::move(packet)) { }
-
-            void Read() override;
-
-            std::string Signature;
-            uint32 RequestID = 0;               // UNVERIFIED: Anfrage-/Kontextkennung, Semantik offen
-            ObjectGuid Guid;
         // SMSG_PLAYER_SKINNED - wire 0x64000F, 1 byte.
         // Case: Read<uint8> >> 7. Fires Lua PLAYER_SKINNED(hasFreeRepop)
         // (hash 0x69E51F7A6E5DEAE8). GameEvent.HandlePlayerSkinned closes the three resurrect
@@ -2819,22 +2890,27 @@ namespace WorldPackets
             explicit BonusRoll(WorldPacket&& packet) : ClientPacket(CMSG_BONUS_ROLL, std::move(packet)) { }
 
             void Read() override { }
-        // Writer 0x6CCC40 (body 0x6A31A0): uint32 ViewIndex, then one bit State, then flush - 5 bytes.
-        // Despite the name this has nothing to do with game_event/GameEventMgr: ViewIndex is an index
-        // 0..39 into the compiled-in debug view table at 0x43BD1C0 ("Area Triggers", "AI Brain",
-        // "Behavior Tree", "Pathing", "Aura Debugger", ...), whose entries match the message set of
-        // family 0x4D. This is the subscription switch of the AI debug channel.
-        // Two senders: 0x4EF5F0 (the answer to SMSG_DEBUG_MENU_MANAGER_FULL_UPDATE) and 0x4EF456
-        // (a client console command of the form "<view name> <0|1>").
-        class SetGameEventDebugViewState final : public ClientPacket
+        };
+
+        class ChromieTimeSelectExpansion final : public ClientPacket
         {
         public:
-            explicit SetGameEventDebugViewState(WorldPacket&& packet) : ClientPacket(CMSG_SET_GAME_EVENT_DEBUG_VIEW_STATE, std::move(packet)) { }
+            explicit ChromieTimeSelectExpansion(WorldPacket&& packet) : ClientPacket(CMSG_CHROMIE_TIME_SELECT_EXPANSION, std::move(packet)) { }
 
             void Read() override;
 
-            uint32 ViewIndex = 0;
-            bool State = false;
+            ObjectGuid Vendor;     // packed GUID of the Chromie NPC the player is interacting with
+            int32 ExpansionID = 0; // UIChromieTimeExpansionInfo.ID (NOT the Expansions enum)
+        };
+
+        class ChromieTimeSelectExpansionSuccess final : public ServerPacket
+        {
+        public:
+            ChromieTimeSelectExpansionSuccess() : ServerPacket(SMSG_CHROMIE_TIME_SELECT_EXPANSION_SUCCESS, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
         class TimerunningSeasonEnded final : public ServerPacket
         {
         public:
@@ -2867,6 +2943,8 @@ namespace WorldPackets
 
             CTROptionsBlock Previous;
             CTROptionsBlock Current;
+        };
+
         class DisplayWorldText final : public ServerPacket
         {
         public:
@@ -2878,6 +2956,39 @@ namespace WorldPackets
             uint32 Arg1 = 0;
             uint32 Arg2 = 0;
             std::string Text;
+        };
+
+        class RequestCurrencyDataForAccountCharacters final : public ClientPacket
+        {
+        public:
+            explicit RequestCurrencyDataForAccountCharacters(WorldPacket&& packet)
+                : ClientPacket(CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class TransferCurrencyFromAccountCharacter final : public ClientPacket
+        {
+        public:
+            explicit TransferCurrencyFromAccountCharacter(WorldPacket&& packet)
+                : ClientPacket(CMSG_TRANSFER_CURRENCY_FROM_ACCOUNT_CHARACTER, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid SourceCharacterGUID;
+            int32 CurrencyID = 0;
+            int32 Quantity = 0;
+        };
+
+        class GetCharacterCurrencyTransferLog final : public ClientPacket
+        {
+        public:
+            explicit GetCharacterCurrencyTransferLog(WorldPacket&& packet)
+                : ClientPacket(CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         class AccountCharacterCurrencyLists final : public ServerPacket
         {
         public:

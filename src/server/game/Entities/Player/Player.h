@@ -1136,9 +1136,6 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_RENOWN_REWARDS,
     PLAYER_LOGIN_QUERY_LOAD_COVENANT_CALLINGS,
     PLAYER_LOGIN_QUERY_LOAD_COVENANT_SOULBINDS,
-    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS,
-    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY,
-    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT,
     PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_TAB_SETTINGS,
     PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_ITEMS,
     PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_COINAGE,
@@ -3279,7 +3276,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         // Soulbind conduit collection (server-authoritative: conduitId -> owned RankIndex)
         // Socketed conduits for a soulbind tree: GarrTalent node id -> conduitId
-        int32 GetConduitSpell(uint32 conduitId) const;   // owned rank -> SoulbindConduitRank.SpellID (0 if none)
 
         // Covenant renown rewards. The renown LEVEL itself is a renown-reputation (TC ReputationMgr) and is client-synced
         // by the standard reputation packets; this grants the per-level RenownRewards (item/spell/title/mount) once each.
@@ -3879,9 +3875,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         bool m_covenantCallingsChanged = false;
         // Re-entrancy latch for the 1813 <-> 1859-1862 reservoir-anima mirror; see Player::CurrencyChanged.
         bool m_covenantAnimaSyncing = false;
-        std::unordered_map<uint32 /*conduitId*/, uint32 /*rankIndex*/> m_soulbindConduits;
         // garrTalent node id -> (conduitId, garrTalentTreeID); tree id lets us apply only the active soulbind's sockets
-        std::unordered_map<uint32 /*garrTalentId*/, std::pair<uint32 /*conduitId*/, uint32 /*treeId*/>> m_soulbindConduitSockets;
 
         uint32 m_lastFallTime;
         float  m_lastFallZ;

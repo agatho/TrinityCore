@@ -500,7 +500,6 @@ class TC_GAME_API Battleground
         void SetMaxTeamScore(uint16 maxTeamScore);
         // at zero, and then no SMSG_BATTLEGROUND_INIT is sent at all - which is what the client wants, since
         // its handler discards a zero cap anyway.
-        void SetMaxTeamScore(uint16 maxTeamScore);
         uint16 GetMaxTeamScore() const { return _maxTeamScore; }
 
         Trinity::unique_weak_ptr<Battleground> GetWeakPtr() const { return m_weakRef; }
