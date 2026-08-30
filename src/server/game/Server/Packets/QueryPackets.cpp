@@ -345,6 +345,13 @@ WorldPacket const* QueryPageTextResponse::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* InvalidatePageText::Write()
+{
+    _worldPacket << uint32(PageTextID);
+
+    return &_worldPacket;
+}
+
 void QueryNPCText::Read()
 {
     _worldPacket >> TextID;
@@ -615,12 +622,26 @@ ByteBuffer& operator<<(ByteBuffer& data, TreasurePickerBonus const& treasurePick
     for (TreasurePickCurrency const& treasurePickCurrency : treasurePickerBonus.CurrencyPicks)
         data << treasurePickCurrency;
 
+    // UNVERIFIED: the position of this bit. It is placed behind the element lists to match
+    // TreasurePickerPick, where the same move is proven at 424 recorded packets (see below).
+    // None of the twelve 12.1 recordings contains a single TreasurePickerBonus, so this one
+    // cannot be decided against reference bytes - only the analogy carries it.
     data << Bits<1>(treasurePickerBonus.Context);
     data.FlushBits();
 
-   return data;
+    return data;
 }
 
+// IsChoice belongs BEHIND the three element lists, not in front of them. TrinityCore wrote it
+// in front, which is right for at most an empty pick and wrong for every other one: with a single
+// item the bit byte lands where the client expects the item's first byte and the whole stream
+// slips by one.
+// Measured, not reasoned: the twelve unique 12.1 recordings hold 424 SMSG_TREASURE_PICKER_RESPONSE.
+// Parsed and re-serialised with the bit in front, 57 of them come out byte-identical - exactly the
+// 57 that carry neither an item nor a currency, where the position cannot matter. With the bit
+// behind the lists it is 424 of 424. Tool: C:\dumps\tools\w0_query_hotfix\treasure_layout.py.
+// That also matches the format rule in BEFUND_ai_debug_kanal_4D_69382.md section 3.4 - the element
+// data of a structure comes after its scalars but before its bit section.
 ByteBuffer& operator<<(ByteBuffer& data, TreasurePickerPick const& treasurePickerPick)
 {
     data << Size<uint32>(treasurePickerPick.ItemPicks);

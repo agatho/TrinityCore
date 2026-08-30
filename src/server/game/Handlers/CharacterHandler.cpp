@@ -1324,6 +1324,34 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
 
     pCurrChar->SendInitialPacketsAfterAddToMap();
 
+    // SMSG_CACHE_INFO belongs to the enter world burst, not to the auth sequence: it is sent once
+    // per login, after the player is on the map, one packet per cache domain.
+    //
+    // Where retail puts it, measured in dump_12.1.0.69382_2026-08-18_23-19-46.pkt: index 918
+    // SMSG_VIGNETTE_UPDATE, 919 SMSG_CACHE_INFO WQST, 920 SMSG_CACHE_INFO WGOB, 925
+    // SMSG_LOGIN_VERIFY_WORLD - the two cache packets follow the initial vignette update with no
+    // packet in between. This call does NOT reproduce that position, and the deviation is
+    // deliberate on both counts:
+    //
+    //  * Not inside SendInitialPacketsAfterAddToMap, next to the vignette block it would follow
+    //    there. That function is also the world port path (MovementHandler.cpp, HandleMoveWorldportAck),
+    //    so hooking it would send SMSG_CACHE_INFO on every map change. Retail sends it twice per
+    //    login and never on a port. Matching the position would break the count, which is the
+    //    property that was actually measured - 22 packets over 11 recorded logins, two per login.
+    //    So the call stays here, at the end of the login burst, and the whole of
+    //    SendInitialPacketsAfterAddToMap runs before it: UpdateZone -> SendInitWorldStates,
+    //    SendLoadCUFProfiles, the LOGINEFFECT spell, MoveSetCompoundState, SendAurasForTarget,
+    //    the duration and passive packets, PhasingHandler::OnMapChange and Garrison::SendRemoteInfo.
+    //
+    //  * The position relative to SMSG_LOGIN_VERIFY_WORLD is out of reach anyway. Retail sends it
+    //    at 925, after the cache packets; this core sends it above at line ~1208, before
+    //    AddPlayerToMap, so no placement of this call can put it on retail's side of that packet.
+    //
+    // What matters for the client is that the packet arrives after login and before the player
+    // acts on cached data, and the handler (RVA 0x341AD0) is order independent - it compares
+    // stamps against CVars and flushes on mismatch, whenever it runs.
+    SendCacheInfo();
+
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHAR_ONLINE);
     stmt->setUInt64(0, pCurrChar->GetGUID().GetCounter());
     CharacterDatabase.Execute(stmt);

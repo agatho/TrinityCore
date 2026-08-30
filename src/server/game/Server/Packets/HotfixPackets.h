@@ -79,16 +79,36 @@ namespace WorldPackets
             std::vector<int32> Hotfixes;
         };
 
+        // One record of SMSG_HOTFIX_CONNECT / SMSG_HOTFIX_MESSAGE, 21 bytes on the wire.
+        // Client element reader RVA 0x72AEA0 (12.1.0.69382): five uint32 followed by bits<3> Status.
+        // Size is the byte length this record occupies inside HotfixContent - the client uses it as a
+        // slice length and advances its blob cursor by exactly that much (handlers RVA 0x4A9BB0 / 0x4A97A0).
+        struct HotfixData
+        {
+            DB2Manager::HotfixRecord Record;
+            uint32 Size = 0;
+        };
+
         class HotfixConnect final : public ServerPacket
         {
         public:
-            struct HotfixData
-            {
-                DB2Manager::HotfixRecord Record;
-                uint32 Size = 0;
-            };
+            using HotfixData = Hotfix::HotfixData;
 
             explicit HotfixConnect() : ServerPacket(SMSG_HOTFIX_CONNECT) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<HotfixData> Hotfixes;
+            ByteBuffer HotfixContent;
+        };
+
+        // Unsolicited push of hotfix records applied after the client already connected.
+        // Byte-for-byte identical to SMSG_HOTFIX_CONNECT - same element reader, same field order,
+        // only the client-side hook and handler differ (RVA 0x4A9BB0 vs 0x4A97A0).
+        class HotfixMessage final : public ServerPacket
+        {
+        public:
+            explicit HotfixMessage() : ServerPacket(SMSG_HOTFIX_MESSAGE) { }
 
             WorldPacket const* Write() override;
 

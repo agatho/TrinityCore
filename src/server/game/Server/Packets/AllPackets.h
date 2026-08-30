@@ -84,6 +84,7 @@
 #include "VehiclePackets.h"
 #include "VoiceChatPackets.h"
 #include "VignettePackets.h"
+#include "VoidStoragePackets.h"
 #include "WhoPackets.h"
 #include "WorldStatePackets.h"
 

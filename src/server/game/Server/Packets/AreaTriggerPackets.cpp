@@ -44,6 +44,13 @@ WorldPacket const* AreaTriggerPlaySpellVisual::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* AreaTriggerUpdateDecalProperties::Write()
+{
+    _worldPacket << AreaTriggerGUID;
+
+    return &_worldPacket;
+}
+
 void UpdateAreaTriggerVisual::Read()
 {
     _worldPacket >> SpellID;

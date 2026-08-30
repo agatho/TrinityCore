@@ -357,6 +357,21 @@ namespace WorldPackets
             std::vector<PageTextInfo> Pages;
         };
 
+        // Drops exactly one page text record from the client's page text cache; the client marks the
+        // record dirty and re-queries it with CMSG_QUERY_PAGE_TEXT the next time it is needed.
+        // Client handler RVA 0x351F00 reads the leading uint32 and forwards it to
+        // DBCache::InvalidateRecord of the WPTX (page text) cache - the rest of the packet is ignored.
+        // No Lua event fires; the observable effect is the follow up query.
+        class InvalidatePageText final : public ServerPacket
+        {
+        public:
+            explicit InvalidatePageText() : ServerPacket(SMSG_INVALIDATE_PAGE_TEXT, 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 PageTextID = 0;
+        };
+
         class QueryNPCText final : public ClientPacket
         {
         public:

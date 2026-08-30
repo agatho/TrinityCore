@@ -1283,3 +1283,34 @@ void WorldSession::HandleSetBankAutosortDisabled(WorldPackets::Item::SetBankAuto
 {
     _player->SetBankAutoSortDisabled(setBankAutosortDisabled.Disable);
 }
+
+// Asks the client to open one of the player's own bags. The client resolves the guid against the
+// backpack and its 16 container slots and fires BAG_OPEN(bagID), which ContainerFrame.lua turns
+// into OpenBag(bagID) (client handler RVA 0x1E1DB80). A guid that is not a carried container is
+// dropped without a word, so this is checked here rather than leaving it to the client.
+// No core path calls this yet: retail uses it for flows this core does not have, and the obvious
+// candidate - opening a quest chest or a reward bag - does not work, because the client only ever
+// resolves carried bags and silently discards a GameObject guid.
+void WorldSession::SendOpenContainer(ObjectGuid containerGuid)
+{
+    // Nothing can be carried while no player is in world, so there is nothing to open either.
+    // Unlike the handlers in this file this one is not reached through DEFINE_HANDLER - the opcode
+    // is STATUS_NEVER - so no opcode status guarantees the logged in state, and _player is null
+    // both before PlayerLoadFromDB and after LogoutPlayer. The guard belongs here rather than at
+    // the first caller, because otherwise every caller would have to repeat it.
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    Item* container = player->GetItemByGuid(containerGuid);
+    if (!container || !container->IsBag())
+    {
+        TC_LOG_DEBUG("network", "WorldSession::SendOpenContainer: {} is not a container carried by {}", containerGuid.ToString(), GetPlayerInfo());
+        return;
+    }
+
+    WorldPackets::Item::OpenContainer openContainer;
+    openContainer.ContainerGUID = containerGuid;
+
+    SendPacket(openContainer.Write());
+}

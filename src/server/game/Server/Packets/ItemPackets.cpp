@@ -426,4 +426,11 @@ WorldPacket const* SendItemPassives::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* OpenContainer::Write()
+{
+    _worldPacket << ContainerGUID;
+
+    return &_worldPacket;
+}
 }

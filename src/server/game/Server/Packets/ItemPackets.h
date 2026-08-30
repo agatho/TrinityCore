@@ -531,6 +531,21 @@ namespace WorldPackets
             WorldPacket const* Write() override { return &_worldPacket; }
         };
 
+        // Opens one of the player's own bags in the client UI. The client (handler RVA 0x1E1DB80)
+        // compares the guid against the backpack container and its 16 entry container slot table
+        // and fires the Lua event BAG_OPEN(bagID) on a hit - ContainerFrame.lua calls OpenBag(bagID)
+        // for it. A guid that is not a carried container is silently ignored; there is no fallback
+        // path for game object containers such as quest chests.
+        class OpenContainer final : public ServerPacket
+        {
+        public:
+            explicit OpenContainer() : ServerPacket(SMSG_OPEN_CONTAINER, 16) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid ContainerGUID;
+        };
+
         class RemoveNewItem final : public ClientPacket
         {
         public:

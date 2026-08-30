@@ -501,3 +501,23 @@ void WorldSession::HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasureP
 
     SendPacket(treasurePickerResponse.Write());
 }
+
+// Tells the client that one page text record is stale. The client drops exactly that record from
+// its page text cache (client handler RVA 0x351F00 -> DBCache::InvalidateRecord) and asks for it
+// again with CMSG_QUERY_PAGE_TEXT the next time it needs it. Nothing else is thrown away, and no
+// Lua event fires - the follow up query is the observable effect.
+// No core path calls this yet: TrinityCore only knows the bulk ".reload page_text", not a change to
+// a single record, and this message carries exactly one record. The bulk case has a lever of its
+// own, but it is opt-in: retail never sends the WPTX domain of SMSG_CACHE_INFO - not in any of the
+// 11 recorded logins - so SendCacheInfo does not send it either, and the core therefore has no
+// automatic page text stamp. To invalidate the whole page text cache, put a WPTX row into the world
+// table `cache_info`, bump its Value and run `.reload cache_info` alongside `.reload page_text`;
+// the new stamp is what the next login sees. What is missing here is therefore the single record
+// trigger, and the bulk path costs one deliberate table row.
+void WorldSession::SendInvalidatePageText(uint32 pageTextId)
+{
+    WorldPackets::Query::InvalidatePageText invalidatePageText;
+    invalidatePageText.PageTextID = pageTextId;
+
+    SendPacket(invalidatePageText.Write());
+}

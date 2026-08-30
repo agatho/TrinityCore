@@ -170,10 +170,16 @@ ByteBuffer& operator>>(ByteBuffer& data, ItemModList& itemModList)
     return data;
 }
 
+// 12.1.0.69382 swapped the two groups: the client reads ItemModList BEFORE the HasItemBonus bit.
+// Reader RVA 0x6BFC30 (69382): uint32 ItemID | ItemModList | bits<1> HasItemBonus + Flush | [ItemBonus]
+// Reader RVA 0x72BD40 (12.0.7/68275): uint32 ItemID | bits<1> HasItemBonus + Flush | ItemModList | [ItemBonus]
+// Writer RVA 0x6BFD20 (69382) emits the same swapped order, so read and write stay symmetric.
 ByteBuffer& operator<<(ByteBuffer& data, ItemInstance const& itemInstance)
 {
     data << int32(itemInstance.ItemID);
+
     data << itemInstance.Modifications;
+
     data << OptionalInit(itemInstance.ItemBonus);
     data.FlushBits();
 
@@ -186,7 +192,9 @@ ByteBuffer& operator<<(ByteBuffer& data, ItemInstance const& itemInstance)
 ByteBuffer& operator>>(ByteBuffer& data, ItemInstance& itemInstance)
 {
     data >> itemInstance.ItemID;
+
     data >> itemInstance.Modifications;
+
     data >> OptionalInit(itemInstance.ItemBonus);
     data.ResetBitPos();
 
