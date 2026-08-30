@@ -1279,6 +1279,8 @@ namespace WorldPackets
             /// bools it carries is not decidable offline - the consumer writes both as constants
             /// (mov word ptr [rsp+0x2c], 1). Named after the more likely of the two.
             bool FirstCraftReward = false;
+        };
+
         // CMSG_OPEN_TRADESKILL_NPC (0x3A01E9): the client telling the server a trade-skill window opened.
         // Wire: PackedGuid NpcGUID - a PackedGuid, so 2 bytes when empty, NOT a fixed 16.
         //

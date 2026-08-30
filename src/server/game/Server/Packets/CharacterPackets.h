@@ -966,6 +966,8 @@ namespace WorldPackets
             void Read() override;
 
             std::vector<WarbandGroupSetup> Groups;
+        };
+
         // Sent by a neutral Pandaren choosing a faction at the end of the Wandering Isle.
         // Client UI (Blizzard_FrameXML/DestinyFrame.xml): Alliance button = NeutralPlayerSelectFaction(2),
         // Horde button = NeutralPlayerSelectFaction(1).
