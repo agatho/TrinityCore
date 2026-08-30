@@ -1035,6 +1035,40 @@ std::vector<TraitDefinitionEffectPointsEntry const*> const* GetTraitDefinitionEf
     return Trinity::Containers::MapGetValuePtr(_traitDefinitionEffectPointModifiers, traitDefinitionId);
 }
 
+void FillTraitConfigWithSystemKit(WorldPackets::Traits::TraitConfig& traitConfig)
+{
+    traitConfig.Entries.clear();
+    std::vector<Tree const*> const* trees = GetTreesForConfig(traitConfig);
+    if (!trees)
+        return;
+
+    // Grant every node's first entry at its max rank. For Skyriding (tree 672) this yields the full
+    // movement kit (Surge Forward / Skyward Ascent / Whirling Surge, ...) plus every Vigor node, so
+    // the alternate-mount power actually has capacity to spend. Choice nodes take entry 0. Nodes
+    // gated behind an inactive sub-tree (opt-in glyph paths) are skipped.
+    for (Tree const* tree : *trees)
+    {
+        for (Node const* node : tree->Nodes)
+        {
+            if (!node->Data || node->Entries.empty())
+                continue;
+
+            if (node->Data->TraitSubTreeID)
+                continue;
+
+            NodeEntry const& firstEntry = node->Entries[0];
+            if (!firstEntry.Data)
+                continue;
+
+            WorldPackets::Traits::TraitEntry& entry = traitConfig.Entries.emplace_back();
+            entry.TraitNodeID = node->Data->ID;
+            entry.TraitNodeEntryID = firstEntry.Data->ID;
+            entry.Rank = 0;
+            entry.GrantedRanks = std::max<int32>(firstEntry.Data->MaxRanks, 1);
+        }
+    }
+}
+
 void InitializeStarterBuildTraitConfig(WorldPackets::Traits::TraitConfig& traitConfig, PlayerDataAccessor player)
 {
     traitConfig.Entries.clear();

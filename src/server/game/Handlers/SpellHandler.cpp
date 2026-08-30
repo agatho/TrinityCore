@@ -617,5 +617,9 @@ void WorldSession::HandleKeyboundOverride(WorldPackets::Spells::KeyboundOverride
     if (!spellKeyboundOverride)
         return;
 
-    player->CastSpell(player, spellKeyboundOverride->Data);
+    // Server-initiated reaction to a client keybind, not a player spell cast: the mapped spells are
+    // internal utilities without ALLOW_WHILE_MOUNTED & co (e.g. 374763 Lift Off for the skyriding
+    // double-jump fires while mounted and falling), so a normal cast would fail its state checks.
+    // Spell scripts' own CheckCast hooks still run and can veto.
+    player->CastSpell(player, spellKeyboundOverride->Data, true);
 }

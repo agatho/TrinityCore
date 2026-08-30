@@ -8542,9 +8542,36 @@ void Unit::UpdateMountCapability()
         else if (MountCapabilityEntry const* capability = sMountCapabilityStore.LookupEntry(aurEff->GetAmountAsInt())) // aura may get removed by interrupt flag, reapply
         {
             SetFlightCapabilityID(capability->FlightCapabilityID, true);
+            SetDriveCapabilityID(capability->DriveCapabilityID, true);
 
             if (!HasAura(capability->ModSpellAuraID))
                 CastSpell(this, capability->ModSpellAuraID, aurEff);
+            else if (Aura* modAura = GetAura(capability->ModSpellAuraID))
+            {
+                // The mount aura can outlive its LINKED / LINKED_2 children across a login:
+                // CharacterHandler strips SpellAuraInterruptFlags::Login auras after LoadFromDB while
+                // leaving the ModSpellAura itself (e.g. Skyriding 406095) intact, and the re-cast above
+                // is skipped precisely because it is still there. A remount would re-fire the links;
+                // do the same here without disturbing the mount aura. Anything already present - such
+                // as Dragonrider Energy 372773, which SetFlightCapabilityID above re-establishes on the
+                // skyriding path - is left alone.
+
+                // snapshot first - casting may add or remove auras on this unit
+                std::vector<AuraEffect const*> linkedEffects;
+                for (AuraEffect const* modEff : modAura->GetAuraEffects())
+                {
+                    AuraType const auraType = modEff->GetAuraType();
+                    if (auraType != SPELL_AURA_LINKED && auraType != SPELL_AURA_LINKED_2)
+                        continue;
+
+                    if (modEff->GetSpellEffectInfo().TriggerSpell)
+                        linkedEffects.push_back(modEff);
+                }
+
+                for (AuraEffect const* modEff : linkedEffects)
+                    if (!HasAura(modEff->GetSpellEffectInfo().TriggerSpell))
+                        CastSpell(this, modEff->GetSpellEffectInfo().TriggerSpell, modEff);
+            }
         }
     }
 }
@@ -9100,6 +9127,10 @@ void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
 
     SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::FlightCapabilityID), flightCapabilityId);
 
+    // GlideEventSpeedDivisor scales movement speed when the client evaluates which GlideEvent to play.
+    // 1.0 is the neutral default; 0.0 would cause divide-by-zero on the client.
+    SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::GlideEventSpeedDivisor), 1.0f);
+
     UpdateAdvFlyingSpeed(ADV_FLYING_AIR_FRICTION, clientUpdate);
     UpdateAdvFlyingSpeed(ADV_FLYING_MAX_VEL, clientUpdate);
     UpdateAdvFlyingSpeed(ADV_FLYING_LIFT_COEFFICIENT, clientUpdate);
@@ -9113,9 +9144,115 @@ void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
     UpdateAdvFlyingSpeed(ADV_FLYING_SURFACE_FRICTION, clientUpdate);
     UpdateAdvFlyingSpeed(ADV_FLYING_OVER_MAX_DECELERATION, clientUpdate);
     UpdateAdvFlyingSpeed(ADV_FLYING_LAUNCH_SPEED_COEFFICIENT, clientUpdate);
+
+    // Vigor - the Skyriding resource - is a spell-charge system: SpellCategory 2391 ("Skryriding
+    // Charges - Core" [sic], 6 charges / 15s recovery) is consumed by Skyward Ascent / Surge Forward
+    // and refunded by Second Wind; the Skyriding aura (406095) speeds recovery up via
+    // SPELL_AURA_CHARGE_RECOVERY_MULTIPLIER. Since 11.2.7 retail has NO vigor bar - the client shows
+    // the charge count on the ability icons (native SetSpellCharges traffic covers that). The only
+    // extra server duty is mirroring the charge count into POWER_ALTERNATE_MOUNT (seen as
+    // SMSG_POWER_UPDATE type 25 on the retail wire) and pacing the speed-scaled recharge -
+    // Player::UpdateVigor does both.
+    // NOTE: no action-bar override here. The DF-era swap (OverrideSpellData 2106) is retired on
+    // retail since 11.2.7 - the skyriding abilities live on the normal action bars, default-placed
+    // at login (see the skyriding block in Player::SendInitialPacketsBeforeAddToMap).
+    if (Player* vigorPlayer = ToPlayer())
+    {
+        constexpr uint32 SPELL_CATEGORY_SKYRIDING_VIGOR = 2391;
+        // 372773 "Dragonrider Energy" is the CasterAuraSpell required to cast every skyriding
+        // ability (Surge Forward, Skyward Ascent, Whirling Surge, Second Wind, Aerial Halt); the
+        // client blocks them with "You can't do that yet" without it. Retail applies it through the
+        // Skyriding mount aura's (406095) linked effect, but that only re-fires when 406095 is
+        // freshly cast - on login-while-mounted UpdateMountCapability sees 406095 already restored
+        // and skips the re-cast, so the (non-persisted) energy aura is missing until a remount.
+        // Engaging the flight capability runs on both the fresh-mount and login paths, so establish
+        // it here directly.
+        constexpr uint32 SPELL_SKYRIDING_ENERGY = 372773;
+
+        if (flightCapabilityId)
+        {
+            if (!vigorPlayer->HasAura(SPELL_SKYRIDING_ENERGY))
+                vigorPlayer->CastSpell(vigorPlayer, SPELL_SKYRIDING_ENERGY, true);
+
+            vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, vigorPlayer->GetSpellHistory()->GetMaxCharges(SPELL_CATEGORY_SKYRIDING_VIGOR));
+            vigorPlayer->UpdateVigor();
+        }
+        else
+        {
+            vigorPlayer->RemoveAurasDueToSpell(SPELL_SKYRIDING_ENERGY);
+            if (vigorPlayer->GetMaxPower(POWER_ALTERNATE_MOUNT) > 0)
+            {
+                vigorPlayer->SetPower(POWER_ALTERNATE_MOUNT, 0);
+                vigorPlayer->SetMaxPower(POWER_ALTERNATE_MOUNT, 0);
+            }
+        }
+    }
 }
 
-void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUpdate)
+void Unit::SetDriveCapabilityID(int32 driveCapabilityId, bool clientUpdate)
+{
+    if (driveCapabilityId && !sDriveCapabilityStore.HasRecord(driveCapabilityId))
+        return;
+
+    if (GetDriveCapabilityID() == driveCapabilityId)
+        return;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::DriveCapabilityID), driveCapabilityId);
+
+    // 12.1 has no MovementFlags3 drive flag on the wire; the DriveCapabilityID UpdateField plus the
+    // SMSG_MOVE_(UN)SET_CAN_DRIVE packets below drive the client. (Fork MOVEMENTFLAG3_CAN_DRIVE dropped —
+    // adding it would change MovementInfo wire serialization for every player.)
+
+    if (!clientUpdate)
+        return;
+
+    if (Player* playerMover = GetPlayerMovingMe())
+    {
+        if (driveCapabilityId)
+        {
+            WorldPackets::Movement::MoveSetCanDrive packet;
+            packet.MoverGUID = GetGUID();
+            packet.SequenceIndex = m_movementCounter++;
+            packet.DriveCapabilityRecID = driveCapabilityId;
+            playerMover->SendDirectMessage(packet.Write());
+        }
+        else
+        {
+            WorldPackets::Movement::MoveUnsetCanDrive packet;
+            packet.MoverGUID = GetGUID();
+            packet.SequenceIndex = m_movementCounter++;
+            playerMover->SendDirectMessage(packet.Write());
+        }
+
+        WorldPackets::Movement::MoveUpdate moveUpdate;
+        moveUpdate.Status = &m_movementInfo;
+        SendMessageToSet(moveUpdate.Write(), playerMover);
+    }
+}
+
+void Unit::SendAdvFlyingSpeedBurst()
+{
+    // The complete FlightCapability parameter burst, in the retail order (sniff 66709: sent on every
+    // mount-engage, strictly AFTER SMSG_MOVE_SET_CAN_ADV_FLY). The client's double-jump launch gate
+    // requires its physics-param array populated, and the change-suppression in UpdateAdvFlyingSpeed
+    // would swallow most of it - m_advFlyingSpeed is pre-seeded with FlightCapability fallback row 1,
+    // which differs from typical live rows in only a field or two - so force all 13.
+    UpdateAdvFlyingSpeed(ADV_FLYING_AIR_FRICTION, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_MAX_VEL, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_LIFT_COEFFICIENT, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_DOUBLE_JUMP_VEL_MOD, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_GLIDE_START_MIN_HEIGHT, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_ADD_IMPULSE_MAX_SPEED, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_BANKING_RATE, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_PITCHING_RATE_DOWN, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_PITCHING_RATE_UP, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_TURN_VELOCITY_THRESHOLD, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_SURFACE_FRICTION, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_OVER_MAX_DECELERATION, true, true);
+    UpdateAdvFlyingSpeed(ADV_FLYING_LAUNCH_SPEED_COEFFICIENT, true, true);
+}
+
+void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUpdate, bool force /*= false*/)
 {
     FlightCapabilityEntry const* flightCapabilityEntry = sFlightCapabilityStore.LookupEntry(GetFlightCapabilityID());
     if (!flightCapabilityEntry)
@@ -9158,7 +9295,7 @@ void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUp
             ApplyPct(newValue, pos);
     }
 
-    if (m_advFlyingSpeed[speedType] == newValue)
+    if (!force && m_advFlyingSpeed[speedType] == newValue)
         return;
 
     m_advFlyingSpeed[speedType] = newValue;
@@ -9176,7 +9313,7 @@ void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUp
     }
 }
 
-void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeRange speedType, bool clientUpdate)
+void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeRange speedType, bool clientUpdate, bool force /*= false*/)
 {
     FlightCapabilityEntry const* flightCapabilityEntry = sFlightCapabilityStore.LookupEntry(GetFlightCapabilityID());
     if (!flightCapabilityEntry)
@@ -9215,7 +9352,7 @@ void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeRange speedType, bool clientUpd
         }
     }
 
-    if (m_advFlyingSpeed[speedType] == min && m_advFlyingSpeed[speedType + 1] == max)
+    if (!force && m_advFlyingSpeed[speedType] == min && m_advFlyingSpeed[speedType + 1] == max)
         return;
 
     m_advFlyingSpeed[speedType] = min;
@@ -12673,6 +12810,45 @@ void Unit::SendMoveKnockBack(Player* player, float speedXY, float speedZ, float 
     moveKnockBack.Speeds.VertSpeed = speedZ;
     moveKnockBack.Direction = Position(vcos, vsin);
     player->GetSession()->SendPacket(moveKnockBack.Write());
+}
+
+void Unit::SendApplyInertia(int32 movementInertiaID, Position const& force, uint32 lifetimeMs)
+{
+    if (Player* playerMover = GetPlayerMovingMe())
+    {
+        WorldPackets::Movement::MoveApplyInertia applyInertia;
+        applyInertia.MoverGUID = GetGUID();
+        applyInertia.SequenceIndex = m_movementCounter++;
+        applyInertia.InertiaID = movementInertiaID;
+        applyInertia.LifetimeMs = Milliseconds(lifetimeMs);
+        // 12.1 dropped the inertia Force vector from the wire; the client derives it from the InertiaID record.
+        (void)force;
+        playerMover->SendDirectMessage(applyInertia.Write());
+    }
+}
+
+void Unit::SendRemoveInertia(int32 movementInertiaID)
+{
+    if (Player* playerMover = GetPlayerMovingMe())
+    {
+        WorldPackets::Movement::MoveRemoveInertia removeInertia;
+        removeInertia.MoverGUID = GetGUID();
+        removeInertia.SequenceIndex = m_movementCounter++;
+        removeInertia.InertiaID = movementInertiaID;
+        playerMover->SendDirectMessage(removeInertia.Write());
+    }
+}
+
+void Unit::SendAddImpulse(Position const& direction)
+{
+    if (Player* playerMover = GetPlayerMovingMe())
+    {
+        WorldPackets::Movement::MoveAddImpulse addImpulse;
+        addImpulse.MoverGUID = GetGUID();
+        addImpulse.SequenceIndex = m_movementCounter++;
+        addImpulse.Direction = direction;
+        playerMover->SendDirectMessage(addImpulse.Write());
+    }
 }
 
 void Unit::KnockbackFrom(Position const& origin, float speedXY, float speedZ, float angle /*= M_PI*/, Movement::SpellEffectExtraData const* spellEffectExtraData /*= nullptr*/)

@@ -1316,4 +1316,30 @@ WorldPacket const* MoveUpdateRemoveInertia::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* MoveSetCanDrive::Write()
+{
+    _worldPacket << MoverGUID;
+    _worldPacket << SequenceIndex;
+    _worldPacket << int32(DriveCapabilityRecID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* MoveUnsetCanDrive::Write()
+{
+    _worldPacket << MoverGUID;
+    _worldPacket << SequenceIndex;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* MoveAddImpulse::Write()
+{
+    _worldPacket << MoverGUID;
+    _worldPacket << SequenceIndex;
+    _worldPacket << Direction;
+
+    return &_worldPacket;
+}
 }

@@ -2016,6 +2016,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void Regenerate(Powers power);
         void InterruptPowerRegen(Powers power);
         void RegenerateHealth();
+        void UpdateVigor(uint32 elapsedMs = 0);
+        void EnsureSkyridingActionDefaults();
         void setRegenTimerCount(uint32 time) {m_regenTimerCount = time;}
         void setWeaponChangeTimer(uint32 time) {m_weaponChangeTimer = time;}
 
@@ -2178,6 +2180,10 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SetFrozenPerksProgramVendorItem(WorldPackets::PerksProgram::PerksVendorItem const* item);   // nullptr clears the Trading Post freeze
         void ApplyTraitConfig(int32 configId, bool apply);
         void ApplyTraitEntry(int32 traitNodeEntryId, int32 rank, int32 grantedRanks, bool apply);
+        void SyncGrantedTraitEntries(int32 configId);   // retro-grant: pull new TraitCond::Granted entries/ranks into an existing config
+        // False until the login sweep at the end of _LoadTraits has applied every config; anything that
+        // creates or extends a config before that must leave the spell side to the sweep (no double apply).
+        bool AreTraitConfigsApplied() const { return m_traitConfigsApplied; }
         void SetActiveCombatTraitConfigID(int32 traitConfigId) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ActiveCombatTraitConfigID), traitConfigId); }
         void SetCurrentCombatTraitConfigSubTreeID(int32 traitSubTreeId) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::CurrentCombatTraitConfigSubTreeID), traitSubTreeId); }
         void SetTraitConfigUseStarterBuild(int32 traitConfigId, bool useStarterBuild);
@@ -3581,6 +3587,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         SpecializationInfo _specializationInfo;
 
         std::unordered_map<int32, PlayerSpellState> m_traitConfigStates;
+        bool m_traitConfigsApplied = false;
 
         ActionButtonList m_actionButtons;
 
