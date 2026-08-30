@@ -1,0 +1,26 @@
+--
+-- feature/haranir-allied-race : Heritage-armor achievement link (LISTED - NOT APPLIED by default)
+--
+-- The Haranir heritage set is gated by ChrRaces.HeritageArmorAchievementID. In the shipped
+-- 12.0.7.68887 client DB2 this field is 0 for BOTH Haranir rows (race 86 Alliance / 91 Horde),
+-- even though the heritage achievement itself EXISTS in Achievement.db2:
+--     61942  "Heritage of the Haranir"  (Supercedes 61506, Reward: Haranir Heritage Armor)
+--
+-- Because the field is 0 in the client's own data, the character-select heritage flag is
+-- CLIENT-BLOCKED at build 68887: a server-side hotfix alone will not surface the heritage UI
+-- until a client build ships HeritageArmorAchievementID != 0. This hotfix is therefore provided
+-- as a forward-looking template and is intentionally left commented out. The server-side seam
+-- that consumes it already exists on this branch (CharacterHandler.cpp -> HasHeritageArmorUnlockAchievement).
+--
+-- `chr_races` is a FULL-ROW hotfix table: an applied row REPLACES the DB2 entry, so any partial
+-- row would zero out FactionID / model / screen fields. The rows below carry the real 68887
+-- values (verified against wago.tools ChrRaces @ 12.0.7.68887) with ONLY HeritageArmorAchievementID
+-- changed to 61942. Uncomment + fill the remaining columns from the live DB2 export before applying.
+--
+-- Race 86 (Haranir, Alliance): FactionID=4  ResSicknessSpellID=15007  CreateScreen=623712  SelectScreen=7446723  LowRes=651555  PlayableRaceBit=20  HeritageArmorAchievementID -> 61942
+-- Race 91 (Haranir, Horde):    FactionID=116 ResSicknessSpellID=15007  CreateScreen=623714  SelectScreen=7446723  LowRes=651558  PlayableRaceBit=19  HeritageArmorAchievementID -> 61942
+--
+-- DELETE FROM `chr_races` WHERE `ID` IN (86, 91);
+-- INSERT INTO `chr_races` (`ID`, `FactionID`, `ResSicknessSpellID`, `CreateScreenFileDataID`, `SelectScreenFileDataID`, `LowResScreenFileDataID`, `HeritageArmorAchievementID`, /* ...all remaining ChrRaces columns from the 68887 export... */ `VerifiedBuild`) VALUES
+-- (86,   4, 15007, 623712, 7446723, 651555, 61942, /* ... */ 68887),
+-- (91, 116, 15007, 623714, 7446723, 651558, 61942, /* ... */ 68887);
