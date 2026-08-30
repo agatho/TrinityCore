@@ -56,6 +56,7 @@ class Group;
 class InstanceLock;
 class InstanceMap;
 class InstanceScript;
+class ChallengeMode;
 class InstanceScenario;
 class Object;
 class PhaseShift;
@@ -901,6 +902,8 @@ class TC_GAME_API InstanceMap : public Map
         InstanceScript const* GetInstanceScript() const { return i_data; }
         InstanceScenario* GetInstanceScenario() { return i_scenario.get(); }
         InstanceScenario const* GetInstanceScenario() const { return i_scenario.get(); }
+        ChallengeMode* GetChallengeMode() { return i_challengeMode.get(); }
+        ChallengeMode const* GetChallengeMode() const { return i_challengeMode.get(); }
         void SetInstanceScenario(InstanceScenario* scenario);
         ChallengeMode* GetChallengeMode() { return i_challengeMode.get(); }
         ChallengeMode const* GetChallengeMode() const { return i_challengeMode.get(); }

@@ -1129,6 +1129,9 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_RENOWN_REWARDS,
     PLAYER_LOGIN_QUERY_LOAD_COVENANT_CALLINGS,
     PLAYER_LOGIN_QUERY_LOAD_COVENANT_SOULBINDS,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT,
     MAX_PLAYER_LOGIN_QUERY
 };
 
@@ -2712,6 +2715,16 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         void SendInitWorldStates(uint32 zoneId, uint32 areaId) const;
         void SendUpdateWorldState(uint32 variable, uint32 value, bool hidden = false) const;
+        void SetDelveData(int32 mapId, int32 tier, uint64 instanceId, int32 entranceType,
+            std::vector<ObjectGuid> playersEligibleForRewards = {},
+            std::vector<int32> activeOptionalAffixIDs = {},
+            bool restrictRewardsToCurrentPlayers = false);
+        void ClearDelveData(int32 mapId);
+        void SetDelveProgressData(int32 key, int32 lastSelectedMapId, int32 highestTierUnlocked,
+            std::vector<int32> weeklyCounters);
+        bool HasActiveDelve() const { return !m_activePlayerData->DelveData.empty(); }
+        uint32 m_delveSelectedMapId = 0;
+        uint8 m_delveSelectedTier = 0;
         void SendDirectMessage(WorldPacket const* data) const;
 
         void SendAurasForTarget(Unit* target) const;
@@ -3166,6 +3179,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendCovenantCallingsUpdate();
         // A calling quest was turned in - free its slot so the next daily reset issues a replacement.
         void OnCovenantCallingCompleted(uint32 questId);
+        void UpdateDungeonScore();
 
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }

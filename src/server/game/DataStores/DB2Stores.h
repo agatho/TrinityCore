@@ -411,6 +411,9 @@ TC_GAME_API extern DB2Storage<SoulbindConduitItemEntry>             sSoulbindCon
 TC_GAME_API extern DB2Storage<SoulbindConduitRankEntry>             sSoulbindConduitRankStore;
 TC_GAME_API extern DB2Storage<SoulbindConduitRankPropertiesEntry>   sSoulbindConduitRankPropertiesStore;
 TC_GAME_API extern DB2Storage<TrophyEntry>                          sTrophyStore;
+TC_GAME_API extern DB2Storage<DelvesSeasonXSpellEntry>              sDelvesSeasonXSpellStore;
+TC_GAME_API extern DB2Storage<PlayerCompanionInfoEntry>             sPlayerCompanionInfoStore;
+TC_GAME_API extern DB2Storage<DelvesSeasonEntry>                    sDelvesSeasonStore;
 
 struct ClassPowerTypes
 {

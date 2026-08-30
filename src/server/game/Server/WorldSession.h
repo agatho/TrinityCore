@@ -781,6 +781,26 @@ namespace WorldPackets
         class ConfirmPurchaseResponse;
         class DistributionAssignToTarget;
         class CharacterUpgradeStart;
+    namespace ChallengeMode
+    {
+        class RequestMythicPlusSeasonData;
+        class RequestMythicPlusAffixes;
+        class StartChallengeMode;
+        class ResetChallengeMode;
+        class MythicPlusRequestMapStats;
+    }
+
+    namespace WeeklyRewards
+    {
+        class ClaimWeeklyReward;
+        class RequestWeeklyRewards;
+    }
+    namespace Delves
+    {
+        class DelveTeleportOut;
+        class RequestPartyEligibilityForDelveTiers;
+        class SelectDelveEntranceTier;
+        class TieredEntranceOpen;
     }
     namespace Movement
     {
@@ -1794,6 +1814,20 @@ class TC_GAME_API WorldSession
         void SendBattlePayDistributionUpdate(ShopEntitlement const& entitlement);
         void SendBattlePayEntitlementSync();
         void RedeemBattlePayEntitlements();
+        // Delves
+        void HandleDelveTeleportOut(WorldPackets::Delves::DelveTeleportOut& delveTeleportOut);
+        void HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delves::RequestPartyEligibilityForDelveTiers& requestPartyEligibilityForDelveTiers);
+        void HandleSelectDelveEntranceTier(WorldPackets::Delves::SelectDelveEntranceTier& selectDelveEntranceTier);
+        void HandleTieredEntranceOpen(WorldPackets::Delves::TieredEntranceOpen& tieredEntranceOpen);
+        // WeeklyRewards
+        void HandleRequestWeeklyRewards(WorldPackets::WeeklyRewards::RequestWeeklyRewards& packet);
+        void HandleClaimWeeklyReward(WorldPackets::WeeklyRewards::ClaimWeeklyReward& packet);
+        // Challenge Mode (Mythic+)
+        void HandleRequestMythicPlusSeasonData(WorldPackets::ChallengeMode::RequestMythicPlusSeasonData& requestMythicPlusSeasonData);
+        void HandleRequestMythicPlusAffixes(WorldPackets::ChallengeMode::RequestMythicPlusAffixes& requestMythicPlusAffixes);
+        void HandleStartChallengeMode(WorldPackets::ChallengeMode::StartChallengeMode& startChallengeMode);
+        void HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetChallengeMode& resetChallengeMode);
+        void HandleMythicPlusRequestMapStats(WorldPackets::ChallengeMode::MythicPlusRequestMapStats& request);
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);

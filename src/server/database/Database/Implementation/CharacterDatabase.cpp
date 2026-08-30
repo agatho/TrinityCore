@@ -32,6 +32,24 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_REP_SHOP_BOOST, "REPLACE INTO character_shop_boost (guid, productId, distributionId, specializationId, trial, boostedAt) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_SHOP_BOOST, "DELETE FROM character_shop_boost WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_SHOP_BOOST_ACCOUNT, "SELECT b.guid, b.trial FROM character_shop_boost b INNER JOIN characters c ON c.guid = b.guid WHERE c.account = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_DELVE_COMPANION, "SELECT companionId, level, xp, selectedRole, combatCurioNodeId, utilityCurioNodeId FROM delve_companion WHERE battlenetAccountId = ? LIMIT 1", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_DELVE_COMPANION, "REPLACE INTO delve_companion (battlenetAccountId, companionId, level, xp, selectedRole, combatCurioNodeId, utilityCurioNodeId) VALUES (?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_DELVE_PROGRESS, "SELECT highestTierUnlocked, weeklyCompletions, highestTierThisWeek, weeklyBountifulCount, weeklyCofferShards FROM delve_progress WHERE battlenetAccountId = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_DELVE_PROGRESS, "REPLACE INTO delve_progress (battlenetAccountId, highestTierUnlocked, weeklyCompletions, highestTierThisWeek, weeklyBountifulCount, weeklyCofferShards) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_UPD_RESET_DELVE_PROGRESS_WEEKLY, "UPDATE delve_progress SET weeklyCompletions = 0, highestTierThisWeek = 0, weeklyBountifulCount = 0, weeklyCofferShards = 0", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_WEEKLY_REWARD_ACTIVITY, "SELECT period, activityType, count, bestLevel, levels FROM character_weekly_reward_activity WHERE ownerGuid = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_WEEKLY_REWARD_ACTIVITY, "REPLACE INTO character_weekly_reward_activity (ownerGuid, activityType, period, count, bestLevel, levels) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_WEEKLY_REWARD_STATE, "SELECT claimedPeriod FROM character_weekly_reward_state WHERE ownerGuid = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_WEEKLY_REWARD_STATE, "REPLACE INTO character_weekly_reward_state (ownerGuid, claimedPeriod) VALUES (?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_CHARACTER_MYTHIC_PLUS, "SELECT challengeModeId, level, durationMs, deaths, completionDate, score, affix1, affix2, affix3, affix4 FROM character_mythic_plus WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_INS_CHARACTER_MYTHIC_PLUS, "INSERT INTO character_mythic_plus (guid, challengeModeId, level, durationMs, deaths, completionDate, score, affix1, affix2, affix3, affix4) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_CHARACTER_MYTHIC_PLUS, "DELETE FROM character_mythic_plus WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_CHARACTER_MYTHIC_PLUS_WEEKLY, "SELECT challengeModeId, level, timed, completionDate, resetTime FROM character_mythic_plus_weekly WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_INS_CHARACTER_MYTHIC_PLUS_WEEKLY, "INSERT INTO character_mythic_plus_weekly (guid, challengeModeId, level, timed, completionDate, resetTime) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_CHARACTER_MYTHIC_PLUS_WEEKLY, "DELETE FROM character_mythic_plus_weekly WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_CHARACTER_MYTHIC_PLUS_VAULT, "SELECT claimedResetTime, keystoneResetTime, prevWeekResetTime, prevWeekBestLevel, prevWeekBestTimedLevel FROM character_mythic_plus_vault WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_INS_CHARACTER_MYTHIC_PLUS_VAULT, "INSERT INTO character_mythic_plus_vault (guid, claimedResetTime, keystoneResetTime, prevWeekResetTime, prevWeekBestLevel, prevWeekBestTimedLevel) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE claimedResetTime = VALUES(claimedResetTime), keystoneResetTime = VALUES(keystoneResetTime), prevWeekResetTime = VALUES(prevWeekResetTime), prevWeekBestLevel = VALUES(prevWeekBestLevel), prevWeekBestTimedLevel = VALUES(prevWeekBestTimedLevel)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_CHARACTER_MYTHIC_PLUS_VAULT, "DELETE FROM character_mythic_plus_vault WHERE guid = ?", CONNECTION_ASYNC);
     if (!m_reconnecting)
         m_stmts.resize(MAX_CHARACTERDATABASE_STATEMENTS);
 

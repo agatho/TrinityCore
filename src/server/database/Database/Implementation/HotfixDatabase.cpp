@@ -2512,6 +2512,18 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_TROPHY, "SELECT MAX(ID) + 1 FROM trophy", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_TROPHY, "SELECT ID, Name_lang FROM trophy_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_DELVES_SEASON_X_SPELL, "SELECT ID, SpellID, DelvesSeasonID FROM delves_season_x_spell"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_DELVES_SEASON_X_SPELL, "SELECT MAX(ID) + 1 FROM delves_season_x_spell", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT UnlockDescription, ID, DelvesSeasonID, TraitTreeID, "
+        "TraitNodeID_DPS, TraitNodeID_Heal, TraitSubTreeID_DPS, TraitSubTreeID_Heal, TraitSubTreeID_Tank, "
+        "FactionID, CreatureDisplayInfoID, UiModelSceneID, "
+        "Field_12_0_0_64499_011, Field_12_0_0_64499_012, ParentID"
+        " FROM player_companion_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT MAX(ID) + 1 FROM player_companion_info", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_DELVES_SEASON, "SELECT ID, FactionID FROM delves_season"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_DELVES_SEASON, "SELECT MAX(ID) + 1 FROM delves_season", CONNECTION_SYNCH);
 }
 
 HotfixDatabaseConnection::HotfixDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

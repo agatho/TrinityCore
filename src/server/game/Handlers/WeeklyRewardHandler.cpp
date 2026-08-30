@@ -19,6 +19,7 @@
 #include "ChallengeModeMgr.h"
 #include "Log.h"
 #include "Player.h"
+#include "ChallengeModeMgr.h"
 #include "WeeklyRewardsMgr.h"
 #include "WeeklyRewardsPackets.h"
 
@@ -74,6 +75,7 @@ void WorldSession::HandleRequestWeeklyRewards(WorldPackets::WeeklyRewards::Reque
         for (WeeklyRewards::VaultSlot const& slot : WeeklyRewards::SlotsFor(type))
         {
             uint32 const slotLevel = WeeklyRewardsMgr::GetSlotLevel(row, slot);
+
 
             WorldPackets::WeeklyRewards::WeeklyRewardProgress p;
             p.ThresholdID = slot.ThresholdID;

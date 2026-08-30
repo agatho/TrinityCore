@@ -18,6 +18,7 @@
 #include "WeeklyRewardsMgr.h"
 #include "ChallengeModeMgr.h"
 #include "CharacterDatabase.h"
+#include "DatabaseEnv.h"
 #include "Common.h"
 #include "Config.h"
 #include "DB2Stores.h"

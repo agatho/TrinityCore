@@ -489,6 +489,9 @@ DB2Storage<SoulbindConduitEntry>                sSoulbindConduitStore("SoulbindC
 DB2Storage<SoulbindConduitItemEntry>            sSoulbindConduitItemStore("SoulbindConduitItem.db2", &SoulbindConduitItemLoadInfo::Instance);
 DB2Storage<SoulbindConduitRankPropertiesEntry>  sSoulbindConduitRankPropertiesStore("SoulbindConduitRankProperties.db2", &SoulbindConduitRankPropertiesLoadInfo::Instance);
 DB2Storage<TrophyEntry>                         sTrophyStore("Trophy.db2", &TrophyLoadInfo::Instance);
+DB2Storage<DelvesSeasonXSpellEntry>             sDelvesSeasonXSpellStore("DelvesSeasonXSpell.db2", &DelvesSeasonXSpellLoadInfo::Instance);
+DB2Storage<PlayerCompanionInfoEntry>            sPlayerCompanionInfoStore("PlayerCompanionInfo.db2", &PlayerCompanionInfoLoadInfo::Instance);
+DB2Storage<DelvesSeasonEntry>                   sDelvesSeasonStore("DelvesSeason.db2", &DelvesSeasonLoadInfo::Instance);
 
 TaxiMask                                        sTaxiNodesMask;
 TaxiMask                                        sOldContinentsNodesMask;
@@ -1230,6 +1233,9 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sSoulbindConduitItemStore);
     LOAD_DB2(sSoulbindConduitRankPropertiesStore);
     LOAD_DB2(sTrophyStore);
+    LOAD_DB2(sDelvesSeasonXSpellStore);
+    LOAD_DB2(sPlayerCompanionInfoStore);
+    LOAD_DB2(sDelvesSeasonStore);
 
     // error checks
 

@@ -16,6 +16,7 @@
  */
 
 #include "Map.h"
+#include "ChallengeMode.h"
 #include "Battleground.h"
 #include "BattlegroundMgr.h"
 #include "BattlegroundScript.h"

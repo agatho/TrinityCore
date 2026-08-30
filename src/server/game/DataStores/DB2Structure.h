@@ -1650,22 +1650,22 @@ struct DurabilityCostsEntry
 struct DriveCapabilityEntry
 {
     uint32 ID;
-    float ForwardAcceleration;              // DB2 field 1 → v28[0]
-    float BackwardMaxSpeed;                 // DB2 field 2 → v28[10], used at offset 312 (backward max speed)
-    float IdleFriction;                     // DB2 field 3 → v28[12], used at offset 320 (friction when not driving)
-    float BackwardAcceleration;             // DB2 field 4 → v28[11], used at offset 316 (backward accel)
-    float Field_5;                          // DB2 field 5 → v28[13]
-    float Field_6;                          // DB2 field 6 → v28[16]
-    float Field_7;                          // DB2 field 7 → v28[14]
-    float Field_8;                          // DB2 field 8 → v28[17]
-    float Field_9;                          // DB2 field 9 → v28[18]
-    float Field_10;                         // DB2 field 10 → v28[19]
-    float Field_11;                         // DB2 field 11 → v28[1]
-    float Field_12;                         // DB2 field 12 → v28[2]
-    float Field_13;                         // DB2 field 13 → v28[3]
-    float Field_14;                         // DB2 field 14 → v28[4]
-    float Field_15;                         // DB2 field 15 → v28[5]
-    float Field_16;                         // DB2 field 16 → v28[6]
+    float ForwardAcceleration;              // DB2 field 1 â†’ v28[0]
+    float BackwardMaxSpeed;                 // DB2 field 2 â†’ v28[10], used at offset 312 (backward max speed)
+    float IdleFriction;                     // DB2 field 3 â†’ v28[12], used at offset 320 (friction when not driving)
+    float BackwardAcceleration;             // DB2 field 4 â†’ v28[11], used at offset 316 (backward accel)
+    float Field_5;                          // DB2 field 5 â†’ v28[13]
+    float Field_6;                          // DB2 field 6 â†’ v28[16]
+    float Field_7;                          // DB2 field 7 â†’ v28[14]
+    float Field_8;                          // DB2 field 8 â†’ v28[17]
+    float Field_9;                          // DB2 field 9 â†’ v28[18]
+    float Field_10;                         // DB2 field 10 â†’ v28[19]
+    float Field_11;                         // DB2 field 11 â†’ v28[1]
+    float Field_12;                         // DB2 field 12 â†’ v28[2]
+    float Field_13;                         // DB2 field 13 â†’ v28[3]
+    float Field_14;                         // DB2 field 14 â†’ v28[4]
+    float Field_15;                         // DB2 field 15 â†’ v28[5]
+    float Field_16;                         // DB2 field 16 â†’ v28[6]
 };
 
 struct DriveCapabilityTierEntry
@@ -5666,7 +5666,7 @@ struct GarrFollowerLevelXPEntry
     uint32 ID;
     // 68275 db2 layout (WoWDBDefs LAYOUT 83953EF8): GarrFollowerTypeID comes BEFORE FollowerLevel.
     // These were previously declared in the reverse order, so every row loaded with the two bytes
-    // swapped (FollowerLevel held the type value, GarrFollowerTypeID held the level) â€” GetFollowerLevelXP
+    // swapped (FollowerLevel held the type value, GarrFollowerTypeID held the level) Ã¢â‚¬â€� GetFollowerLevelXP
     // then missed for every real (type, level) pair and follower mission XP was silently discarded.
     int8 GarrFollowerTypeID;
     uint8 FollowerLevel;
@@ -6050,6 +6050,38 @@ struct TrophyEntry
     uint8 TrophyTypeID;
     int32 GameObjectDisplayInfoID;
     uint32 PlayerConditionID;
+};
+
+struct DelvesSeasonXSpellEntry
+{
+    uint32 ID;
+    int32 SpellID;
+    uint32 DelvesSeasonID;
+};
+
+struct PlayerCompanionInfoEntry
+{
+    LocalizedString UnlockDescription;
+    uint32 ID;
+    int32 DelvesSeasonID;
+    int32 TraitTreeID;
+    int32 TraitNodeID_DPS;
+    int32 TraitNodeID_Heal;
+    int32 TraitSubTreeID_DPS;
+    int32 TraitSubTreeID_Heal;
+    int32 TraitSubTreeID_Tank;
+    int32 FactionID;
+    int32 CreatureDisplayInfoID;
+    int32 UiModelSceneID;
+    int32 Field_12_0_0_64499_011;
+    int32 Field_12_0_0_64499_012;
+    int32 ParentID;                                                                   // Field_12_0_1_64889_014, parent relation
+};
+
+struct DelvesSeasonEntry
+{
+    uint32 ID;
+    int32 FactionID;                                                                  // Faction.ID FK
 };
 
 #endif
