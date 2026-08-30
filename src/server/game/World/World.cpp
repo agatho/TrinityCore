@@ -1668,6 +1668,8 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading World Quests...");
     sWorldQuestMgr->LoadFromDB();
 
+    sObjectMgr->LoadTreasurePickerTemplates();                   // must be after LoadItemTemplates()
+    TC_LOG_INFO("server.loading", "Loading World Quests...");
     TC_LOG_INFO("server.loading", "Checking Quest Disables");
     DisableMgr::CheckQuestDisables();                           // must be after loading quests
 
