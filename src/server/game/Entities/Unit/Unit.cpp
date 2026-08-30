@@ -82,6 +82,7 @@
 #include "SpellPackets.h"
 #include "StringConvert.h"
 #include "TemporarySummon.h"
+#include "PvPSeasonRules.h"
 #include "Totem.h"
 #include "Transport.h"
 #include "Util.h"
@@ -7696,6 +7697,12 @@ int32 Unit::SpellHealingBonusTaken(Unit* caster, SpellInfo const* spellProto, in
         });
     }
 
+    // [Midnight Season 1 PvP RULE — PLACEHOLDER, verify vs 12.0.7 patch notes]
+    // Players receive reduced healing while in a battleground (retail S1: -20%,
+    // includes Battleground Blitz / rated BG). Single incoming-heal choke point.
+    if (IsPlayer() && GetMap()->IsBattleground())
+        TakenTotalMod *= PvPSeasonRules::BATTLEGROUND_HEALING_MULTIPLIER;
+
     float heal = healamount * TakenTotalMod;
     return int32(std::max(heal, 0.0f));
 }
@@ -9627,8 +9634,9 @@ DiminishingLevels Unit::GetDiminishing(DiminishingGroup group) const
     if (!diminish.hitCount)
         return DIMINISHING_LEVEL_1;
 
-    // If last spell was cast more than 18 seconds ago - reset level.
-    if (!diminish.stack && GetMSTimeDiffToNow(diminish.hitTime) > 18 * IN_MILLISECONDS)
+    // If last spell was cast more than the DR-reset window ago - reset level.
+    // [Midnight Season 1 PvP RULE] retail shortened this 18s -> 16s (PLACEHOLDER, see PvPSeasonRules.h).
+    if (!diminish.stack && GetMSTimeDiffToNow(diminish.hitTime) > PvPSeasonRules::DR_RESET_SECONDS * IN_MILLISECONDS)
         return DIMINISHING_LEVEL_1;
 
     return DiminishingLevels(diminish.hitCount);
