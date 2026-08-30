@@ -27,6 +27,7 @@
 #include "DB2Stores.h"
 #include "Formulas.h"
 #include "GameEventSender.h"
+#include "GameObject.h"
 #include "GameTime.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
@@ -41,6 +42,7 @@
 #include "MiscPackets.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
+#include "Optional.h"
 #include "Player.h"
 #include "ReputationMgr.h"
 #include "SpellAuras.h"
@@ -48,7 +50,45 @@
 #include "Transport.h"
 #include "Util.h"
 #include "WorldStateMgr.h"
+#include <algorithm>
 #include <cstdarg>
+#include <limits>
+
+namespace
+{
+// Maps the queue a player actually came in through onto the client's own match-kind table (see
+// WorldPackets::Battleground::PVPMatchBracket). Returns nothing when this core's queue has no counterpart in
+// that table - unrated random battlegrounds, wargames and cheat queues have no label there - and
+// SMSG_PVP_MATCH_START is then simply not sent rather than sent with a made-up bracket.
+Optional<WorldPackets::Battleground::PVPMatchBracket> GetPVPMatchBracket(BattlegroundQueueTypeId queueId)
+{
+    switch (BattlegroundQueueIdType(queueId.Type))
+    {
+        case BattlegroundQueueIdType::Arena:
+            switch (queueId.TeamSize)
+            {
+                case ARENA_TYPE_2v2: return WorldPackets::Battleground::PVPMatchBracket::Arena2v2;
+                case ARENA_TYPE_3v3: return WorldPackets::Battleground::PVPMatchBracket::Arena3v3;
+                case ARENA_TYPE_5v5: return WorldPackets::Battleground::PVPMatchBracket::Arena5v5;
+                default: break;
+            }
+            break;
+        case BattlegroundQueueIdType::ArenaSkirmish:
+            return WorldPackets::Battleground::PVPMatchBracket::Skirmish;
+        case BattlegroundQueueIdType::Battleground:
+            // Only the rated 10v10 premade queue has a label; plain random battlegrounds do not.
+            if (queueId.Rated)
+                return WorldPackets::Battleground::PVPMatchBracket::RatedBattleground;
+            break;
+        case BattlegroundQueueIdType::RatedBattlegroundBlitz:
+            return WorldPackets::Battleground::PVPMatchBracket::RatedSoloRBG;
+        default:
+            break;
+    }
+
+    return {};
+}
+}
 
 template<class Do>
 void Battleground::BroadcastWorker(Do& _do)
@@ -96,6 +136,7 @@ Battleground::Battleground(BattlegroundTemplate const* battlegroundTemplate) : _
     m_PrematureCountDown = false;
 
     m_LastPlayerPositionBroadcast = 0;
+    _maxTeamScore = 0;
 
     StartDelayTimes[BG_STARTING_EVENT_FIRST]  = BG_START_DELAY_2M;
     StartDelayTimes[BG_STARTING_EVENT_SECOND] = BG_START_DELAY_1M;
@@ -393,12 +434,25 @@ inline void Battleground::_ProcessJoin(uint32 diff)
 
         SendPacketToAll(WorldPackets::Battleground::PVPMatchSetState(WorldPackets::Battleground::PVPMatchState::Engaged).Write());
 
-        for (auto const& [guid, _] : GetPlayers())
+        for (auto const& [guid, battlegroundPlayer] : GetPlayers())
         {
             if (Player* player = ObjectAccessor::GetPlayer(GetBgMap(), guid))
             {
                 player->StartCriteria(CriteriaStartEvent::StartBattleground, GetBgMap()->GetId());
                 player->AtStartOfEncounter(EncounterType::Battleground);
+
+                // Retail sends SMSG_PVP_MATCH_START 29 ms after SMSG_PVP_MATCH_SET_STATE(Engaged), i.e. right
+                // here. It is per-connection (instance) and its bracket comes from the queue the player
+                // arrived through, which is why it is built inside this loop rather than broadcast.
+                if (Optional<WorldPackets::Battleground::PVPMatchBracket> bracket = GetPVPMatchBracket(battlegroundPlayer.queueTypeId))
+                {
+                    WorldPackets::Battleground::PVPMatchStart pvpMatchStart;
+                    pvpMatchStart.MapID = GetMapId();
+                    pvpMatchStart.ArenaSeason = sWorld->getIntConfig(CONFIG_ARENA_SEASON_ID);
+                    pvpMatchStart.Bracket = *bracket;
+                    pvpMatchStart.StartTime = GameTime::GetSystemTime();
+                    player->SendDirectMessage(pvpMatchStart.Write());
+                }
             }
         }
 
@@ -1054,6 +1108,19 @@ void Battleground::AddPlayer(Player* player, BattlegroundQueueTypeId queueId)
 
     player->SendDirectMessage(pvpMatchInitialize.Write());
 
+    SendMatchScoreState(player);
+    // Deliberately outside SendMatchScoreState: that one emits the score baseline only for battlegrounds
+    // with a resource cap (_maxTeamScore != 0), and capture point battlegrounds are not necessarily capped.
+    // UNVERIFIED: where SMSG_MAP_OBJECTIVES_INIT belongs inside the entry burst. What the captures settle is
+    // the triple SendMatchScoreState emits - SMSG_BATTLEGROUND_INIT, then SMSG_BATTLEGROUND_POINTS for Horde
+    // and for Alliance - while no capture of any build carries SMSG_MAP_OBJECTIVES_INIT at all, so its place
+    // relative to those three is not derivable from the wire, and TrinityCore has never sent it either.
+    // Sending it directly afterwards is therefore a choice, not a measurement. It is a safe one: the client
+    // feeds this message and SMSG_UPDATE_CAPTURE_POINT into the same array and re-bases CaptureTime on its
+    // own clock in both (see the comment on SendMapObjectivesInit), so nothing in the burst can be lost to
+    // ordering. Needs a capture of a player entering a capture point battleground that is already running.
+    SendMapObjectivesInit(player);
+
     player->RemoveAurasByType(SPELL_AURA_MOUNTED);
 
     // add arena specific auras
@@ -1495,6 +1562,138 @@ void Battleground::RewardXPAtKill(Player* killer, Player* victim)
         Player* killers[] = { killer };
         KillRewarder(Trinity::IteratorPair(std::begin(killers), std::end(killers)), victim, true).Reward();
     }
+}
+
+void Battleground::SetTeamScore(TeamId teamId, int32 score)
+{
+    // Retail only puts SMSG_BATTLEGROUND_POINTS on the wire when a score actually moves - across the 322
+    // captured packets of one full match no team ever repeats a value - and callers like the Deephaul Ravine
+    // ticker do run every two seconds with nothing to add, so the early-out here is load bearing.
+    if (m_TeamScores[teamId] == score)
+        return;
+
+    m_TeamScores[teamId] = score;
+
+    // Only resource races put this on the wire. The cap is the discriminator: SendMatchScoreState already
+    // withholds the two entry SMSG_BATTLEGROUND_POINTS without one, so sending live updates without one
+    // would leave the client with a score stream it never got a baseline or a maximum for - and its handler
+    // discards a zero cap outright. (SMSG_BATTLEGROUND_INIT itself does go out either way; it carries the
+    // server clock as well, and that half is unconditional. See SendMatchScoreState.)
+    //
+    // This is what keeps the flag battlegrounds out. Warsong Gulch and Twin Peaks route their flag captures
+    // through AddPoint too, but a capture count of 0..3 is not a resource amount, and those two already
+    // publish it on a channel of their own: UpdateTeamScore in battleground_warsong_gulch.cpp writes
+    // WORLD_STATE_FLAG_CAPTURES_ALLIANCE / _HORDE, and the one in battleground_twin_peaks.cpp writes
+    // TwinPeaks::WorldStates::FlagCapturesAlliance / FlagCapturesHorde. The only source for this field's
+    // meaning is one Deephaul Ravine style resource race, so it is not stretched past that.
+    if (!_maxTeamScore)
+        return;
+
+    WorldPackets::Battleground::BattlegroundPoints battlegroundPoints;
+    // The field is a uint16 on the wire; scores are never negative in practice but RemovePoint can in
+    // principle underflow, so clamp rather than wrap.
+    battlegroundPoints.BgPoints = uint16(std::clamp<int32>(score, 0, std::numeric_limits<uint16>::max()));
+    // m_TeamScores is indexed by TeamId (alliance 0), the packet by PvPTeamId (horde 0). They are inverted.
+    battlegroundPoints.Team = teamId == TEAM_ALLIANCE;
+    SendPacketToAll(battlegroundPoints.Write());
+}
+
+void Battleground::SetMaxTeamScore(uint16 maxTeamScore)
+{
+    if (_maxTeamScore == maxTeamScore)
+        return;
+
+    _maxTeamScore = maxTeamScore;
+
+    // A revision DOWN to zero has nothing to deliver: the client keeps its old cap when it is handed a zero
+    // one, so a resend could not clear it anyway, and everyone still in the match already has the clock.
+    if (!_maxTeamScore)
+        return;
+
+    // Scripts set this from OnInit, before anyone has joined, so this normally reaches nobody and the real
+    // delivery happens from AddPlayer. It matters only if a script ever revises the cap mid-match.
+    for (auto const& [guid, _] : m_Players)
+        if (Player* player = ObjectAccessor::FindPlayer(guid))
+            SendMatchScoreState(player);
+}
+
+void Battleground::SendMatchScoreState(Player* player) const
+{
+    // Capture order at battleground entry (C:\sniff\rated BG 12.0.7.pkt, tick 915464, instance connection):
+    // SMSG_BATTLEGROUND_INIT first, then SMSG_BATTLEGROUND_POINTS for horde and then for alliance.
+    //
+    // The INIT goes out for EVERY match, capped or not, because its two fields are not gated alike. Its
+    // first field is the server clock, and the client's handler stores that one before and outside the
+    // guard it puts on the cap - it is the only writer of the offset the arena crowd-control bar and
+    // C_Commentator's spell charges read back. Arenas, Warsong Gulch, Twin Peaks, Alterac Valley and Isle
+    // of Conquest declare no cap, and gating the send on the cap left all of them computing those timers
+    // across two unrelated epochs. See the decode above SMSG_BATTLEGROUND_INIT for the reader census.
+    WorldPackets::Battleground::BattlegroundInit battlegroundInit;
+    battlegroundInit.ServerTime = GameTime::GetGameTimeMS();
+    // Zero where no cap was declared. The client discards a zero cap itself, so this stays a clock-only
+    // message for everything that is not a resource race.
+    battlegroundInit.MaxPoints = _maxTeamScore;
+    player->SendDirectMessage(battlegroundInit.Write());
+
+    // The score baseline, unlike the clock, IS meaningless without a cap - and SetTeamScore would never
+    // follow it up with live updates either, so it stays out.
+    if (!_maxTeamScore)
+        return;
+
+    for (TeamId teamId : { TEAM_HORDE, TEAM_ALLIANCE })
+    {
+        WorldPackets::Battleground::BattlegroundPoints battlegroundPoints;
+        battlegroundPoints.BgPoints = uint16(std::clamp<int32>(m_TeamScores[teamId], 0, std::numeric_limits<uint16>::max()));
+        battlegroundPoints.Team = teamId == TEAM_ALLIANCE;
+        player->SendDirectMessage(battlegroundPoints.Write());
+    }
+}
+
+void Battleground::AddCapturePoint(ObjectGuid guid)
+{
+    if (std::ranges::find(_capturePoints, guid) == _capturePoints.end())
+        _capturePoints.push_back(guid);
+}
+
+void Battleground::RemoveCapturePoint(ObjectGuid guid)
+{
+    std::erase(_capturePoints, guid);
+}
+
+// The whole set of capture points in one message, sent when a player enters. Without it a player joining a
+// match in progress sees nothing for any point that has not changed state since - SMSG_UPDATE_CAPTURE_POINT
+// only ever carries deltas. Both paths stay live afterwards: the client feeds the list consumer (0x21C2520)
+// and the single-point consumer (0x21C25C0) into the same array and re-bases CaptureTime on its own clock in
+// both, so the snapshot does not suppress later updates.
+void Battleground::SendMapObjectivesInit(Player* player) const
+{
+    if (_capturePoints.empty())
+        return;
+
+    WorldPackets::Battleground::MapObjectivesInit mapObjectivesInit;
+    mapObjectivesInit.CapturePoints.reserve(_capturePoints.size());
+
+    for (ObjectGuid const& guid : _capturePoints)
+    {
+        GameObject const* capturePoint = GetBgMap()->GetGameObject(guid);
+        if (!capturePoint)
+            continue;
+
+        WorldPackets::Battleground::BattlegroundCapturePointInfo& info = mapObjectivesInit.CapturePoints.emplace_back();
+        info.Guid = capturePoint->GetGUID();
+        info.Pos = capturePoint->GetPosition();
+        info.State = capturePoint->GetGOValue()->CapturePoint.State;
+        // Same two assignments GameObject::UpdateCapturePoint makes for the single-point message: CaptureTime
+        // is the REMAINING assault time in milliseconds, not a timestamp - the client adds its own millisecond
+        // tick onto it. The Timestamp<> type name on the field is misleading but the width and value are right.
+        info.CaptureTotalDuration = Milliseconds(capturePoint->GetGOInfo()->capturePoint.CaptureTime);
+        info.CaptureTime = capturePoint->GetGOValue()->CapturePoint.AssaultTimer;
+    }
+
+    if (mapObjectivesInit.CapturePoints.empty())
+        return;
+
+    player->SendDirectMessage(mapObjectivesInit.Write());
 }
 
 uint32 Battleground::GetTeamScore(TeamId teamId) const

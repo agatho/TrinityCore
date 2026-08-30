@@ -23,6 +23,7 @@
 #include "ItemPacketsCommon.h"
 #include "LFGPacketsCommon.h"
 #include "Optional.h"
+#include <array>
 
 namespace lfg
 {
@@ -290,6 +291,92 @@ namespace WorldPackets
 
             LFGBlackList BlackList;
             std::vector<LfgPlayerDungeonInfo> Dungeon;
+        };
+
+        // SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x4B0014). Reply to the empty CMSG_REQUEST_PVP_REWARDS
+        // (0x3D0041); in every capture the reply follows the request 100-250 ms later, 1:1.
+        //
+        // The body is a FIXED thirteen activity blocks - there is no count field - plus two loose flag bytes.
+        // Each block is exactly LfgPlayerQuestReward above, which is why that struct already carries the
+        // `Honor` optional.
+        //
+        // FIELD ORDER: the two flag bytes MOVED between builds, and Write() emits the 12.1 order.
+        //   12.0.7 (68275/68453): Block[0], u8, u8, Block[1..12].
+        //   12.1   (69382):       Block[0..12], u8, u8.
+        // Both readings are measured, not assumed, and they disagree. For 12.0.7 all six captured bodies
+        // (304, 304, 348, 348, 584, 592 - two of the files are byte-identical copies) parse to exactly zero
+        // bytes left over with the flags after block 0, and parse to a hard desync with the flags at the end:
+        // implausible array counts inside block 1 on five of six, four bytes left over on the sixth. Since the
+        // blocks are variable length, that is discriminating and not a coincidence of equal totals. The
+        // 12.0.7 client agrees with its own capture: its reader sub_7FF7290FB600 calls the per-block reader
+        // sub_7FF7291DAB70 thirteen times with the two loose u8 reads after block 0.
+        // For 12.1 the reader at 0x732900 settles it the other way: 0x732919..0x7329CD are thirteen
+        // `lea rcx, [rdi + 0x20 + 0x80*k]; call 0x756BA0` block reads, and the two `call 0x35AF050`
+        // (Read<uint8>) only follow at 0x7329DF and 0x732A72. Verified by disassembling the range directly.
+        // No 12.1 capture of this opcode exists, so the flip is not confirmed on the wire in that build - but
+        // the client binary is the arbiter over an older capture, and 12.1 is the build this tree serves:
+        // sql/updates/auth/master/2026_08_22_00_auth.sql adds build 69404 (12.1.0), and the opcode table is on
+        // the 12.1 values (SMSG_PONG = 0x4C0009). Emitting the 12.0.7 order here would desync every reply.
+        // Reverting for a 12.0.7 realm is one loop and one pair of writes, right here in Write().
+        //
+        // Retail leaves blocks it has nothing to say about entirely zero - the rated Blitz capture sent 11
+        // of 13 populated, a levelling character only 4 - so an unimplemented activity is written empty
+        // rather than omitted, and that is a wire-legal state rather than a stub.
+        class RequestPvpRewardsResponse final : public ServerPacket
+        {
+        public:
+            // Slot order is not guesswork: each block lands in its own client global, and each global is
+            // read by exactly one C_PvP getter which embeds its own name string as the Lua arg-check
+            // argument, so the blocks are self-labelling. Blocks 3/4 and 5/6/8/10 are the two multiplexed
+            // getters (GetArenaRewards by team size, GetBrawlRewards by brawl type).
+            enum PvpRewardSlot : uint8
+            {
+                RandomBattleground      = 0,        // C_PvP.GetRandomBGRewards
+                RatedBattleground       = 1,        // C_PvP.GetRatedBGRewards
+                ArenaSkirmish           = 2,        // C_PvP.GetArenaSkirmishRewards
+                Arena2v2                = 3,        // C_PvP.GetArenaRewards(2)
+                Arena3v3                = 4,        // C_PvP.GetArenaRewards(3)
+                BrawlBattleground       = 5,        // C_PvP.GetBrawlRewards(Battleground)
+                BrawlArena              = 6,        // C_PvP.GetBrawlRewards(Arena), aliased by (LFG)
+                RandomEpicBattleground  = 7,        // C_PvP.GetRandomEpicBGRewards
+                BrawlSoloShuffle        = 8,        // C_PvP.GetBrawlRewards(SoloShuffle)
+                RatedSoloShuffle        = 9,        // C_PvP.GetRatedSoloShuffleRewards
+                BrawlSoloRbg            = 10,       // C_PvP.GetBrawlRewards(SoloRbg)
+                BattlegroundBlitz       = 11,       // C_PvP.GetRatedSoloRBGRewards
+                RandomTrainingGround    = 12,       // C_PvP.GetRandomTrainingGroundRewards
+                MaxPvpRewardSlot        = 13
+            };
+
+            explicit RequestPvpRewardsResponse() : ServerPacket(SMSG_REQUEST_PVP_REWARDS_RESPONSE) { }
+
+            WorldPacket const* Write() override;
+
+            std::array<LfgPlayerQuestReward, MaxPvpRewardSlot> Activity = { };
+
+            // The two loose bytes are read as two plain uint8 and then tested bit by bit. What the captures
+            // actually carried, so the account below can be checked against it:
+            //   BrawlFlags  0x02 in the two non-PvP captures, 0x03 in the rated Blitz one.
+            //   ExtraFlags  0xC0 in all six occurrences.
+            //
+            // Four of those set bits are understood. BrawlFlags 0x08/0x04/0x02 and ExtraFlags 0x40 are the
+            // per-brawl-type "has already won this brawl" markers the client returns as the extra `hasWon`
+            // value from GetBrawlRewards. We run no brawl rotation, so nothing here has been won and all four
+            // are written false - which is why BrawlFlags leaves as 0x00 although no capture was 0x00, and
+            // why ExtraFlags leaves as 0x80 although every capture was 0xC0. That is a decided value, not an
+            // omission.
+            //
+            // UNVERIFIED: ExtraFlags 0x80. Set in all six occurrences and gates something inside the client's
+            // Rated Solo Shuffle path; the branch it feeds was not followed to a conclusion. It is written at
+            // the value that was observed and nothing more.
+            //
+            // UNVERIFIED: BrawlFlags 0x01. Set in the rated Blitz capture, clear in the two non-PvP ones. It
+            // is not one of the four brawl markers above and it is not a bit that was zero everywhere, so
+            // neither reading covers it and its meaning is not established. It is written CLEAR: we cannot
+            // say what setting it would promise the client, and clear is the value two of the three distinct
+            // captures carried. A capture taken from a session with and without an active rated Blitz week
+            // would decide it - see aufnahme_noetig.
+            uint8 BrawlFlags = 0x00;
+            uint8 ExtraFlags = 0x80;
         };
 
         class LfgPartyInfo final : public ServerPacket

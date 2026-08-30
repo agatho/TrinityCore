@@ -37,6 +37,7 @@
 #include "TemporarySummon.h"
 #include "WaypointDefines.h"
 
+#include <algorithm>
 #include <unordered_map>
 
 namespace SeethingShore
@@ -192,6 +193,14 @@ struct battleground_seething_shore final : BattlegroundScript
     {
         _isInformedNearVictory = { false, false };
         _commanderGUIDs = { };
+    }
+
+    void OnInit() override
+    {
+        // The cap for SMSG_BATTLEGROUND_INIT. Read from the MaxScore world state rather than from
+        // WARNING_NEAR_VICTORY_SCORE above, because MaxScore is what the win check in HandleAssaultPoint
+        // compares against. Map world states are populated in the Map constructor, before OnInit.
+        battleground->SetMaxTeamScore(uint16(std::max<int32>(0, battlegroundMap->GetWorldStateValue(SeethingShore::WorldStates::MaxScore))));
     }
 
     void OnUpdate(uint32 diff) override

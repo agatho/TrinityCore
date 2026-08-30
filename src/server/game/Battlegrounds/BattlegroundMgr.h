@@ -23,6 +23,7 @@
 #include "Battleground.h"
 #include "BattlegroundQueue.h"
 #include "UniqueTrackablePtr.h"
+#include <array>
 #include <unordered_map>
 
 class Battleground;
@@ -73,11 +74,14 @@ namespace WorldPackets
     namespace Battleground
     {
         struct BattlefieldStatusHeader;
+        struct PvpRoleQueueCounts;
         class BattlefieldStatusNone;
         class BattlefieldStatusNeedConfirmation;
         class BattlefieldStatusActive;
         class BattlefieldStatusQueued;
         class BattlefieldStatusFailed;
+        class BattlefieldStatusWaitForGroups;
+        class BattlefieldStatusGroupProposalFailed;
     }
 }
 
@@ -101,10 +105,21 @@ class TC_GAME_API BattlegroundMgr
         void SendBattlegroundList(Player* player, ObjectGuid const& guid, BattlegroundTypeId bgTypeId);
         static void BuildBattlegroundStatusHeader(WorldPackets::Battleground::BattlefieldStatusHeader* header, Player const* player, uint32 ticketId, uint32 joinTime, BattlegroundQueueTypeId queueId);
         static void BuildBattlegroundStatusNone(WorldPackets::Battleground::BattlefieldStatusNone* battlefieldStatus, Player const* player, uint32 ticketId, uint32 joinTime);
-        static void BuildBattlegroundStatusNeedConfirmation(WorldPackets::Battleground::BattlefieldStatusNeedConfirmation* battlefieldStatus, Battleground const* bg, Player const* player, uint32 ticketId, uint32 joinTime, uint32 timeout, BattlegroundQueueTypeId queueId);
+        static void BuildBattlegroundStatusNeedConfirmation(WorldPackets::Battleground::BattlefieldStatusNeedConfirmation* battlefieldStatus, Battleground const* bg, Player const* player, uint32 ticketId, uint32 joinTime, uint32 timeout, BattlegroundQueueTypeId queueId,
+            ChrSpecializationRole role);
         static void BuildBattlegroundStatusActive(WorldPackets::Battleground::BattlefieldStatusActive* battlefieldStatus, Battleground const* bg, Player const* player, uint32 ticketId, uint32 joinTime, BattlegroundQueueTypeId queueId);
         static void BuildBattlegroundStatusQueued(WorldPackets::Battleground::BattlefieldStatusQueued* battlefieldStatus, Player const* player, uint32 ticketId, uint32 joinTime, BattlegroundQueueTypeId queueId, uint32 avgWaitTime, bool asGroup);
         static void BuildBattlegroundStatusFailed(WorldPackets::Battleground::BattlefieldStatusFailed* battlefieldStatus, BattlegroundQueueTypeId queueId, Player const* player, uint32 ticketId, GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid = nullptr);
+        static void BuildBattlegroundStatusWaitForGroups(WorldPackets::Battleground::BattlefieldStatusWaitForGroups* battlefieldStatus, Player const* player, uint32 ticketId, uint32 joinTime, BattlegroundQueueTypeId queueId,
+            uint32 mapId, uint32 timeout, std::array<uint8, 2> const& slotsPerSide, std::array<uint8, 2> const& awaitedPerSide, WorldPackets::Battleground::PvpRoleQueueCounts const& roles);
+        static void BuildBattlegroundStatusGroupProposalFailed(WorldPackets::Battleground::BattlefieldStatusGroupProposalFailed* battlefieldStatus, Player const* player, uint32 ticketId, uint32 joinTime, BattlegroundQueueTypeId queueId,
+            WorldPackets::Battleground::PvpRoleQueueCounts const& roles);
+
+        // Everything CMSG_BATTLEFIELD_PORT does once an invite is accepted and all the cheat checks have
+        // passed: leave the queue, drop out of any current battleground and teleport in. Split out of
+        // WorldSession::HandleBattleFieldPortOpcode because a group proposal has to run it for every member
+        // at once, not only for the session that happened to send the packet.
+        static void PortPlayerToBattleground(Player* player, Battleground* bg, Team team, BattlegroundQueueTypeId queueId, uint32 ticketId);
 
         /* Battlegrounds */
         Battleground* GetBattleground(uint32 InstanceID, BattlegroundTypeId bgTypeId);
@@ -120,6 +135,17 @@ class TC_GAME_API BattlegroundMgr
 
         static void SendToBattleground(Player* player, Battleground const* battleground);
 
+        /* PvP Brawl */
+        struct ActiveBrawl
+        {
+            uint32 PvpBrawlId = 0;              // PvpBrawl.db2 row id - what the client is told
+            uint32 BattlemasterListId = 0;      // PvpBrawl.db2 BattlemasterListID - what the server queues
+        };
+
+        // The running brawl, or nothing. Returns nothing unless the configured brawl can genuinely produce a
+        // match, so callers may treat a value as "advertising this is honest".
+        Optional<ActiveBrawl> GetActiveBrawl();
+
         /* Battleground queues */
         static bool IsValidQueueId(BattlegroundQueueTypeId bgQueueTypeId);
         BattlegroundQueue& GetBattlegroundQueue(BattlegroundQueueTypeId bgQueueTypeId) { return m_BattlegroundQueues.emplace(bgQueueTypeId, bgQueueTypeId).first->second; }
@@ -134,6 +160,15 @@ class TC_GAME_API BattlegroundMgr
         bool isTesting() const { return m_Testing; }
 
         static bool IsRandomBattleground(uint32 battlemasterListId);
+
+        // True for a BattlemasterList that never runs itself. Its `battleground_template` row carries more than
+        // one BattlemasterListXMap map, so CreateNewBattleground draws one of them and builds the instance from
+        // THAT map's single-map template: the instance is filed in bgDataStore under the drawn type id, never
+        // under the queue's own id. Every lookup that starts from a queue id therefore has to search all types.
+        // Random Battleground (32) and Random Epic (901) are the two this tree already knew about by name; the
+        // 12.1 aggregates Battleground Blitz (1101), Rated Battleground (100) and the multi-map brawls behave
+        // exactly the same way, and so does All Arenas (6).
+        bool IsAggregateBattleground(BattlegroundTypeId bgTypeId);
         static BattlegroundQueueTypeId BGQueueTypeId(uint16 battlemasterListId, BattlegroundQueueIdType type, bool rated, uint8 teamSize);
 
         static HolidayIds BGTypeToWeekendHolidayId(BattlegroundTypeId bgTypeId);
@@ -168,7 +203,9 @@ class TC_GAME_API BattlegroundMgr
     private:
         uint32 CreateClientVisibleInstanceId(BattlegroundTypeId bgTypeId, BattlegroundBracketId bracket_id);
         static bool IsArenaType(BattlegroundTypeId bgTypeId);
-        BattlegroundTypeId GetRandomBG(BattlegroundTypeId id);
+        // queueBracket, when given, restricts the draw to maps whose own PVPDifficulty ladder holds a single
+        // bracket that fully contains the queue bracket's level range. See the definition for why.
+        BattlegroundTypeId GetRandomBG(BattlegroundTypeId id, PVPDifficultyEntry const* queueBracket = nullptr);
 
         typedef std::map<BattlegroundTypeId, BattlegroundData> BattlegroundDataContainer;
         BattlegroundDataContainer bgDataStore;

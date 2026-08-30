@@ -938,6 +938,14 @@ void GameObject::AddToWorld()
         if (m_spawnId)
             GetMap()->GetGameObjectBySpawnIdStore().insert(std::make_pair(m_spawnId, this));
 
+        // Keep the battleground's capture point list in step, so a player joining later can be sent the whole
+        // set at once via SMSG_MAP_OBJECTIVES_INIT. Only type 42 qualifies - that is the same type gate
+        // UpdateCapturePoint and the SMSG_CAPTURE_POINT_REMOVED send in Delete() use.
+        if (m_goInfo->type == GAMEOBJECT_TYPE_CAPTURE_POINT)
+            if (BattlegroundMap* battlegroundMap = GetMap()->ToBattlegroundMap())
+                if (Battleground* battleground = battlegroundMap->GetBG())
+                    battleground->AddCapturePoint(GetGUID());
+
         // The state can be changed after GameObject::Create but before GameObject::AddToWorld
         bool toggledState = GetGoType() == GAMEOBJECT_TYPE_CHEST ? getLootState() == GO_READY : (GetGoState() == GO_STATE_READY || IsTransport());
         if (m_model)
@@ -971,6 +979,11 @@ void GameObject::RemoveFromWorld()
             linkedTrap->DespawnOrUnsummon();
 
         WorldObject::RemoveFromWorld();
+
+        if (m_goInfo->type == GAMEOBJECT_TYPE_CAPTURE_POINT)
+            if (BattlegroundMap* battlegroundMap = GetMap()->ToBattlegroundMap())
+                if (Battleground* battleground = battlegroundMap->GetBG())
+                    battleground->RemoveCapturePoint(GetGUID());
 
         if (m_spawnId)
             Trinity::Containers::MultimapErasePair(GetMap()->GetGameObjectBySpawnIdStore(), m_spawnId, this);

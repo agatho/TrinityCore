@@ -194,6 +194,10 @@ namespace WorldPackets
         class PVPLogDataRequest;
         class BattlemasterJoin;
         class BattlemasterJoinArena;
+        class BattlemasterJoinRatedBGBlitz;
+        class BattlemasterJoinSkirmish;
+        class BattlemasterJoinBrawl;
+        class JoinRatedBattleground;
         class BattlefieldLeave;
         class BattlefieldPort;
         class BattlefieldListRequest;
@@ -202,6 +206,7 @@ namespace WorldPackets
         class ReportPvPPlayerAFK;
         class RequestPVPRewards;
         class RequestRatedPvpInfo;
+        class RequestScheduledPvpInfo;
     }
 
     namespace Battlenet
@@ -2118,12 +2123,17 @@ class TC_GAME_API WorldSession
 
         //Battleground
         void HandleBattlemasterHelloOpcode(WorldPackets::NPC::Hello& hello);
+        bool CheckBattlegroundInfoThrottle();
         void HandleBattlemasterJoinOpcode(WorldPackets::Battleground::BattlemasterJoin& battlemasterJoin);
         void HandlePVPLogDataOpcode(WorldPackets::Battleground::PVPLogDataRequest& pvpLogDataRequest);
         void HandleBattleFieldPortOpcode(WorldPackets::Battleground::BattlefieldPort& battlefieldPort);
         void HandleBattlefieldListOpcode(WorldPackets::Battleground::BattlefieldListRequest& battlefieldList);
         void HandleBattlefieldLeaveOpcode(WorldPackets::Battleground::BattlefieldLeave& battlefieldLeave);
         void HandleBattlemasterJoinArena(WorldPackets::Battleground::BattlemasterJoinArena& packet);
+        void HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground::BattlemasterJoinRatedBGBlitz& packet);
+        void HandleBattlemasterJoinSkirmish(WorldPackets::Battleground::BattlemasterJoinSkirmish& packet);
+        void HandleBattlemasterJoinBrawl(WorldPackets::Battleground::BattlemasterJoinBrawl& packet);
+        void HandleJoinRatedBattleground(WorldPackets::Battleground::JoinRatedBattleground& packet);
         void HandleReportPvPAFK(WorldPackets::Battleground::ReportPvPPlayerAFK& reportPvPPlayerAFK);
 
         // Great Vault / weekly rewards
@@ -2134,6 +2144,7 @@ class TC_GAME_API WorldSession
         void HandleContentTrackingStartTracking(WorldPackets::ContentTracking::StartTracking& packet);
         void HandleContentTrackingStopTracking(WorldPackets::ContentTracking::StopTracking& packet);
         void HandleRequestRatedPvpInfo(WorldPackets::Battleground::RequestRatedPvpInfo& packet);
+        void HandleRequestScheduledPvpInfo(WorldPackets::Battleground::RequestScheduledPvpInfo& packet);
         void HandleGetPVPOptionsEnabled(WorldPackets::Battleground::GetPVPOptionsEnabled& getPvPOptionsEnabled);
         void HandleRequestPvpReward(WorldPackets::Battleground::RequestPVPRewards& packet);
         void HandleAreaSpiritHealerQueryOpcode(WorldPackets::Battleground::AreaSpiritHealerQuery& areaSpiritHealerQuery);
@@ -2734,6 +2745,10 @@ class TC_GAME_API WorldSession
         // cannot tell a repetition from an unrelated second suggestion and swallows both in
         // silence; with it only the repetition is swallowed. See SendSuggestedInvite.
         ObjectGuid _lastSuggestedInviteTarget;
+        // Battlemaster gossip rate limit, see CheckBattlegroundInfoThrottle. Session local and volatile on
+        // purpose: nothing behind SMSG_BATTLEGROUND_INFO_THROTTLED outlives the connection.
+        TimePoint _battlegroundInfoThrottlePeriodEnd = TimePoint::min();
+        uint32 _battlegroundInfoRequestsRemaining = 0;
 
         std::unique_ptr<BattlePets::BattlePetMgr> _battlePetMgr;
 

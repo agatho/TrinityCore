@@ -85,6 +85,7 @@
 #include "Language.h"
 #include "LanguageMgr.h"
 #include "LFGMgr.h"
+#include "LFGPackets.h"
 #include "ListUtils.h"
 #include "Log.h"
 #include "Loot.h"
@@ -7226,10 +7227,140 @@ void Player::SendCurrencies() const
     SendDirectMessage(packet.Write());
 }
 
+// SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x4B0014) is sent from here, and it publishes only what this core will
+// actually pay. The full decode is recorded below so it is not repeated; what is left empty is left empty
+// on purpose, and every empty block is a wire-legal state retail itself transmits.
+//
+// The wire form was pinned from all 6 occurrences in the 12.0.7 family of captures (build-filtered to
+// 68275/68453/68974 and content-hash deduplicated - "rbg rated BG 12.0.7.pkt" is a byte-identical copy of
+// "rated BG 12.0.7.pkt", so the rated Blitz session counts once, not twice). Bodies are 304, 304, 348, 348,
+// 584 and 592 bytes. The shape is fixed, not counted:
+//
+//     RewardBlock[0]
+//     uint8  BrawlFlags   // 0x02 in the two non-PvP captures, 0x03 in the rated Blitz one
+//     uint8  ExtraFlags   // 0xC0 in all six
+//     RewardBlock[1] .. RewardBlock[12]        // 13 blocks in total, always all 13 present
+//
+// Neither flag byte is echoed back at its captured value, and the two bits that are not accounted for -
+// BrawlFlags 0x01 and ExtraFlags 0x80 - are marked UNVERIFIED at the member declarations in LFGPackets.h.
+// The bit-by-bit account lives there, next to the values, rather than being repeated here.
+//
+// where RewardBlock is byte for byte the existing WorldPackets::LFG::LfgPlayerQuestReward and its
+// operator<< in LFGPackets.cpp - uint8 Mask, int32 RewardMoney, int32 RewardXP, the three uint32 counts up
+// front, then Item[]/Currency[]/BonusCurrency[] as {int32,int32} pairs, then one byte of MSB-first
+// OptionalInit bits (0x80 RewardSpellID, 0x40 ArtifactXPCategory, 0x20 ArtifactXP, 0x10 Honor) and the
+// present optionals in that order. That parser consumes all six bodies with ZERO bytes left over, which is
+// what settles the 13-block count: the client reader sub_7FF7290FB600 likewise calls the per-block reader
+// sub_7FF7291DAB70 thirteen times with two loose u8 reads after the first, and the two agree exactly.
+// Unpopulated activities are sent as all-zero blocks - retail itself left blocks 8 and 10 empty in the rated
+// Blitz capture, and left all but four blocks empty for a levelling character.
+//
+// Decoded values, for anyone verifying this later (currency 1792 = Honor, 1602 = Conquest): the rated Blitz
+// session carried e.g. Honor 300 + Conquest 8000 in block 0, Conquest 29800 + Honor 850 in block 1, and
+// Honor 200 with item 135539 in block 12; several blocks carry RewardSpellID 192953. The two non-PvP
+// captures are a levelling character and carry RewardXP (2150, 12250) where the max-level one carries none.
+//
+// The request side is already correct and needs no new trigger: CMSG_REQUEST_PVP_REWARDS (0x3D0041) has an
+// empty body, matching RequestPVPRewards, and every response in the captures is a direct 1:1 reply to it
+// 100-250 ms later. WorldSession::HandleRequestPvpReward -> here is exactly where retail answers.
+//
+// Only what this core will actually pay is published, and every input of the advertised figure is taken from
+// the same place the award path takes it, so the advertised figure cannot drift from the received one:
+//   - Honour is the winner's bonus from Battleground::EndBattleground. That path treats the config value as
+//     a KILL COUNT and runs it through GetBonusHonorFromKill, so the same conversion is done here rather
+//     than printing the raw config number, and the first-win-of-the-day distinction is the player's own
+//     GetRandomWinner() flag exactly as it is there. The level that conversion is keyed on is the BRACKET's
+//     max level, capped at 80, not the player's own - the player's own level is what an earlier revision
+//     used, and it was a real drift of up to 13 percent for anyone standing below their bracket's ceiling.
+//     The bracket is resolved outside a battleground exactly as the queue resolves it, on the block's own
+//     BattlemasterList map; see the loop below.
+//     WHICH blocks may carry it is decided by the same predicate as the payout, not by a hand-written list
+//     of modes - also in that loop.
+//   - Conquest is deliberately NOT advertised. CONFIG_BG_REWARD_WINNER_CONQUEST_FIRST/LAST are declared in
+//     World.cpp and read by nothing at all, so this core awards no Conquest; publishing a figure would
+//     promise a payout that never arrives.
+//   - No item or spell rewards are advertised, because nothing in this core grants the ones retail sends.
+//   - The arena blocks stay empty on purpose rather than by omission: RewardHonor returns early in arenas,
+//     so 2v2, 3v3 and Skirmish genuinely pay no honour here and empty is the truthful answer.
+//   - The remaining blocks are activities this core does not run, and retail itself transmits those as
+//     all-zero blocks, so they are left zero rather than filled with something invented.
+//
+// Note on the opcode table: this reply is declared CONNECTION_TYPE_INSTANCE, which is the socket retail
+// sends it on - every one of the eight bodies found across the captures in C:/sniff is on the instance
+// socket, none on the realm socket. The counting and the safety argument for the REALM -> INSTANCE
+// direction are written out above the DEFINE_SERVER_OPCODE_HANDLER line in Opcodes.cpp; do not restate them
+// here. An earlier revision of this branch kept the opcode on REALM with the argument that the rewards frame
+// is opened in the open world, where an instance socket need not exist. That argument was measured and is
+// wrong: WorldSession asks for the second socket in HandlePlayerLoginOpcode, before the Player object even
+// exists, and WorldSession::PlayerDisconnected treats a missing instance socket as a disconnect. It is not a
+// reason to move the opcode back.
 void Player::SendPvpRewards() const
 {
-    //WorldPacket packet(SMSG_REQUEST_PVP_REWARDS_RESPONSE, 24);
-    //GetSession()->SendPacket(&packet);
+    WorldPackets::LFG::RequestPvpRewardsResponse response;
+
+    // Mirrors Battleground::EndBattleground: the config is a kill count, not an honour amount.
+    uint32 const winnerKills = GetRandomWinner()
+        ? sWorld->getIntConfig(CONFIG_BG_REWARD_WINNER_HONOR_LAST)
+        : sWorld->getIntConfig(CONFIG_BG_REWARD_WINNER_HONOR_FIRST);
+
+    // An earlier revision filled blocks 0, 1, 5 and 11 with the sentence "every battleground pays this same
+    // bonus". That sentence is wrong, and it made this reply promise honour the match end never delivers.
+    // Battleground::EndBattleground pays the winner's bonus ONLY inside
+    //   if (IsRandomBattleground(bgPlayer->queueTypeId.BattlemasterListId)
+    //       || IsBGWeekend(BattlegroundTypeId(bgPlayer->queueTypeId.BattlemasterListId)))
+    // and the id it tests is the AGGREGATE id of the queue the player joined - Player::m_bgData.queueId,
+    // handed to Battleground::AddPlayer - not the single map the aggregate resolved to. IsRandomBattleground
+    // is true for exactly BATTLEGROUND_RB (32) and BATTLEGROUND_RANDOM_EPIC (901), and
+    // BGTypeToWeekendHolidayId knows only AV/EY/WS/SA/AB/IC/TP/BFG, so for 100, 879 and 1101 it yields
+    // HOLIDAY_NONE, which IsHolidayActive rejects unconditionally. Rated Battleground, the brawl and Blitz
+    // therefore pay no completion bonus in this core, while Random Epic Battleground - which was missing -
+    // does.
+    //
+    // So the predicate is asked here instead of a list of modes being written out by hand, block by block,
+    // on the BattlemasterList each block's queue is keyed on. That is the only construction in which the
+    // advertised figure cannot drift from the received one, which is what the paragraph above promises.
+    // The brawl block reads the running brawl's own BattlemasterList rather than a constant, because which
+    // brawl runs is configuration (PvpBrawl.db2 via BattlegroundMgr::GetActiveBrawl); with no brawl running
+    // there is nothing to advertise either way.
+    uint32 activeBrawlBattlemasterListId = 0;
+    if (Optional<BattlegroundMgr::ActiveBrawl> brawl = sBattlegroundMgr->GetActiveBrawl())
+        activeBrawlBattlemasterListId = brawl->BattlemasterListId;
+
+    std::pair<uint8, uint32> const battlegroundBlocks[] =
+    {
+        { WorldPackets::LFG::RequestPvpRewardsResponse::RandomBattleground,     BATTLEGROUND_RB },
+        { WorldPackets::LFG::RequestPvpRewardsResponse::RatedBattleground,      BATTLEGROUND_RATED_10_VS_10 },
+        { WorldPackets::LFG::RequestPvpRewardsResponse::BrawlBattleground,      activeBrawlBattlemasterListId },
+        { WorldPackets::LFG::RequestPvpRewardsResponse::RandomEpicBattleground, BATTLEGROUND_RANDOM_EPIC },
+        { WorldPackets::LFG::RequestPvpRewardsResponse::BattlegroundBlitz,      BATTLEGROUND_BLITZ }
+    };
+
+    for (auto const& [slot, battlemasterListId] : battlegroundBlocks)
+    {
+        if (!BattlegroundMgr::IsRandomBattleground(battlemasterListId)
+            && !BattlegroundMgr::IsBGWeekend(BattlegroundTypeId(battlemasterListId)))
+            continue;
+
+        // The level fed to hk_honor_at_level is the BRACKET's max level, not the player's own, because that is
+        // what the payout uses: Battleground::GetBonusHonorFromKill runs std::min<uint32>(GetMaxLevel(), 80U),
+        // and GetMaxLevel is _pvpDifficultyEntry->MaxLevel - the entry CreateNewBattleground resolved on
+        // queueTemplate->MapIDs.front(), i.e. on this very block's BattlemasterList. Since honour is strictly
+        // linear in that level (multiplier * level * 1.55f), quoting GetLevel() here shorted a level-70
+        // character in the 70-79 bracket by about 13 percent of what the match end then paid. Resolved per
+        // block rather than once, because each block keys on its own aggregate and those need not share a
+        // PVPDifficulty ladder - the same reason CreateNewBattleground looks it up on the queue's map.
+        BattlegroundTemplate const* queueTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BattlegroundTypeId(battlemasterListId));
+        if (!queueTemplate || queueTemplate->MapIDs.empty())
+            continue;
+
+        PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(queueTemplate->MapIDs.front(), GetLevel());
+        if (!bracketEntry)
+            continue;
+
+        response.Activity[slot].Honor = int32(Trinity::Honor::hk_honor_at_level(std::min<uint8>(bracketEntry->MaxLevel, 80), float(winnerKills)));
+    }
+
+    SendDirectMessage(response.Write());
 }
 
 void Player::SetCreateCurrency(uint32 id, uint32 amount)
@@ -11816,6 +11947,33 @@ Item* Player::EquipItem(uint16 pos, Item* pItem, bool update)
                 break;
             default:
                 break;
+        }
+
+        // Swapping a weapon restarts the swing, so the client's ranged swing cooldown has to be dropped.
+        // UNVERIFIED: the trigger is read off the wire, not off the client. All five 12.1 occurrences of
+        // SMSG_RESET_RANGED_COMBAT_TIMER in C:\sniff follow a CMSG_AUTO_EQUIP_ITEM within 25 records, and
+        // only 5 of the 36 captured equips produce one - which fits "the item was a weapon", since the
+        // captures are mostly full armour sets. What the captures cannot show is whether retail narrows this
+        // further to ranged weapons only; the equip payload names the source bag slot, not the item. Settling
+        // it needs a recording of a hunter and a melee character each swapping weapons. Note that the brief's
+        // proposed site - Spell::SendSpellCooldown gated on IsAutoRepeat - is refuted by the same data: there
+        // is no auto-repeat shot anywhere near any of the five packets.
+        // IsInWorld() is not decoration: Player::Create reaches EquipItem twice for a brand new character -
+        // once through StoreNewItemInBestSlots -> EquipNewItem, once through the second pass under "bags and
+        // main-hand weapon must equipped at this moment" - and every class starts with a weapon. At that point
+        // the session is still on the character screen, m_Socket[CONNECTION_TYPE_INSTANCE] is only requested in
+        // WorldSession::HandlePlayerLoginOpcode, and this opcode is declared INSTANCE, so WorldSession::SendPacket
+        // would drop the packet and log "Prevented sending of {} to non existent socket". The login path proper
+        // is clean for a different reason - Player::_LoadInventory equips through QuickEquipItem, which does not
+        // carry this send site - but character creation is not, and the guard covers both.
+        if (IsInWorld() && Player::GetAttackBySlot(slot, pItem->GetTemplate()->GetInventoryType()) != MAX_ATTACK)
+        {
+            // Zero is the value in all five captured packets and is meaningful: the consumer 0x1D8A150 stores
+            // it as the duration of the cooldown record it builds, so 0 clears the cooldown rather than setting
+            // one. Structurally identical to the duration field of the regular cooldown handler 0x1D89890.
+            WorldPackets::Combat::ResetRangedCombatTimer resetRangedCombatTimer;
+            resetRangedCombatTimer.Cooldown = 0;
+            SendDirectMessage(resetRangedCombatTimer.Write());
         }
     }
     else
@@ -23693,6 +23851,54 @@ void Player::SetAttackSwingError(Optional<AttackSwingErr> err)
         SendDirectMessage(WorldPackets::Combat::AttackSwingError(*err).Write());
 
     m_swingErrorMsg = err;
+}
+
+// Edge triggered twin of SetAttackSwingError for the other refusal channel, and SYMMETRIC - that is the
+// point of the falling edge below. SMSG_COMBAT_EVENT_FAILED is not a hint, it is an attack STOP: its client
+// consumer is the thunk SMSG_ATTACK_STOP uses (hook slot 0x462E0D8 and 0x462E0D0 both hold 0x1F79D90, which
+// jumps to 0x1F79C90), and 0x1F79C90 clears the target marker at +696, zeroes the swing timer at +980, drops
+// the auto attack bit 0x40000000 at *(unit+48)+544 and fires PLAYER_LEAVE_COMBAT.
+//
+// Most of the states that raise this edge are TRANSIENT - stun, fear, confusion, charge, pacify, a broken
+// line of sight - and nothing on the server takes the stop back on its own: Unit::DoMeleeAttackIfReady never
+// checks any of them, so the swing timer keeps running through the stun and Unit::Attack, the only caller of
+// SendMeleeAttackStart, is not run again because m_attacking and UNIT_STATE_MELEE_ATTACKING never changed.
+// Left as it was, the client would stand with its auto attack switched off while the server kept swinging.
+// So the falling edge sends the inverse itself. SMSG_ATTACK_START (0x4B0017, hook slot 0x462E0C0 ->
+// 0x1F79AE0) is exactly that inverse, verified against the client rather than assumed: 0x1F79AE0 writes the
+// same target marker at +696, refills the same swing timer at +980 and ORs back the same bit 0x40000000 that
+// 0x1F79C90 clears.
+//
+// Sent direct, not SendMeleeAttackStart: the failure that it undoes went to this player alone, so the
+// surrounding clients never stopped and must not have their swing timer reset.
+void Player::SetCombatEventFailed(Unit const* victim)
+{
+    ObjectGuid victimGuid = victim ? victim->GetGUID() : ObjectGuid::Empty;
+    if (victimGuid == m_combatEventFailedVictim)
+        return;
+
+    if (!victimGuid.IsEmpty())
+    {
+        WorldPackets::Combat::CombatEventFailed combatEventFailed;
+        combatEventFailed.Attacker = GetGUID();
+        combatEventFailed.Victim = victimGuid;
+        SendDirectMessage(combatEventFailed.Write());
+    }
+    else if (Unit* attackTarget = GetVictim())
+    {
+        // Recovered while still swinging at the very victim we reported. Any other way out of the failed
+        // state already carries its own packet - a target switch and a fresh Unit::Attack send
+        // SMSG_ATTACK_START, Unit::AttackStop sends SMSG_ATTACK_STOP - so re-arming is only this case.
+        if (HasUnitState(UNIT_STATE_MELEE_ATTACKING) && attackTarget->GetGUID() == m_combatEventFailedVictim)
+        {
+            WorldPackets::Combat::AttackStart attackStart;
+            attackStart.Attacker = GetGUID();
+            attackStart.Victim = attackTarget->GetGUID();
+            SendDirectMessage(attackStart.Write());
+        }
+    }
+
+    m_combatEventFailedVictim = victimGuid;
 }
 
 void Player::SendAutoRepeatCancel(Unit* target)

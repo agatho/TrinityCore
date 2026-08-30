@@ -7020,6 +7020,7 @@ enum BattlegroundTypeId : uint32
     BATTLEGROUND_DOM_DG         = 1037,     // Domination - Deepwind Gorge
     BATTLEGROUND_DOM_DG2        = 1039,     // Domination - Deepwind Gorge
     BATTLEGROUND_ED             = 1041,     // Empyrean Domain
+    BATTLEGROUND_BLITZ          = 1101,     // Battleground Blitz (rated 8v8 solo queue)
 };
 
 #define MAX_BATTLEGROUND_TYPE_ID 845

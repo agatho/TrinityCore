@@ -75,6 +75,18 @@ void WorldSession::HandleDuelAccepted(ObjectGuid arbiterGuid)
     player->duel->State = DUEL_STATE_COUNTDOWN;
     target->duel->State = DUEL_STATE_COUNTDOWN;
 
+    // The acceptance itself, sent to both duellists before the countdown. This is what re-arms the client:
+    // its consumer (0x265A520) stores the arbiter into xmmword_7FF7877FFDB8, the only guid the AcceptDuel,
+    // CancelDuel and ForfeitDuel bindings put into CMSG_DUEL_RESPONSE, and the same global they test (>> 58 on
+    // the high qword, i.e. the HighGuid type) to decide whether a duel is running at all. Arbiter first, then
+    // the challenger - the same two globals in the same order as SMSG_DUEL_REQUESTED fills them.
+    WorldPackets::Duel::DuelArranged duelArranged;
+    duelArranged.ArbiterGUID = arbiterGuid;
+    duelArranged.RequestedByGUID = player->duel->Initiator->GetGUID();
+    WorldPacket const* duelArrangedPacket = duelArranged.Write();
+    player->GetSession()->SendPacket(duelArrangedPacket);
+    target->GetSession()->SendPacket(duelArrangedPacket);
+
     WorldPackets::Duel::DuelCountdown packet(3000); // milliseconds
     WorldPacket const* worldPacket = packet.Write();
     player->GetSession()->SendPacket(worldPacket);

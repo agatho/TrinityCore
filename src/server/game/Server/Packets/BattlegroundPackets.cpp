@@ -173,6 +173,30 @@ void BattlemasterJoinArena::Read()
     _worldPacket >> Roles;
 }
 
+void BattlemasterJoinRatedBGBlitz::Read()
+{
+    _worldPacket >> Roles;
+}
+
+void JoinRatedBattleground::Read()
+{
+    _worldPacket >> Roles;
+}
+
+void BattlemasterJoinSkirmish::Read()
+{
+    // Roles FIRST - see the class comment. This is the opposite order to BattlemasterJoinArena.
+    _worldPacket >> Roles;
+    _worldPacket >> Bracket;
+    Requeue = _worldPacket.ReadBit();
+}
+
+void BattlemasterJoinBrawl::Read()
+{
+    _worldPacket >> Roles;
+    IsSpecialBrawl = _worldPacket.ReadBit();
+}
+
 ByteBuffer& operator<<(ByteBuffer& data, BattlefieldStatusHeader const& header)
 {
     data << header.Ticket;
@@ -242,6 +266,46 @@ WorldPacket const* BattlefieldStatusFailed::Write()
     _worldPacket << uint64(QueueID);
     _worldPacket << uint32(Reason);
     _worldPacket << ClientID;
+
+    return &_worldPacket;
+}
+
+// Index-interleaved, as read by sub_7FF7290FAD90: the three counters of role 0, then of role 1, then of
+// role 2, then the "role counts are populated" bit. See the decode block in BattlegroundPackets.h.
+ByteBuffer& operator<<(ByteBuffer& data, PvpRoleQueueCounts const& counts)
+{
+    for (std::size_t i = 0; i < PVP_QUEUE_ROLE_COUNT; ++i)
+    {
+        data << uint8(counts.Awaited[i]);
+        data << uint8(counts.Secured[i]);
+        data << uint8(counts.Lost[i]);
+    }
+
+    data << Bits<1>(counts.HasRoleCounts);
+    data.FlushBits();
+
+    return data;
+}
+
+WorldPacket const* BattlefieldStatusWaitForGroups::Write()
+{
+    _worldPacket << Hdr;
+    _worldPacket << uint32(Mapid);
+    _worldPacket << uint32(Timeout);
+    for (std::size_t i = 0; i < SlotsPerSide.size(); ++i)
+    {
+        _worldPacket << uint8(SlotsPerSide[i]);
+        _worldPacket << uint8(AwaitedPerSide[i]);
+    }
+    _worldPacket << Roles;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* BattlefieldStatusGroupProposalFailed::Write()
+{
+    _worldPacket << Hdr;
+    _worldPacket << Roles;
 
     return &_worldPacket;
 }
@@ -381,6 +445,33 @@ WorldPacket const* RatedPvpInfo::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* RequestScheduledPvpInfoResponse::Write()
+{
+    // Both presence bits share one flushed byte - the client's reader pulls a single byte and tests bit 7 and
+    // bit 6 of it. Each optional block then ends with its own flush, so its trailing bool costs a whole byte.
+    _worldPacket << OptionalInit(Brawl);
+    _worldPacket << OptionalInit(SpecialEventBrawl);
+    _worldPacket.FlushBits();
+
+    if (Brawl)
+    {
+        _worldPacket << uint32(Brawl->BrawlID);
+        _worldPacket << uint32(Brawl->SecondsUntilNextChange);
+        _worldPacket << Bits<1>(Brawl->CanQueue);
+        _worldPacket.FlushBits();
+    }
+
+    if (SpecialEventBrawl)
+    {
+        _worldPacket << uint32(SpecialEventBrawl->BrawlID);
+        _worldPacket << uint32(SpecialEventBrawl->SecondsUntilNextChange);
+        _worldPacket << Bits<1>(SpecialEventBrawl->CanQueue);
+        _worldPacket.FlushBits();
+    }
+
+    return &_worldPacket;
+}
+
 ByteBuffer& operator<<(ByteBuffer& data, RatedMatchDeserterPenalty const& ratedMatchDeserterPenalty)
 {
     data << int32(ratedMatchDeserterPenalty.PersonalRatingChange);
@@ -390,6 +481,41 @@ ByteBuffer& operator<<(ByteBuffer& data, RatedMatchDeserterPenalty const& ratedM
     return data;
 }
 
+// SMSG_PVP_MATCH_INITIALIZE (0x4B0030), body = exactly 39 bytes with a deserter penalty present.
+//
+// VERIFIED byte-exact against C:\sniff\rated BG 12.0.7.pkt (client build 68275, read from the uint32 at
+// PKT header offset 6), the single rated-Blitz capture we have. Note that "rbg rated BG 12.0.7.pkt" is a
+// byte-identical duplicate of that file (same md5 385db4d3a85e9bce243e3ee8526e4226) and is NOT independent
+// confirmation. Replaying the writer below against the captured body consumes all 39 bytes with ZERO left
+// over:
+//
+//   [ 0.. 3] uint32 MapID                  c5080000            2245
+//   [ 4    ] uint8  State                  01                  StartUp
+//   [ 5..12] int64  StartTime              aef54b6a00000000    1783362990 (valid unix time)
+//   [13..20] int64  Duration               0000000000000000    0 (match not started yet)
+//   [21    ] uint8  ArenaFaction           00
+//   [22..25] uint32 BattlemasterListID     55040000            1109
+//   [26    ] bits                          e0                  Registered=1 AffectsRating=1 HasPenalty=1
+//   [27..30] int32  PersonalRatingChange   6affffff            -150
+//   [31..34] int32  QueuePenaltySpellID    9ea00500            368798
+//   [35..38] int32  QueuePenaltyDuration   a0bb0d00            900000 ms = the 15-minute deserter debuff
+//
+// There is NO undiscovered 4-byte field between Duration and ArenaFaction. That earlier report came from
+// assuming Duration was int32; WorldPackets::Duration<Seconds> and Timestamp<> both default to an int64
+// underlying type, so each already occupies 8 bytes and the supposed "hole" is simply the zero upper half
+// of the int64 Duration. Bytes alone cannot separate those two readings here (both candidate fields are
+// zero in this capture), so it is settled from the client instead: the reader trace for 0x480030 in
+// c:/dumps/all_smsg_layouts_68275.json (0x480030 is this same opcode under the 12.0.7 numbering of
+// build 68275; 12.1 shifted the families up by three, hence 0x4B0030 in the header above)
+// is exactly ten reads -
+//   uint32, u8, <qword>, <qword>, u8, uint32, u8, uint32, uint32, uint32
+// - which sums to 4+1+8+8+1+4+1+4+4+4 = 39 and matches the field order below one-for-one. The two qword
+// reads go through the helper at VA 0x7FF72BE6C460, which is `mov r8d, 8` (request 8 bytes) followed by
+// `mov rcx, qword ptr [rcx+rax]` (load a qword) - a 64-bit read. That helper carries the bogus AI-generated
+// name "ai_Process_HousingDataPacket" in the IDB and has nothing to do with housing.
+//
+// Bit order is MSB-first: ByteBuffer::WriteBit does `--_bitpos; _curbitval |= (1 << _bitpos)` starting from
+// 8, so the three bits land on 0x80|0x40|0x20 = 0xe0, exactly the captured byte.
 WorldPacket const* PVPMatchInitialize::Write()
 {
     _worldPacket << uint32(MapID);
@@ -416,6 +542,25 @@ WorldPacket const* PVPMatchSetState::Write()
     return &_worldPacket;
 }
 
+// SMSG_PVP_MATCH_COMPLETE (0x4B002F), body = 1530 bytes in the capture (13-byte head + 1517 of LogData).
+//
+// VERIFIED byte-exact against the same C:\sniff\rated BG 12.0.7.pkt. The suspicion that an extra int32 sits
+// before the bits byte is WRONG, and for the same reason as PVP_MATCH_INITIALIZE above: Duration is an
+// int64, so what looks like a spare int32 is its zero upper half.
+//
+//   [ 0.. 3] int32 Winner    00000000            0
+//   [ 4..11] int64 Duration  f001000000000000    496
+//   [12    ] bits            80                  HasLogData=1, SoloShuffleStatus=0
+//   [13..  ] LogData (PVPMatchStatistics)
+//
+// Duration's offset AND width are pinned independently of any assumption. Value: SMSG_PVP_MATCH_SET_STATE
+// (Engaged) arrives at sniff tick 1041200 and SET_STATE (Inactive) at 1537775, a gap of 496575 ms whose
+// whole-second floor is 496 - so the 496 must be Duration and it must start at offset 4. Width: the client
+// reader trace for 0x48002f is exactly four reads - uint32, <qword>, u8, struct - i.e. the same 64-bit
+// helper at 0x7FF72BE6C460 described above, placing LogData at offset 13. Decoding LogData from 13 with the
+// existing PVPMatchStatistics serializer then lands exactly on the last byte, ZERO left over, and the
+// result self-validates: Statistics count = 16, PlayerCount = {8, 8}, and the per-player Faction fields do
+// split 8/8 - a genuine 8v8 Blitz scoreboard. A wrong head size would have desynced all 16 player records.
 WorldPacket const* PVPMatchComplete::Write()
 {
     _worldPacket << int32(Winner);
@@ -426,6 +571,39 @@ WorldPacket const* PVPMatchComplete::Write()
 
     if (LogData)
         _worldPacket << *LogData;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* BattlegroundPoints::Write()
+{
+    _worldPacket << uint16(BgPoints);
+    _worldPacket << Bits<1>(Team);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* BattlegroundInit::Write()
+{
+    _worldPacket << uint32(ServerTime);
+    _worldPacket << uint16(MaxPoints);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* PVPMatchStart::Write()
+{
+    _worldPacket << uint32(MapID);
+    _worldPacket << uint32(ArenaSeason);
+    _worldPacket << uint8(Bracket);
+    _worldPacket << Bits<1>(Unknown1207);
+    _worldPacket.FlushBits();
+    // UNVERIFIED: the element layout of this counted array of per-player records (720 bytes each in client
+    // memory). It was empty in the only capture of this opcode, so we emit the observed count of zero and
+    // never any entries - see the comment on the class.
+    _worldPacket << uint32(0);
+    _worldPacket << StartTime;
 
     return &_worldPacket;
 }
@@ -443,6 +621,15 @@ ByteBuffer& operator<<(ByteBuffer& data, BattlegroundCapturePointInfo const& bat
     }
 
     return data;
+}
+
+WorldPacket const* MapObjectivesInit::Write()
+{
+    _worldPacket << uint32(CapturePoints.size());
+    for (BattlegroundCapturePointInfo const& capturePoint : CapturePoints)
+        _worldPacket << capturePoint;
+
+    return &_worldPacket;
 }
 
 WorldPacket const* UpdateCapturePoint::Write()

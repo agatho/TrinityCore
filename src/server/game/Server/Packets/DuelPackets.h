@@ -47,6 +47,24 @@ namespace WorldPackets
             bool Result = false;
         };
 
+        // Confirms to both duellists that the duel is on. Arbiter first: the consumer 0x265A520 stores field 1
+        // into xmmword_7FF7877FFDB8 and field 2 into xmmword_7FF7877FFDC8, the same two globals SMSG_DUEL_REQUESTED
+        // fills in the same order. ...FDB8 is the only guid C.AcceptDuel/C.CancelDuel/C.ForfeitDuel (0x265A940,
+        // 0x265A9B0, 0x265AA20) put into CMSG_DUEL_RESPONSE, and they use its HighGuid type field (>> 58) as the
+        // "a duel is running" predicate; ...FDC8 is set from SMSG_CAN_DUEL_RESULT's only field, TargetGUID.
+        // That makes this packet load-bearing rather than cosmetic: without it (or a preceding DUEL_REQUESTED)
+        // the client cannot fill CMSG_DUEL_RESPONSE at all, so the player can neither accept, cancel nor forfeit.
+        class DuelArranged final : public ServerPacket
+        {
+        public:
+            explicit DuelArranged() : ServerPacket(SMSG_DUEL_ARRANGED, 16 + 16) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid ArbiterGUID;
+            ObjectGuid RequestedByGUID;
+        };
+
         class DuelComplete final : public ServerPacket
         {
         public:

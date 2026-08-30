@@ -142,6 +142,21 @@ WorldPacket const* ThreatClear::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* CombatEventFailed::Write()
+{
+    _worldPacket << Attacker;
+    _worldPacket << Victim;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ResetRangedCombatTimer::Write()
+{
+    _worldPacket << uint32(Cooldown);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* PvPCredit::Write()
 {
     _worldPacket << int32(OriginalHonor);

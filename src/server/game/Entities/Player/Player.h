@@ -2428,6 +2428,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         // notifiers
         void SendAttackSwingCancelAttack() const;
         void SetAttackSwingError(Optional<AttackSwingErr> err);
+        void SetCombatEventFailed(Unit const* victim);
         void SendAutoRepeatCancel(Unit* target);
         void SendExplorationExperience(uint32 Area, uint32 Experience) const;
 
@@ -3647,6 +3648,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint32 m_titanGripArmorSubclasses;
         uint32 m_titanGripPenaltySpellId;
         Optional<AttackSwingErr> m_swingErrorMsg;
+        ObjectGuid m_combatEventFailedVictim;
 
         // Social
         PlayerSocial* m_social;

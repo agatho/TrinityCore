@@ -35,6 +35,14 @@ WorldPacket const* CanDuelResult::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* DuelArranged::Write()
+{
+    _worldPacket << ArbiterGUID;
+    _worldPacket << RequestedByGUID;
+
+    return &_worldPacket;
+}
+
 WorldPacket const* DuelComplete::Write()
 {
     _worldPacket << Bits<1>(Started);
