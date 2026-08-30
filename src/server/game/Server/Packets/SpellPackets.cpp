@@ -1192,6 +1192,9 @@ WorldPacket const* XPAwardedFromCurrency::Write()
     _worldPacket.FlushBits();
 
     return &_worldPacket;
+void OpenTradeSkillNpc::Read()
+{
+    _worldPacket >> NpcGUID;
 }
 
 void KeyboundOverride::Read()
