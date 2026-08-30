@@ -3976,7 +3976,6 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
             if (!TimeEvents::HasPassed(reqValue))
                 return false;
             break;
-        }
         case ModifierTreeType::GarrisonHasPermanentTalent: // 290
         {
             // A permanent (non-temporary) talent: learned and not flagged GARRISON_TALENT_FLAG_TEMPORARY.
