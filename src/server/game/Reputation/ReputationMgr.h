@@ -146,6 +146,8 @@ class TC_GAME_API ReputationMgr
     public:                                                 // senders
         void SendInitialReputations();
         void SendState(FactionState const* faction);
+        bool IsRenownRewardGranted(uint32 renownRewardId, bool accountWide) const;
+        void MarkRenownRewardGranted(uint32 renownRewardId, bool accountWide);
 
     private:                                                // internal helper functions
         void Initialize();
@@ -169,6 +171,8 @@ class TC_GAME_API ReputationMgr
         uint8 _reveredFactionCount :8;
         uint8 _exaltedFactionCount :8;
         bool _sendFactionIncreased; //!< Play visual effect on next SMSG_SET_FACTION_STANDING sent
+        std::unordered_set<uint32> _grantedRenownRewardsChar;     // per-character renown reward grants (PK rewardId)
+        std::unordered_set<uint32> _grantedRenownRewardsAccount;  // per-bnet renown reward grants (loaded with account-wide rep)
 };
 
 #endif

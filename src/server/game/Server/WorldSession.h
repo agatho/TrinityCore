@@ -660,6 +660,10 @@ namespace WorldPackets
         class SetGameEventDebugViewState;
     }
 
+    namespace MajorFactions
+    {
+        class RequestCatchupState;
+    }
     namespace Movement
     {
         class ClientPlayerMovement;
