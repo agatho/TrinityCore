@@ -1516,20 +1516,6 @@ namespace WorldPackets
         // aufgeloest, ist also das Zauberziel.
         // Draht: 102 Pakete, 37..61 B. Beispielpaket 38 B = 9 + 8 + 15 + 2 + 4; dessen dritte
         // GUID traegt den Typ 47 (0xbc >> 2), die vierte ist leer.
-        class ResumeCast final : public ServerPacket
-        {
-        public:
-            explicit ResumeCast() : ServerPacket(SMSG_RESUME_CAST, 18 + 8 + 18 + 18 + 4) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid CasterGUID;
-            SpellCastVisual Visual;
-            ObjectGuid CastID;                              ///< HighGuid::Cast (47)
-            ObjectGuid TargetGUID;
-            int32 SpellID = 0;
-        };
-
         // SMSG_RESUME_CAST_BAR (0x670031)
         // Beleg: Case 0x7507B6 - RGUID 0x7507E8 (msg+0x20), RGUID 0x7507F4 (msg+0x30),
         // R32 0x750809 (msg+0x40), Unterleser 0x6BF980 (SpellCastVisual, msg+0x44),
@@ -1542,22 +1528,6 @@ namespace WorldPackets
         // SMSG_SPELL_START ueber 0x1D85110 aus JamSpellCastData+1704 (`immunities`) speist.
         // Feuert UNIT_SPELLCAST_START / _CHANNEL_START / _EMPOWER_START.
         // Draht: 364 Pakete, 32..53 B. Beispielpaket 32 B = 9 + 2 + 4 + 8 + 4 + 4 + 1.
-        class ResumeCastBar final : public ServerPacket
-        {
-        public:
-            explicit ResumeCastBar() : ServerPacket(SMSG_RESUME_CAST_BAR, 18 + 18 + 4 + 8 + 4 + 4 + 1 + 8) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid CasterGUID;
-            ObjectGuid TargetGUID;
-            int32 SpellID = 0;
-            SpellCastVisual Visual;
-            Duration<Milliseconds, uint32> TimeRemaining;
-            Duration<Milliseconds, uint32> CastTime;
-            Optional<SpellChannelStartInterruptImmunities> InterruptImmunities;
-        };
-
         // CMSG_REQUEST_CROWD_CONTROL_SPELL (0x3B00CA): in arenas the client asks which spell is currently
         // crowd-controlling a target so it can display it. Wire is a single PackedGuid (client serializer
         // sub_7FF729153490). Answered with SMSG_ARENA_CROWD_CONTROL_SPELL_RESULT.

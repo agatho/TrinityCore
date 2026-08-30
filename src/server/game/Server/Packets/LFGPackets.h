@@ -392,48 +392,6 @@ namespace WorldPackets
         // Retail leaves blocks it has nothing to say about entirely zero - the rated Blitz capture sent 11
         // of 13 populated, a levelling character only 4 - so an unimplemented activity is written empty
         // rather than omitted, and that is a wire-legal state rather than a stub.
-        class RequestPvpRewardsResponse final : public ServerPacket
-        {
-        public:
-            // Slot order is not guesswork: each block lands in its own client global, and each global is
-            // read by exactly one C_PvP getter which embeds its own name string as the Lua arg-check
-            // argument, so the blocks are self-labelling. Blocks 3/4 and 5/6/8/10 are the two multiplexed
-            // getters (GetArenaRewards by team size, GetBrawlRewards by brawl type).
-            enum PvpRewardSlot : uint8
-            {
-                RandomBattleground      = 0,        // C_PvP.GetRandomBGRewards
-                RatedBattleground       = 1,        // C_PvP.GetRatedBGRewards
-                ArenaSkirmish           = 2,        // C_PvP.GetArenaSkirmishRewards
-                Arena2v2                = 3,        // C_PvP.GetArenaRewards(2)
-                Arena3v3                = 4,        // C_PvP.GetArenaRewards(3)
-                BrawlBattleground       = 5,        // C_PvP.GetBrawlRewards(Battleground)
-                BrawlArena              = 6,        // C_PvP.GetBrawlRewards(Arena), aliased by (LFG)
-                RandomEpicBattleground  = 7,        // C_PvP.GetRandomEpicBGRewards
-                BrawlSoloShuffle        = 8,        // C_PvP.GetBrawlRewards(SoloShuffle)
-                RatedSoloShuffle        = 9,        // C_PvP.GetRatedSoloShuffleRewards
-                BrawlSoloRbg            = 10,       // C_PvP.GetBrawlRewards(SoloRbg)
-                BattlegroundBlitz       = 11,       // C_PvP.GetRatedSoloRBGRewards
-                RandomTrainingGround    = 12,       // C_PvP.GetRandomTrainingGroundRewards
-                MaxPvpRewardSlot        = 13
-            };
-
-            explicit RequestPvpRewardsResponse() : ServerPacket(SMSG_REQUEST_PVP_REWARDS_RESPONSE) { }
-
-            WorldPacket const* Write() override;
-
-            std::array<LfgPlayerQuestReward, MaxPvpRewardSlot> Activity = { };
-
-            // The two loose bytes are twelve MSB-first booleans, of which only half are understood. Five of
-            // them (BrawlFlags 0x08/0x04/0x02 and ExtraFlags 0x40) are the per-brawl-type "has already won
-            // this brawl" markers the client returns as the extra `hasWon` value from GetBrawlRewards; we
-            // run no brawl rotation, so those are false and are written false. ExtraFlags 0x80 was set in
-            // every capture and gates something inside the client's Rated Solo Shuffle path; its meaning is
-            // not established, so it is written at the value that was observed and nothing more. The
-            // remaining six bits were zero in every capture and are left zero.
-            uint8 BrawlFlags = 0x00;
-            uint8 ExtraFlags = 0x80;
-        };
-
         // SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x480014). Reply to the empty CMSG_REQUEST_PVP_REWARDS
         // (0x3A0041); in every capture the reply follows the request 100-250 ms later, 1:1.
         //
@@ -447,48 +405,6 @@ namespace WorldPackets
         // Retail leaves blocks it has nothing to say about entirely zero - the rated Blitz capture sent 11
         // of 13 populated, a levelling character only 4 - so an unimplemented activity is written empty
         // rather than omitted, and that is a wire-legal state rather than a stub.
-        class RequestPvpRewardsResponse final : public ServerPacket
-        {
-        public:
-            // Slot order is not guesswork: each block lands in its own client global, and each global is
-            // read by exactly one C_PvP getter which embeds its own name string as the Lua arg-check
-            // argument, so the blocks are self-labelling. Blocks 3/4 and 5/6/8/10 are the two multiplexed
-            // getters (GetArenaRewards by team size, GetBrawlRewards by brawl type).
-            enum PvpRewardSlot : uint8
-            {
-                RandomBattleground      = 0,        // C_PvP.GetRandomBGRewards
-                RatedBattleground       = 1,        // C_PvP.GetRatedBGRewards
-                ArenaSkirmish           = 2,        // C_PvP.GetArenaSkirmishRewards
-                Arena2v2                = 3,        // C_PvP.GetArenaRewards(2)
-                Arena3v3                = 4,        // C_PvP.GetArenaRewards(3)
-                BrawlBattleground       = 5,        // C_PvP.GetBrawlRewards(Battleground)
-                BrawlArena              = 6,        // C_PvP.GetBrawlRewards(Arena), aliased by (LFG)
-                RandomEpicBattleground  = 7,        // C_PvP.GetRandomEpicBGRewards
-                BrawlSoloShuffle        = 8,        // C_PvP.GetBrawlRewards(SoloShuffle)
-                RatedSoloShuffle        = 9,        // C_PvP.GetRatedSoloShuffleRewards
-                BrawlSoloRbg            = 10,       // C_PvP.GetBrawlRewards(SoloRbg)
-                BattlegroundBlitz       = 11,       // C_PvP.GetRatedSoloRBGRewards
-                RandomTrainingGround    = 12,       // C_PvP.GetRandomTrainingGroundRewards
-                MaxPvpRewardSlot        = 13
-            };
-
-            explicit RequestPvpRewardsResponse() : ServerPacket(SMSG_REQUEST_PVP_REWARDS_RESPONSE) { }
-
-            WorldPacket const* Write() override;
-
-            std::array<LfgPlayerQuestReward, MaxPvpRewardSlot> Activity = { };
-
-            // The two loose bytes are twelve MSB-first booleans, of which only half are understood. Five of
-            // them (BrawlFlags 0x08/0x04/0x02 and ExtraFlags 0x40) are the per-brawl-type "has already won
-            // this brawl" markers the client returns as the extra `hasWon` value from GetBrawlRewards; we
-            // run no brawl rotation, so those are false and are written false. ExtraFlags 0x80 was set in
-            // every capture and gates something inside the client's Rated Solo Shuffle path; its meaning is
-            // not established, so it is written at the value that was observed and nothing more. The
-            // remaining six bits were zero in every capture and are left zero.
-            uint8 BrawlFlags = 0x00;
-            uint8 ExtraFlags = 0x80;
-        };
-
         class LfgPartyInfo final : public ServerPacket
         {
         public:
@@ -917,47 +833,16 @@ namespace WorldPackets
         // !! INFERRED (needs sniff validation): no serializer and no 0x811C9DC5 reflection descriptor for this
         // opcode was recovered offline; a single uint32 dungeon id is the asserted body. Senders must gate this
         // behind a config opt-in (see WarfrontMgr::IsNativeUiEnabled / Warfront.NativeUI.Enable).
-        class OpenLfgDungeonFinder final : public ServerPacket
-        {
-        public:
-            explicit OpenLfgDungeonFinder(uint32 dungeonId = 0) : ServerPacket(SMSG_OPEN_LFG_DUNGEON_FINDER, 4), DungeonID(dungeonId) { }
-
-            WorldPacket const* Write() override;
-
-            uint32 DungeonID;   // INFERRED (needs sniff validation)
-        };
-
         // Dispatcher case 5636127 (0x56001F) inside the 0x56 group dispatcher @ RVA 0x739420 is a single
         // RideTicket read and nothing else; the registered handler @ RVA 0x2301A90 copies msg+0x20..+0x48
         // (guid 16 + id 4 + type 4 + time 8 + bit) into a global and fires SHOW_LFG_EXPAND_SEARCH_PROMPT,
         // which LFGInfoDocumentation.lua declares with an empty payload. So: ticket only.
-        class LFGExpandSearchPrompt final : public ServerPacket
-        {
-        public:
-            explicit LFGExpandSearchPrompt() : ServerPacket(SMSG_LFG_EXPAND_SEARCH_PROMPT, 16 + 4 + 4 + 8 + 1) { }
-
-            WorldPacket const* Write() override;
-
-            RideTicket Ticket;
-        };
-
         // Dispatcher case 5636116 (0x560014) only takes a reference to the remaining bytes - the parse is
         // deferred to the handler. That handler (registration site RVA 0x1EE580E stores RVA 0x2301A40 into
         // the slot at RVA 0x4404890) reads exactly three dwords off the tail:
         //   eax = [payload+0] -> arg0 ; eax = [payload+4] -> arg1 ; eax = [payload+8] -> arg2
         // and fires a three-number Lua event - LFG_INVALID_ERROR_MESSAGE(reason, subReason1, subReason2).
         // Reason is Enum.LFGSlotInvalidReason (see lfg::LfgSlotInvalidReason).
-        class LFGSlotInvalid final : public ServerPacket
-        {
-        public:
-            explicit LFGSlotInvalid() : ServerPacket(SMSG_LFG_SLOT_INVALID, 4 + 4 + 4) { }
-
-            WorldPacket const* Write() override;
-
-            uint32 Reason = 0;
-            int32 SubReason1 = 0;
-            int32 SubReason2 = 0;
-        };
     }
 }
 

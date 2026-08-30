@@ -456,35 +456,9 @@ namespace WorldPackets
         // single issuer of the serial: it mints the value, remembers it and registers the matching time sync
         // counter, and WorldSession::HandleSuspendCommsAck accepts the acknowledgement only for a serial issued
         // there. A hand rolled send would hand the serial space back to the client.
-        class SuspendComms final : public ServerPacket
-        {
-        public:
-            explicit SuspendComms(ConnectionType connection) : ServerPacket(SMSG_SUSPEND_COMMS, 4, connection) { }
-
-            WorldPacket const* Write() override;
-
-            uint32 SerialNumber = 0;     ///< opaque to the client, echoed back verbatim
-        };
-
         // CMSG_SUSPEND_COMMS_ACK (12.1 0x440000) - two uint32, 8 bytes. Writer 0x5D54B0.
         // Over the corpus: 78 packets, all 8 bytes, serial echo 78/78, always on the same PKT connection index as
         // the SMSG_SUSPEND_COMMS it answers.
-        class SuspendCommsAck final : public ClientPacket
-        {
-        public:
-            explicit SuspendCommsAck(WorldPacket&& packet) : ClientPacket(CMSG_SUSPEND_COMMS_ACK, std::move(packet)) { }
-
-            void Read() override;
-
-            uint32 SerialNumber = 0;     ///< echoed from SMSG_SUSPEND_COMMS
-            // Client clock in milliseconds, taken by 0x354ED50 at the moment the ack is built. It is NOT unix time
-            // and NOT a server value: over the corpus, all 78 pairs spread across 24 recordings,
-            // (ClientTick - PKT tick) takes at most two adjacent values within any one recording (spread 0 or
-            // 1 ms, i.e. rounding) and a different value in every recording, in the 1.7 h .. 7.7 d range of a
-            // process uptime. Usable as a clock-delta sample, never as a value to validate against server time.
-            uint32 ClientTick = 0;
-        };
-
         // SMSG_DROP_NEW_CONNECTION (12.1 0x4C0007) - empty.
         // Measured: consumer 0x18C1500 never touches msg+0x20. It resolves its target slot from the RECEIVING
         // socket, not from the payload: it searches NetClient+0x1A0[0..3] for the socket the message arrived on,

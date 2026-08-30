@@ -384,16 +384,6 @@ namespace WorldPackets
 
         // Sent when the client throws away time sync work it had queued, typically around a map
         // transfer. Everything up to and including MaxSequenceIndex will never be answered.
-        class DiscardedTimeSyncAcks final : public ClientPacket
-        {
-        public:
-            explicit DiscardedTimeSyncAcks(WorldPacket&& packet) : ClientPacket(CMSG_DISCARDED_TIME_SYNC_ACKS, std::move(packet)) { }
-
-            void Read() override;
-
-            uint32 MaxSequenceIndex = 0;
-        };
-
         class TriggerCinematic final : public ServerPacket
         {
         public:
@@ -1366,16 +1356,6 @@ namespace WorldPackets
             bool KeepTimer = false;
         };
 
-        class StopTimer final : public ServerPacket
-        {
-        public:
-            explicit StopTimer() : ServerPacket(SMSG_STOP_TIMER, 4) { }
-
-            WorldPacket const* Write() override;
-
-            CountdownTimerType Type = {};
-        };
-
         // One entry of the client's "world elapsed timer" list (client type name: JamElaspedTimer).
         //
         // Wire, derived from the 68275 client deserializers and cross-checked against the
@@ -1387,52 +1367,15 @@ namespace WorldPackets
         // TimerID indexes WorldElapsedTimer.db2. The client reads the timer *type* from that DB2
         // row - it is NOT on the wire - and Blizzard_ScenarioObjectiveTracker only renders rows
         // whose Type is ChallengeMode(1) or ProvingGround(2). See ElapsedTimerMgr.h.
-        struct ElapsedTimer
-        {
-            Duration<Seconds> CurrentDuration;
-            uint32 TimerID = 0;
-        };
-
         ByteBuffer& operator<<(ByteBuffer& data, ElapsedTimer const& timer);
 
         // Starts (or re-bases) a single elapsed timer. CurrentDuration is the time already elapsed;
         // the client free-runs its own clock from that baseline.
-        class StartElapsedTimer final : public ServerPacket
-        {
-        public:
-            explicit StartElapsedTimer() : ServerPacket(SMSG_START_ELAPSED_TIMER, 8 + 4) { }
-
-            WorldPacket const* Write() override;
-
-            ElapsedTimer Timer;
-        };
-
         // Bulk form, used to resynchronise every active timer on zone-in / relog. The client's
         // PLAYER_ENTERING_WORLD handler calls GetWorldElapsedTimers(), so this is the packet that
         // repopulates that list.
-        class StartElapsedTimers final : public ServerPacket
-        {
-        public:
-            explicit StartElapsedTimers() : ServerPacket(SMSG_START_ELAPSED_TIMERS, 4) { }
-
-            WorldPacket const* Write() override;
-
-            std::vector<ElapsedTimer> Timers;
-        };
-
         // Wire: { uint32 TimerID; bit KeepTimer; } - verified against the client deserializer,
         // which reads the flag as the top bit of one byte (matching OptionalInit/FlushBits packing).
-        class StopElapsedTimer final : public ServerPacket
-        {
-        public:
-            explicit StopElapsedTimer() : ServerPacket(SMSG_STOP_ELAPSED_TIMER, 4 + 1) { }
-
-            WorldPacket const* Write() override;
-
-            uint32 TimerID = 0;
-            bool KeepTimer = false;
-        };
-
         class QueryCountdownTimer final : public ClientPacket
         {
         public:
@@ -2958,15 +2901,6 @@ namespace WorldPackets
             std::string Text;
         };
 
-        class RequestCurrencyDataForAccountCharacters final : public ClientPacket
-        {
-        public:
-            explicit RequestCurrencyDataForAccountCharacters(WorldPacket&& packet)
-                : ClientPacket(CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS, std::move(packet)) { }
-
-            void Read() override { }
-        };
-
         class TransferCurrencyFromAccountCharacter final : public ClientPacket
         {
         public:
@@ -2978,41 +2912,6 @@ namespace WorldPackets
             ObjectGuid SourceCharacterGUID;
             int32 CurrencyID = 0;
             int32 Quantity = 0;
-        };
-
-        class GetCharacterCurrencyTransferLog final : public ClientPacket
-        {
-        public:
-            explicit GetCharacterCurrencyTransferLog(WorldPacket&& packet)
-                : ClientPacket(CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG, std::move(packet)) { }
-
-            void Read() override { }
-        };
-
-        class AccountCharacterCurrencyLists final : public ServerPacket
-        {
-        public:
-            struct CharacterCurrencyData
-            {
-                ObjectGuid CharacterGUID;
-                std::string CharacterName;
-                uint8 ClassID = 0;
-                int32 Level = 0;
-            };
-
-            struct CurrencyQuantityData
-            {
-                ObjectGuid CharacterGUID;
-                int32 CurrencyTypeID = 0;
-                int32 Quantity = 0;
-            };
-
-            explicit AccountCharacterCurrencyLists() : ServerPacket(SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS) { }
-
-            WorldPacket const* Write() override;
-
-            std::vector<CharacterCurrencyData> Characters;
-            std::vector<CurrencyQuantityData> CurrencyData;
         };
 
         class CurrencyTransferResult final : public ServerPacket
@@ -3028,25 +2927,6 @@ namespace WorldPackets
             AccountCurrencyTransferResult Result = AccountCurrencyTransferResult::Ok;
         };
 
-        class CurrencyTransferLog final : public ServerPacket
-        {
-        public:
-            struct CurrencyTransferLogEntry
-            {
-                ObjectGuid SourceCharacterGUID;
-                ObjectGuid DestCharacterGUID;
-                int32 CurrencyTypeID = 0;
-                int32 QuantityReceived = 0;
-                int32 QuantitySent = 0;
-                uint32 Timestamp = 0;
-            };
-
-            explicit CurrencyTransferLog() : ServerPacket(SMSG_CURRENCY_TRANSFER_LOG) { }
-
-            WorldPacket const* Write() override;
-
-            std::vector<CurrencyTransferLogEntry> Entries;
-        };
     }
 }
 
