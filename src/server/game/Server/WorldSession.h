@@ -743,6 +743,7 @@ namespace WorldPackets
         class MountSpecial;
         class SetTaxiBenchmarkMode;
         class MountSetFavorite;
+        class MountClearFanfare;
         class CloseInteraction;
         class CloseRuneforgeInteraction;
         class CloseTraitSystemInteraction;
@@ -1140,7 +1141,13 @@ namespace WorldPackets
         class AddIgnore;
         class DelFriend;
         class DelIgnore;
+        class RecentAllyRequestData;
+        class RecentAllySetNote;
+        class SetAllowRecentAlliesSeeLocation;
+        class RecentAllyRequestData;
+        class RecentAllySetNote;
         class SendContactList;
+        class SetAllowRecentAlliesSeeLocation;
         class SetContactNotes;
         class SocialContractRequest;
     }
@@ -2737,6 +2744,7 @@ class TC_GAME_API WorldSession
         void HandleToyClearFanfare(WorldPackets::Toy::ToyClearFanfare& toyClearFanfare);
 
         void HandleMountSetFavorite(WorldPackets::Misc::MountSetFavorite& mountSetFavorite);
+        void HandleMountClearFanfare(WorldPackets::Misc::MountClearFanfare& mountClearFanfare);
 
         // Scenes
         void HandleSceneTriggerEvent(WorldPackets::Scenes::SceneTriggerEvent& sceneTriggerEvent);

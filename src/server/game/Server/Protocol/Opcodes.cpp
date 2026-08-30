@@ -708,6 +708,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_MINIMAP_PING,                                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMinimapPingOpcode);
     DEFINE_HANDLER(CMSG_MISSILE_TRAJECTORY_COLLISION,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMissileTrajectoryCollision);
     DEFINE_HANDLER(CMSG_MOUNT_CLEAR_FANFARE,                                STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_MOUNT_CLEAR_FANFARE,                                STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMountClearFanfare);
     DEFINE_HANDLER(CMSG_MOUNT_SET_FAVORITE,                                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMountSetFavorite);
     DEFINE_HANDLER(CMSG_MOUNT_SPECIAL_ANIM,                                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMountSpecialAnimOpcode);
     DEFINE_HANDLER(CMSG_MOVE_ADD_IMPULSE_ACK,                               STATUS_UNHANDLED, PROCESS_THREADSAFE,   &WorldSession::Handle_NULL);
@@ -967,6 +968,8 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_READ_ITEM,                                          STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleReadItem);
     DEFINE_HANDLER(CMSG_RECENT_ALLY_REQUEST_DATA,                           STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_RECENT_ALLY_SET_NOTE,                               STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_RECENT_ALLY_REQUEST_DATA,                           STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRecentAllyRequestData);
+    DEFINE_HANDLER(CMSG_RECENT_ALLY_SET_NOTE,                               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRecentAllySetNote);
     DEFINE_HANDLER(CMSG_RECLAIM_CORPSE,                                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleReclaimCorpse);
     DEFINE_HANDLER(CMSG_REFRESH_BLEEP_TOKENS,                               STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleRefreshBleepTokens);
     DEFINE_HANDLER(CMSG_REFRESH_ENTITLEMENTS_ON_ORDER_COMPLETE,             STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
@@ -1053,6 +1056,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_SET_ACTIVE_MOVER,                                   STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleSetActiveMoverOpcode);
     DEFINE_HANDLER(CMSG_SET_ADVANCED_COMBAT_LOGGING,                        STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleSetAdvancedCombatLogging);
     DEFINE_HANDLER(CMSG_SET_ALLOW_RECENT_ALLIES_SEE_LOCATION,               STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_SET_ALLOW_RECENT_ALLIES_SEE_LOCATION,               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleSetAllowRecentAlliesSeeLocation);
     DEFINE_HANDLER(CMSG_SET_ASSISTANT_LEADER,                               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleSetAssistantLeaderOpcode);
     DEFINE_HANDLER(CMSG_SET_BACKPACK_AUTOSORT_DISABLED,                     STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleSetBackpackAutosortDisabled);
     DEFINE_HANDLER(CMSG_SET_BACKPACK_SELL_JUNK_DISABLED,                    STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleSetBackpackSellJunkDisabled);
@@ -2344,6 +2348,8 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RECEIVE_PING_COOLDOWN,                                        STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RECEIVE_PING_UNIT,                                            STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RECEIVE_PING_WORLD_POINT,                                     STATUS_NEVER,       CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_RECENT_ALLY_DATA_RESPONSE,                                    STATUS_NEVER,   CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_RECENT_ALLY_NOTE_UPDATED,                                     STATUS_NEVER,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RECRAFT_ITEM_RESULT,                                          STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RECRUIT_A_FRIEND_FAILURE,                                     STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_REFETCH_TACT_KEYS,                                            STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);

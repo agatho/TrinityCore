@@ -1195,6 +1195,10 @@ void WorldSession::HandleMountSetFavorite(WorldPackets::Misc::MountSetFavorite& 
     _collectionMgr->MountSetFavorite(mountSetFavorite.MountSpellID, mountSetFavorite.IsFavorite);
 }
 
+void WorldSession::HandleMountClearFanfare(WorldPackets::Misc::MountClearFanfare& mountClearFanfare)
+{
+    _collectionMgr->MountClearFanfare(mountClearFanfare.MountSpellID);
+}
 void WorldSession::HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& closeInteraction)
 {
     if (_player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest)

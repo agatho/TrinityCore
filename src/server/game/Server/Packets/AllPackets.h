@@ -77,6 +77,7 @@
 #include "ReputationPackets.h"
 #include "ScenarioPackets.h"
 #include "ScenePackets.h"
+#include "RecentAllyPackets.h"
 #include "SocialPackets.h"
 #include "SpellPackets.h"
 #include "SystemPackets.h"
