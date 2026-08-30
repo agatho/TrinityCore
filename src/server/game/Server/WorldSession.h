@@ -2457,7 +2457,6 @@ class TC_GAME_API WorldSession
         void HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasurePicker const& queryTreasurePicker);
         void HandleSpawnTrackingUpdate(WorldPackets::Quest::SpawnTrackingUpdate& spawnTrackingUpdate);
         void HandleQueryQuestItemUsability(WorldPackets::Quest::QueryQuestItemUsability& queryQuestItemUsability);
-        void HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& closeQuestChoice);
 
         void HandleChatMessageOpcode(WorldPackets::Chat::ChatMessage& chatMessage);
         void HandleChatMessageWhisperOpcode(WorldPackets::Chat::ChatMessageWhisper& chatMessageWhisper);
@@ -2473,7 +2472,6 @@ class TC_GAME_API WorldSession
         void SendChatPlayerNotfoundNotice(std::string const& name);
         void SendPlayerAmbiguousNotice(std::string const& name);
         void SendChatRestricted(ChatRestrictionType restriction);
-        void SendChatNotInParty(ChatMsg type);
         void SendChatNotInGuild(uint32 guildCommandError);           ///< @see enum GuildCommandError - NOT a ChatMsg
         void SendChatIgnoredAccountMuted();
         void SendChatServiceStatus(bool available, bool initial);
@@ -2561,8 +2559,6 @@ class TC_GAME_API WorldSession
         void HandleReportPvPAFK(WorldPackets::Battleground::ReportPvPPlayerAFK& reportPvPPlayerAFK);
 
         // Great Vault / weekly rewards
-        void HandleRequestWeeklyRewards(WorldPackets::WeeklyRewards::RequestWeeklyRewards& packet);
-        void HandleClaimWeeklyReward(WorldPackets::WeeklyRewards::ClaimWeeklyReward& packet);
 
         // Content tracking
         void HandleContentTrackingStartTracking(WorldPackets::ContentTracking::StartTracking& packet);
@@ -2592,9 +2588,6 @@ class TC_GAME_API WorldSession
         void HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck const& suspendCommsAck);
         void HandleLatencyReport(WorldPackets::Auth::LatencyReport const& latencyReport);
         void HandleLogStreamingError(WorldPackets::Auth::LogStreamingError const& logStreamingError);
-        void HandleDiscardedTimeSyncAcks(WorldPackets::Misc::DiscardedTimeSyncAcks const& discardedTimeSyncAcks);
-        void HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd const& queuedMessagesEnd);
-        void HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck const& suspendCommsAck);
         void HandleWhoIsOpcode(WorldPackets::Who::WhoIsRequest& packet);
         void HandleResetInstancesOpcode(WorldPackets::Instance::ResetInstances& packet);
         void HandleInstanceLockResponse(WorldPackets::Instance::InstanceLockResponse& packet);
@@ -2660,7 +2653,6 @@ class TC_GAME_API WorldSession
         void HandleSortBags(WorldPackets::Item::SortBags& sortBags);
         void HandleSortBankBags(WorldPackets::Item::SortBankBags& sortBankBags);
         void HandleRemoveNewItem(WorldPackets::Item::RemoveNewItem& removeNewItem);
-        void HandlePerformItemInteraction(WorldPackets::Item::PerformItemInteraction& performItemInteraction);
         void HandleConvertItemToBindToAccount(WorldPackets::Item::ConvertItemToBindToAccount& convertItemToBindToAccount);
 
         void HandleCancelTempEnchantmentOpcode(WorldPackets::Item::CancelTempEnchantment& cancelTempEnchantment);
@@ -2746,8 +2738,6 @@ class TC_GAME_API WorldSession
         void HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& closeInteraction);
         void HandleCloseRuneforgeInteraction(WorldPackets::Misc::CloseRuneforgeInteraction& closeRuneforgeInteraction);
         void HandleCloseTraitSystemInteraction(WorldPackets::Misc::CloseTraitSystemInteraction& closeTraitSystemInteraction);
-        void HandleContributionContribute(WorldPackets::Contribution::ContributionContribute& contribute);
-        void HandleContributionLastUpdateRequest(WorldPackets::Contribution::ContributionLastUpdateRequest& request);
 
         // Commentator (spectator) mode
         void HandleCommentatorEnable(WorldPackets::Commentator::CommentatorEnable& packet);
@@ -2817,11 +2807,6 @@ class TC_GAME_API WorldSession
         void SendLoadCUFProfiles();
 
         // Challenge Mode (Mythic+)
-        void HandleRequestMythicPlusSeasonData(WorldPackets::ChallengeMode::RequestMythicPlusSeasonData& requestMythicPlusSeasonData);
-        void HandleRequestMythicPlusAffixes(WorldPackets::ChallengeMode::RequestMythicPlusAffixes& requestMythicPlusAffixes);
-        void HandleStartChallengeMode(WorldPackets::ChallengeMode::StartChallengeMode& startChallengeMode);
-        void HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetChallengeMode& resetChallengeMode);
-        void HandleMythicPlusRequestMapStats(WorldPackets::ChallengeMode::MythicPlusRequestMapStats& request);
         void HandleChallengeModeRequestLeaders(WorldPackets::ChallengeMode::RequestLeaders& request);
         // CMSG_REQUEST_WEEKLY_REWARDS / CMSG_CLAIM_WEEKLY_REWARD are bound to the WorldPackets::WeeklyRewards
         // overloads (WeeklyRewardHandler.cpp), which serve all three vault rows - see ChallengeModeHandler.cpp.
@@ -2868,7 +2853,6 @@ class TC_GAME_API WorldSession
         void HandleLoadSelectedTrophy(WorldPackets::Garrison::LoadSelectedTrophy& loadSelectedTrophy);
         void HandleChangeMonumentAppearance(WorldPackets::Garrison::ChangeMonumentAppearance& changeMonumentAppearance);
         void HandleRevertMonumentAppearance(WorldPackets::Garrison::RevertMonumentAppearance& revertMonumentAppearance);
-        void HandleGarrisonSocketTalent(WorldPackets::Garrison::GarrisonSocketTalent& garrisonSocketTalent);
 
         // Battle Pets
         void HandleBattlePetRequestJournal(WorldPackets::BattlePet::BattlePetRequestJournal& battlePetRequestJournal);
@@ -3023,9 +3007,7 @@ class TC_GAME_API WorldSession
         void HandleQuerySelectedWowLabsArea(WorldPackets::WowLabs::QuerySelectedWowLabsArea& querySelectedWowLabsArea);
         void HandleQueryWowLabsAreaInfo(WorldPackets::WowLabs::QueryWowLabsAreaInfo& queryWowLabsAreaInfo);
         void HandleSelectWowLabsArea(WorldPackets::WowLabs::SelectWowLabsArea& selectWowLabsArea);
-        void HandleRequestCurrencyDataForAccountCharacters(WorldPackets::Misc::RequestCurrencyDataForAccountCharacters& packet);
         void HandleTransferCurrencyFromAccountCharacter(WorldPackets::Misc::TransferCurrencyFromAccountCharacter& packet);
-        void HandleGetCharacterCurrencyTransferLog(WorldPackets::Misc::GetCharacterCurrencyTransferLog& packet);
 
         union ConnectToKey
         {

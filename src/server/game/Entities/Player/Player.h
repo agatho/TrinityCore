@@ -331,6 +331,7 @@ struct SpellFlatPvpModifierByClassMask : SpellPvpModifierByClassMask
     SpellFlatPvpModifierByClassMask(SpellModOp _op, SpellPvpModifier _pvpOp, uint32 _spellId, Aura* _ownerAura, flag128 _mask)
         : SpellPvpModifierByClassMask(_op, _pvpOp, SPELLMOD_FLAT_PVP, _spellId, _ownerAura, _mask) { }
 
+    int32 value = { };
 };
 
 struct SpellPctPvpModifierByClassMask : SpellPvpModifierByClassMask
@@ -338,6 +339,7 @@ struct SpellPctPvpModifierByClassMask : SpellPvpModifierByClassMask
     SpellPctPvpModifierByClassMask(SpellModOp _op, SpellPvpModifier _pvpOp, uint32 _spellId, Aura* _ownerAura, flag128 _mask)
         : SpellPvpModifierByClassMask(_op, _pvpOp, SPELLMOD_PCT_PVP, _spellId, _ownerAura, _mask) { }
 
+    float value = { };
 };
 
 struct SpellFlatModifierByLabel : SpellModifier
@@ -370,6 +372,7 @@ struct SpellFlatPvpModifierByLabel : SpellModifier
         value.LabelID = _label;
     }
 
+    SpellPvpModifier pvpOp;
     UF::SpellFlatPVPModByLabel value = { };
 };
 
@@ -378,10 +381,12 @@ struct SpellPctPvpModifierByLabel : SpellModifier
     SpellPctPvpModifierByLabel(SpellModOp _op, SpellPvpModifier _pvpOp, uint32 _spellId, Aura* _ownerAura, int32 _label)
         : SpellModifier(_op, SPELLMOD_LABEL_PCT_PVP, _spellId, _ownerAura), pvpOp(_pvpOp)
     {
+        value.PvpModIndex = int32(_pvpOp);
         value.ModifierValue = 1.0f;  // neutrales Element des multiplikativen Modifikators; wird in CalculateSpellMod sofort ueberschrieben
         value.LabelID = _label;
     }
 
+    SpellPvpModifier pvpOp;
     UF::SpellPctPVPModByLabel value = { };
 };
 
@@ -390,6 +395,7 @@ struct SpellPctModifierByLabel : SpellModifier
     SpellPctModifierByLabel(SpellModOp _op, uint32 _spellId, Aura* _ownerAura, int32 _label)
         : SpellModifier(_op, SPELLMOD_LABEL_PCT, _spellId, _ownerAura)
     {
+        value.ModIndex = int32(_op);
         value.ModifierValue = 0.0f;
         value.LabelID = _label;
     }
@@ -1130,6 +1136,9 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_RENOWN_REWARDS,
     PLAYER_LOGIN_QUERY_LOAD_COVENANT_CALLINGS,
     PLAYER_LOGIN_QUERY_LOAD_COVENANT_SOULBINDS,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT,
     PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_TAB_SETTINGS,
     PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_ITEMS,
     PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_COINAGE,
@@ -1191,7 +1200,7 @@ enum PlayerCommandStates
     CHEAT_COOLDOWN  = 0x04,
     CHEAT_POWER     = 0x08,
     CHEAT_WATERWALK = 0x10,
-    CHEAT_IGNORE_DIMINISHING_RETURNS = 0x20,     // SMSG_CHEAT_IGNORE_DIMISHING_RETURNS (0x670002)
+    CHEAT_IGNORE_DIMINISHING_RETURNS = 0x20,      // SMSG_CHEAT_IGNORE_DIMISHING_RETURNS (0x670002)
     // 0x20 is taken on feature/spell (CHEAT_IGNORE_DIMINISHING_RETURNS) - do not reuse
     CHEAT_PET_GOD   = 0x40
 };
@@ -1339,6 +1348,7 @@ float constexpr TELEPORT_MIN_LOAD_SCREEN_DISTANCE = 200.0f;
 
 struct TeleportLocation
 {
+    WorldLocation Location;
     Optional<ObjectGuid> TransportGuid;
     Optional<uint32> InstanceId;
     Optional<uint32> LfgDungeonsId;
@@ -1413,6 +1423,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         bool ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature* npc = nullptr, uint32 spellid = 0, uint32 preferredMountDisplay = 0, Optional<float> speed = {},
             Scripting::v2::ActionResultSetter<MovementStopReason> const& scriptResult = {});
         bool ActivateTaxiPathTo(uint32 taxi_path_id, uint32 spellid = 0, Optional<float> speed = {},
+            Scripting::v2::ActionResultSetter<MovementStopReason> const& scriptResult = {});
         void FinishTaxiFlight();
         void CleanupAfterTaxiFlight();
         void ContinueTaxiFlight();
@@ -1532,6 +1543,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
                 for (uint8 i = PROFESSION_SLOT_START; i < PROFESSION_SLOT_END; ++i)
                     if (Item* pItem = GetItemByPos(INVENTORY_SLOT_BAG_0, i))
                         if (callback(pItem) == ItemSearchCallbackResult::Stop)
+                            return false;
             }
 
             if (flag.HasFlag(ItemSearchLocation::Inventory))
@@ -1540,16 +1552,19 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
                 for (uint8 i = INVENTORY_SLOT_BAG_START; i < inventoryEnd; ++i)
                     if (Item* pItem = GetItemByPos(INVENTORY_SLOT_BAG_0, i))
                         if (callback(pItem) == ItemSearchCallbackResult::Stop)
+                            return false;
 
                 for (uint8 i = CHILD_EQUIPMENT_SLOT_START; i < CHILD_EQUIPMENT_SLOT_END; ++i)
                     if (Item* pItem = GetItemByPos(INVENTORY_SLOT_BAG_0, i))
                         if (callback(pItem) == ItemSearchCallbackResult::Stop)
+                            return false;
 
                 for (uint8 i = INVENTORY_SLOT_BAG_START; i < INVENTORY_SLOT_BAG_END; ++i)
                     if (Bag* pBag = GetBagByPos(i))
                         for (uint32 j = 0; j < GetBagSize(pBag); ++j)
                             if (Item* pItem = GetItemInBag(pBag, j))
                                 if (callback(pItem) == ItemSearchCallbackResult::Stop)
+                                    return false;
             }
 
             if (flag.HasFlag(ItemSearchLocation::Bank))
@@ -1559,6 +1574,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
                         for (uint32 j = 0; j < GetBagSize(pBag); ++j)
                             if (Item* pItem = GetItemInBag(pBag, j))
                                 if (callback(pItem) == ItemSearchCallbackResult::Stop)
+                                    return false;
             }
 
             if (flag.HasFlag(ItemSearchLocation::ReagentBank))
@@ -1568,6 +1584,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
                         for (uint32 j = 0; j < GetBagSize(bag); ++j)
                             if (Item* pItem = GetItemInBag(bag, j))
                                 if (callback(pItem) == ItemSearchCallbackResult::Stop)
+                                    return false;
             }
 
             if (flag.HasFlag(ItemSearchLocation::AccountBank))
@@ -1577,6 +1594,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
                         for (uint32 j = 0; j < GetBagSize(bag); ++j)
                             if (Item* pItem = GetItemInBag(bag, j))
                                 if (callback(pItem) == ItemSearchCallbackResult::Stop)
+                                    return false;
             }
 
             return true;
@@ -1640,6 +1658,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SetAccountBankTabSettings(uint32 tabId, std::string const& name, std::string const& icon, std::string const& description, BagSlotFlags depositFlags)
         {
             auto setter = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::AccountBankTabSettings, tabId);
+            SetBankTabSettings(setter, name, icon, description, depositFlags);
         }
         void SetBankTabSettings(UF::MutableFieldReferenceWithChangesMask<UF::BankTabSettings, false> setter, std::string const& name, std::string const& icon, std::string const& description, BagSlotFlags depositFlags)
         {
@@ -2240,6 +2259,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         bool IsResurrectRequestedBy(ObjectGuid const& guid) const
         {
             if (!IsResurrectRequested())
+                return false;
 
             return !_resurrectionData->GUID.IsEmpty() && _resurrectionData->GUID == guid;
         }
@@ -3259,6 +3279,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         // Soulbind conduit collection (server-authoritative: conduitId -> owned RankIndex)
         // Socketed conduits for a soulbind tree: GarrTalent node id -> conduitId
+        int32 GetConduitSpell(uint32 conduitId) const;   // owned rank -> SoulbindConduitRank.SpellID (0 if none)
 
         // Covenant renown rewards. The renown LEVEL itself is a renown-reputation (TC ReputationMgr) and is client-synced
         // by the standard reputation packets; this grants the per-level RenownRewards (item/spell/title/mount) once each.

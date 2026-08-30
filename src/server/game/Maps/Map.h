@@ -59,6 +59,7 @@ class Group;
 class InstanceLock;
 class InstanceMap;
 class InstanceScript;
+class ChallengeMode;
 class InstanceScenario;
 class Object;
 class PhaseShift;
@@ -210,6 +211,7 @@ struct MapStoredObjectsUnorderedMap
     static bool Remove(Container& container, ValueType object)
     {
         container.erase(object->GetGUID());
+        return true;
     }
 
     static std::size_t Size(Container const& container)
@@ -240,10 +242,13 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         bool CanUnload(uint32 diff)
         {
             if (!m_unloadTimer)
+                return false;
 
             if (m_unloadTimer <= diff)
+                return true;
 
             m_unloadTimer -= diff;
+            return false;
         }
 
         virtual bool AddPlayerToMap(Player* player, bool initPlayer = true);
@@ -486,6 +491,7 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
             if (itr != _corpsesByGrid.end())
                 return &itr->second;
 
+            return nullptr;
         }
 
         Corpse* GetCorpseByPlayer(ObjectGuid const& ownerGuid) const
@@ -494,6 +500,7 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
             if (itr != _corpsesByPlayer.end())
                 return itr->second;
 
+            return nullptr;
         }
 
         InstanceMap* ToInstanceMap() { return IsDungeon() ? reinterpret_cast<InstanceMap*>(this) : nullptr; }
@@ -792,6 +799,7 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
                 case SPAWN_TYPE_GAMEOBJECT:
                     return &_gameObjectRespawnTimesBySpawnId;
                 case SPAWN_TYPE_AREATRIGGER:
+                    return nullptr;
             }
         }
         RespawnInfoMap const* GetRespawnMapForType(SpawnObjectType type) const
@@ -799,9 +807,13 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
             switch (type)
             {
                 default:
+                    ABORT();
                 case SPAWN_TYPE_CREATURE:
+                    return &_creatureRespawnTimesBySpawnId;
                 case SPAWN_TYPE_GAMEOBJECT:
+                    return &_gameObjectRespawnTimesBySpawnId;
                 case SPAWN_TYPE_AREATRIGGER:
+                    return nullptr;
             }
         }
 
