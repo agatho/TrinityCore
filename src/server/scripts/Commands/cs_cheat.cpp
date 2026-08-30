@@ -29,6 +29,7 @@ EndScriptData */
 #include "Language.h"
 #include "Player.h"
 #include "RBAC.h"
+#include "SpellPackets.h"
 #include "WorldSession.h"
 
 using namespace Trinity::ChatCommands;
@@ -50,6 +51,7 @@ public:
             { "status",         HandleCheatStatusCommand,    rbac::RBAC_PERM_COMMAND_CHEAT_STATUS,    Console::No },
             { "taxi",           HandleTaxiCheatCommand,      rbac::RBAC_PERM_COMMAND_CHEAT_TAXI,      Console::No },
             { "explore",        HandleExploreCheatCommand,   rbac::RBAC_PERM_COMMAND_CHEAT_EXPLORE,   Console::No },
+            { "diminishingreturns", HandleDiminishingReturnsCheatCommand, rbac::RBAC_PERM_COMMAND_CHEAT_DIMINISHINGRETURNS, Console::No },
 
         };
 
@@ -58,6 +60,39 @@ public:
             { "cheat", cheatCommandTable },
         };
         return commandTable;
+    }
+
+    // SMSG_CHEAT_IGNORE_DIMISHING_RETURNS (0x670002) - ein Bit, danach FlushBits (1 B Draht).
+    // Der Retail-Client nimmt die Nachricht an und tut nichts: sein Handler-Slot zeigt auf den
+    // `return 0`-Stub. Die Wirkung liegt vollstaendig serverseitig in
+    // Unit::ApplyDiminishingToDuration; der Opcode haelt einen eigenen Client auf demselben Stand.
+    // Erwartetes Testergebnis am Retail-Client ist deshalb: KEINE sichtbare Reaktion.
+    // UNVERIFIED: umgesetzt ist die ZIEL-Lesart - Auren AUF dem Schaltenden laufen ungekuerzt,
+    // nicht "seine eigenen Kontrollzauber werden nicht abgeschwaecht". Die Wahl ist unbelegt und
+    // an der wirksamen Stelle ausfuehrlich begruendet und markiert (Unit::ApplyDiminishingToDuration).
+    // Die Klartextmeldungen unten benennen die umgesetzte Richtung deshalb ausdruecklich, damit ein
+    // GM nicht die andere annimmt.
+    static bool HandleDiminishingReturnsCheatCommand(ChatHandler* handler, Optional<bool> enableArg)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+
+        bool enable = !player->GetCommandStatus(CHEAT_IGNORE_DIMINISHING_RETURNS);
+        if (enableArg)
+            enable = *enableArg;
+
+        if (enable)
+        {
+            player->SetCommandStatusOn(CHEAT_IGNORE_DIMINISHING_RETURNS);
+            handler->SendSysMessage("Diminishing returns no longer apply to auras cast on you.");
+        }
+        else
+        {
+            player->SetCommandStatusOff(CHEAT_IGNORE_DIMINISHING_RETURNS);
+            handler->SendSysMessage("Diminishing returns apply to auras cast on you again.");
+        }
+
+        player->SendDirectMessage(WorldPackets::Spells::CheatIgnoreDiminishingReturns(enable).Write());
+        return true;
     }
 
     static bool HandleGodModeCheatCommand(ChatHandler* handler, Optional<bool> enableArg)
@@ -157,6 +192,7 @@ public:
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_CT, player->GetCommandStatus(CHEAT_CASTTIME) ? enabled : disabled);
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_POWER, player->GetCommandStatus(CHEAT_POWER) ? enabled : disabled);
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_WW, player->GetCommandStatus(CHEAT_WATERWALK) ? enabled : disabled);
+        handler->PSendSysMessage(LANG_COMMAND_CHEAT_DR, player->GetCommandStatus(CHEAT_IGNORE_DIMINISHING_RETURNS) ? enabled : disabled);
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_TAXINODES, player->isTaxiCheater() ? enabled : disabled);
         return true;
     }

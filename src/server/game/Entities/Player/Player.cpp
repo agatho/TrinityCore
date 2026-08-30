@@ -3386,6 +3386,24 @@ void Player::RemoveSpell(uint32 spell_id, bool disabled /*= false*/, bool learn_
         unlearnedSpells.SpellID.push_back(spell_id);
         unlearnedSpells.SuppressMessaging = suppressMessaging;
         SendDirectMessage(unlearnedSpells.Write());
+
+        // SMSG_REMOVE_SPELL_FROM_ACTION_BAR (0x670045)
+        // UNVERIFIED: weder Referenzpaket noch Konsument im Retail-Abbild (Slot 0x43AA3A0 =
+        // TAGGED(0x1)). Struktur und Ausloeser sind allein aus der Symmetrie zu
+        // SMSG_PUSH_SPELL_TO_ACTION_BAR abgeleitet. Fuer 0x670045 gibt es UI-seitig auch kein
+        // eigenes Ereignis, nur indirekt ACTIONBAR_SLOT_CHANGED.
+        //
+        // suppressMessaging gilt hier MIT. Der Draht fuehrt kein SuppressMessaging-Feld (4 B,
+        // nur SpellID), also ist Nichtsenden die einzige Art, den Schalter zu befolgen - und die
+        // richtige: alle drei Aufrufer mit suppressMessaging=true entfernen einen ABGELEITETEN,
+        // voruebergehenden Zauber, der beim naechsten Anlegen wieder gelernt wird -
+        // Player::ApplyAzeriteEssencePower (:8603), AuraEffect::HandleLearnSpell
+        // (SpellAuraEffects.cpp:5406) und die Reittier-Ausruestung (SpellEffects.cpp:6083). Fuer
+        // die ist ein Leeren des Aktionsleistenplatzes verlorene Spielereinstellung: das
+        // Gegenstueck SMSG_PUSH_SPELL_TO_ACTION_BAR stellt keinen Platz wieder her, es weist
+        // einen neuen zu.
+        if (!suppressMessaging)
+            SendDirectMessage(WorldPackets::Spells::RemoveSpellFromActionBar(spell_id).Write());
     }
 }
 
@@ -22602,7 +22620,12 @@ void Player::CharmSpellInitialize()
 
 void Player::SendRemoveControlBar() const
 {
-    WorldPackets::Pet::PetSpells packet;
+    // SMSG_PET_CLEAR_SPELLS (0x670013) - leere Nachricht.
+    // Der dafuer zustaendige Konsument ist 0x22C0020: er setzt fuenf Globals auf 0 und baut die
+    // Begleiter-Aktionsleiste neu auf. Ein leeres SMSG_PET_SPELLS_MESSAGE landet dagegen im
+    // Konsumenten 0x22BFAB0, der einen vollstaendigen Leistenaufbau erwartet - das war der
+    // bisherige Ersatzweg und ist nicht der Retail-Pfad.
+    WorldPackets::Pet::PetClearSpells packet;
     SendDirectMessage(packet.Write());
 }
 
@@ -22867,6 +22890,98 @@ void Player::GetSpellModValues(SpellInfo const* spellInfo, SpellModOp op, Spell*
         *pct *= std::pow(value, float(applyCount));
         Player::ApplyModToSpell(mod, spell);
     }
+
+    // PvP-Zaubermodifikatoren (SPELL_AURA_ADD_FLAT_PVP_MODIFIER / _PCT_, 646 / 647).
+    // Der Client haelt sie in einer eigenen Tabelle und wendet sie nur im PvP-Kontext an;
+    // die Anwendung selbst ist dieselbe wie bei den Nicht-PvP-Zwillingen (flat wird addiert,
+    // pct multipliziert, Beleg 0x1D8B1C0).
+    // UNVERIFIED: WORAN der Client "PvP-Kontext" festmacht, ist offline nicht auslesbar - die
+    // Nachschlagefunktion 0x1D8B1C0 bekommt den Schalter vom Aufrufer, und im Abbild ist keine
+    // Aufrufstelle mit konstantem Schalter zu finden.
+    //
+    // "Der Zauber trifft einen Spieler" ist als Regel ZU WEIT: eine Heilung auf einen Mitspieler
+    // in einer PvE-Schlachtzugsbegegnung erfuellt sie, ist aber kein PvP - der Modifikator wuerde
+    // dort die Zahl veraendern, ohne dass es einen PvP-Kontext gibt. Serverseitig gilt deshalb die
+    // engere Regel: das Ziel ist spielergesteuert UND es besteht ein PvP-Verhaeltnis - der Caster
+    // ist in einem Schlachtfeld oder einer Arena, oder Caster und Ziel sind beide PvP-markiert
+    // (auch FFA). Damit greift der Modifikator in keiner PvE-Begegnung ohne Kriegsmodus.
+    // Auch diese Regel ist eine Einschraenkung ohne Beleg, nur eine engere - sie kann zu wenig
+    // anwenden, wo die urspruengliche zu viel angewendet hat. Aufnahme, die das schliesst, steht
+    // unter aufnahme_noetig in status/spell_67.json.
+    bool isPvpContext = false;
+    if (spell)
+    {
+        if (Unit const* unitTarget = spell->m_targets.GetUnitTarget())
+            isPvpContext = unitTarget->IsCharmedOwnedByPlayerOrPlayer()
+                && (InBattleground() || ((IsPvP() || IsFFAPvP()) && (unitTarget->IsPvP() || unitTarget->IsFFAPvP())));
+    }
+
+    if (isPvpContext)
+    {
+        for (SpellModifier* mod : spellModTypeRange(SPELLMOD_FLAT_PVP))
+        {
+            int32 applyCount = IsAffectedBySpellmod(spellInfo, mod, spell);
+            if (!applyCount)
+                continue;
+
+            int32 value = static_cast<SpellFlatPvpModifierByClassMask*>(mod)->value;
+            if (value == 0)
+                continue;
+
+            *flat += value * applyCount;
+            Player::ApplyModToSpell(mod, spell);
+        }
+
+        for (SpellModifier* mod : spellModTypeRange(SPELLMOD_PCT_PVP))
+        {
+            int32 applyCount = IsAffectedBySpellmod(spellInfo, mod, spell);
+            if (!applyCount)
+                continue;
+
+            if (base + *flat == 0)
+                continue;
+
+            float value = static_cast<SpellPctPvpModifierByClassMask*>(mod)->value;
+            if (value == 0)
+                continue;
+
+            *pct *= std::pow(1.0f + CalculatePct(1.0f, value), float(applyCount));
+            Player::ApplyModToSpell(mod, spell);
+        }
+
+        // Label-Varianten (Auren 648 / 649). Dieselbe PvP-Kontextregel wie oben, dieselbe Formel
+        // wie bei den Nicht-PvP-Zwillingen SPELLMOD_LABEL_FLAT / _PCT.
+        for (SpellModifier* mod : spellModTypeRange(SPELLMOD_LABEL_FLAT_PVP))
+        {
+            int32 applyCount = IsAffectedBySpellmod(spellInfo, mod, spell);
+            if (!applyCount)
+                continue;
+
+            int32 value = static_cast<SpellFlatPvpModifierByLabel*>(mod)->value.ModifierValue;
+            if (value == 0)
+                continue;
+
+            *flat += value * applyCount;
+            Player::ApplyModToSpell(mod, spell);
+        }
+
+        for (SpellModifier* mod : spellModTypeRange(SPELLMOD_LABEL_PCT_PVP))
+        {
+            int32 applyCount = IsAffectedBySpellmod(spellInfo, mod, spell);
+            if (!applyCount)
+                continue;
+
+            if (base + *flat == 0)
+                continue;
+
+            float value = static_cast<SpellPctPvpModifierByLabel*>(mod)->value.ModifierValue;
+            if (value == 1.0f)
+                continue;
+
+            *pct *= std::pow(value, float(applyCount));
+            Player::ApplyModToSpell(mod, spell);
+        }
+    }
 }
 
 template <class T>
@@ -22949,6 +23064,96 @@ void Player::AddSpellMod(SpellModifier* mod, bool apply)
                 }
 
                 SendDirectMessage(packet.Write());
+            }
+            break;
+        case SPELLMOD_FLAT_PVP:
+        case SPELLMOD_PCT_PVP:
+            // SMSG_SET_FLAT_SPELL_PVP_MODIFIER (0x670029) / SMSG_SET_PCT_SPELL_PVP_MODIFIER (0x67002A)
+            // NICHT die SetSpellModifier-Klasse wiederverwenden: der PvP-Zwilling schreibt
+            // ModIndex als uint32 (Leser 0x68A1D0), der Nicht-PvP als uint8 (0x68A0F0).
+            if (!IsLoading())
+            {
+                SpellPvpModifierByClassMask const* pvpMod = static_cast<SpellPvpModifierByClassMask const*>(mod);
+                OpcodeServer opcode = (mod->type == SPELLMOD_FLAT_PVP) ? SMSG_SET_FLAT_SPELL_PVP_MODIFIER : SMSG_SET_PCT_SPELL_PVP_MODIFIER;
+
+                WorldPackets::Spells::SetSpellPvpModifier packet(opcode);
+
+                packet.Modifiers.resize(1);
+                WorldPackets::Spells::SpellPvpModifier& spellModifier = packet.Modifiers[0];
+                spellModifier.ModIndex = AsUnderlyingType(pvpMod->pvpOp);
+
+                boost::dynamic_bitset<uint32> mask(128, 0);
+
+                boost::from_block_range(
+                    &static_cast<SpellModifierByClassMask const*>(mod)->mask[0],
+                    &static_cast<SpellModifierByClassMask const*>(mod)->mask[0] + 4,
+                    mask);
+
+                for (std::size_t classIndex = mask.find_first(); classIndex != decltype(mask)::npos; classIndex = mask.find_next(classIndex))
+                {
+                    WorldPackets::Spells::SpellModifierData& modData = spellModifier.ModifierData.emplace_back();
+                    if (mod->type == SPELLMOD_FLAT_PVP)
+                    {
+                        // Der Client ADDIERT die flat-Werte (`*a3 = flat[i] + *a3`, Startwert 0.0f),
+                        // deshalb wird hier der Gesamtstand fuer diesen Slot uebertragen.
+                        modData.ModifierValue = 0.0f;
+                        auto itr = std::ranges::lower_bound(m_spellMods, std::make_pair(mod->op, SPELLMOD_FLAT_PVP), std::ranges::less(), [](SpellModifier const* sm) { return std::make_pair(sm->op, sm->type); });
+                        while (itr != m_spellMods.end() && (*itr)->op == mod->op && (*itr)->type == SPELLMOD_FLAT_PVP)
+                        {
+                            SpellFlatPvpModifierByClassMask const* spellMod = static_cast<SpellFlatPvpModifierByClassMask const*>(*itr++);
+                            if (spellMod->pvpOp == pvpMod->pvpOp && (spellMod->mask[classIndex / 32] & (1u << (classIndex % 32))))
+                                modData.ModifierValue += spellMod->value;
+                        }
+                    }
+                    else
+                    {
+                        // pct wird MULTIPLIZIERT (`*a4 = pct[i] * *a4`, Startwert 1.0f).
+                        modData.ModifierValue = 1.0f;
+                        auto itr = std::ranges::lower_bound(m_spellMods, std::make_pair(mod->op, SPELLMOD_PCT_PVP), std::ranges::less(), [](SpellModifier const* sm) { return std::make_pair(sm->op, sm->type); });
+                        while (itr != m_spellMods.end() && (*itr)->op == mod->op && (*itr)->type == SPELLMOD_PCT_PVP)
+                        {
+                            SpellPctPvpModifierByClassMask const* spellMod = static_cast<SpellPctPvpModifierByClassMask const*>(*itr++);
+                            if (spellMod->pvpOp == pvpMod->pvpOp && (spellMod->mask[classIndex / 32] & (1u << (classIndex % 32))))
+                                modData.ModifierValue *= 1.0f + CalculatePct(1.0f, spellMod->value);
+                        }
+                    }
+
+                    modData.ClassIndex = classIndex;
+                }
+
+                SendDirectMessage(packet.Write());
+            }
+            break;
+        case SPELLMOD_LABEL_FLAT_PVP:
+            // Kein Opcode - Familie 0x67 fuehrt keine Label-Variante. Die Gegenstelle ist das
+            // Aktualisierungsfeld ActivePlayerData::SpellFlatModPVPByLabel; der Weg ist
+            // Zeile fuer Zeile derselbe wie beim Nicht-PvP-Zwilling SPELLMOD_LABEL_FLAT.
+            if (apply)
+            {
+                AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+                    .ModifyValue(&UF::ActivePlayerData::SpellFlatModPVPByLabel)) = static_cast<SpellFlatPvpModifierByLabel const*>(mod)->value;
+            }
+            else
+            {
+                int32 firstIndex = m_activePlayerData->SpellFlatModPVPByLabel.FindIndex(static_cast<SpellFlatPvpModifierByLabel const*>(mod)->value);
+                if (firstIndex >= 0)
+                    RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+                        .ModifyValue(&UF::ActivePlayerData::SpellFlatModPVPByLabel), firstIndex);
+            }
+            break;
+        case SPELLMOD_LABEL_PCT_PVP:
+            // Gegenstueck zu SPELLMOD_LABEL_FLAT_PVP, Feld SpellPctModPVPByLabel.
+            if (apply)
+            {
+                AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+                    .ModifyValue(&UF::ActivePlayerData::SpellPctModPVPByLabel)) = static_cast<SpellPctPvpModifierByLabel const*>(mod)->value;
+            }
+            else
+            {
+                int32 firstIndex = m_activePlayerData->SpellPctModPVPByLabel.FindIndex(static_cast<SpellPctPvpModifierByLabel const*>(mod)->value);
+                if (firstIndex >= 0)
+                    RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+                        .ModifyValue(&UF::ActivePlayerData::SpellPctModPVPByLabel), firstIndex);
             }
             break;
         case SPELLMOD_LABEL_FLAT:
@@ -23066,11 +23271,63 @@ void Player::SendSpellModifiers() const
         }
     }
 
+    // PvP-Varianten. Hier wird nicht ueber die Sortierreihenfolge gruppiert, sondern ueber den
+    // ModIndex selbst: die Menge ist nach SpellModOp sortiert, und der PvP-Index 3 (im Enum eine
+    // Luecke ohne Namen) hat keine belegte SpellModOp-Entsprechung - zwei verschiedene ModIndex
+    // koennten sonst denselben op tragen und die Gruppierung zerreissen.
+    std::map<uint32, std::vector<WorldPackets::Spells::SpellModifierData>> flatPvpMods;
+    std::map<uint32, std::vector<WorldPackets::Spells::SpellModifierData>> pctPvpMods;
+
+    for (SpellModifier const* mod : m_spellMods)
+    {
+        if (mod->type != SPELLMOD_FLAT_PVP && mod->type != SPELLMOD_PCT_PVP)
+            continue;
+
+        SpellPvpModifierByClassMask const* pvpMod = static_cast<SpellPvpModifierByClassMask const*>(mod);
+        bool isFlat = mod->type == SPELLMOD_FLAT_PVP;
+        std::vector<WorldPackets::Spells::SpellModifierData>& datas =
+            (isFlat ? flatPvpMods : pctPvpMods)[AsUnderlyingType(pvpMod->pvpOp)];
+
+        boost::from_block_range(&pvpMod->mask[0], &pvpMod->mask[0] + 4, mask);
+        for (std::size_t classIndex = mask.find_first(); classIndex != decltype(mask)::npos; classIndex = mask.find_next(classIndex))
+        {
+            float& modifierValue = getOrCreateModifierData(datas, classIndex, isFlat ? 0.0f : 1.0f);
+            if (isFlat)
+                modifierValue += static_cast<SpellFlatPvpModifierByClassMask const*>(mod)->value;
+            else
+                modifierValue *= 1.0f + CalculatePct(1.0f, static_cast<SpellPctPvpModifierByClassMask const*>(mod)->value);
+        }
+    }
+
     if (!flatMods.Modifiers.empty())
         SendDirectMessage(flatMods.Write());
 
     if (!pctMods.Modifiers.empty())
         SendDirectMessage(pctMods.Write());
+
+    if (!flatPvpMods.empty())
+    {
+        WorldPackets::Spells::SetSpellPvpModifier packet(SMSG_SET_FLAT_SPELL_PVP_MODIFIER);
+        for (auto& [modIndex, datas] : flatPvpMods)
+        {
+            WorldPackets::Spells::SpellPvpModifier& modifier = packet.Modifiers.emplace_back();
+            modifier.ModIndex = modIndex;
+            modifier.ModifierData = std::move(datas);
+        }
+        SendDirectMessage(packet.Write());
+    }
+
+    if (!pctPvpMods.empty())
+    {
+        WorldPackets::Spells::SetSpellPvpModifier packet(SMSG_SET_PCT_SPELL_PVP_MODIFIER);
+        for (auto& [modIndex, datas] : pctPvpMods)
+        {
+            WorldPackets::Spells::SpellPvpModifier& modifier = packet.Modifiers.emplace_back();
+            modifier.ModIndex = modIndex;
+            modifier.ModifierData = std::move(datas);
+        }
+        SendDirectMessage(packet.Write());
+    }
 }
 
 // send Proficiency
@@ -24749,6 +25006,13 @@ void Player::SendInitialVisiblePackets(WorldObject* target) const
                 targetUnit->SendMeleeAttackStart(targetUnit->GetVictim());
         }
 
+        // SMSG_RESUME_CAST / SMSG_RESUME_CAST_BAR (0x67002E / 0x670031)
+        // Laeuft an der Einheit gerade eine Zauberwirkung, bekommt der Client sie hier
+        // nachgetragen - sonst sieht er eine Einheit mit Zauberanimation, aber ohne Zauberleiste.
+        for (CurrentSpellTypes spellType : { CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL })
+            if (Spell const* currentSpell = targetUnit->GetCurrentSpell(spellType))
+                currentSpell->SendResumeCast(this);
+
         if (Vignettes::VignetteData const* vignette = targetUnit->GetVignette())
             sendVignette(*vignette, this);
     }
@@ -25022,6 +25286,17 @@ void Player::SendInitialPacketsBeforeAddToMap()
 
     // Spell modifiers
     SendSpellModifiers();
+
+    // SMSG_SETUP_COMBAT_LOG_FILE_FLUSH (0x67000F)
+    // Steuert, wie der Client sein WoWCombatLog.txt schreibt. Konsument 0x1E0B270 setzt vier
+    // Globals und feuert kein Lua-Ereignis; bei einem Feld <= 0 nimmt er seine eigene Vorgabe.
+    // Feste 16 B, Referenzpaket im Sniff traegt exakt die Vorgabewerte.
+    WorldPackets::CombatLog::SetupCombatLogFileFlush setupCombatLogFileFlush;
+    setupCombatLogFileFlush.MaxFileSize = sWorld->getIntConfig(CONFIG_COMBAT_LOG_FILE_MAX_FILE_SIZE);
+    setupCombatLogFileFlush.Threshold = sWorld->getFloatConfig(CONFIG_COMBAT_LOG_FILE_THRESHOLD);
+    setupCombatLogFileFlush.FlushInterval = sWorld->getFloatConfig(CONFIG_COMBAT_LOG_FILE_FLUSH_INTERVAL);
+    setupCombatLogFileFlush.MaxSeconds = sWorld->getIntConfig(CONFIG_COMBAT_LOG_FILE_MAX_SECONDS);
+    SendDirectMessage(setupCombatLogFileFlush.Write());
 
     // SMSG_ACCOUNT_MOUNT_UPDATE
     WorldPackets::Misc::AccountMountUpdate mountUpdate;

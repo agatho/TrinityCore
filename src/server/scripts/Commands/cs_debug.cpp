@@ -32,6 +32,7 @@ EndScriptData */
 #include "Chat.h"
 #include "ChatCommand.h"
 #include "ChatPackets.h"
+#include "CombatLogPackets.h"
 #include "Conversation.h"
 #include "CreatureAI.h"
 #include "DB2Stores.h"
@@ -126,6 +127,8 @@ public:
             { "instancespawn",      HandleDebugInstanceSpawns,             rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "conversation",       HandleDebugConversationCommand,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "modifiertree",       HandleDebugModifierTreeCommand,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "scriptcast",         HandleDebugScriptCastCommand,          rbac::RBAC_PERM_COMMAND_DEBUG_SCRIPTCAST, Console::No },
+            { "worldtext",          HandleDebugWorldTextOnTargetCommand,   rbac::RBAC_PERM_COMMAND_DEBUG_WORLDTEXT,  Console::No },
             { "wsexpression",       HandleDebugWSExpressionCommand,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "playercondition",    HandleDebugPlayerConditionCommand,     rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "pvp warmode",        HandleDebugWarModeBalanceCommand,      rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
@@ -1200,6 +1203,67 @@ public:
     }
 
     // Play emote animation
+    // SMSG_SCRIPT_CAST (0x670049) - der Client wirkt den Zauber, ohne dass der Spieler ihn
+    // ausloest. Beleg: Konsument 0x1E24FB0 liest den ersten uint32 und ruft
+    // 0x1D4F8E0(ctx, SpellID, ...); ausgeloeste Ereignisse sind UNIT_SPELLCAST_RETICLE_TARGET,
+    // BONUS_ROLL_DEACTIVATE und ARCHAEOLOGY_TOGGLE (Tiefe 1 ueber 0x1D7F8E0).
+    // Das ist ein Werkzeug fuer Skript-Inszenierungen (Questfilme, Tutorials) und darf deshalb
+    // nur aus einer berechtigten Quelle kommen - hier ueber RBAC.
+    // UNVERIFIED: im Abbild existiert ein Reflexionstyp `ScriptCastParams` mit 30 Feldern
+    // (0x3891DA0). Ob er etwas mit diesem Opcode zu tun hat, ist offen - der Konsument liest
+    // genau ein uint32, und der Leser ist ein Rohzeiger auf den Paketrest.
+    static bool HandleDebugScriptCastCommand(ChatHandler* handler, uint32 spellId)
+    {
+        if (!sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
+        {
+            handler->PSendSysMessage(LANG_COMMAND_NOSPELLFOUND);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        Player* target = handler->getSelectedPlayerOrSelf();
+        if (!target)
+        {
+            handler->SendSysMessage(LANG_PLAYER_NOT_FOUND);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        target->SendDirectMessage(WorldPackets::Spells::ScriptCast(spellId).Write());
+        return true;
+    }
+
+    // SMSG_DISPLAY_WORLD_TEXT_ON_TARGET (0x670055) - schwebender Text ueber einem Ziel.
+    // Beleg: Leser 0x68B530, Konsument 0x1E20E60 (der einzige PTR-Hook der Familie).
+    // Der Konsument kappt den Text bei 3001 Zeichen, der LESER prueft die 12-Bit-Laenge aber
+    // NICHT und schreibt in einen Puffer auf dem Dispatcher-Stack - deshalb klemmt schon die
+    // Paketklasse auf 3000 (DisplayWorldTextOnTarget::MaxTextLength).
+    // Loest der Client die TargetGUID nicht auf und ist zugleich |Position|^2 < 2.4e-7, kehrt
+    // der Konsument sofort zurueck; die Position ist der Fallback-Anker.
+    // Kein Lua-Ereignis, keine Dauer am Draht (die kommt aus der Alpha-Rampe in 0x1D054B0).
+    static bool HandleDebugWorldTextOnTargetCommand(ChatHandler* handler, Tail text)
+    {
+        if (text.empty())
+        {
+            handler->SendSysMessage(LANG_CMD_SYNTAX);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        Unit* target = handler->getSelectedUnit();
+        if (!target)
+            target = handler->GetPlayer();
+
+        WorldPackets::CombatLog::DisplayWorldTextOnTarget packet;
+        packet.TargetGUID = target->GetGUID();
+        packet.Position = target->GetPosition();
+        packet.Text.assign(text.data(), text.length());
+        packet.Unique = true;
+
+        handler->GetPlayer()->SendDirectMessage(packet.Write());
+        return true;
+    }
+
     static bool HandleDebugAnimCommand(ChatHandler* handler, Emote emote)
     {
         if (Unit* unit = handler->getSelectedUnit())

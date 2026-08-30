@@ -502,4 +502,113 @@ WorldPacket const* SpellHealAbsorbLog::Write()
 
     return &_worldPacket;
 }
+
+// ---------------------------------------------------------------------------
+// Familie 0x67 - Kampflog-Dateisystem, Debug- und Anzeigekanaele. Belege im Header.
+// ---------------------------------------------------------------------------
+
+WorldPacket const* SetupCombatLogFileFlush::Write()
+{
+    _worldPacket << int32(MaxFileSize);
+    _worldPacket << float(Threshold);
+    _worldPacket << float(FlushInterval);
+    _worldPacket << int32(MaxSeconds);
+
+    // Feste 16 B. Referenzpaket: 00000400 cdcc4c3f 0000803f 2c010000
+    return &_worldPacket;
+}
+
+WorldPacket const* DisplayWorldTextOnTarget::Write()
+{
+    // Der Client-Leser prueft die 12-Bit-Laenge nicht und schreibt in einen Stack-Puffer.
+    // Ueber 3003 Zeichen ist das ein Stack-Overflow im Client, deshalb wird hier hart
+    // geklemmt statt sich auf den Aufrufer zu verlassen.
+    std::string_view text(Text);
+    if (text.length() > MaxTextLength)
+        text = text.substr(0, MaxTextLength);
+
+    _worldPacket << TargetGUID;
+    _worldPacket << Position;
+    _worldPacket << Size<uint32>(Args);
+    for (int32 arg : Args)
+        _worldPacket << int32(arg);
+
+    // Bit-Gruppe, genau 16 Bit MSB-first - danach bleibt kein Fuellbit uebrig.
+    _worldPacket << SizedString::BitsSize<12>(text);
+    _worldPacket << OptionalInit(Color);
+    _worldPacket << OptionalInit(Style);
+    _worldPacket << OptionalInit(Angle);
+    _worldPacket << Bits<1>(Unique);
+    _worldPacket.FlushBits();
+
+    _worldPacket << SizedString::Data(text);        // kein NUL am Draht
+
+    if (Color)
+        _worldPacket << uint8(*Color);
+
+    if (Style)
+        _worldPacket << uint8(*Style);
+
+    if (Angle)
+        _worldPacket << float(*Angle);
+
+    return &_worldPacket;
+}
+
+ByteBuffer& operator<<(ByteBuffer& data, DamageCalcLog::Step const& step)
+{
+    std::string_view varName(step.VarName);
+    if (varName.length() > DamageCalcLog::MaxVarNameLength)
+        varName = varName.substr(0, DamageCalcLog::MaxVarNameLength);
+
+    // bits<5> VarNameLen + bits<1> VariantSel, danach zwei Fuellbits (impliziter Flush).
+    data << SizedString::BitsSize<5>(varName);
+    data << Bits<1>(step.Text.has_value());
+    data.FlushBits();
+
+    data << int32(step.CalcStepType);               // steht VOR den Stringbytes
+    data << SizedString::Data(varName);
+
+    if (step.Text)
+    {
+        std::string_view text(*step.Text);
+        if (text.length() > DamageCalcLog::MaxTextLength)
+            text = text.substr(0, DamageCalcLog::MaxTextLength);
+
+        // bits<9> TextLen + bits<1> IsSupport, danach sechs Fuellbits.
+        data << SizedString::BitsSize<9>(text);
+        data << Bits<1>(step.IsSupport);
+        data.FlushBits();
+
+        data << SizedString::Data(text);
+    }
+    else
+    {
+        data << float(step.Value);
+        data << float(step.Total);
+        data << float(step.Unknown3);
+        data << Size<uint32>(step.Supports);
+        for (Spells::SpellSupportInfo const& support : step.Supports)
+            data << support;
+    }
+
+    return data;
+}
+
+WorldPacket const* DamageCalcLog::Write()
+{
+    _worldPacket << Attacker;
+    _worldPacket << Victim;
+    _worldPacket << int32(SourceType);
+    _worldPacket << int32(SpellID);
+    _worldPacket << Size<uint32>(Steps);
+    for (Step const& step : Steps)
+        _worldPacket << step;
+
+    // Das Bit ist das LETZTE Feld, nach dem Array (Beleg 0x751F1D/0x751F29).
+    _worldPacket << Bits<1>(Flag);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
 }

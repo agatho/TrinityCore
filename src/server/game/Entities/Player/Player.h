@@ -178,6 +178,10 @@ enum SpellModType : uint8
     SPELLMOD_PCT          = 1,                            // SPELL_AURA_ADD_PCT_MODIFIER
     SPELLMOD_LABEL_FLAT   = 2,                            // SPELL_AURA_ADD_FLAT_MODIFIER_BY_SPELL_LABEL
     SPELLMOD_LABEL_PCT    = 3,                            // SPELL_AURA_ADD_PCT_MODIFIER_BY_SPELL_LABEL
+    SPELLMOD_FLAT_PVP     = 4,                            // SPELL_AURA_ADD_FLAT_PVP_MODIFIER
+    SPELLMOD_PCT_PVP      = 5,                            // SPELL_AURA_ADD_PCT_PVP_MODIFIER
+    SPELLMOD_LABEL_FLAT_PVP = 6,                          // SPELL_AURA_ADD_FLAT_PVP_MODIFIER_BY_SPELL_LABEL
+    SPELLMOD_LABEL_PCT_PVP  = 7,                          // SPELL_AURA_ADD_PCT_PVP_MODIFIER_BY_SPELL_LABEL
     SPELLMOD_END
 };
 
@@ -286,6 +290,33 @@ struct SpellPctModifierByClassMask : SpellModifierByClassMask
     float value = { };
 };
 
+// PvP-Zaubermodifikatoren (SMSG_SET_FLAT_/PCT_SPELL_PVP_MODIFIER, Familie 0x67).
+// pvpOp ist der Wert, der auf den Draht geht (SpellPvpModifier, 0..9); op ist die daraus
+// abgeleitete SpellModOp-Bedeutung, die der Server selbst anwendet.
+struct SpellPvpModifierByClassMask : SpellModifierByClassMask
+{
+    SpellPvpModifierByClassMask(SpellModOp _op, SpellPvpModifier _pvpOp, SpellModType _type, uint32 _spellId, Aura* _ownerAura, flag128 const& _mask)
+        : SpellModifierByClassMask(_op, _type, _spellId, _ownerAura, _mask), pvpOp(_pvpOp) { }
+
+    SpellPvpModifier pvpOp;
+};
+
+struct SpellFlatPvpModifierByClassMask : SpellPvpModifierByClassMask
+{
+    SpellFlatPvpModifierByClassMask(SpellModOp _op, SpellPvpModifier _pvpOp, uint32 _spellId, Aura* _ownerAura, flag128 _mask)
+        : SpellPvpModifierByClassMask(_op, _pvpOp, SPELLMOD_FLAT_PVP, _spellId, _ownerAura, _mask) { }
+
+    int32 value = { };
+};
+
+struct SpellPctPvpModifierByClassMask : SpellPvpModifierByClassMask
+{
+    SpellPctPvpModifierByClassMask(SpellModOp _op, SpellPvpModifier _pvpOp, uint32 _spellId, Aura* _ownerAura, flag128 _mask)
+        : SpellPvpModifierByClassMask(_op, _pvpOp, SPELLMOD_PCT_PVP, _spellId, _ownerAura, _mask) { }
+
+    float value = { };
+};
+
 struct SpellFlatModifierByLabel : SpellModifier
 {
     SpellFlatModifierByLabel(SpellModOp _op, uint32 _spellId, Aura* _ownerAura, uint32 _label)
@@ -297,6 +328,41 @@ struct SpellFlatModifierByLabel : SpellModifier
     }
 
     UF::SpellFlatModByLabel value = { };
+};
+
+// Label-Varianten der PvP-Zaubermodifikatoren (SPELL_AURA_ADD_FLAT_PVP_MODIFIER_BY_SPELL_LABEL /
+// _PCT_, 648 / 649). Sie haben KEINEN eigenen Opcode - Familie 0x67 fuehrt nur die vier
+// Klassenmasken-Varianten 0x670027/28 (nicht-PvP) und 0x670029/2A (PvP). Die Gegenstelle sind die
+// Aktualisierungsfelder ActivePlayerData::SpellFlatModPVPByLabel und SpellPctModPVPByLabel, deren
+// Feld PvpModIndex heisst; der Weg ist damit derselbe wie bei den Nicht-PvP-Zwillingen 218/219.
+// pvpOp ist der Index, der im Feld landet; op ist die daraus abgeleitete SpellModOp-Bedeutung fuer
+// die serverseitige Anwendung (SPELLMOD_OP_PVP_UNMAPPED, wenn der Index unbelegt ist).
+struct SpellFlatPvpModifierByLabel : SpellModifier
+{
+    SpellFlatPvpModifierByLabel(SpellModOp _op, SpellPvpModifier _pvpOp, uint32 _spellId, Aura* _ownerAura, int32 _label)
+        : SpellModifier(_op, SPELLMOD_LABEL_FLAT_PVP, _spellId, _ownerAura), pvpOp(_pvpOp)
+    {
+        value.PvpModIndex = int32(_pvpOp);
+        value.ModifierValue = 0;
+        value.LabelID = _label;
+    }
+
+    SpellPvpModifier pvpOp;
+    UF::SpellFlatPVPModByLabel value = { };
+};
+
+struct SpellPctPvpModifierByLabel : SpellModifier
+{
+    SpellPctPvpModifierByLabel(SpellModOp _op, SpellPvpModifier _pvpOp, uint32 _spellId, Aura* _ownerAura, int32 _label)
+        : SpellModifier(_op, SPELLMOD_LABEL_PCT_PVP, _spellId, _ownerAura), pvpOp(_pvpOp)
+    {
+        value.PvpModIndex = int32(_pvpOp);
+        value.ModifierValue = 1.0f;  // neutrales Element des multiplikativen Modifikators; wird in CalculateSpellMod sofort ueberschrieben
+        value.LabelID = _label;
+    }
+
+    SpellPvpModifier pvpOp;
+    UF::SpellPctPVPModByLabel value = { };
 };
 
 struct SpellPctModifierByLabel : SpellModifier
@@ -1076,7 +1142,8 @@ enum PlayerCommandStates
     CHEAT_CASTTIME  = 0x02,
     CHEAT_COOLDOWN  = 0x04,
     CHEAT_POWER     = 0x08,
-    CHEAT_WATERWALK = 0x10
+    CHEAT_WATERWALK = 0x10,
+    CHEAT_IGNORE_DIMINISHING_RETURNS = 0x20      // SMSG_CHEAT_IGNORE_DIMISHING_RETURNS (0x670002)
 };
 
 enum PlayerLogXPReason : uint8

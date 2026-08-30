@@ -5570,6 +5570,25 @@ void Unit::ExitAllAreaTriggers()
         at->HandleUnitExit(this);
 }
 
+// SMSG_DAMAGE_CALC_LOG (0x670056) gehoerte hier her - hinter
+// `if (player->IsAdvancedCombatLoggingEnabled())`, wie das uebrige erweiterte Kampflog.
+// Die Paketklasse (WorldPackets::CombatLog::DamageCalcLog) ist vollstaendig und der Opcode ist
+// freigeschaltet; gesendet wird trotzdem nichts, und zwar aus einem Grund, der nicht am Client
+// liegt: die Nachricht traegt die EINZELNEN RECHENSCHRITTE der Schadensformel (Enum
+// CalcStepType, 61 Werte, Tabelle 0x43C89B0 - Blizzards eigene Gliederung), und TrinityCore
+// haelt diese Zwischenschritte nirgends fest. Unit::SpellDamageBonusDone und
+// Unit::MeleeDamageBonusDone rechnen die Faktoren direkt in den Schaden hinein.
+// Etwas anderes als die echten Schritte einzusetzen, waere eine erfundene Wirkung: der Client
+// druckt jede Zeile woertlich in sein Debug-Log der Kategorie "Damage Calculator", und ein
+// erfundener Zwischenschritt liest sich dort wie eine Messung.
+// Was fehlt, ist also keine Aufnahme, sondern ein eigener Arbeitsschritt: die Schadenspipeline
+// mit einem Schrittsammler zu instrumentieren. Das ist eine Aenderung an der Schadensrechnung
+// und gehoert nicht in eine Opcode-Einheit.
+// Dieser Kommentar ist NICHT die einzige Aufzeichnung der offenen Arbeit - das war er bis zur
+// Nacharbeit Runde 5 und deshalb ein Befund. Fortgeschrieben ist sie jetzt an zwei Stellen, die
+// eine Integration ueberleben:
+//   orchestrierung/familien.json  -> offene_serverarbeit[0], id "damage_calc_steps"
+//   orchestrierung/status/spell_67.json -> offene_serverarbeit
 void Unit::SendSpellNonMeleeDamageLog(SpellNonMeleeDamage const* log)
 {
     WorldPackets::CombatLog::SpellNonMeleeDamageLog packet;
@@ -9422,6 +9441,32 @@ bool Unit::ApplyDiminishingToDuration(SpellInfo const* auraSpellInfo, int32& dur
     // test pet/charm masters instead pets/charmeds
     Unit const* targetOwner = GetCharmerOrOwner();
     Unit const* casterOwner = caster->GetCharmerOrOwner();
+
+    // .cheat diminishingreturns - der Schalter, den SMSG_CHEAT_IGNORE_DIMISHING_RETURNS (0x670002)
+    // dem Client mitteilt. Der Retail-Client hat den Konsumenten ausgebaut (der Slot zeigt auf
+    // den `return 0`-Stub), die serverseitige Wirkung ist davon unberuehrt.
+    //
+    // UNVERIFIED: die WIRKUNGSRICHTUNG des Schalters ist geraten. Zwei Lesarten sind moeglich:
+    //   (a) ZIEL - "Auren AUF MIR laufen ungekuerzt" (umgesetzt: `this` ist das Aurenziel);
+    //   (b) WIRKENDER - "MEINE Kontrollzauber werden nicht abgeschwaecht" (dann muesste die
+    //       Pruefung an `caster`/`casterOwner` haengen).
+    // Gewaehlt ist (a). Ein Beleg fuer die eine oder die andere Richtung KANN es aus dem Client
+    // nicht geben: der Handler-Slot 0x462E848 zeigt auf den `return 0`-Stub, es gibt also keinen
+    // Konsumenten, aus dessen Verhalten die Bedeutung ablesbar waere (dieselbe Feststellung steht
+    // an SpellPackets.h / CheatIgnoreDiminishingReturns und in cs_cheat.cpp).
+    // Fuer (a) spricht, WO beide Seiten den DR-Zustand fuehren: der Client fuehrt ihn je
+    // EMPFAENGENDER Einheit (C_SpellDiminish, Ereignis UNIT_SPELL_DIMINISH_CATEGORY_STATE_UPDATED
+    // mit unitTarget + SpellDiminishTrackerInfo, SpellDiminishUIDocumentation.lua), TrinityCore
+    // ebenso (m_Diminishing haengt an der Einheit, die die Aura BEKOMMT). Ein Schalter, der "DR
+    // ignorieren" heisst, liest sich damit naturgemaess als Aussage ueber den DR-Zustand des
+    // Ziels. Das ist ein Argument aus der Datenhaltung, KEIN Beleg fuer die Absicht des Schalters.
+    // Fuer (b) spricht der Nutzen fuer den Anwender: (a) ist fuer ihn ein Nachteil - seine
+    // eigenen Auren werden gekuerzt, waehrend fremde CC auf ihm voll durchlaufen.
+    // Zu entscheiden ist das nur an Blizzards Dev-Client (Schritt 3 der Verifikationsschleife);
+    // bis dahin bleibt die Stelle als Vermutung markiert.
+    if (Player const* targetPlayer = Object::ToPlayer(targetOwner ? targetOwner : this))
+        if (targetPlayer->GetCommandStatus(CHEAT_IGNORE_DIMINISHING_RETURNS))
+            return true;
 
     if (limitDuration > 0 && duration > limitDuration)
     {

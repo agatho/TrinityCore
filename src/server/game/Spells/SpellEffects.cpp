@@ -170,7 +170,7 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectUnused,                                   // 78 SPELL_EFFECT_ATTACK
     &Spell::EffectSanctuary,                                // 79 SPELL_EFFECT_SANCTUARY
     &Spell::EffectNULL,                                     // 80 SPELL_EFFECT_MODIFY_FOLLOWER_ITEM_LEVEL
-    &Spell::EffectNULL,                                     // 81 SPELL_EFFECT_PUSH_ABILITY_TO_ACTION_BAR
+    &Spell::EffectPushAbilityToActionBar,                   // 81 SPELL_EFFECT_PUSH_ABILITY_TO_ACTION_BAR
     &Spell::EffectNULL,                                     // 82 SPELL_EFFECT_BIND_SIGHT
     &Spell::EffectDuel,                                     // 83 SPELL_EFFECT_DUEL
     &Spell::EffectStuck,                                    // 84 SPELL_EFFECT_STUCK
@@ -3394,6 +3394,46 @@ void Spell::EffectActivateObject()
     GameObjectActions action = GameObjectActions(effectInfo->MiscValue);
 
     gameObjTarget->ActivateObject(action, effectInfo->MiscValueB, m_caster, m_spellInfo->Id, int32(effectInfo->EffectIndex));
+}
+
+// SMSG_PUSH_SPELL_TO_ACTION_BAR (0x670044)
+// Blizzards eigener Ausloeser fuer diesen Opcode ist Zaubereffekt 81 - der Name des Effekts und
+// der Name des Opcodes decken sich, und ein zweiter Ausloeser existiert nicht.
+// Der Client sucht sich den Leistenplatz SELBST: SPELL_PUSHED_TO_ACTIONBAR traegt slot und page,
+// beide werden clientseitig aus einem DB2-Datensatz berechnet (Beleg 0x1DE0850,
+// `slot = index + 12 * page`), nicht aus dem Paket. Der Server weist also keinen Platz zu; die
+// Belegung kommt als CMSG_SET_ACTION_BUTTON zurueck und wird ueber character_action persistiert.
+// UNVERIFIED: das uint32 ist aus Paketgroesse (2 Pakete a 4 B) und Opcodename abgeleitet - der
+// Retail-Client hat fuer 0x670044 keinen registrierten Abonnenten (Slot 0x43AA350 = TAGGED(0x1)),
+// also keinen Leser, aus dem sich die Feldbedeutung ablesen liesse.
+//
+// WELCHES Feld des Effekts die zu schiebende Faehigkeit traegt, ist dagegen BELEGT und nicht
+// geraten. Quelle ist SpellEffect.db2 selbst: von den 57 Zeilen mit Effect == 81 fuellen ALLE 57
+// EffectTriggerSpell und lassen EffectMiscValue[0] auf 0 - bitgleich in zwei Builds geprueft
+// (C:/dumps/SpellEffect_68887.csv, 12.0.7.68887, und
+// C:/dumps/overnight_dataquality_68275/db2_cache/SpellEffect.12.0.7.68275.csv, 12.0.7.68275;
+// 57/57 in beiden). Die Zeilen sind auch inhaltlich eindeutig: die Zauber 225860..225886 heissen
+// in SpellName.db2 "Push Active Ability to Bar", und ihr TriggerSpell ist jeweils die Faehigkeit,
+// die geschoben wird - 225860 -> 205223 Consumption, 225862 -> 220143 Apocalypse,
+// 225863 -> 201467 Fury of the Illidari (die Legion-Artefakt-Aktiven).
+// MiscValue traegt die Faehigkeit in KEINER Zeile. Der frueher hier stehende Vorrang-Vergleich
+// "TriggerSpell, sonst MiscValue" war damit nicht nur unbelegt, sondern die einzige Stelle, an der
+// eine falsche ID stumm hinausgehen konnte, und ist ersetzt. Traegt eine Zeile kein TriggerSpell
+// - etwa aus einer eigenen spell_dbc-Aenderung -, geht jetzt NICHTS hinaus statt einer geratenen ID.
+void Spell::EffectPushAbilityToActionBar()
+{
+    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
+        return;
+
+    Player* player = Object::ToPlayer(unitTarget);
+    if (!player)
+        return;
+
+    int32 const spellId = int32(effectInfo->TriggerSpell);
+    if (spellId <= 0)
+        return;
+
+    player->SendDirectMessage(WorldPackets::Spells::PushSpellToActionBar(spellId).Write());
 }
 
 void Spell::EffectApplyGlyph()

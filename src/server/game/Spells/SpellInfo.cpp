@@ -2000,6 +2000,8 @@ int32 SpellInfo::IsAffectedBySpellMod(SpellModifier const* mod) const
     {
         case SPELLMOD_FLAT:
         case SPELLMOD_PCT:
+        case SPELLMOD_FLAT_PVP:
+        case SPELLMOD_PCT_PVP:
         {
             // TEMP: dont use IsAffected - !familyName and !familyFlags are not valid options for spell mods
             // TODO: investigate if the !familyName and !familyFlags conditions are even valid for all other (nonmod) uses of SpellInfo::IsAffected
@@ -2015,6 +2017,10 @@ int32 SpellInfo::IsAffectedBySpellMod(SpellModifier const* mod) const
             return HasLabel(static_cast<SpellFlatModifierByLabel const*>(mod)->value.LabelID) ? 1 : 0;
         case SPELLMOD_LABEL_PCT:
             return HasLabel(static_cast<SpellPctModifierByLabel const*>(mod)->value.LabelID) ? 1 : 0;
+        case SPELLMOD_LABEL_FLAT_PVP:
+            return HasLabel(static_cast<SpellFlatPvpModifierByLabel const*>(mod)->value.LabelID) ? 1 : 0;
+        case SPELLMOD_LABEL_PCT_PVP:
+            return HasLabel(static_cast<SpellPctPvpModifierByLabel const*>(mod)->value.LabelID) ? 1 : 0;
         default:
             break;
     }

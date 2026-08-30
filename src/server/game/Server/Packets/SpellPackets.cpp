@@ -1183,4 +1183,139 @@ void KeyboundOverride::Read()
 {
     _worldPacket >> OverrideID;
 }
+
+// ---------------------------------------------------------------------------
+// Familie 0x67 - Phase A. Belege je Klasse im Header.
+// ---------------------------------------------------------------------------
+
+ByteBuffer& operator<<(ByteBuffer& data, SpellPvpModifier const& spellPvpModifier)
+{
+    // Der einzige Unterschied zum Nicht-PvP-Zwilling: uint32 statt uint8.
+    // Leser 0x68A1D0 (R32 @0x35AF190, Aufruf 0x68A1F5) gegen 0x68A0F0 (R8 @0x35AF050).
+    data << uint32(spellPvpModifier.ModIndex);
+    data << Size<uint32>(spellPvpModifier.ModifierData);
+    for (SpellModifierData const& modData : spellPvpModifier.ModifierData)
+        data << modData;
+
+    return data;
+}
+
+WorldPacket const* SetSpellPvpModifier::Write()
+{
+    _worldPacket << Size<uint32>(Modifiers);
+    for (SpellPvpModifier const& spellMod : Modifiers)
+        _worldPacket << spellMod;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* SpellCategoryCooldown::Write()
+{
+    _worldPacket << int32(Category);
+    _worldPacket << ModCooldown;
+    _worldPacket << float(ModRate);
+    _worldPacket << Bits<1>(IsPet);
+    _worldPacket.FlushBits();
+
+    // Feste 13 B. Referenzpaket 0x670006: 9e040000 905f0100 0000803f 00
+    return &_worldPacket;
+}
+
+WorldPacket const* SpellFailureMessage::Write()
+{
+    _worldPacket << int32(Reason);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ScriptCast::Write()
+{
+    _worldPacket << int32(SpellID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* PushSpellToActionBar::Write()
+{
+    _worldPacket << int32(SpellID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* RemoveSpellFromActionBar::Write()
+{
+    _worldPacket << int32(SpellID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* RestartGlobalCooldown::Write()
+{
+    _worldPacket << CasterGUID;
+    _worldPacket << int32(SpellID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CheatIgnoreDiminishingReturns::Write()
+{
+    _worldPacket << Bits<1>(Enable);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* NotifyDestLocSpellCast::Write()
+{
+    _worldPacket << Caster;
+    _worldPacket << DestTransport;
+    _worldPacket << int32(SpellID);
+    _worldPacket << Visual;
+    _worldPacket << SourceLoc;
+    _worldPacket << DestLoc;
+    _worldPacket << float(Pitch);
+    _worldPacket << float(Speed);
+    _worldPacket << TravelTime;
+    _worldPacket << uint8(CastIndex);
+    _worldPacket << CastID;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* AuraPointsDepleted::Write()
+{
+    _worldPacket << UnitGUID;
+    _worldPacket << uint16(Slot);
+    _worldPacket << uint8(EffectIndex);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ResumeCast::Write()
+{
+    _worldPacket << CasterGUID;
+    _worldPacket << Visual;
+    _worldPacket << CastID;
+    _worldPacket << TargetGUID;
+    _worldPacket << int32(SpellID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ResumeCastBar::Write()
+{
+    _worldPacket << CasterGUID;
+    _worldPacket << TargetGUID;
+    _worldPacket << int32(SpellID);
+    _worldPacket << Visual;
+    _worldPacket << TimeRemaining;
+    _worldPacket << CastTime;
+    _worldPacket << OptionalInit(InterruptImmunities);
+    _worldPacket.FlushBits();
+
+    if (InterruptImmunities)
+        _worldPacket << *InterruptImmunities;
+
+    return &_worldPacket;
+}
 }

@@ -758,6 +758,9 @@ enum RBACPermissions
     // sends that opcode once per world entry (it hangs off the client CVar "TurnSpeed", whose help
     // text says "capped by the server"), so refusing it is the normal case and not an offence.
     RBAC_PERM_CHANGE_TURN_RATE                               = 887,
+    RBAC_PERM_COMMAND_CHEAT_DIMINISHINGRETURNS               = 888,
+    RBAC_PERM_COMMAND_DEBUG_SCRIPTCAST                       = 889,
+    RBAC_PERM_COMMAND_DEBUG_WORLDTEXT                        = 890,
     //
     // IF YOU ADD NEW PERMISSIONS, ADD THEM IN 3.3.5 BRANCH AS WELL!
     //
