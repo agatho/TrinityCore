@@ -92,8 +92,6 @@ TC_GAME_API extern DB2Storage<ConditionalChrModelEntry>             sConditional
 TC_GAME_API extern DB2Storage<ContentTuningEntry>                   sContentTuningStore;
 TC_GAME_API extern DB2Storage<ConversationLineEntry>                sConversationLineStore;
 TC_GAME_API extern DB2Storage<CorruptionEffectsEntry>               sCorruptionEffectsStore;
-TC_GAME_API extern DB2Storage<CovenantEntry>                        sCovenantStore;
-TC_GAME_API extern DB2Storage<RenownRewardsEntry>                   sRenownRewardsStore;
 TC_GAME_API extern DB2Storage<CraftingQualityEntry>                 sCraftingQualityStore;
 TC_GAME_API extern DB2Storage<CreatureDisplayInfoEntry>             sCreatureDisplayInfoStore;
 TC_GAME_API extern DB2Storage<CreatureDisplayInfoExtraEntry>        sCreatureDisplayInfoExtraStore;
@@ -362,8 +360,6 @@ TC_GAME_API extern DB2Storage<WeeklyRewardChestThresholdEntry>      sWeeklyRewar
 TC_GAME_API extern DB2Storage<WorldEffectEntry>                     sWorldEffectStore;
 TC_GAME_API extern DB2Storage<WorldMapOverlayEntry>                 sWorldMapOverlayStore;
 TC_GAME_API extern DB2Storage<WorldStateExpressionEntry>            sWorldStateExpressionStore;
-TC_GAME_API extern DB2Storage<BountyEntry>                          sBountyStore;
-TC_GAME_API extern DB2Storage<BountySetEntry>                       sBountySetStore;
 TC_GAME_API extern DB2Storage<CharShipmentEntry>                    sCharShipmentStore;
 TC_GAME_API extern DB2Storage<CharShipmentContainerEntry>           sCharShipmentContainerStore;
 TC_GAME_API extern DB2Storage<ContributionEntry>                    sContributionStore;
@@ -414,11 +410,6 @@ TC_GAME_API extern DB2Storage<GossipXGarrTalentTreesEntry>          sGossipXGarr
 TC_GAME_API extern DB2Storage<ManagedWorldStateEntry>               sManagedWorldStateStore;
 TC_GAME_API extern DB2Storage<ManagedWorldStateInputEntry>          sManagedWorldStateInputStore;
 TC_GAME_API extern DB2Storage<ManagedWorldStateBuffEntry>           sManagedWorldStateBuffStore;
-TC_GAME_API extern DB2Storage<SoulbindEntry>                        sSoulbindStore;
-TC_GAME_API extern DB2Storage<SoulbindConduitEntry>                 sSoulbindConduitStore;
-TC_GAME_API extern DB2Storage<SoulbindConduitItemEntry>             sSoulbindConduitItemStore;
-TC_GAME_API extern DB2Storage<SoulbindConduitRankEntry>             sSoulbindConduitRankStore;
-TC_GAME_API extern DB2Storage<SoulbindConduitRankPropertiesEntry>   sSoulbindConduitRankPropertiesStore;
 TC_GAME_API extern DB2Storage<TrophyEntry>                          sTrophyStore;
 TC_GAME_API extern DB2Storage<DelvesSeasonXSpellEntry>              sDelvesSeasonXSpellStore;
 TC_GAME_API extern DB2Storage<PlayerCompanionInfoEntry>             sPlayerCompanionInfoStore;

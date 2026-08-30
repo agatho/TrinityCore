@@ -1119,44 +1119,7 @@ struct CorruptionEffectsEntry
     int32 Flags;
 };
 
-struct RenownRewardsEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
-    LocalizedString ToastDescription;
-    int32 CovenantID;
-    int32 Level;
-    int32 Icon;
-    int32 Flags;
-    int32 UiOrder;
-    int32 ItemID;
-    int32 SpellID;
-    int32 MountID;
-    int32 TransmogID;
-    int32 TransmogSetID;
-    int32 CharTitlesID;
-    int32 GarrFollowerID;
-    int32 TransmogIllusionID;
-    int32 Field_12_0_0_63534_016;
-    int32 QuestID;
-    int32 PlayerConditionID;
-};
 
-struct CovenantEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    LocalizedString Description;
-    int32 BountySetID;
-    int32 SkillLineID;
-    int32 DeathTeleportSpellID;
-    int32 Field_9_0_2_36165_006;
-    int32 Field_9_0_2_36165_007;
-    int32 FactionID;
-    int32 CurrencyTypesID;
-    int32 RequiredPlayerConditionID;
-};
 
 struct CraftingQualityEntry
 {
@@ -5543,22 +5506,7 @@ struct WorldStateExpressionEntry
 };
 
 #pragma pack(pop)
-struct BountyEntry
-{
-    uint32 ID;
-    int32 QuestID;
-    uint16 FactionID;
-    uint32 IconFileDataID;
-    uint32 TurninPlayerConditionID;
-    int32 BountySetID;
-};
 
-struct BountySetEntry
-{
-    uint32 ID;
-    uint32 VisiblePlayerConditionID;
-    int32 LockedQuestID;
-};
 
 struct CharShipmentEntry
 {
@@ -6099,40 +6047,9 @@ struct ManagedWorldStateBuffEntry
     int32 ManagedWorldStateID;
 };
 
-struct SoulbindEntry
-{
-    uint32 ID;
-    LocalizedString Name;
-    int32 CovenantID;
-    int32 GarrTalentTreeID;
-    int32 CreatureID;
-    int32 GarrFollowerID;
-    int32 PlayerConditionID;
-};
 
-struct SoulbindConduitEntry
-{
-    uint32 ID;
-    uint8 ConduitType;
-    int32 CovenantID;
-    int32 SpecSetID;
-    int32 Flags;
-};
 
-struct SoulbindConduitItemEntry
-{
-    uint32 ID;
-    int32 ItemID;
-    int32 ConduitID;
-};
 
-struct SoulbindConduitRankPropertiesEntry
-{
-    uint32 ID;
-    int32 Rank;
-    int32 ItemLevel;
-    int8 QualityID;
-};
 
 struct TrophyEntry
 {

@@ -122,8 +122,6 @@ DB2Storage<ContentTuningXExpectedEntry>         sContentTuningXExpectedStore("Co
 DB2Storage<ContentTuningXLabelEntry>            sContentTuningXLabelStore("ContentTuningXLabel.db2", &ContentTuningXLabelLoadInfo::Instance);
 DB2Storage<ConversationLineEntry>               sConversationLineStore("ConversationLine.db2", &ConversationLineLoadInfo::Instance);
 DB2Storage<CorruptionEffectsEntry>              sCorruptionEffectsStore("CorruptionEffects.db2", &CorruptionEffectsLoadInfo::Instance);
-DB2Storage<CovenantEntry>                       sCovenantStore("Covenant.db2", &CovenantLoadInfo::Instance);
-DB2Storage<RenownRewardsEntry>                  sRenownRewardsStore("RenownRewards.db2", &RenownRewardsLoadInfo::Instance);
 DB2Storage<CraftingQualityEntry>                sCraftingQualityStore("CraftingQuality.db2", &CraftingQualityLoadInfo::Instance);
 DB2Storage<CreatureDisplayInfoEntry>            sCreatureDisplayInfoStore("CreatureDisplayInfo.db2", &CreatureDisplayInfoLoadInfo::Instance);
 DB2Storage<CreatureDisplayInfoExtraEntry>       sCreatureDisplayInfoExtraStore("CreatureDisplayInfoExtra.db2", &CreatureDisplayInfoExtraLoadInfo::Instance);
@@ -440,8 +438,6 @@ DB2Storage<WMOAreaTableEntry>                   sWMOAreaTableStore("WMOAreaTable
 DB2Storage<WorldEffectEntry>                    sWorldEffectStore("WorldEffect.db2", &WorldEffectLoadInfo::Instance);
 DB2Storage<WorldMapOverlayEntry>                sWorldMapOverlayStore("WorldMapOverlay.db2", &WorldMapOverlayLoadInfo::Instance);
 DB2Storage<WorldStateExpressionEntry>           sWorldStateExpressionStore("WorldStateExpression.db2", &WorldStateExpressionLoadInfo::Instance);
-DB2Storage<BountyEntry>                          sBountyStore("Bounty.db2", &BountyLoadInfo::Instance);
-DB2Storage<BountySetEntry>                       sBountySetStore("BountySet.db2", &BountySetLoadInfo::Instance);
 DB2Storage<CharShipmentEntry>                   sCharShipmentStore("CharShipment.db2", &CharShipmentLoadInfo::Instance);
 DB2Storage<CharShipmentContainerEntry>          sCharShipmentContainerStore("CharShipmentContainer.db2", &CharShipmentContainerLoadInfo::Instance);
 DB2Storage<ContributionEntry>                   sContributionStore("Contribution.db2", &ContributionLoadInfo::Instance);
@@ -492,10 +488,6 @@ DB2Storage<GarrTypeEntry>                       sGarrTypeStore("GarrType.db2", &
 DB2Storage<GarrUiAnimClassInfoEntry>           sGarrUiAnimClassInfoStore("GarrUiAnimClassInfo.db2", &GarrUiAnimClassInfoLoadInfo::Instance);
 DB2Storage<GarrUiAnimRaceInfoEntry>            sGarrUiAnimRaceInfoStore("GarrUiAnimRaceInfo.db2", &GarrUiAnimRaceInfoLoadInfo::Instance);
 DB2Storage<GossipXGarrTalentTreesEntry>         sGossipXGarrTalentTreesStore("GossipXGarrTalentTrees.db2", &GossipXGarrTalentTreesLoadInfo::Instance);
-DB2Storage<SoulbindEntry>                       sSoulbindStore("Soulbind.db2", &SoulbindLoadInfo::Instance);
-DB2Storage<SoulbindConduitEntry>                sSoulbindConduitStore("SoulbindConduit.db2", &SoulbindConduitLoadInfo::Instance);
-DB2Storage<SoulbindConduitItemEntry>            sSoulbindConduitItemStore("SoulbindConduitItem.db2", &SoulbindConduitItemLoadInfo::Instance);
-DB2Storage<SoulbindConduitRankPropertiesEntry>  sSoulbindConduitRankPropertiesStore("SoulbindConduitRankProperties.db2", &SoulbindConduitRankPropertiesLoadInfo::Instance);
 DB2Storage<TrophyEntry>                         sTrophyStore("Trophy.db2", &TrophyLoadInfo::Instance);
 DB2Storage<DelvesSeasonXSpellEntry>             sDelvesSeasonXSpellStore("DelvesSeasonXSpell.db2", &DelvesSeasonXSpellLoadInfo::Instance);
 DB2Storage<PlayerCompanionInfoEntry>            sPlayerCompanionInfoStore("PlayerCompanionInfo.db2", &PlayerCompanionInfoLoadInfo::Instance);
@@ -929,8 +921,6 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sContentTuningXLabelStore);
     LOAD_DB2(sConversationLineStore);
     LOAD_DB2(sCorruptionEffectsStore);
-    LOAD_DB2(sCovenantStore);
-    LOAD_DB2(sRenownRewardsStore);
     LOAD_DB2(sCraftingQualityStore);
     LOAD_DB2(sCreatureDisplayInfoStore);
     LOAD_DB2(sCreatureDisplayInfoExtraStore);
@@ -1247,8 +1237,6 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sWorldEffectStore);
     LOAD_DB2(sWorldMapOverlayStore);
     LOAD_DB2(sWorldStateExpressionStore);
-    LOAD_DB2(sBountyStore);
-    LOAD_DB2(sBountySetStore);
     LOAD_DB2(sCharShipmentStore);
     LOAD_DB2(sCharShipmentContainerStore);
     LOAD_DB2(sContributionStore);
@@ -1299,10 +1287,6 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sGarrUiAnimClassInfoStore);
     LOAD_DB2(sGarrUiAnimRaceInfoStore);
     LOAD_DB2(sGossipXGarrTalentTreesStore);
-    LOAD_DB2(sSoulbindStore);
-    LOAD_DB2(sSoulbindConduitStore);
-    LOAD_DB2(sSoulbindConduitItemStore);
-    LOAD_DB2(sSoulbindConduitRankPropertiesStore);
     LOAD_DB2(sTrophyStore);
     LOAD_DB2(sDelvesSeasonXSpellStore);
     LOAD_DB2(sPlayerCompanionInfoStore);

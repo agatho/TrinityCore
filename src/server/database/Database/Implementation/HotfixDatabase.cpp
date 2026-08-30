@@ -528,10 +528,6 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_CORRUPTION_EFFECTS, "SELECT MAX(ID) + 1 FROM corruption_effects", CONNECTION_SYNCH);
 
     // Covenant.db2
-    PrepareStatement(HOTFIX_SEL_COVENANT, "SELECT ID, Name, Description, BountySetID, SkillLineID, DeathTeleportSpellID, "
-        "Field_9_0_2_36165_006, Field_9_0_2_36165_007, FactionID, CurrencyTypesID, RequiredPlayerConditionID FROM covenant"
-        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
-    PREPARE_MAX_ID_STMT(HOTFIX_SEL_COVENANT, "SELECT MAX(ID) + 1 FROM covenant", CONNECTION_SYNCH);
 
     // CraftingQuality.db2
     PrepareStatement(HOTFIX_SEL_CRAFTING_QUALITY, "SELECT ID, QualityTier, CraftingQualityAtlasSetID FROM crafting_quality"
@@ -1596,10 +1592,6 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_RAND_PROP_POINTS, "SELECT MAX(ID) + 1 FROM rand_prop_points", CONNECTION_SYNCH);
 
     // RenownRewards.db2
-    PrepareStatement(HOTFIX_SEL_RENOWN_REWARDS, "SELECT ID, Name, Description, ToastDescription, CovenantID, Level, Icon, Flags, UiOrder, "
-        "ItemID, SpellID, MountID, TransmogID, TransmogSetID, CharTitlesID, GarrFollowerID, TransmogIllusionID, Field_12_0_0_63534_016, "
-        "QuestID, PlayerConditionID FROM renown_rewards WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
-    PREPARE_MAX_ID_STMT(HOTFIX_SEL_RENOWN_REWARDS, "SELECT MAX(ID) + 1 FROM renown_rewards", CONNECTION_SYNCH);
 
     // RewardPack.db2
     PrepareStatement(HOTFIX_SEL_REWARD_PACK, "SELECT ID, CharTitleID, Money, ArtifactXPDifficulty, ArtifactXPMultiplier, ArtifactXPCategoryID, "
@@ -2347,12 +2339,6 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     // WorldStateExpression.db2
     PrepareStatement(HOTFIX_SEL_WORLD_STATE_EXPRESSION, "SELECT ID, Expression FROM world_state_expression WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_WORLD_STATE_EXPRESSION, "SELECT MAX(ID) + 1 FROM world_state_expression", CONNECTION_SYNCH);
-    PrepareStatement(HOTFIX_SEL_BOUNTY, "SELECT ID, QuestID, FactionID, IconFileDataID, TurninPlayerConditionID, BountySetID FROM bounty"
-        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
-    PREPARE_MAX_ID_STMT(HOTFIX_SEL_BOUNTY, "SELECT MAX(ID) + 1 FROM bounty", CONNECTION_SYNCH);
-    PrepareStatement(HOTFIX_SEL_BOUNTY_SET, "SELECT ID, VisiblePlayerConditionID, LockedQuestID FROM bounty_set"
-        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
-    PREPARE_MAX_ID_STMT(HOTFIX_SEL_BOUNTY_SET, "SELECT MAX(ID) + 1 FROM bounty_set", CONNECTION_SYNCH);
     PrepareStatement(HOTFIX_SEL_CHAR_SHIPMENT, "SELECT ID, ContainerID, TreasureID, DummyItemID, Duration, SpellID, OnCompleteSpellID,"
         " MaxShipments, GarrFollowerID, Flags FROM char_shipment WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_CHAR_SHIPMENT, "SELECT MAX(ID) + 1 FROM char_shipment", CONNECTION_SYNCH);
@@ -2537,20 +2523,8 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PrepareStatement(HOTFIX_SEL_GOSSIP_X_GARR_TALENT_TREES, "SELECT ID, GarrTalentTreeID, GossipID"
         " FROM gossip_x_garr_talent_trees WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_GOSSIP_X_GARR_TALENT_TREES, "SELECT MAX(ID) + 1 FROM gossip_x_garr_talent_trees", CONNECTION_SYNCH);
-    PrepareStatement(HOTFIX_SEL_SOULBIND, "SELECT ID, Name, CovenantID, GarrTalentTreeID, CreatureID, GarrFollowerID, "
-        "PlayerConditionID FROM soulbind WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
-    PREPARE_MAX_ID_STMT(HOTFIX_SEL_SOULBIND, "SELECT MAX(ID) + 1 FROM soulbind", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_SOULBIND, "SELECT ID, Name_lang FROM soulbind_locale"
         " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
-    PrepareStatement(HOTFIX_SEL_SOULBIND_CONDUIT, "SELECT ID, ConduitType, CovenantID, SpecSetID, Flags FROM soulbind_conduit"
-        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
-    PREPARE_MAX_ID_STMT(HOTFIX_SEL_SOULBIND_CONDUIT, "SELECT MAX(ID) + 1 FROM soulbind_conduit", CONNECTION_SYNCH);
-    PrepareStatement(HOTFIX_SEL_SOULBIND_CONDUIT_ITEM, "SELECT ID, ItemID, ConduitID FROM soulbind_conduit_item"
-        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
-    PREPARE_MAX_ID_STMT(HOTFIX_SEL_SOULBIND_CONDUIT_ITEM, "SELECT MAX(ID) + 1 FROM soulbind_conduit_item", CONNECTION_SYNCH);
-    PrepareStatement(HOTFIX_SEL_SOULBIND_CONDUIT_RANK_PROPERTIES, "SELECT ID, `Rank`, ItemLevel, QualityID FROM soulbind_conduit_rank_properties"
-        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
-    PREPARE_MAX_ID_STMT(HOTFIX_SEL_SOULBIND_CONDUIT_RANK_PROPERTIES, "SELECT MAX(ID) + 1 FROM soulbind_conduit_rank_properties", CONNECTION_SYNCH);
     PrepareStatement(HOTFIX_SEL_TROPHY, "SELECT ID, Name, TrophyTypeID, GameObjectDisplayInfoID, PlayerConditionID FROM trophy"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_TROPHY, "SELECT MAX(ID) + 1 FROM trophy", CONNECTION_SYNCH);
