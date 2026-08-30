@@ -812,6 +812,16 @@ void WorldSession::HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceRespons
         playerChoice, playerChoiceResponse, choiceResponse.ResponseIdentifier);
 }
 
+void WorldSession::HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& /*closeQuestChoice*/)
+{
+    // The player dismissed the PlayerChoice UI. If a PlayerChoice interaction is active, end it so a late/duplicate
+    // CMSG_CHOICE_RESPONSE can no longer be honoured against it (HandlePlayerChoiceResponse requires an active
+    // GetPlayerChoice()). Leave any other interaction type untouched.
+    InteractionData& interaction = _player->PlayerTalkClass->GetInteractionData();
+    if (interaction.Type == PlayerInteractionType::PlayerChoice)
+        interaction.Reset();
+}
+
 void WorldSession::HandleUiMapQuestLinesRequest(WorldPackets::Quest::UiMapQuestLinesRequest& uiMapQuestLinesRequest)
 {
     UiMapEntry const* uiMap = sUiMapStore.LookupEntry(uiMapQuestLinesRequest.UiMapID);
