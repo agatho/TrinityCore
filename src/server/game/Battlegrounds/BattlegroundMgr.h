@@ -124,6 +124,8 @@ class TC_GAME_API BattlegroundMgr
         /* Battlegrounds */
         Battleground* GetBattleground(uint32 InstanceID, BattlegroundTypeId bgTypeId);
         Battleground* CreateNewBattleground(BattlegroundQueueTypeId queueId, BattlegroundBracketId bracketId);
+        void GetActiveArenas(std::vector<Battleground*>& arenas) const;    // all in-progress arena instances (commentator/spectator)
+        BattlegroundTypeId GetRandomBG(BattlegroundTypeId id);             // resolve a BattlemasterList id to a concrete bg/arena template
 
         void AddBattleground(Battleground* bg);
         void AddToBGFreeSlotQueue(Battleground* bg);

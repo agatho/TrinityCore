@@ -41,6 +41,7 @@
 #include "ClientConfigPackets.h"
 #include "CollectionPackets.h"
 #include "CombatLogPackets.h"
+#include "CommentatorPackets.h"
 #include "CombatPackets.h"
 #include "ContentTrackingPackets.h"
 #include "ContributionPackets.h"

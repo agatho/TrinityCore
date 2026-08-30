@@ -432,6 +432,16 @@ namespace WorldPackets
         class ActivateSoulbind;
         class RequestCovenantCallings;
         class CovenantRenownRequestCatchupState;
+    namespace Commentator
+    {
+        class CommentatorEnable;
+        class CommentatorGetMapInfo;
+        class CommentatorEnterInstance;
+        class CommentatorExitInstance;
+        class CommentatorSpectate;
+        class CommentatorGetPlayerInfo;
+        class CommentatorGetPlayerCooldowns;
+        class CommentatorStartWargame;
     }
 
     namespace Duel
@@ -2628,6 +2638,18 @@ class TC_GAME_API WorldSession
         void HandleCloseTraitSystemInteraction(WorldPackets::Misc::CloseTraitSystemInteraction& closeTraitSystemInteraction);
         void HandleContributionContribute(WorldPackets::Contribution::ContributionContribute& contribute);
         void HandleContributionLastUpdateRequest(WorldPackets::Contribution::ContributionLastUpdateRequest& request);
+
+        // Commentator (spectator) mode
+        void HandleCommentatorEnable(WorldPackets::Commentator::CommentatorEnable& packet);
+        void HandleCommentatorGetMapInfo(WorldPackets::Commentator::CommentatorGetMapInfo& getMapInfo);
+        void HandleCommentatorEnterInstance(WorldPackets::Commentator::CommentatorEnterInstance& enterInstance);
+        void HandleCommentatorExitInstance(WorldPackets::Commentator::CommentatorExitInstance& exitInstance);
+        void HandleCommentatorSpectate(WorldPackets::Commentator::CommentatorSpectate& spectate);
+        void HandleCommentatorGetPlayerInfo(WorldPackets::Commentator::CommentatorGetPlayerInfo& getPlayerInfo);
+        void HandleCommentatorGetPlayerCooldowns(WorldPackets::Commentator::CommentatorGetPlayerCooldowns& getPlayerCooldowns);
+        void HandleCommentatorStartWargame(WorldPackets::Commentator::CommentatorStartWargame& startWargame);
+        bool IsCommentator() const { return _isCommentator; }
+        void SetCommentator(bool on) { _isCommentator = on; }
         void HandleConversationLineStarted(WorldPackets::Misc::ConversationLineStarted& conversationLineStarted);
         void HandleKeyboundOverride(WorldPackets::Spells::KeyboundOverride& keyboundOverride);
         void HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownTimer& queryCountdownTimer);
@@ -3009,6 +3031,7 @@ class TC_GAME_API WorldSession
         bool _sentGarrisonLoginPrologue = false;
         uint32 recruiterId;
         bool isRecruiter;
+        bool _isCommentator = false;                        // account is currently in commentator (spectator) mode
         LockedQueue<WorldPacket*> _recvQueue;
         rbac::RBACData* _RBACData;
         uint32 expireTime;

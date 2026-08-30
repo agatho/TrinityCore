@@ -761,6 +761,7 @@ enum RBACPermissions
     RBAC_PERM_COMMAND_CHEAT_DIMINISHINGRETURNS               = 888,
     RBAC_PERM_COMMAND_DEBUG_SCRIPTCAST                       = 889,
     RBAC_PERM_COMMAND_DEBUG_WORLDTEXT                        = 890,
+    RBAC_PERM_USE_COMMENTATOR_MODE                           = 891,
     //
     // IF YOU ADD NEW PERMISSIONS, ADD THEM IN 3.3.5 BRANCH AS WELL!
     //

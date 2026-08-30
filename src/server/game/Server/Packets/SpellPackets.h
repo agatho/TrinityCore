@@ -626,6 +626,8 @@ namespace WorldPackets
             Optional<int32> CategoryRecoveryTimeStartOffset;
         };
 
+        ByteBuffer& operator<<(ByteBuffer& data, SpellHistoryEntry const& historyEntry);
+
         class SendSpellHistory final : public ServerPacket
         {
         public:
@@ -691,6 +693,8 @@ namespace WorldPackets
             float ChargeModRate = 1.0f;
             uint8 ConsumedCharges = 0;
         };
+
+        ByteBuffer& operator<<(ByteBuffer& data, SpellChargeEntry const& chargeEntry);
 
         class SendSpellCharges final : public ServerPacket
         {
