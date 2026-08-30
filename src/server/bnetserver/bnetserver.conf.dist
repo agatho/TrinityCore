@@ -149,6 +149,19 @@ ProcessPriority = 0
 RealmsStateUpdateDelay = 10
 
 #
+#    BattlenetDiscord.Enabled
+#        Description: Enable the Discord account-link store (client 12.1.0). When enabled the
+#                     bnetserver keeps per-account Discord identities that an external linker
+#                     populates and that a future 12.1 wire implementation publishes via the
+#                     Battle.net presence external-identity path. There is no dedicated Discord
+#                     BNet RPC service in the client; the server/channel attribute wire is past
+#                     the current offline RE ceiling and is NOT published yet. Inert by default.
+#        Default:     0 - disabled
+#                     1 - enabled
+
+BattlenetDiscord.Enabled = 0
+
+#
 #    WrongPass.MaxCount
 #        Description: Number of login attempts with wrong password before the account or IP will be
 #                     banned.

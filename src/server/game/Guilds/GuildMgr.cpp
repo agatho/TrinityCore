@@ -394,6 +394,40 @@ void GuildMgr::LoadGuilds()
         }
     }
 
+    // 8b. Load Discord integration settings (12.1.0)
+    TC_LOG_INFO("server.loading", "Loading guild Discord settings...");
+    {
+        uint32 oldMSTime = getMSTime();
+
+        // Delete orphaned rows before loading valid ones
+        CharacterDatabase.DirectExecute("DELETE gds FROM guild_discord_settings gds LEFT JOIN guild g ON gds.guildId = g.guildId WHERE g.guildId IS NULL");
+
+                                                     //         0        1         2               3
+        QueryResult result = CharacterDatabase.Query("SELECT guildid, settings, discordGuildId, discordChannelId FROM guild_discord_settings");
+
+        if (!result)
+        {
+            TC_LOG_INFO("server.loading", ">> Loaded 0 guild Discord settings. DB table `guild_discord_settings` is empty.");
+        }
+        else
+        {
+            uint32 count = 0;
+            do
+            {
+                Field* fields = result->Fetch();
+                uint64 guildId = fields[0].GetUInt64();
+
+                if (Guild* guild = GetGuildById(guildId))
+                    guild->LoadDiscordSettingsFromDB(fields);
+
+                ++count;
+            }
+            while (result->NextRow());
+
+            TC_LOG_INFO("server.loading", ">> Loaded {} guild Discord settings in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
+        }
+    }
+
     // 9. Fill all guild bank tabs
     TC_LOG_INFO("server.loading", "Filling bank tabs with items...");
     {

@@ -6543,6 +6543,12 @@ enum ChatMsg : int32
     CHAT_MSG_VOICE_TEXT                         = 0x42,
     CHAT_MSG_PING                               = 0x43,
     CHAT_MSG_ENCOUNTER_EVENT                    = 0x44,
+    // 12.1.0 (build 69299) Discord integration: guild chat line bridged from a linked Discord
+    // server/channel. Value 0x45 recovered from the 69299 client enum-reflection table
+    // (data:0x3E09200 {value,name} pairs); every neighbor matches this enum exactly.
+    // Purely additive over 68275 (whose max is 0x44) - never sent to a pre-12.1 client
+    // (Guild::SendGuildDiscordMessage is gated on Guild.DiscordBridge.Enabled).
+    CHAT_MSG_GUILD_DISCORD                      = 0x45,
 
     MAX_CHAT_MSG_TYPE
 };

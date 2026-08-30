@@ -65,6 +65,7 @@
 #include "GitRevision.h"
 #include "GridNotifiersImpl.h"
 #include "GroupMgr.h"
+#include "DiscordBridge.h"
 #include "GuildMgr.h"
 #include "IPLocation.h"
 #include "InstanceEncounterTimeline.h"
@@ -1917,6 +1918,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Guilds...");
     sGuildMgr->LoadGuilds();
 
+    TC_LOG_INFO("server.loading", "Initializing Discord bridge...");
+    sDiscordBridge->LoadConfig();
+
     TC_LOG_INFO("server.loading", "Loading ArenaTeams...");
     sArenaTeamMgr->LoadArenaTeams();
 
@@ -2592,6 +2596,9 @@ void World::Update(uint32 diff)
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update world scripts"));
         sScriptMgr->OnWorldUpdate(diff);
     }
+
+    // Deliver any messages the Discord bridge received on its I/O thread as guild chat lines.
+    sDiscordBridge->Update();
 
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update metrics"));

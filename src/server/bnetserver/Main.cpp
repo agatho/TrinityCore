@@ -34,6 +34,7 @@
 #include "IPLocation.h"
 #include "IpNetwork.h"
 #include "Locales.h"
+#include "DiscordLinkStore.h"
 #include "LoginRESTService.h"
 #include "Memory.h"
 #include "MySQLThreading.h"
@@ -199,6 +200,9 @@ int main(int argc, char** argv)
         return 0;
 
     sSecretMgr->Initialize(SECRET_OWNER_BNETSERVER);
+
+    // Initialize Discord account-link store (12.1.0 seam; inert unless BattlenetDiscord.Enabled)
+    sDiscordLinkStore->LoadConfig();
 
     // Load IP Location Database
     sIPLocation->Load();

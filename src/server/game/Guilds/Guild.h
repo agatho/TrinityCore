@@ -21,6 +21,7 @@
 #include "Common.h"
 #include "DatabaseEnvFwd.h"
 #include "DBCEnums.h"
+#include "DiscordDefines.h"
 #include "ObjectGuid.h"
 #include "Optional.h"
 #include "RaceMask.h"
@@ -824,7 +825,20 @@ class TC_GAME_API Guild
         void LoadBankTabFromDB(Field* fields);
         bool LoadBankEventLogFromDB(Field* fields);
         bool LoadBankItemFromDB(Field* fields);
+        void LoadDiscordSettingsFromDB(Field* fields);
         bool Validate();
+
+        // Discord integration (12.1.0). Per-guild link to a Discord server/channel + settings
+        // bitmask (see DiscordGuildSettings). Persisted in `guild_discord_settings`.
+        uint32 GetDiscordSettings() const { return m_discordSettings; }
+        bool IsDiscordSettingSet(uint32 flag) const { return (m_discordSettings & flag) != 0; }
+        void SetDiscordSetting(uint32 flag, bool set);
+        DiscordUserId GetDiscordGuildId() const { return m_discordGuildId; }     // linked Discord server id
+        DiscordUserId GetDiscordChannelId() const { return m_discordChannelId; } // linked Discord channel id
+        void SetDiscordLink(DiscordUserId discordGuildId, DiscordUserId discordChannelId);
+        // Delivers a Discord-bridged line to online guild members as CHAT_MSG_GUILD_DISCORD.
+        // Gated by the Discord bridge being enabled; never reaches a pre-12.1 client otherwise.
+        void SendGuildDiscordMessage(std::string_view senderName, std::string_view message, DiscordUserId senderDiscordId = 0) const;
 
         // Broadcasts
         void BroadcastToGuild(WorldSession* session, bool officerOnly, std::string_view msg, uint32 language = LANG_UNIVERSAL) const;
@@ -892,6 +906,11 @@ class TC_GAME_API Guild
         EmblemInfo m_emblemInfo;
         uint32 m_accountsNumber;
         uint64 m_bankMoney;
+
+        // Discord integration (12.1.0)
+        uint32 m_discordSettings = DISCORD_GUILD_SETTING_NONE;
+        DiscordUserId m_discordGuildId = 0;
+        DiscordUserId m_discordChannelId = 0;
 
         std::vector<RankInfo> m_ranks;
         std::unordered_map<ObjectGuid, Member> m_members;

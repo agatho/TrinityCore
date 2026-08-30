@@ -30,6 +30,7 @@
 #include "Config.h"
 #include "DB2Stores.h"
 #include "DatabaseEnv.h"
+#include "DiscordBridge.h"
 #include "GameTime.h"
 #include "GuildMgr.h"
 #include "GuildPackets.h"
@@ -1259,6 +1260,10 @@ void Guild::Disband()
     trans->Append(stmt);
 
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_GUILD_EVENTLOGS);
+    stmt->setUInt64(0, m_id);
+    trans->Append(stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_GUILD_DISCORD_SETTINGS);
     stmt->setUInt64(0, m_id);
     trans->Append(stmt);
 
@@ -2727,6 +2732,65 @@ bool Guild::Validate()
 bool Guild::HasChatRankRight(Player const* player, bool officerOnly) const
 {
     return _HasRankRight(player, officerOnly ? GR_RIGHT_OFFCHATSPEAK : GR_RIGHT_GCHATSPEAK);
+void Guild::LoadDiscordSettingsFromDB(Field* fields)
+{
+    // fields: 0 guildid, 1 settings, 2 discordGuildId, 3 discordChannelId
+    m_discordSettings = fields[1].GetUInt32() & DISCORD_GUILD_SETTING_MASK;
+    m_discordGuildId = fields[2].GetUInt64();
+    m_discordChannelId = fields[3].GetUInt64();
+}
+
+void Guild::SetDiscordSetting(uint32 flag, bool set)
+{
+    flag &= DISCORD_GUILD_SETTING_MASK;
+    if (set)
+        m_discordSettings |= flag;
+    else
+        m_discordSettings &= ~flag;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_GUILD_DISCORD_SETTINGS);
+    stmt->setUInt64(0, m_id);
+    stmt->setUInt32(1, m_discordSettings);
+    stmt->setUInt64(2, m_discordGuildId);
+    stmt->setUInt64(3, m_discordChannelId);
+    CharacterDatabase.Execute(stmt);
+}
+
+void Guild::SetDiscordLink(DiscordUserId discordGuildId, DiscordUserId discordChannelId)
+{
+    m_discordGuildId = discordGuildId;
+    m_discordChannelId = discordChannelId;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_GUILD_DISCORD_SETTINGS);
+    stmt->setUInt64(0, m_id);
+    stmt->setUInt32(1, m_discordSettings);
+    stmt->setUInt64(2, m_discordGuildId);
+    stmt->setUInt64(3, m_discordChannelId);
+    CharacterDatabase.Execute(stmt);
+}
+
+void Guild::SendGuildDiscordMessage(std::string_view senderName, std::string_view message, DiscordUserId senderDiscordId) const
+{
+    // The Discord bridge is the only producer of this chat type. Keeping the gate here means a
+    // 68275 (pre-12.1) client - whose ChatMsg tops out at 0x44 - never receives 0x45.
+    if (!sDiscordBridge->IsEnabled())
+        return;
+
+    WorldPackets::Chat::Chat packet;
+    packet.SlashCmd = CHAT_MSG_GUILD_DISCORD;
+    packet._Language = LANG_UNIVERSAL;
+    packet.SenderGuildGUID = GetGUID();
+    packet.SenderName = std::string(senderName);
+    packet.FakeSenderName = true;       // sender is a Discord user, not a WoW object
+    packet.ChatText = std::string(message);
+    packet.HideChatLog = false;
+    (void)senderDiscordId;              // reserved: real bridge may map to a BNet external identity
+    WorldPacket const* data = packet.Write();
+
+    for (auto const& [guid, member] : m_members)
+        if (Player* player = member.FindConnectedPlayer())
+            if (player->GetSession() && _HasRankRight(player, GR_RIGHT_GCHATLISTEN))
+                player->SendDirectMessage(data);
 }
 
 void Guild::BroadcastToGuild(WorldSession* session, bool officerOnly, std::string_view msg, uint32 language) const
@@ -2741,6 +2805,11 @@ void Guild::BroadcastToGuild(WorldSession* session, bool officerOnly, std::strin
                 if (player->GetSession() && _HasRankRight(player, officerOnly ? GR_RIGHT_OFFCHATLISTEN : GR_RIGHT_GCHATLISTEN) &&
                     !player->GetSocial()->HasIgnore(session->GetPlayer()->GetGUID(), session->GetAccountGUID()))
                     player->SendDirectMessage(data);
+
+        // Mirror guild (not officer) chat out to the linked Discord channel. No-op unless the
+        // bridge is enabled with a real provider (Guild.DiscordBridge.ForwardGuildChat).
+        if (!officerOnly)
+            sDiscordBridge->ForwardGuildChat(m_id, session->GetPlayer()->GetName(), msg);
     }
 }
 

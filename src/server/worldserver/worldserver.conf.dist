@@ -1563,6 +1563,81 @@ Guild.BankEventLogRecordsCount = 25
 Guild.NewsLogRecordsCount = 250
 
 #
+#    Guild.DiscordBridge.Enabled
+#        Description: Master switch for the Discord <-> guild-chat bridge (client 12.1.0).
+#                     When enabled AND a bot token is set below, the server connects to the
+#                     Discord HTTP API and runs a real two-way guild-chat bridge: Discord
+#                     messages surface in guild chat as CHAT_MSG_GUILD_DISCORD (value 0x45),
+#                     and (if ForwardGuildChat = 1) guild chat is mirrored to Discord.
+#                     With the switch on but no bot token / no linked channel, the bridge
+#                     stays an honest no-op.
+#                     Per-guild channel links live in the guild_discord_settings table
+#                     (discordChannelId). NOTE: CHAT_MSG_GUILD_DISCORD is a 12.1 client chat
+#                     type; do not enable against a pre-12.1 client.
+#        Default:     0 - disabled
+#                     1 - enabled
+
+Guild.DiscordBridge.Enabled = 0
+
+#
+#    Guild.DiscordBridge.ForwardGuildChat
+#        Description: When the bridge is enabled, also mirror in-game guild chat lines out to
+#                     the linked Discord channel via the registered provider. No effect with
+#                     the default no-op provider.
+#        Default:     0 - do not forward
+#                     1 - forward guild chat to Discord
+
+Guild.DiscordBridge.ForwardGuildChat = 0
+
+#
+#    Guild.DiscordBridge.BotToken
+#        Description: Discord bot token used for the connection (sent as "Authorization: Bot
+#                     <token>"). Create a bot at https://discord.com/developers, enable the
+#                     "Message Content Intent", invite it to your server with the "View
+#                     Channel", "Send Messages" and "Read Message History" permissions, then
+#                     paste its token here. Empty = bridge runs as a no-op even if enabled.
+#                     Keep this secret.
+#        Default:     "" - no token (no-op)
+
+Guild.DiscordBridge.BotToken = ""
+
+#
+#    Guild.DiscordBridge.ApiHost
+#        Description: Discord API host to connect to (TLS, port 443). Only change this to route
+#                     through a proxy that speaks the Discord REST API.
+#        Default:     "discord.com"
+
+Guild.DiscordBridge.ApiHost = "discord.com"
+
+#
+#    Guild.DiscordBridge.PollIntervalMs
+#        Description: How often (milliseconds) each linked channel is polled for new inbound
+#                     Discord messages. Lower = snappier bridge, more API calls. Discord's rate
+#                     limits are generous for a single channel; 2000-5000 ms is a good range.
+#        Default:     3000
+
+Guild.DiscordBridge.PollIntervalMs = 3000
+
+#
+#    Guild.DiscordBridge.VerifyCertificate
+#        Description: Verify Discord's TLS certificate chain. Leave enabled. If verification
+#                     fails on your platform (no system CA store), point CaBundle at a PEM file
+#                     instead of disabling this.
+#        Default:     1 - verify (recommended)
+#                     0 - do not verify (insecure)
+
+Guild.DiscordBridge.VerifyCertificate = 1
+
+#
+#    Guild.DiscordBridge.CaBundle
+#        Description: Optional path to a CA-certificate bundle (PEM) used to verify Discord's
+#                     TLS certificate. Empty = use the system default trust store. Set this on
+#                     platforms where the default store is missing (e.g. a cacert.pem).
+#        Default:     "" - system default trust store
+
+Guild.DiscordBridge.CaBundle = ""
+
+#
 #    Guild.SaveInterval
 #        Description: Time (in minutes) for guild save interval.
 #        Default:     15
