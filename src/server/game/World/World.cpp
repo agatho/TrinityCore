@@ -122,6 +122,7 @@
 #include "NemesisMgr.h"
 #include "RitualSiteMgr.h"
 #include "AbyssAnglersMgr.h"
+#include "ZoneEventMgr.h"
 #include <zlib.h>
 
 TC_GAME_API std::atomic<bool> World::m_stopEvent(false);
@@ -1697,6 +1698,8 @@ bool World::SetInitialWorldSettings()
     sAbyssAnglersMgr->LoadFromDB();
     TC_LOG_INFO("server.loading", "Loading Omnium Folio seasonal schedule...");
     sOmniumFolioMgr->LoadFromDB();                             // realm-safe: tolerates absent omnium_folio_season table
+    TC_LOG_INFO("server.loading", "Loading Quel'Thalas Zone Events...");      // must be after world states
+    sZoneEventMgr->LoadFromDB();
 
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();
@@ -2538,6 +2541,11 @@ void World::Update(uint32 diff)
 
     sNemesisMgr->Update(diff);
     sOmniumFolioMgr->Update(diff);
+
+    {
+        TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update Quel'Thalas zone events"));
+        sZoneEventMgr->Update(diff);
+    }
 
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Process cli commands"));
