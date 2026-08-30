@@ -409,6 +409,10 @@ namespace WorldPackets
         class GuildChallengeUpdateRequest;
         class SaveGuildEmblem;
         class GuildSetAchievementTracking;
+        class GuildQueryRecipes;
+        class GuildQueryMemberRecipes;
+        class GuildQueryMembersForRecipe;
+        class GuildChangeNameRequest;
     }
 
     namespace Hotfix
@@ -1438,6 +1442,9 @@ class TC_GAME_API WorldSession
         void HandleTurnInPetition(WorldPackets::Petition::TurnInPetition& packet);
 
         void HandleGuildQueryOpcode(WorldPackets::Guild::QueryGuildInfo& query);
+        void HandleGuildQueryRecipes(WorldPackets::Guild::GuildQueryRecipes& packet);
+        void HandleGuildQueryMemberRecipes(WorldPackets::Guild::GuildQueryMemberRecipes& packet);
+        void HandleGuildQueryMembersForRecipe(WorldPackets::Guild::GuildQueryMembersForRecipe& packet);
         void HandleGuildInviteByName(WorldPackets::Guild::GuildInviteByName& packet);
         void HandleGuildOfficerRemoveMember(WorldPackets::Guild::GuildOfficerRemoveMember& packet);
         void HandleGuildAcceptInvite(WorldPackets::Guild::AcceptGuildInvite& invite);
@@ -1453,6 +1460,7 @@ class TC_GAME_API WorldSession
         void HandleGuildReplaceGuildMaster(WorldPackets::Guild::GuildReplaceGuildMaster& replaceGuildMaster);
         void HandleGuildSetAchievementTracking(WorldPackets::Guild::GuildSetAchievementTracking& packet);
         void HandleGuildGetAchievementMembers(WorldPackets::Achievement::GuildGetAchievementMembers& getAchievementMembers);
+        void HandleGuildChangeNameRequest(WorldPackets::Guild::GuildChangeNameRequest& packet);
         void HandleGuildSetGuildMaster(WorldPackets::Guild::GuildSetGuildMaster& packet);
         void HandleGuildUpdateMotdText(WorldPackets::Guild::GuildUpdateMotdText& packet);
         void HandleGuildNewsUpdateSticky(WorldPackets::Guild::GuildNewsUpdateSticky& packet);
