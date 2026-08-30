@@ -1,6 +1,41 @@
 --
-SET @CGUID := 144991; -- 8
+-- LOCAL DIVERGENCE FROM UPSTREAM - the Malacrass guid renumber is dropped and the boss formation
+-- is re-pointed, deliberately. Related collision class to 2026_07_17_00_world.sql; read that
+-- header too.
+--
+-- Upstream ships `SET @CGUID := 144991;` and renumbers Hex Lord Malacrass with
+-- `UPDATE creature SET guid=89357 WHERE guid=313406;`. Neither number means anything on this realm:
+--
+--   * 144991-144998 held 8 live map-1 spawns. This file's own
+--     `DELETE FROM creature WHERE guid BETWEEN @CGUID+00 AND @CGUID+07` removed them silently, and
+--     the 8 Zul'Aman companions were inserted on top - guids 144990 and 144999 either side are
+--     still map 1, which is how the squat was spotted. @CGUID is deliberately NOT re-based: the
+--     damage is already done, the 8 companion rows and spawn_group 368-375 are live and correct at
+--     144991-144998, and vacating the block now would mean deleting live rows to move them. The
+--     lost map-1 spawns still exist in the wc_world reference DB and can be restored separately -
+--     do that to a FREE block, not to 144991.
+--
+--   * guid 89357 is a live map-0 creature (id 2620) and 313406 is a live map-1464 spawn (id 89699),
+--     so `UPDATE creature SET guid=89357 WHERE guid=313406` failed on a duplicate key every time
+--     this file ran - and had it succeeded it would have dragged an unrelated Dornogal spawn into
+--     89357. It is commented out below. Hex Lord Malacrass actually lives at guid 217323 here, so
+--     the formation is built on @MALACRASS_GUID; until this fix the 8 companions were formed up
+--     behind creature 2620 out in Elwynn Forest.
+--
+--   * `DELETE FROM creature WHERE guid IN (313405,313407);` is commented out for the same reason:
+--     here that is map-1464 guid space, not the old Zul'Aman companion spawns upstream meant.
+--
+-- Verified before re-pointing the formation: guid 217323 is the only `creature` row carrying id
+-- 24239 (Hex Lord Malacrass) - map 568, spawnDifficulties '1,2' - and it appeared in
+-- `creature_formations` neither as leaderGUID nor as memberGUID.
+--
+-- @SPAWN_GROUP_ID (368-375) is unchanged - separate id space, already correct and live.
+--
+-- Do not revert this on the next merge. If Malacrass is ever re-spawned at a different guid, move
+-- @MALACRASS_GUID rather than restoring the upstream 89357.
+SET @CGUID := 144991; -- 8 (upstream value kept on purpose - see header)
 SET @SPAWN_GROUP_ID := 368; -- 8
+SET @MALACRASS_GUID := 217323; -- Hex Lord Malacrass (24239) on this realm (upstream: 89357)
 
 -- Texts
 DELETE FROM `creature_text` WHERE `CreatureID` = 24239;
@@ -39,7 +74,9 @@ INSERT INTO `conditions` (`SourceTypeOrReferenceId`,`SourceGroup`,`SourceEntry`,
 
 UPDATE `creature_template_addon` SET `PvpFlags`=0 WHERE `entry`=24363;
 UPDATE `creature_template_difficulty` SET `LevelScalingDeltaMin`=2,`LevelScalingDeltaMax`=2,`ContentTuningID`=1112,`DamageModifier`=35,`LootID`=24239,`GoldMin`=419816,`GoldMax`=513109,`StaticFlags1`=524288 WHERE `Entry`=24239 AND `DifficultyID`=2;
-UPDATE `creature` SET `guid`=89357 WHERE `guid`=313406;
+-- Upstream: UPDATE `creature` SET `guid`=89357 WHERE `guid`=313406;
+-- Dropped - 89357 and 313406 are both live unrelated spawns here; see header. Local Malacrass guid
+-- is @MALACRASS_GUID.
 
 UPDATE `creature_template` SET `ScriptName`='npc_malacrass_blood_worm' WHERE `entry`=52827;
 UPDATE `creature_template_difficulty` SET `ContentTuningID`=1112, `VerifiedBuild`=68453 WHERE `Entry`=52827 AND `DifficultyID`=2; -- 52827 (Blood Worm)
@@ -55,7 +92,9 @@ UPDATE `creature_template` SET `ScriptName`='boss_darkheart' WHERE `entry`=24246
 UPDATE `creature_template` SET `ScriptName`='boss_koragg' WHERE `entry`=24247;
 UPDATE `creature_template_difficulty` SET `ContentTuningID`=1112,`DamageModifier`=7.5,`StaticFlags1`=524288 WHERE `Entry` IN (24240,24241,24242,24243,24244,24245,24246,24247) AND `DifficultyID`=2;
 
-DELETE FROM `creature` WHERE `guid` IN (313405,313407);
+-- Upstream: DELETE FROM `creature` WHERE `guid` IN (313405,313407);
+-- Dropped - on this realm that is map-1464 guid space, not the stale Zul'Aman companion spawns
+-- upstream meant to clear. See header.
 DELETE FROM `creature` WHERE `guid` BETWEEN @CGUID+0 AND @CGUID+7;
 INSERT INTO `creature` (`guid`,`id`,`map`,`zoneId`,`areaId`,`spawnDifficulties`,`phaseId`,`modelid`,`equipment_id`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`wander_distance`,`currentwaypoint`,`MovementType`,`ScriptName`,`StringId`,`VerifiedBuild`) VALUES
 (@CGUID+0,24240,568,0,0,'2',0,0,1,125.57986,923.1528,33.97253,1.588249564170837402,259200,0,0,0,'',NULL,12340),
@@ -89,17 +128,21 @@ INSERT INTO `spawn_group_template` (`groupId`, `groupName`, `groupFlags`) VALUES
 (@SPAWN_GROUP_ID+6,"Zul'Aman - Darkheart",4),
 (@SPAWN_GROUP_ID+7,"Zul'Aman - Koragg",4);
 
+-- The first statement is the upstream one, kept only to undo the damage an earlier run of this file
+-- did: guid 89357 is a live map-0 creature here (id 2620), and it was left leading a formation of
+-- eight Zul'Aman companions. The second keeps the file idempotent at the real local boss guid.
 DELETE FROM `creature_formations` WHERE `leaderGUID` = 89357;
+DELETE FROM `creature_formations` WHERE `leaderGUID` = @MALACRASS_GUID;
 INSERT INTO `creature_formations` (`leaderGUID`, `memberGUID`, `dist`, `angle`, `groupAI`, `point_1`, `point_2`) VALUES
-(89357,89357,0,0,3,0,0),
-(89357,@CGUID+0,0,0,3,0,0),
-(89357,@CGUID+1,0,0,3,0,0),
-(89357,@CGUID+2,0,0,3,0,0),
-(89357,@CGUID+3,0,0,3,0,0),
-(89357,@CGUID+4,0,0,3,0,0),
-(89357,@CGUID+5,0,0,3,0,0),
-(89357,@CGUID+6,0,0,3,0,0),
-(89357,@CGUID+7,0,0,3,0,0);
+(@MALACRASS_GUID,@MALACRASS_GUID,0,0,3,0,0),
+(@MALACRASS_GUID,@CGUID+0,0,0,3,0,0),
+(@MALACRASS_GUID,@CGUID+1,0,0,3,0,0),
+(@MALACRASS_GUID,@CGUID+2,0,0,3,0,0),
+(@MALACRASS_GUID,@CGUID+3,0,0,3,0,0),
+(@MALACRASS_GUID,@CGUID+4,0,0,3,0,0),
+(@MALACRASS_GUID,@CGUID+5,0,0,3,0,0),
+(@MALACRASS_GUID,@CGUID+6,0,0,3,0,0),
+(@MALACRASS_GUID,@CGUID+7,0,0,3,0,0);
 
 DELETE FROM `areatrigger_template` WHERE `Id`=3382 AND `IsCustom`=0;
 INSERT INTO `areatrigger_template` (`Id`, `IsCustom`, `VerifiedBuild`) VALUES
