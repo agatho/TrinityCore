@@ -1832,7 +1832,6 @@ class TC_GAME_API WorldSession
         };
 
         ClientPerformanceStats const& GetClientPerformanceStats() const { return _clientPerformanceStats; }
-        static constexpr uint32 SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER     = 0xFFFFFFFD;
 
         // Packets cooldown
         time_t GetCalendarEventCreationCooldown() const { return _calendarEventCreationCooldown; }
