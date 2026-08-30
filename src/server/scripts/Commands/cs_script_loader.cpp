@@ -61,6 +61,7 @@ void AddSC_tele_commandscript();
 void AddSC_ticket_commandscript();
 void AddSC_titles_commandscript();
 void AddSC_warfront_commandscript();
+void AddSC_delvenemesis_commandscript(); // TEMPORARY DEBUG stand-in for the Delve Nemesis seam
 void AddSC_wp_commandscript();
 
 // The name of this function should match:
@@ -112,5 +113,6 @@ void AddCommandsScripts()
     AddSC_ticket_commandscript();
     AddSC_titles_commandscript();
     AddSC_warfront_commandscript();
+    AddSC_delvenemesis_commandscript(); // TEMPORARY DEBUG stand-in for the Delve Nemesis seam
     AddSC_wp_commandscript();
 }
