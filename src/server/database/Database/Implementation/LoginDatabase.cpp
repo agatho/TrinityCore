@@ -160,6 +160,14 @@ void LoginDatabaseConnection::DoPrepareStatements()
     // Account wide toys
     PrepareStatement(LOGIN_SEL_ACCOUNT_TOYS, "SELECT itemId, isFavourite, hasFanfare FROM battlenet_account_toys WHERE accountId = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_REP_ACCOUNT_TOYS, "REPLACE INTO battlenet_account_toys (accountId, itemId, isFavourite, hasFanfare) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_DEL_ACCOUNT_TOYS, "DELETE FROM battlenet_account_toys WHERE accountId = ? AND itemId = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_DEL_ACCOUNT_MOUNT, "DELETE FROM battlenet_account_mounts WHERE battlenetAccountId = ? AND mountSpellId = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_SEL_ACCOUNT_PERKS_PURCHASES, "SELECT perksVendorItemId, price, purchaseTime, mountId, toyId, buyerGuid FROM battlenet_account_perks_purchases WHERE accountId = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_INS_ACCOUNT_PERKS_PURCHASE, "INSERT INTO battlenet_account_perks_purchases (accountId, perksVendorItemId, price, purchaseTime, mountId, toyId, buyerGuid) VALUES (?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_DEL_ACCOUNT_PERKS_PURCHASE, "DELETE FROM battlenet_account_perks_purchases WHERE accountId = ? AND perksVendorItemId = ?", CONNECTION_ASYNC);
+    // Account-wide Trader's Tender (currency 2032): authoritative balance shared across all characters of the bnet account.
+    PrepareStatement(LOGIN_SEL_ACCOUNT_PERKS_TENDER, "SELECT amount, lastCacheGrantPeriod FROM battlenet_account_perks_tender WHERE accountId = ?", CONNECTION_ASYNC);
+    PrepareStatement(LOGIN_REP_ACCOUNT_PERKS_TENDER, "REPLACE INTO battlenet_account_perks_tender (accountId, amount, lastCacheGrantPeriod) VALUES (?, ?, ?)", CONNECTION_ASYNC);
 
     // Battle Pets
     PrepareStatement(LOGIN_SEL_BATTLE_PETS, "SELECT bp.guid, bp.species, bp.breed, bp.displayId, bp.level, bp.exp, bp.health, bp.quality, bp.flags, bp.name, bp.nameTimestamp, bp.owner, bp.ownerRealmId, dn.genitive, dn.dative, dn.accusative, dn.instrumental, dn.prepositional FROM battle_pets bp LEFT JOIN battle_pet_declinedname dn ON bp.guid = dn.guid WHERE bp.battlenetAccountId = ? AND (bp.ownerRealmId IS NULL OR bp.ownerRealmId = ?)", CONNECTION_ASYNC);

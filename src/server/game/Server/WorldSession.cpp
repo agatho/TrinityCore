@@ -1506,6 +1506,8 @@ public:
         WARBAND_SCENES,
         PLAYER_DATA_ELEMENTS_ACCOUNT,
         PLAYER_DATA_FLAGS_ACCOUNT,
+        PERKS_PROGRAM_PURCHASES,
+        PERKS_PROGRAM_TENDER,
 
         MAX_QUERIES
     };
@@ -1536,6 +1538,14 @@ public:
         stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_MOUNTS);
         stmt->setUInt32(0, battlenetAccountId);
         ok = SetPreparedQuery(MOUNTS, stmt) && ok;
+
+        stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_PERKS_PURCHASES);
+        stmt->setUInt32(0, battlenetAccountId);
+        ok = SetPreparedQuery(PERKS_PROGRAM_PURCHASES, stmt) && ok;
+
+        stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_PERKS_TENDER);
+        stmt->setUInt32(0, battlenetAccountId);
+        ok = SetPreparedQuery(PERKS_PROGRAM_TENDER, stmt) && ok;
 
         stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_CHARACTER_COUNTS_BY_ACCOUNT_ID);
         stmt->setUInt32(0, accountId);
@@ -1619,6 +1629,15 @@ void WorldSession::InitializeSessionCallback(LoginDatabaseQueryHolder const& hol
     LoadInstanceTimeRestrictions(realmHolder.GetPreparedResult(AccountInfoQueryHolderPerRealm::INSTANCE_TIMES));
     LoadChallengeModeHistory(realmHolder.GetPreparedResult(AccountInfoQueryHolderPerRealm::CHALLENGE_MODE_HISTORY));
     _collectionMgr->LoadAccountToys(holder.GetPreparedResult(AccountInfoQueryHolder::GLOBAL_ACCOUNT_TOYS));
+    _collectionMgr->LoadPerksProgramPurchases(holder.GetPreparedResult(AccountInfoQueryHolder::PERKS_PROGRAM_PURCHASES));
+    // Account-wide Trader's Tender: cache the shared balance so _LoadCurrency can override the per-character
+    // row when the player enters the world (a missing row leaves the cache at -1 -> seeded from the character).
+    if (PreparedQueryResult tenderResult = holder.GetPreparedResult(AccountInfoQueryHolder::PERKS_PROGRAM_TENDER))
+    {
+        Field* tenderFields = tenderResult->Fetch();
+        _accountPerksTender = int64(tenderFields[0].GetUInt32());
+        _accountPerksCacheGrantPeriod = tenderFields[1].GetUInt64();
+    }
     _collectionMgr->LoadAccountHeirlooms(holder.GetPreparedResult(AccountInfoQueryHolder::GLOBAL_ACCOUNT_HEIRLOOMS));
     _collectionMgr->LoadAccountMounts(holder.GetPreparedResult(AccountInfoQueryHolder::MOUNTS));
     _collectionMgr->LoadAccountItemAppearances(holder.GetPreparedResult(AccountInfoQueryHolder::ITEM_APPEARANCES), holder.GetPreparedResult(AccountInfoQueryHolder::ITEM_FAVORITE_APPEARANCES));
@@ -1659,6 +1678,19 @@ void WorldSession::InitializeSessionCallback(LoginDatabaseQueryHolder const& hol
 
     _battlePetMgr->LoadFromDB(holder.GetPreparedResult(AccountInfoQueryHolder::BATTLE_PETS),
                               holder.GetPreparedResult(AccountInfoQueryHolder::BATTLE_PET_SLOTS));
+}
+
+void WorldSession::StoreAccountPerksTender(uint32 amount)
+{
+    // Trader's Tender is account-wide: keep the session cache in sync and write the new absolute balance
+    // to the login DB so every character of the bnet account earns/spends/refunds against one wallet.
+    _accountPerksTender = int64(amount);
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_REP_ACCOUNT_PERKS_TENDER);
+    stmt->setUInt32(0, GetBattlenetAccountId());
+    stmt->setUInt32(1, amount);
+    stmt->setUInt64(2, _accountPerksCacheGrantPeriod);
+    LoginDatabase.Execute(stmt);
 }
 
 rbac::RBACData* WorldSession::GetRBACData() const

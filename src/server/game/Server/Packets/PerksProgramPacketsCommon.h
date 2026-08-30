@@ -37,6 +37,8 @@ struct PerksVendorItem
     Timestamp<> AvailableUntil;
     bool Disabled = false;
     bool DoesNotExpire = false;
+
+    friend bool operator==(PerksVendorItem const& left, PerksVendorItem const& right) = default;
 };
 
 ByteBuffer& operator<<(ByteBuffer& data, PerksVendorItem const& perksVendorItem);
