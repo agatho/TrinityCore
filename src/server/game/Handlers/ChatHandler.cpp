@@ -146,12 +146,6 @@ void WorldSession::HandleChatMessageEmoteOpcode(WorldPackets::Chat::ChatMessageE
 // Tells the client that the group channel it addressed does not exist for it right now. The single
 // retail sample carries the requested chat type verbatim (CHAT_MSG_PARTY), which is what the client
 // needs to know which chat frame to complain about.
-void WorldSession::SendChatNotInParty(ChatMsg type)
-{
-    WorldPackets::Chat::ChatNotInParty chatNotInParty(type);
-    SendPacket(chatNotInParty.Write());
-}
-
 ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string msg, std::string target /*= ""*/, Optional<ObjectGuid> targetGuid /*= {}*/)
 {
     Player* sender = GetPlayer();
