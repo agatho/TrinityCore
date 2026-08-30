@@ -184,6 +184,36 @@ void TimeSyncResponse::Read()
     _worldPacket >> ClientTime;
 }
 
+void TimeSyncResponseFailed::Read()
+{
+    _worldPacket >> SequenceIndex;
+}
+
+void TimeSyncResponseDropped::Read()
+{
+    _worldPacket >> SequenceIndexA;
+    _worldPacket >> SequenceIndexB;
+}
+
+void DiscardedTimeSyncAcks::Read()
+{
+    _worldPacket >> MaxSequenceIndex;
+}
+
+WorldPacket const* TimeAdjustment::Write()
+{
+    _worldPacket << uint32(SequenceIndex);
+    _worldPacket << float(TimeScale);
+
+    return &_worldPacket;
+}
+
+void TimeAdjustmentResponse::Read()
+{
+    _worldPacket >> SequenceIndex;
+    _worldPacket >> ClientTime;
+}
+
 WorldPacket const* TriggerCinematic::Write()
 {
     _worldPacket << uint32(CinematicID);

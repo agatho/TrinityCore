@@ -56,6 +56,7 @@ EndScriptData */
 #include "World.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
+#include <cmath>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -93,6 +94,8 @@ public:
             { "setphaseshift",      HandleDebugSendSetPhaseShiftCommand,   rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "spellfail",          HandleDebugSendSpellFailCommand,       rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "playerchoice",       HandleDebugSendPlayerChoiceCommand,    rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "timeadjustment",     HandleDebugSendTimeAdjustmentCommand,  rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "markremotetimeinvalid", HandleDebugSendMarkRemoteTimeInvalidCommand, rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
         };
         static ChatCommandTable debugCommandTable =
         {
@@ -1109,6 +1112,51 @@ public:
 
         map->AddToMap(v);
 
+        return true;
+    }
+
+    static bool HandleDebugSendTimeAdjustmentCommand(ChatHandler* handler, float timeScale)
+    {
+        // The only trigger SMSG_TIME_ADJUSTMENT has. Which game situation makes Retail send it is
+        // not known - the opcode appears in none of the ten recordings, so there is no observed
+        // trigger and no observed range for timeScale (see WorldSession::SendTimeAdjustment).
+        // Rather than invent a game rule, the message is put where an operator can fire it: the
+        // client answers with CMSG_TIME_ADJUSTMENT_RESPONSE and logs "Time elapse scaled by %g to
+        // %g" (consumer 0x1E2B3B0, format string 0x3D015E0), which is what makes the pair testable.
+        if (!std::isfinite(timeScale) || timeScale <= 0.0f)
+        {
+            handler->SendSysMessage("TimeScale must be a finite positive factor.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        handler->GetSession()->SendTimeAdjustment(timeScale);
+        return true;
+    }
+
+    static bool HandleDebugSendMarkRemoteTimeInvalidCommand(ChatHandler* handler)
+    {
+        // The only trigger SMSG_MOVE_MARK_REMOTE_TIME_INVALID has, for the same reason
+        // ".debug send timeadjustment" is the only one its sibling has: which game situation makes
+        // Retail send it is not known. The opcode appears in none of the 73 recordings, and the
+        // situations it would plausibly belong to - teleports, transport changes - were recorded
+        // thousands of times without it, so the absence is evidence here and not a gap in coverage.
+        // Rather than invent a game rule, the message is put where an operator can fire it and watch
+        // what it does to observers of the selected unit (see Unit::SendMoveMarkRemoteTimeInvalid
+        // for the consumer 0x1F14820 and the flag it clears).
+        //
+        // The selected unit is the useful target: the message is addressed at everybody who observes
+        // the mover and skips the client controlling it, so firing it on yourself shows the caster
+        // nothing.
+        Unit* target = handler->getSelectedUnit();
+        if (!target)
+        {
+            handler->SendSysMessage(LANG_SELECT_CHAR_OR_CREATURE);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        target->SendMoveMarkRemoteTimeInvalid();
         return true;
     }
 

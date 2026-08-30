@@ -82,25 +82,48 @@ ByteBuffer& operator<<(ByteBuffer& data, MovementInfo const& movementInfo)
     data << float(movementInfo.pitch);
     data << float(movementInfo.stepUpStartElevation);
 
-    uint32 removeMovementForcesCount = 0;
-    data << removeMovementForcesCount;
+    data << uint32(movementInfo.removeForcesIDs.size());
 
     uint32 moveIndex = 0;
     data << moveIndex;
 
     data << float(movementInfo.gravityModifier);
 
-    /*for (uint32 i = 0; i < removeMovementForcesCount; ++i)
-    {
-        data << ObjectGuid;
-    }*/
+    // deferred payload of the count written above - the client reads it here, before the bit section
+    // (reader 0x6E9470, writer loop 0x6E9A6D with stride 0x10, client 12.1.0.69382)
+    for (ObjectGuid const& removeForcesID : movementInfo.removeForcesIDs)
+        data << removeForcesID;
 
     data << WorldPackets::OptionalInit(movementInfo.standingOnGameObjectGUID);
     data << WorldPackets::Bits<1>(hasTransportData);
     data << WorldPackets::Bits<1>(hasFallData);
     data << WorldPackets::Bits<1>(false); // HasSpline
     data << WorldPackets::Bits<1>(false); // HeightChangeFailed
-    data << WorldPackets::Bits<1>(false); // RemoteTimeValid
+    // RemoteTimeValid. Measured, not assumed: all 82742 Retail SMSG_MOVE_UPDATE (0x5E000E) found in
+    // 73 recordings parse against this field list byte-exact - 82742 of 82742 end on the last byte,
+    // none short, none with a remainder - and 82452 of them, 99.6%, carry this bit SET. The core
+    // wrote a hardcoded false here, which contradicts every one of those packets.
+    //
+    // The bit is not the same thing as the client flag SMSG_MOVE_MARK_REMOTE_TIME_INVALID clears: the
+    // client only ever RAISES that flag (0x18A00D0, "|= 1") and never lowers it from this bit. What
+    // this bit decides is whether the flag is raised again after a re-base - with a permanent false
+    // the client keeps the remote clock of every observed mover unusable in one of the two branches,
+    // and the invalidate message then has little left to invalidate.
+    //
+    // UNVERIFIED: what makes Retail send false, and therefore this hardcoded true for the 0.35% of
+    // packets that do not carry it. The 290 measured false cases are SMSG_MOVE_UPDATE written by
+    // this very function, not create blocks, and 258 of them are the first update an observer sees
+    // for a mover - but MovementInfo has no field to carry the bit (the reader below drops it), so
+    // no value written here can reproduce them and the byte-exact round trip of D1 is not obtainable
+    // for those 290. Hardcoded true moves the exact cases from 290 to 82452 of 82742; it does not
+    // close the gap. Closing it needs the rule Retail uses, which is per-observer state the server
+    // does not keep today: a recording that pairs each SMSG_MOVE_UPDATE with the observer's history
+    // of that mover would give it. See aufnahme_noetig.
+    //
+    // The create block in BaseEntity.cpp is deliberately NOT changed along with this - its bit was
+    // never read off the wire, which would mean parsing SMSG_UPDATE_OBJECT, and it is a different
+    // writer with its own unmeasured distribution.
+    data << WorldPackets::Bits<1>(true); // RemoteTimeValid
     data << WorldPackets::OptionalInit(movementInfo.inertia);
     data << WorldPackets::OptionalInit(movementInfo.advFlying);
     data << WorldPackets::OptionalInit(movementInfo.driveStatus);
@@ -170,8 +193,22 @@ ByteBuffer& operator>>(ByteBuffer& data, MovementInfo& movementInfo)
 
     data >> movementInfo.gravityModifier;
 
-    for (uint32 i = 0; i < removeMovementForcesCount; ++i)
-        data >> WorldPackets::Ignored<ObjectGuid>;
+    // These are the AreaTrigger guids of the forces the client is dropping. They used to be read
+    // into Ignored<ObjectGuid>, which made CMSG_MOVE_REMOVE_MOVEMENT_FORCES - whose entire payload
+    // is this list - unreadable. Client field JamCliMovementStatus.removeAreaTriggerGUIDs@176.
+    //
+    // The count precedes its payload, so it must be checked against what is left in the buffer
+    // BEFORE it reaches std::vector::resize. This is the shared reader of every movement message,
+    // and a resize of an unchecked client uint32 throws std::length_error/std::bad_alloc, which is
+    // not a ByteBufferException - it would walk straight out of WorldSession::Update. The smallest
+    // an ObjectGuid can be on the wire is the 2-byte mask with no bytes set
+    // (ObjectGuid.cpp:1113), so anything above that many remaining bytes cannot be a real list.
+    if (removeMovementForcesCount > (data.size() - data.rpos()) / sizeof(uint16))
+        throw ByteBufferPositionException(data.rpos(), data.size(), std::size_t(removeMovementForcesCount) * sizeof(uint16));
+
+    movementInfo.removeForcesIDs.resize(removeMovementForcesCount);
+    for (ObjectGuid& removeForcesID : movementInfo.removeForcesIDs)
+        data >> removeForcesID;
 
     data >> WorldPackets::OptionalInit(movementInfo.standingOnGameObjectGUID);
     bool hasTransport = data.ReadBit();
@@ -1038,6 +1075,43 @@ void MoveTimeSkipped::Read()
 {
     _worldPacket >> MoverGUID;
     _worldPacket >> TimeSkipped;
+}
+
+WorldPacket const* MoveInitialObjectUpdateComplete::Write()
+{
+    _worldPacket << MoverGUID;
+    _worldPacket << uint32(SequenceIndex);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* MoveSetGravityModifier::Write()
+{
+    _worldPacket << MoverGUID;
+    _worldPacket << uint32(SequenceIndex);
+    _worldPacket << float(GravityModifier);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* MoveUpdateGravityModifier::Write()
+{
+    _worldPacket << *Status;
+    _worldPacket << float(GravityModifier);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* MoveMarkRemoteTimeInvalid::Write()
+{
+    _worldPacket << MoverGUID;
+
+    return &_worldPacket;
+}
+
+void MoveSetTurnRateCheat::Read()
+{
+    _worldPacket >> TurnRate;
 }
 
 WorldPacket const* MoveSkipTime::Write()

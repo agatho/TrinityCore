@@ -1187,8 +1187,12 @@ class TC_GAME_API Unit : public WorldObject
         MovementForces const* GetMovementForces() const { return _movementForces.get(); }
         void ApplyMovementForce(ObjectGuid id, Position origin, float magnitude, MovementForceType type, Position direction = {}, ObjectGuid transportGuid = ObjectGuid::Empty);
         void RemoveMovementForce(ObjectGuid id);
+        bool ResendMovementForce(ObjectGuid id);
         bool SetIgnoreMovementForces(bool ignore);
         void UpdateMovementForcesModMagnitude();
+        void UpdateGravityModifier();
+        float CalculateGravityModifier() const;
+        void SendMoveMarkRemoteTimeInvalid() const;
 
         void ApplyInertia(int32 id, Milliseconds duration);
         void RemoveInertia(int32 id);
@@ -1730,6 +1734,7 @@ class TC_GAME_API Unit : public WorldObject
         float GetSpeedRate(UnitMoveType mtype) const { return m_speed_rate[mtype]; }
         void SetSpeed(UnitMoveType mtype, float newValue);
         void SetSpeedRate(UnitMoveType mtype, float rate);
+        void ResendSpeed(UnitMoveType mtype);
 
         int32 GetFlightCapabilityID() const { return m_unitData->FlightCapabilityID; }
         void SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate);

@@ -592,6 +592,87 @@ namespace WorldPackets
             float Height = 1.0f;
         };
 
+        // Server -> mover. Announces that the initial object update for the world the player is
+        // entering is on its way; the client answers with CMSG_MOVE_INITIAL_OBJECT_UPDATE_COMPLETE_ACK
+        // (a plain MovementAck) once it has processed the whole SMSG_UPDATE_OBJECT wave.
+        // Wire: packed ObjectGuid + uint32, 13 bytes at a 7-byte guid (client case 0x75DBBD, 18/18 sniffed).
+        class MoveInitialObjectUpdateComplete final : public ServerPacket
+        {
+        public:
+            explicit MoveInitialObjectUpdateComplete() : ServerPacket(SMSG_MOVE_INITIAL_OBJECT_UPDATE_COMPLETE, 16 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid MoverGUID;
+            uint32 SequenceIndex = 0; ///< Unit movement packet index, mirrored back by the client
+        };
+
+        // Server -> mover. Sets the gravity multiplier of a single mover; the client replies with
+        // CMSG_MOVE_FORCE_GRAVITY_MODIFIER_CHANGE_ACK. Client case 0x75B455, consumer 0x1F111F0.
+        class MoveSetGravityModifier final : public ServerPacket
+        {
+        public:
+            explicit MoveSetGravityModifier() : ServerPacket(SMSG_MOVE_SET_GRAVITY_MODIFIER, 16 + 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid MoverGUID;
+            uint32 SequenceIndex = 0;
+            float GravityModifier = 1.0f;
+        };
+
+        // Server -> bystanders. Same value, but carried on a full MovementInfo instead of a guid.
+        // Client case 0x75B3D4, consumer 0x1F0C980.
+        class MoveUpdateGravityModifier final : public ServerPacket
+        {
+        public:
+            explicit MoveUpdateGravityModifier() : ServerPacket(SMSG_MOVE_UPDATE_SET_GRAVITY_MODIFIER) { }
+
+            WorldPacket const* Write() override;
+
+            MovementInfo* Status = nullptr;
+            float GravityModifier = 1.0f;
+        };
+
+        // Server -> observers of a mover. Tells them that the mover's remote time base can no longer
+        // be trusted; the consumer (0x1F14820) clears bit 0 of the flag word at offset 0x378 of the
+        // mover's move component. That bit is client-only state and is NOT the RemoteTimeValid bit of
+        // MovementInfo: its only setter in the whole binary is the "|= 1" in the reconciliation
+        // routine 0x18A00D0, and the wire's RemoteTimeValid never clears it - it only takes part in
+        // deciding whether the bit is raised again. No value of the wire bit can therefore do what
+        // this message does; see Unit::SendMoveMarkRemoteTimeInvalid for the full derivation and the
+        // RemoteTimeValid block in MovementPackets.cpp for the other half.
+        // Wire: one packed guid, nothing else (client case 0x75CFAA - a single read call).
+        class MoveMarkRemoteTimeInvalid final : public ServerPacket
+        {
+        public:
+            explicit MoveMarkRemoteTimeInvalid() : ServerPacket(SMSG_MOVE_MARK_REMOTE_TIME_INVALID, 16) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid MoverGUID;
+        };
+
+        // Client -> server, sent by the change callback of the client CVar "TurnSpeed"
+        // (callback 0x1DEF2D0, registered 0x168B7C, default 180 degrees/s, help text
+        // "Set the keyboard turn rate in degrees per second; capped by the server").
+        // Wire: a single float in radians/s - the write slot 0x35AFCC0 is the dedicated float slot,
+        // and all 11 recorded packets are byte-identical 'db 0f 49 40' = float(M_PI) = 180 degrees/s.
+        // Eleven is the measured count and the only one: 73 .pkt files under C:/sniff, duplicates by
+        // name and size removed, 11 CMSG_MOVE_SET_TURN_RATE_CHEAT (0x410024) in 11 separate
+        // recordings and 0 SMSG_MOVE_SET_TURN_RATE (0x5E0027). Re-measured for this round with
+        // C:/dumps/_mv_r3_turnrate2.py; WorldSession::HandleMoveSetTurnRateCheat rests on the same
+        // count, and the "10 Pakete" of SUBPLAN_move_41_5E.md section 7.2 is a stale estimate.
+        class MoveSetTurnRateCheat final : public ClientPacket
+        {
+        public:
+            explicit MoveSetTurnRateCheat(WorldPacket&& packet) : ClientPacket(CMSG_MOVE_SET_TURN_RATE_CHEAT, std::move(packet)) { }
+
+            void Read() override;
+
+            float TurnRate = 0.0f;
+        };
+
         class MoveTimeSkipped final : public ClientPacket
         {
         public:

@@ -275,6 +275,9 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
     m_forced_speed_changes = { };
 
     m_movementForceModMagnitudeChanges = 0;
+    m_gravityModifierChanges = 0;
+    m_initialObjectUpdateCompleteIndex = 0;
+    m_initialObjectUpdateCompleteSentAt = TimePoint(); // not TimePoint::min(): now - min() overflows the int64 nanosecond duration
 
     /////////////////// Instance System /////////////////////
 
@@ -25051,6 +25054,23 @@ void Player::SendInitialPacketsBeforeAddToMap()
     SendDirectMessage(initialSetup.Write());
 
     SetMovedUnit(this);
+
+    // Announce that the initial object update is coming. Retail sends this before the first large
+    // SMSG_UPDATE_OBJECT of the new world - between SMSG_WORLD_SERVER_INFO and SMSG_LEGACY_LOOT_RULES
+    // in 18 of 18 recorded world entries - not after it, so the end of this function is the right
+    // place and Map::SendInitSelf is not. The name is misleading: the message does not report a
+    // finished send, it announces the state the client is asked to confirm afterwards.
+    // The client answers with CMSG_MOVE_INITIAL_OBJECT_UPDATE_COMPLETE_ACK once the whole update wave
+    // has been processed - measured 13..1259 ms later, median 154 ms.
+    // Seamless teleports never reach this function (MovementHandler.cpp only calls it when
+    // !seamlessTeleport), which is exactly the required behaviour.
+    m_initialObjectUpdateCompleteIndex = m_movementCounter++;
+    m_initialObjectUpdateCompleteSentAt = GameTime::Now();
+
+    WorldPackets::Movement::MoveInitialObjectUpdateComplete initialObjectUpdateComplete;
+    initialObjectUpdateComplete.MoverGUID = GetGUID();
+    initialObjectUpdateComplete.SequenceIndex = m_initialObjectUpdateCompleteIndex;
+    SendDirectMessage(initialObjectUpdateComplete.Write());
 }
 
 void Player::SendInitialPacketsAfterAddToMap()
@@ -25114,6 +25134,41 @@ void Player::SendInitialPacketsAfterAddToMap()
 
     if (HasAuraType(SPELL_AURA_DISABLE_INERTIA))
         setCompoundState.StateChanges.emplace_back(SMSG_MOVE_DISABLE_INERTIA, m_movementCounter++);
+
+    // Gravity was missing from this chain, so a relog silently dropped the modifier while the aura
+    // itself was restored from character_aura. SMSG_MOVE_SET_GRAVITY_MODIFIER has the same
+    // {guid, sequence, float} shape as the speed messages, so it uses the generic Speed slot of
+    // MoveStateChange.
+    //
+    // The compound state consumer really does route this MessageID to the same handler as the
+    // standalone message, so the client acks it exactly like one - that is why the counter below has
+    // to be raised here too. Proof from the binary, not from the shape: SMSG_MOVE_SET_COMPOUND_STATE
+    // is dispatched by 0x1F12AC0, whose switch over the MessageID of each entry (0x1F12B70, stride
+    // 0xC8) has a case 6160410 = 0x5E001A at 0x1F14096. That case copies SequenceIndex from entry+4
+    // and the Speed slot from entry+8, loads the hook slot 0x462EBF0 - the very slot the standalone
+    // case 0x75B4CF of SMSG_Dispatch_fam_5E reads, holding consumer 0x1F111F0 - and calls it through
+    // the common tail 0x1F1428F. From there it is the documented path: 0x1F111F0 queues a state
+    // change of type 29, and 0x18975A0 case 29 answers with CMSG_MOVE_FORCE_GRAVITY_MODIFIER_CHANGE_ACK.
+    //
+    // The case also reads the Speed slot unconditionally once the presence byte at entry+0xC is set
+    // (lea rax, [rbx+8] / cmovz rax, r12 with r12 = 0 at 0x1F12B4B, then movss xmm0, [rax]), so the
+    // slot must be filled for this MessageID - it is, on the next line.
+    if (HasAuraType(SPELL_AURA_MOD_GRAVITY))
+    {
+        WorldPackets::Movement::MoveStateChange& gravity = setCompoundState.StateChanges.emplace_back(SMSG_MOVE_SET_GRAVITY_MODIFIER, m_movementCounter++);
+        // Same value and same source as Unit::UpdateGravityModifier - see the measurement of
+        // EffectBasePointsF for aura 644 documented at Unit::CalculateGravityModifier. Reading the
+        // amount as a percentage, as GetTotalAuraMultiplier does, put a factor of 1.0035 on the wire
+        // here for an aura that means 0.35.
+        gravity.Speed = CalculateGravityModifier();
+
+        // Without this the login send is the one SMSG_MOVE_SET_GRAVITY_MODIFIER the server does not
+        // count, and WorldSession::HandleMoveGravityModifierChangeAck kicks on the counter reaching
+        // zero. A player with a MOD_GRAVITY aura whose value changes while the login ack is still in
+        // flight - measured 13..1259 ms, median 154 ms for the sibling handshake above - would be
+        // kicked for "Incorrect gravity modifier" after returning exactly what it was sent.
+        ++m_gravityModifierChanges;
+    }
 
     if (!setCompoundState.StateChanges.empty())
     {

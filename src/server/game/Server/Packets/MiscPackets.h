@@ -204,6 +204,80 @@ namespace WorldPackets
             uint32 SequenceIndex = 0; // Same index as in request
         };
 
+        // Client -> server. "Sync N was the first request after a world change but carried a
+        // SequenceIndex != 0, which I do not accept - reset the counter." Emitted by the world-entry
+        // guard 0x1E2B340, which replaces the regular SMSG_TIME_SYNC_REQUEST handler for exactly one
+        // request after entering a world. Payload is the rejected index and nothing else
+        // (writer 0x69AC90, client 12.1.0.69382).
+        class TimeSyncResponseFailed final : public ClientPacket
+        {
+        public:
+            explicit TimeSyncResponseFailed(WorldPacket&& packet) : ClientPacket(CMSG_TIME_SYNC_RESPONSE_FAILED, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 SequenceIndex = 0;
+        };
+
+        // Client -> server. "Syncs SequenceIndexA..SequenceIndexB expired, do not account for them."
+        // Both fields are read from +0x14 of two records of the client's open-sync list, which is the
+        // SequenceIndex slot - the second field is NOT a client time, even though the writer body
+        // (0x69ACE0) looks identical to the one of CMSG_TIME_ADJUSTMENT_RESPONSE. Producer 0x1896AD0.
+        class TimeSyncResponseDropped final : public ClientPacket
+        {
+        public:
+            explicit TimeSyncResponseDropped(WorldPacket&& packet) : ClientPacket(CMSG_TIME_SYNC_RESPONSE_DROPPED, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 SequenceIndexA = 0; ///< oldest still open sync record
+            uint32 SequenceIndexB = 0; ///< most recent one
+        };
+
+        // Client -> server. "Everything up to and including MaxSequenceIndex is settled." Always
+        // follows a CMSG_TIME_SYNC_RESPONSE_DROPPED (0x1896BA9), and in the recordings it always sits
+        // immediately before the client restarts its counter at 0. Writer 0x69ADA0.
+        class DiscardedTimeSyncAcks final : public ClientPacket
+        {
+        public:
+            explicit DiscardedTimeSyncAcks(WorldPacket&& packet) : ClientPacket(CMSG_DISCARDED_TIME_SYNC_ACKS, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 MaxSequenceIndex = 0;
+        };
+
+        // Server -> client. Scales the rate at which the client's clock advances. The consumer
+        // (0x1E2B3B0) reads field 0 as an integer and field 1 with movss - it is a float, not a
+        // second uint32 - and logs "Time elapse scaled by %g to %g" (format string 0x3D015E0).
+        class TimeAdjustment final : public ServerPacket
+        {
+        public:
+            explicit TimeAdjustment() : ServerPacket(SMSG_TIME_ADJUSTMENT, 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 SequenceIndex = 0;
+            float TimeScale = 1.0f;
+        };
+
+        // Client -> server, the answer to SMSG_TIME_ADJUSTMENT. Layout-identical to
+        // CMSG_TIME_SYNC_RESPONSE (writer 0x69AD40 == 0x69AC30 apart from the opcode): the time scale
+        // is not echoed back. The client queues adjustments in the same list as ordinary sync
+        // requests (kind 1 instead of 0), so the answer is a clock sample like any other.
+        class TimeAdjustmentResponse final : public ClientPacket
+        {
+        public:
+            explicit TimeAdjustmentResponse(WorldPacket&& packet) : ClientPacket(CMSG_TIME_ADJUSTMENT_RESPONSE, std::move(packet)) { }
+
+            void Read() override;
+
+            TimePoint GetReceivedTime() const { return _worldPacket.GetReceivedTime(); }
+
+            uint32 SequenceIndex = 0;
+            uint32 ClientTime = 0; // Client ticks in ms
+        };
+
         class TriggerCinematic final : public ServerPacket
         {
         public:

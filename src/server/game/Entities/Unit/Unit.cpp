@@ -8972,6 +8972,23 @@ void Unit::SetSpeed(UnitMoveType mtype, float newValue)
     SetSpeedRate(mtype, newValue / (IsControlledByPlayer() ? playerBaseMoveSpeed[mtype] : baseMoveSpeed[mtype]));
 }
 
+namespace
+{
+// Spline packets are for creatures and move_update are for players
+constexpr OpcodeServer MoveTypeToOpcode[MAX_MOVE_TYPE][3] =
+{
+    {SMSG_MOVE_SPLINE_SET_WALK_SPEED,        SMSG_MOVE_SET_WALK_SPEED,        SMSG_MOVE_UPDATE_WALK_SPEED       },
+    {SMSG_MOVE_SPLINE_SET_RUN_SPEED,         SMSG_MOVE_SET_RUN_SPEED,         SMSG_MOVE_UPDATE_RUN_SPEED        },
+    {SMSG_MOVE_SPLINE_SET_RUN_BACK_SPEED,    SMSG_MOVE_SET_RUN_BACK_SPEED,    SMSG_MOVE_UPDATE_RUN_BACK_SPEED   },
+    {SMSG_MOVE_SPLINE_SET_SWIM_SPEED,        SMSG_MOVE_SET_SWIM_SPEED,        SMSG_MOVE_UPDATE_SWIM_SPEED       },
+    {SMSG_MOVE_SPLINE_SET_SWIM_BACK_SPEED,   SMSG_MOVE_SET_SWIM_BACK_SPEED,   SMSG_MOVE_UPDATE_SWIM_BACK_SPEED  },
+    {SMSG_MOVE_SPLINE_SET_TURN_RATE,         SMSG_MOVE_SET_TURN_RATE,         SMSG_MOVE_UPDATE_TURN_RATE        },
+    {SMSG_MOVE_SPLINE_SET_FLIGHT_SPEED,      SMSG_MOVE_SET_FLIGHT_SPEED,      SMSG_MOVE_UPDATE_FLIGHT_SPEED     },
+    {SMSG_MOVE_SPLINE_SET_FLIGHT_BACK_SPEED, SMSG_MOVE_SET_FLIGHT_BACK_SPEED, SMSG_MOVE_UPDATE_FLIGHT_BACK_SPEED},
+    {SMSG_MOVE_SPLINE_SET_PITCH_RATE,        SMSG_MOVE_SET_PITCH_RATE,        SMSG_MOVE_UPDATE_PITCH_RATE       },
+};
+}
+
 void Unit::SetSpeedRate(UnitMoveType mtype, float rate)
 {
     rate = std::max(rate, 0.01f);
@@ -8983,20 +9000,6 @@ void Unit::SetSpeedRate(UnitMoveType mtype, float rate)
     m_speed_rate[mtype] = rate;
 
     PropagateSpeedChange();
-
-    // Spline packets are for creatures and move_update are for players
-    static OpcodeServer const moveTypeToOpcode[MAX_MOVE_TYPE][3] =
-    {
-        {SMSG_MOVE_SPLINE_SET_WALK_SPEED,        SMSG_MOVE_SET_WALK_SPEED,        SMSG_MOVE_UPDATE_WALK_SPEED       },
-        {SMSG_MOVE_SPLINE_SET_RUN_SPEED,         SMSG_MOVE_SET_RUN_SPEED,         SMSG_MOVE_UPDATE_RUN_SPEED        },
-        {SMSG_MOVE_SPLINE_SET_RUN_BACK_SPEED,    SMSG_MOVE_SET_RUN_BACK_SPEED,    SMSG_MOVE_UPDATE_RUN_BACK_SPEED   },
-        {SMSG_MOVE_SPLINE_SET_SWIM_SPEED,        SMSG_MOVE_SET_SWIM_SPEED,        SMSG_MOVE_UPDATE_SWIM_SPEED       },
-        {SMSG_MOVE_SPLINE_SET_SWIM_BACK_SPEED,   SMSG_MOVE_SET_SWIM_BACK_SPEED,   SMSG_MOVE_UPDATE_SWIM_BACK_SPEED  },
-        {SMSG_MOVE_SPLINE_SET_TURN_RATE,         SMSG_MOVE_SET_TURN_RATE,         SMSG_MOVE_UPDATE_TURN_RATE        },
-        {SMSG_MOVE_SPLINE_SET_FLIGHT_SPEED,      SMSG_MOVE_SET_FLIGHT_SPEED,      SMSG_MOVE_UPDATE_FLIGHT_SPEED     },
-        {SMSG_MOVE_SPLINE_SET_FLIGHT_BACK_SPEED, SMSG_MOVE_SET_FLIGHT_BACK_SPEED, SMSG_MOVE_UPDATE_FLIGHT_BACK_SPEED},
-        {SMSG_MOVE_SPLINE_SET_PITCH_RATE,        SMSG_MOVE_SET_PITCH_RATE,        SMSG_MOVE_UPDATE_PITCH_RATE       },
-    };
 
     if (GetTypeId() == TYPEID_PLAYER)
     {
@@ -9012,25 +9015,48 @@ void Unit::SetSpeedRate(UnitMoveType mtype, float rate)
     if (Player* playerMover = Unit::ToPlayer(GetUnitBeingMoved())) // unit controlled by a player.
     {
         // Send notification to self
-        WorldPackets::Movement::MoveSetSpeed selfpacket(moveTypeToOpcode[mtype][1]);
+        WorldPackets::Movement::MoveSetSpeed selfpacket(MoveTypeToOpcode[mtype][1]);
         selfpacket.MoverGUID = GetGUID();
         selfpacket.SequenceIndex = m_movementCounter++;
         selfpacket.Speed = GetSpeed(mtype);
         playerMover->GetSession()->SendPacket(selfpacket.Write());
 
         // Send notification to other players
-        WorldPackets::Movement::MoveUpdateSpeed packet(moveTypeToOpcode[mtype][2]);
+        WorldPackets::Movement::MoveUpdateSpeed packet(MoveTypeToOpcode[mtype][2]);
         packet.Status = &m_movementInfo;
         packet.Speed = GetSpeed(mtype);
         playerMover->SendMessageToSet(packet.Write(), false);
     }
     else
     {
-        WorldPackets::Movement::MoveSplineSetSpeed packet(moveTypeToOpcode[mtype][0]);
+        WorldPackets::Movement::MoveSplineSetSpeed packet(MoveTypeToOpcode[mtype][0]);
         packet.MoverGUID = GetGUID();
         packet.Speed = GetSpeed(mtype);
         SendMessageToSet(packet.Write(), true);
     }
+}
+
+void Unit::ResendSpeed(UnitMoveType mtype)
+{
+    // Restate a speed the client already disagrees with, without changing it. SetSpeedRate cannot
+    // do this: it returns early when the new rate equals the one we hold (Unit.cpp, "Update speed
+    // only on change"), which is exactly the situation here - the server value is unchanged, it is
+    // the client that has drifted off it. Used by CMSG_MOVE_SET_TURN_RATE_CHEAT when the sender
+    // lacks the permission to raise its turn rate.
+    Player* playerMover = Unit::ToPlayer(GetUnitBeingMoved());
+    if (!playerMover)
+        return;
+
+    // Registered like any other forced change so that WorldSession::HandleForceSpeedChangeAck
+    // treats the incoming ack as expected instead of as a speed hack.
+    if (Player* self = ToPlayer())
+        ++self->m_forced_speed_changes[mtype];
+
+    WorldPackets::Movement::MoveSetSpeed selfpacket(MoveTypeToOpcode[mtype][1]);
+    selfpacket.MoverGUID = GetGUID();
+    selfpacket.SequenceIndex = m_movementCounter++;
+    selfpacket.Speed = GetSpeed(mtype);
+    playerMover->GetSession()->SendPacket(selfpacket.Write());
 }
 
 void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
@@ -14183,6 +14209,32 @@ void Unit::RemoveMovementForce(ObjectGuid id)
         _movementForces.reset();
 }
 
+bool Unit::ResendMovementForce(ObjectGuid id)
+{
+    // Re-assert a force the client believes it has dropped. Used by
+    // CMSG_MOVE_REMOVE_MOVEMENT_FORCES, where the client reports the AreaTrigger guids whose forces
+    // it removed locally; if we still hold one, the mover has not left that trigger as far as we are
+    // concerned. Returns false when the force is already gone, which is the normal case.
+    if (!_movementForces)
+        return false;
+
+    MovementForces::Container const* forces = _movementForces->GetForces();
+    auto itr = std::find_if(forces->begin(), forces->end(), [id](MovementForce const& force) { return force.ID == id; });
+    if (itr == forces->end())
+        return false;
+
+    if (Player const* movingPlayer = GetPlayerMovingMe())
+    {
+        WorldPackets::Movement::MoveApplyMovementForce applyMovementForce;
+        applyMovementForce.MoverGUID = GetGUID();
+        applyMovementForce.SequenceIndex = m_movementCounter++;
+        applyMovementForce.Force = &*itr;
+        movingPlayer->SendDirectMessage(applyMovementForce.Write());
+    }
+
+    return true;
+}
+
 bool Unit::SetIgnoreMovementForces(bool ignore)
 {
     if (ignore == HasUnitMovementFlag(MOVEMENTFLAG_IGNORE_MOVEMENT_FORCES))
@@ -14244,6 +14296,125 @@ void Unit::UpdateMovementForcesModMagnitude()
         if (_movementForces->IsEmpty())
             _movementForces.reset();
     }
+}
+
+float Unit::CalculateGravityModifier() const
+{
+    // The amount of SPELL_AURA_MOD_GRAVITY IS the gravity factor. It is not a percentage on top of
+    // 1.0, and this is measured in the client data rather than assumed: SpellEffect.db2 of the 12.1
+    // client (layout 5362E3D4, M:\World of Warcraft\dbc\enUS, read with C:\dumps\_nc6_db2.py)
+    // holds exactly eleven effects with EffectAura 644, and every one of them carries a fractional
+    // EffectBasePointsF - 0.35, 0.35, 0.35, 0.4, 0.5, 0.65, 0.7, 0.8, 0.9, 0.9, 0.9. Not one is a
+    // percentage. The control measurement with the same decoder rules out a decoding artefact:
+    // SPELL_AURA_MOD_INCREASE_SPEED (31) has whole percentages in the same column (Sprint 70,
+    // Aspect of the Cheetah 90, Blazing Speed 150).
+    //
+    // 1.0f is the client's own neutral value, so below 1 is lighter and above 1 is heavier gravity:
+    // the mover state the client builds for CMSG_MOVE_FORCE_GRAVITY_MODIFIER_CHANGE_ACK initialises
+    // the field to 0x3F800000 (0x18AA570, the type-29 applier).
+    //
+    // Reading the amount as a percentage - which is what Unit::GetTotalAuraMultiplier does, since it
+    // runs AddPct(multiplier, GetAmount()) - turns 0.35 into a factor of 1.0035. The aura would then
+    // do nothing at all, silently, on every spell that carries it.
+    //
+    // UNVERIFIED: how Retail combines two of these auras on one unit. Each of the eleven spells
+    // carries exactly one MOD_GRAVITY effect and no recording shows two at once, so composing them
+    // multiplicatively is a server decision. The single-aura case - the only one the data shows - is
+    // unaffected by it.
+    float gravityModifier = 1.0f;
+    for (AuraEffect const* aurEff : GetAuraEffectsByType(SPELL_AURA_MOD_GRAVITY))
+        gravityModifier *= float(aurEff->GetAmount());
+
+    return gravityModifier;
+}
+
+void Unit::UpdateGravityModifier()
+{
+    // Same shape as UpdateMovementForcesModMagnitude above: the mover gets the addressed message and
+    // owes us an ack, everybody else gets the broadcast variant right away.
+    // The client copies both fields of SMSG_MOVE_SET_GRAVITY_MODIFIER straight into the queued state
+    // change (consumer 0x1F111F0: movss [rec+0x68], value / mov [rec+0xB8], sequence) and sends them
+    // back unchanged in CMSG_MOVE_FORCE_GRAVITY_MODIFIER_CHANGE_ACK, so the ack is worth checking.
+    //
+    // The consumer opens with a gate - "if ((mover->flags[0x378] & 0x80000) == 0)" - that drops the
+    // message instead of queueing it. The gate is not this message's own: it stands byte-identical
+    // in front of all nine members of this consumer family, one per state-change type, and the other
+    // eight are the speed setters that every TrinityCore realm drives on every login. Read off the
+    // ack each type sends (0x18AA020 ff.): type 24 answers with CMSG_MOVE_FORCE_RUN_SPEED_CHANGE_ACK
+    // (0x410029), 25 RUN_BACK (0x41002A), 26 WALK (0x41003F), 27 SWIM (0x41002B), 28 SWIM_BACK
+    // (0x410040), 29 GRAVITY (0x410022), 30 FLIGHT (0x41004C), 31 FLIGHT_BACK (0x41004D), 32
+    // TURN_RATE (0x410041). Gravity therefore reaches the client exactly when a run speed change
+    // does, and no gravity-specific gate exists.
+    //
+    // Bit 19 itself is written in exactly five places in the whole .text and never from network
+    // input: set at 0x20D0A4 and 0x1F0B623, cleared at 0x20CFDB, 0x1E2B65F and 0x1F0B35B. All five
+    // sit in the client's own world transfer and active mover switch - 0x20CFA0 carries the string
+    // "Abort New World Handler", and 0x1F0B210, the active mover change, clears the bit on the mover
+    // it releases and in the same branch sets it on the one it takes over (through 0x1F0B5F0). Which
+    // of the two states an ordinary mover is in is thus decided locally by the client, and it is
+    // decided identically for gravity and for run speed. Nothing the server sends can influence it.
+    float gravityModifier = CalculateGravityModifier();
+
+    m_movementInfo.gravityModifier = gravityModifier;
+
+    if (Player* movingPlayer = GetPlayerMovingMe())
+    {
+        WorldPackets::Movement::MoveSetGravityModifier setGravityModifier;
+        setGravityModifier.MoverGUID = GetGUID();
+        setGravityModifier.SequenceIndex = m_movementCounter++;
+        setGravityModifier.GravityModifier = gravityModifier;
+        movingPlayer->SendDirectMessage(setGravityModifier.Write());
+        ++movingPlayer->m_gravityModifierChanges;
+    }
+    else
+    {
+        WorldPackets::Movement::MoveUpdateGravityModifier updateGravityModifier;
+        updateGravityModifier.Status = &m_movementInfo;
+        updateGravityModifier.GravityModifier = gravityModifier;
+        SendMessageToSet(updateGravityModifier.Write(), true);
+    }
+}
+
+void Unit::SendMoveMarkRemoteTimeInvalid() const
+{
+    // The consumer (0x1F14820) resolves the guid to a mover and clears bit 0 of the flag word at
+    // offset 0x378 of its move component. That bit is the client's own "I hold a usable time base
+    // for this remote mover" state, and clearing it is a real state change, not a repetition of what
+    // MovementInfo already says:
+    //
+    //   * The bit is set in the remote-clock reconciliation routine 0x18A00D0, called first thing by
+    //     the movement-update applier 0x18A66E0. The applier hands it the packet time (parsed
+    //     MovementInfo +0x18) and the RemoteTimeValid bit (parsed MovementInfo +0xAE, the sixth bit
+    //     of the bit section). The routine keeps the last accepted remote time pair at +0x2C8/+0x2CC
+    //     and re-bases it when the bit is CLEAR, or when the drift exceeds 10000 ms; afterwards it
+    //     raises the bit with |= 1.
+    //   * That "|= 1" is the only setter of the bit in the whole binary. The wire's RemoteTimeValid
+    //     never clears it - it merely takes part in deciding whether the bit is raised again. So no
+    //     value of that bit, in MovementPackets.cpp or in the create block in BaseEntity.cpp, can
+    //     achieve what this message achieves.
+    //   * Apart from this handler only the active-mover change (0x1F0B210) clears it. A byte-pattern
+    //     search of .text for or/and/bts against [reg+378h] with bit 0 finds exactly these three
+    //     sites, no others.
+    //
+    // The effect is therefore: every observer drops the time base it accumulated for this mover and
+    // rebuilds it from the next movement packet, instead of smoothing the new position against a
+    // clock that no longer applies. It is addressed at everyone who observes the mover; the client
+    // that controls it keeps its own clock and is skipped.
+    //
+    // UNVERIFIED: the situation in which Retail sends this. The opcode does not occur once in
+    // 9595737 packets across all 73 recordings, and here that absence carries weight rather than
+    // being neutral: the two situations this message was first wired to - Unit::SendTeleportPacket
+    // and the transport change in WorldSession::HandleMovementOpcode - were recorded thousands of
+    // times over, creature near-teleports most of all, and no SMSG_MOVE_MARK_REMOTE_TIME_INVALID
+    // came with them. Deriving a trigger from the meaning of the flag would have made the realm
+    // broadcast on every creature near-teleport what Retail demonstrably does not broadcast there.
+    // So this follows WorldSession::SendTimeAdjustment, whose Retail trigger is open in exactly the
+    // same way: no invented game rule, one operator command instead. The only caller is
+    // ".debug send markremotetimeinvalid" (cs_debug.cpp) - enough to exercise the message against a
+    // live client, and honest about the fact that the Retail trigger is still open.
+    WorldPackets::Movement::MoveMarkRemoteTimeInvalid markRemoteTimeInvalid;
+    markRemoteTimeInvalid.MoverGUID = GetGUID();
+    SendMessageToSet(markRemoteTimeInvalid.Write(), GetPlayerMovingMe());
 }
 
 void Unit::ApplyInertia(int32 id, Milliseconds duration)
