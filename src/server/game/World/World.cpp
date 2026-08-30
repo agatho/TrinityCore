@@ -594,6 +594,11 @@ void World::LoadConfigSettings(bool reload)
 
     uint32 databaseCacheVersion = m_int_configs[CONFIG_CLIENTCACHE_VERSION];
 
+    // Kept across the reload so a change can be announced to the connected clients afterwards.
+    // On first load these are the zero initialised defaults, and nobody is connected yet.
+    bool oldChatServiceEnabled = m_bool_configs[CONFIG_CHAT_SERVICE_ENABLED];
+    bool oldChatRegionalServiceEnabled = m_bool_configs[CONFIG_CHAT_REGIONAL_SERVICE_ENABLED];
+
     static constexpr ConfigOptionLoadDefinitionArray<bool, BOOL_CONFIG_VALUE_COUNT> bools =
     { {
         { .Name = "Support.Enabled"sv, .DefaultValue = true, .Index = CONFIG_SUPPORT_ENABLED },
@@ -603,6 +608,9 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Support.SuggestionsEnabled"sv, .DefaultValue = false, .Index = CONFIG_SUPPORT_SUGGESTIONS_ENABLED },
         { .Name = "DurabilityLoss.InPvP"sv, .DefaultValue = false, .Index = CONFIG_DURABILITY_LOSS_IN_PVP },
         { .Name = "AddonChannel"sv, .DefaultValue = true, .Index = CONFIG_ADDON_CHANNEL },
+        { .Name = "Chat.Service.Enabled"sv, .DefaultValue = true, .Index = CONFIG_CHAT_SERVICE_ENABLED },
+        { .Name = "Chat.RegionalService.Enabled"sv, .DefaultValue = true, .Index = CONFIG_CHAT_REGIONAL_SERVICE_ENABLED },
+        { .Name = "Chat.CautionaryChat.Enabled"sv, .DefaultValue = false, .Index = CONFIG_CHAT_CAUTIONARY_ENABLED },
         { .Name = "CleanCharacterDB"sv, .DefaultValue = false, .Index = CONFIG_CLEAN_CHARACTER_DB },
         { .Name = "PreserveCustomChannels"sv, .DefaultValue = false, .Index = CONFIG_PRESERVE_CUSTOM_CHANNELS },
         { .Name = "GridUnload"sv, .DefaultValue = true, .Index = CONFIG_GRID_UNLOAD },
@@ -798,6 +806,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "ChatFlood.AddonMessageCount"sv, .DefaultValue = 100, .Index = CONFIG_CHATFLOOD_ADDON_MESSAGE_COUNT },
         { .Name = "ChatFlood.AddonMessageDelay"sv, .DefaultValue = 1, .Index = CONFIG_CHATFLOOD_ADDON_MESSAGE_DELAY },
         { .Name = "ChatFlood.MuteTime"sv, .DefaultValue = 10, .Index = CONFIG_CHATFLOOD_MUTE_TIME },
+        { .Name = "Chat.SpamFilterReport.MuteThreshold"sv, .DefaultValue = 0, .Index = CONFIG_CHAT_SPAM_FILTER_REPORT_MUTE_THRESHOLD },
         { .Name = "CreatureFamilyAssistanceDelay"sv, .DefaultValue = 1500, .Index = CONFIG_CREATURE_FAMILY_ASSISTANCE_DELAY },
         { .Name = "CreatureFamilyFleeDelay"sv, .DefaultValue = 7000, .Index = CONFIG_CREATURE_FAMILY_FLEE_DELAY },
         { .Name = "WorldBossLevelDiff"sv, .DefaultValue = 3, .Index = CONFIG_WORLD_BOSS_LEVEL_DIFF },
@@ -1108,6 +1117,21 @@ void World::LoadConfigSettings(bool reload)
 
     if (!m_int_configs[CONFIG_CLIENTCACHE_VERSION])
         m_int_configs[CONFIG_CLIENTCACHE_VERSION] = databaseCacheVersion;
+
+    if (reload)
+    {
+        // SMSG_CHAT_DOWN (0x4A0014) / SMSG_CHAT_RECONNECT (0x4A0016) and
+        // SMSG_CHAT_REGIONAL_SERVICE_STATUS (0x4A001D) are pure state announcements, so they only go
+        // out when the state actually changed. The client debounces the regional status itself
+        // (consumer 0x20B2CD0 compares against its cached value at 0x4674E2C and fires no event on a
+        // repeat), and SMSG_CHAT_RECONNECT makes the client re-join every channel it knows - not
+        // something to trigger on an unrelated config reload.
+        if (m_bool_configs[CONFIG_CHAT_SERVICE_ENABLED] != oldChatServiceEnabled)
+            SendChatServiceStatusToAll();
+
+        if (m_bool_configs[CONFIG_CHAT_REGIONAL_SERVICE_ENABLED] != oldChatRegionalServiceEnabled)
+            SendChatRegionalServiceStatusToAll();
+    }
 
     TC_LOG_INFO("server.loading", "Client cache version set to: {}", m_int_configs[CONFIG_CLIENTCACHE_VERSION]);
 
@@ -2076,6 +2100,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading phase names...");
     sObjectMgr->LoadPhaseNames();
 
+    TC_LOG_INFO("server.loading", "Loading chat spam records...");
+    sObjectMgr->LoadChatSpamRecords();
+
     TC_LOG_INFO("server.loading", "Loading transmog data...");
     TransmogMgr::Load();
 
@@ -2446,6 +2473,29 @@ void World::ForceGameEventUpdate()
     uint32 nextGameEvent = sGameEventMgr->Update();
     m_timers[WUPDATE_EVENTS].SetInterval(nextGameEvent);
     m_timers[WUPDATE_EVENTS].Reset();
+}
+
+// The realm's chat service went down or came back. Both DOWN opcodes share one client consumer, so
+// the event form (SMSG_CHAT_DOWN) is used here; the state form (SMSG_CHAT_IS_DOWN) is what a session
+// gets at login.
+void World::SendChatServiceStatusToAll()
+{
+    bool available = m_bool_configs[CONFIG_CHAT_SERVICE_ENABLED];
+    for (auto const& [accountId, session] : m_sessions)
+        if (session && session->GetPlayer() && session->GetPlayer()->IsInWorld())
+            session->SendChatServiceStatus(available, false);
+
+    TC_LOG_INFO("misc", "Chat service is now {}", available ? "available" : "unavailable");
+}
+
+void World::SendChatRegionalServiceStatusToAll()
+{
+    bool available = m_bool_configs[CONFIG_CHAT_REGIONAL_SERVICE_ENABLED];
+    for (auto const& [accountId, session] : m_sessions)
+        if (session && session->GetPlayer() && session->GetPlayer()->IsInWorld())
+            session->SendChatRegionalServiceStatus(available);
+
+    TC_LOG_INFO("misc", "Regional chat service is now {}", available ? "available" : "unavailable");
 }
 
 /// Send a packet to all players (except self if mentioned)

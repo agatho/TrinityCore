@@ -131,6 +131,15 @@ WorldPacket const* UserlistUpdate::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* ChannelNotifyNPEJoinedBatch::Write()
+{
+    _worldPacket << uint32(ChatChannelID);
+    _worldPacket << uint32(JoinedCount);
+    _worldPacket << uint32(TotalCount);
+
+    return &_worldPacket;
+}
+
 ChannelCommand::ChannelCommand(WorldPacket&& packet) : ClientPacket(std::move(packet))
 {
     switch (packet.GetOpcode())
@@ -139,6 +148,10 @@ ChannelCommand::ChannelCommand(WorldPacket&& packet) : ClientPacket(std::move(pa
         case CMSG_CHAT_CHANNEL_DECLINE_INVITE:
         case CMSG_CHAT_CHANNEL_DISPLAY_LIST:
         case CMSG_CHAT_CHANNEL_LIST:
+        // CMSG_CHAT_CHANNEL_MODERATE (0x2C0016): serializer 0x748AC0 is
+        // Write<uint32>(opcode), WriteBits(7)(strnlen(name, 128)), FlushBits, WriteBytes -
+        // byte identical to the other one argument channel commands, so it shares this class.
+        case CMSG_CHAT_CHANNEL_MODERATE:
         case CMSG_CHAT_CHANNEL_OWNER:
             break;
         default:

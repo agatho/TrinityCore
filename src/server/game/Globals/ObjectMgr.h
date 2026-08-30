@@ -43,7 +43,10 @@
 #include <atomic>
 #include <iterator>
 #include <map>
+#include <regex>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 class Item;
 class Unit;
@@ -1348,6 +1351,7 @@ class TC_GAME_API ObjectMgr
 
         void LoadJumpChargeParams();
         void LoadPhaseNames();
+        void LoadChatSpamRecords();
 
         void InitializeQueriesData(QueryDataGroup mask);
 
@@ -1675,6 +1679,12 @@ class TC_GAME_API ObjectMgr
 
         std::string GetPhaseName(uint32 phaseId) const;
 
+        /// Patterns shipped to the client with SMSG_EXPECTED_SPAM_RECORDS (0x4A0005)
+        std::vector<std::string> const& GetChatSpamRecords() const { return _chatSpamRecords; }
+        /// Server side counterpart, used for the cautionary chat check. False when the feature
+        /// has no compiled patterns.
+        bool MatchesChatSpamPattern(std::string const& text) const;
+
         std::vector<RaceClassAvailability> const& GetRaceClassRequirements() const { return _raceClassRequirementStore; }
         RaceUnlockRequirement const* GetRaceUnlockRequirement(uint8 raceId) const;
         ClassAvailability const* GetClassExpansionRequirement(uint8 raceId, uint8 classId) const;
@@ -1887,6 +1897,8 @@ class TC_GAME_API ObjectMgr
         std::unordered_map<int32, JumpChargeParams> _jumpChargeParams;
 
         PhaseNameContainer _phaseNameStore;
+        std::vector<std::string> _chatSpamRecords;
+        std::vector<std::regex> _chatSpamPatterns;
 
         std::set<uint32> _transportMaps; // Helper container storing map ids that are for transports only, loaded from gameobject_template
         VehicleSeatAddonContainer _vehicleSeatAddonStore;

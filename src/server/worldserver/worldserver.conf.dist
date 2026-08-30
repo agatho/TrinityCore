@@ -2112,6 +2112,68 @@ ChatFlood.AddonMessageDelay = 1
 ChatFlood.MuteTime = 10
 
 #
+#    Chat.Service.Enabled
+#        Description: Whether the realm's chat service accepts messages. Turning it off tells every
+#                     connected client with SMSG_CHAT_DOWN and every new login with
+#                     SMSG_CHAT_IS_DOWN, so the client shows CHAT_SERVER_DISCONNECTED_MESSAGE and
+#                     stops offering chat. Turning it back on sends SMSG_CHAT_RECONNECT, after which
+#                     the client re-joins every channel it knows - expect a wave of
+#                     CMSG_CHAT_JOIN_CHANNEL. Ingame commands keep working while it is off, so
+#                     .reload config is still the way back. Reloadable with .reload config.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled, chat is in maintenance)
+
+Chat.Service.Enabled = 1
+
+#
+#    Chat.RegionalService.Enabled
+#        Description: State reported with SMSG_CHAT_REGIONAL_SERVICE_STATUS, readable in the client
+#                     as C_ChatInfo.IsRegionalServiceAvailable(). Only affects the regional chat
+#                     channels (ChatChannels.Flags bit 21). The client debounces the value, so
+#                     repeating it produces no event. Reloadable with .reload config.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+Chat.RegionalService.Enabled = 1
+
+#
+#    Chat.CautionaryChat.Enabled
+#        Description: Hold back whispers and channel messages that match a `chat_spam_record`
+#                     pattern and ask the player to confirm or discard them
+#                     (SMSG_CAUTIONARY_CHAT_MESSAGE / SMSG_CAUTIONARY_CHANNEL_MESSAGE). The client
+#                     rewrites the affected chat line into two hyperlinks. Off by default: holding
+#                     player messages back is intrusive.
+#        Default:     0 - (Disabled)
+#                     1 - (Enabled)
+
+Chat.CautionaryChat.Enabled = 0
+
+#
+#    Chat.SpamFilterReport.MuteThreshold
+#        Description: How many DISTINCT clients must report that they filtered a character's
+#                     messages as spam (CMSG_CHAT_REPORT_FILTERED) before that character is muted
+#                     for ChatFlood.MuteTime seconds. Reports are always counted and logged
+#                     (logger chat.spam); this only controls enforcement.
+#
+#                     A report is only counted if this server actually delivered a whisper from the
+#                     reported character to the reporting one in the preceding five minutes, and
+#                     each such whisper backs at most one report; counted reports themselves stop
+#                     counting after fifteen minutes. Without those two conditions the mute would
+#                     be reachable by anyone who knows a GUID, because the whole trigger of the
+#                     opcode lives in the client and the server is only told the result.
+#
+#                     Nothing happens at all while `chat_spam_record` is empty: the client filters
+#                     against the patterns this server ships it, so with no patterns there is
+#                     nothing to report.
+#
+#                     WARNING: what retail does with such a report is not known and cannot be
+#                     recorded - it is answered with nothing on the wire. Muting is this server's
+#                     own policy. Leave at 0 unless you accept that.
+#        Default:     0 - (Disabled, log only)
+
+Chat.SpamFilterReport.MuteThreshold = 0
+
+#
 #    Channel.RestrictedLfg
 #        Description: Restrict LookupForGroup channel to characters registered in the LFG tool.
 #        Default:     1 - (Enabled, Allow join to channel only if registered in LFG)
@@ -4185,6 +4247,7 @@ Logger.mmaps=3,Server
 #Logger.chat.log=3,Console Server
 #Logger.calendar=3,Console Server
 #Logger.chat.system=3,Console Server
+#Logger.chat.spam=3,Console Server
 #Logger.cheat=3,Console Server
 #Logger.commands.ra=3,Console Server
 #Logger.condition=3,Console Server

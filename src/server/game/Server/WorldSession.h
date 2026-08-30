@@ -41,6 +41,7 @@
 #include <vector>
 
 class BlackMarketEntry;
+class ChatCautionMgr;
 class CollectionMgr;
 class Creature;
 class InstanceLock;
@@ -378,6 +379,7 @@ namespace WorldPackets
         class ChatReportIgnored;
         class CanLocalWhisperTargetRequest;
         class UpdateAADCStatus;
+        class CautionaryAction;
     }
 
     namespace Collections
@@ -879,6 +881,7 @@ namespace WorldPackets
 
     namespace Ticket
     {
+        class ChatReportFiltered;
         class GMTicketGetSystemStatus;
         class GMTicketGetCaseStatus;
         class SubmitUserFeedback;
@@ -1809,6 +1812,29 @@ class TC_GAME_API WorldSession
         void SendChatPlayerNotfoundNotice(std::string const& name);
         void SendPlayerAmbiguousNotice(std::string const& name);
         void SendChatRestricted(ChatRestrictionType restriction);
+        void SendChatNotInParty(ChatMsg type);
+        void SendChatNotInGuild(uint32 guildCommandError);           ///< @see enum GuildCommandError - NOT a ChatMsg
+        void SendChatIgnoredAccountMuted();
+        void SendChatServiceStatus(bool available, bool initial);
+        void SendChatRegionalServiceStatus(bool available);
+        void SendExpectedSpamRecords();
+        void SendChatAutoResponded(bool isDND, std::string_view text);
+        void SendCautionaryChatMessage(ChatMsg type, Language requestedLang, std::string const& msg, Player const* target);
+        /// true while a confirmed held whisper is being re-run - its sender already got his echo when it was held
+        bool IsCautionaryChatAccepted() const { return _chatCautionAccepted; }
+        void SendCautionaryChannelMessage(std::string const& msg);
+        void HandleChatSendCautionaryChatMessage(WorldPackets::Chat::CautionaryAction& packet);
+        void HandleChatDropCautionaryChatMessage(WorldPackets::Chat::CautionaryAction& packet);
+        void HandleChatSendCautionaryChannelMessage(WorldPackets::Chat::CautionaryAction& packet);
+        void HandleChatReportFiltered(WorldPackets::Ticket::ChatReportFiltered& packet);
+        void AddChatSpamFilterReport(ObjectGuid reporterGuid);
+        /// remembers that this session delivered a whisper to @p receiverGuid while the realm ships
+        /// spam patterns, so a CMSG_CHAT_REPORT_FILTERED naming this session can be checked
+        /// against something
+        void NoteFilterableWhisper(ObjectGuid receiverGuid);
+        /// true if this session delivered such a whisper to @p reporterGuid inside the report
+        /// window; takes the entry with it, so one whisper is worth at most one report
+        bool ConsumeFilterableWhisper(ObjectGuid reporterGuid);
         void HandleTextEmoteOpcode(WorldPackets::Chat::CTextEmote& packet);
         void HandleChatIgnoredOpcode(WorldPackets::Chat::ChatReportIgnored& chatReportIgnored);
         void HandleChatCanLocalWhisperTargetRequest(WorldPackets::Chat::CanLocalWhisperTargetRequest const& canLocalWhisperTargetRequest);
@@ -2343,6 +2369,24 @@ class TC_GAME_API WorldSession
         std::unique_ptr<BattlePets::BattlePetMgr> _battlePetMgr;
 
         std::unique_ptr<CollectionMgr> _collectionMgr;
+
+        // Chat messages this session is holding back until the player confirms or drops them
+        // (SMSG_CAUTIONARY_CHAT_MESSAGE). Session state on purpose - it must not survive a relog.
+        std::unique_ptr<ChatCautionMgr> _chatCautionMgr;
+        bool _chatCautionAccepted;      ///< true while re-running a confirmed held message: stops it being held again and stops the flood brake counting it twice
+
+        // Distinct reporters that told us this session's player tripped their client side spam
+        // filter (CMSG_CHAT_REPORT_FILTERED), each with the point in time at which its report stops
+        // counting. One entry per reporter, so a single client cannot inflate the count, and a
+        // sliding window, so reports scattered over a whole session do not add up to a mute.
+        std::map<ObjectGuid, time_t> _chatSpamFilterReporters;
+
+        // Whispers this session delivered while the realm had `chat_spam_record` patterns to ship -
+        // the only whispers a client can legitimately report as filtered - with the point in time
+        // at which each stops being reportable. This is the server side precondition of
+        // CMSG_CHAT_REPORT_FILTERED: without it any session that knows a GUID could report any
+        // online player, because the opcode's whole trigger otherwise lives in the client.
+        std::map<ObjectGuid, time_t> _filterableWhispers;
 
         ConnectToKey _instanceConnectKey;
 

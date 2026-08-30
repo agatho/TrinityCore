@@ -6597,7 +6597,12 @@ enum class ChatMessageResult : uint32
     NotInGroup,
     NotLeaderOrAssistant,
     RaidWarningInPartyDisabled,
-    ChannelIsReadOnly
+    ChannelIsReadOnly,
+    NotInGuild,                     ///< answered with SMSG_CHAT_NOT_IN_GUILD, ERR_GUILD_PLAYER_NOT_IN_GUILD
+    NoGuildChatPermission,          ///< answered with SMSG_CHAT_NOT_IN_GUILD, ERR_GUILD_PERMISSIONS
+    MutedByParentalControls,        ///< answered with SMSG_CHAT_IGNORED_ACCOUNT_MUTED
+    CautionaryChatPending,          ///< held back, answered with SMSG_CAUTIONARY_CHAT_MESSAGE
+    ChatServiceDown                 ///< realm chat service in maintenance, see SMSG_CHAT_DOWN
 };
 
 // Values from ItemPetFood (power of (value-1) used for compare with CreatureFamilyEntry.PetFoodMask

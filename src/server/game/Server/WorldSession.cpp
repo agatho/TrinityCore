@@ -24,6 +24,7 @@
 #include "BattlegroundMgr.h"
 #include "BattlenetPackets.h"
 #include "CharacterPackets.h"
+#include "ChatCaution.h"
 #include "ChatPackets.h"
 #include "ClientConfigPackets.h"
 #include "Containers.h"
@@ -154,7 +155,9 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _quickJoinAutoAcceptRequests(false),
     _engineSurveyReceived(false),
     _lastReportServerLagTime(0),
-    _warden3DisabledSent(false)
+    _warden3DisabledSent(false),
+    _chatCautionMgr(std::make_unique<ChatCautionMgr>(this)),
+    _chatCautionAccepted(false)
 {
     if (m_Socket[CONNECTION_TYPE_REALM])
     {
@@ -640,6 +643,11 @@ void WorldSession::LogoutPlayer(bool save)
             _player->RepopAtGraveyard();
             _player->SetPendingBind(0, 0);
         }
+
+        // Held back chat messages are session state and must not survive the character
+        _chatCautionMgr->Clear();
+        _chatSpamFilterReporters.clear();
+        _filterableWhispers.clear();
 
         //drop a flag if player is carrying it
         if (Battleground* bg = _player->GetBattleground())

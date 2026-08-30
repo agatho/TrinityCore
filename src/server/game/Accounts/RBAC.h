@@ -758,6 +758,14 @@ enum RBACPermissions
     // IF YOU ADD NEW PERMISSIONS, ADD THEM IN 3.3.5 BRANCH AS WELL!
     //
     // custom permissions 1000+
+
+    // Account chat is muted by an age / parental restriction. Answered with
+    // SMSG_CHAT_IGNORED_ACCOUNT_MUTED, whose client consumer hardwires GameError 946
+    // ERR_PARENTAL_CONTROLS_CHAT_MUTED. This is NOT the ordinary mutetime or GM mute - that is
+    // SMSG_CHAT_RESTRICTED with ERR_USER_SQUELCHED.
+    RBAC_PERM_CHAT_MUTED_PARENTAL_CONTROLS                   = 1000,
+    RBAC_PERM_COMMAND_RELOAD_CHAT_SPAM_RECORD                = 1001,
+
     RBAC_PERM_MAX
 };
 

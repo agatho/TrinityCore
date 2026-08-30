@@ -173,6 +173,12 @@ class TC_GAME_API Channel
         bool IsAnnounce() const { return _announceEnabled; }
         void SetAnnounce(bool announce) { _announceEnabled = announce; }
 
+        // Channel wide moderation, the state behind CMSG_CHAT_CHANNEL_MODERATE (0x2C0016).
+        // Deliberately NOT persisted: the `channels` table keeps announce, ownership, password and
+        // ban list only, and the related per-player MEMBER_FLAG_MUTED is not persisted either.
+        // A moderation toggle is a transient moderation action, so it dies with the channel.
+        bool IsModerated() const { return _moderationEnabled; }
+
         // will be saved to DB on next channel save interval
         void SetDirty() { _isDirty = true; }
         void UpdateChannelInDB();
@@ -212,7 +218,11 @@ class TC_GAME_API Channel
         void UnsilenceAll(Player const* player, std::string const& name);
         void List(Player const* player) const;
         void Announce(Player const* player);
-        void Say(ObjectGuid const& guid, std::string const& what, uint32 lang) const;
+        void Moderate(Player const* player);
+        /// @return true when the line was actually broadcast; false when the channel refused it
+        /// (empty, not a member, muted). The cautionary channel notice keys on this - see
+        /// WorldSession::HandleChatMessage, CHAT_MSG_CHANNEL.
+        bool Say(ObjectGuid const& guid, std::string const& what, uint32 lang) const;
         void AddonSay(ObjectGuid const& guid, std::string const& prefix, std::string const& what, bool isLogged) const;
         void DeclineInvite(Player const* player);
         void Invite(Player const* player, std::string const& newp);
@@ -251,7 +261,12 @@ class TC_GAME_API Channel
         bool _isDirty; // whether the channel needs to be saved to DB
         time_t _nextActivityUpdateTime;
 
+        void SendNPEJoinedBatch(uint32 joinedCount) const;
+        /// _playersStore minus the GMs who joined with .gm visible off - what a player can see
+        uint32 GetNumVisiblePlayers() const;
+
         bool _announceEnabled;          //< Whether we should broadcast a packet whenever a player joins/exits the channel
+        bool _moderationEnabled;        //< Whether the channel is moderated, @see CMSG_CHAT_CHANNEL_MODERATE - not persisted
         bool _ownershipEnabled;         //< Whether the channel has to maintain an owner
         bool _isOwnerInvisible;         //< Whether the channel is owned by invisible GM, ownership should change to first player that joins channel
 

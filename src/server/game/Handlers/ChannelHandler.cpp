@@ -141,6 +141,9 @@ void WorldSession::HandleChannelCommand(WorldPackets::Channel::ChannelCommand& p
             case CMSG_CHAT_CHANNEL_LIST:
                 channel->List(GetPlayer());
                 break;
+            case CMSG_CHAT_CHANNEL_MODERATE:
+                channel->Moderate(GetPlayer());
+                break;
             case CMSG_CHAT_CHANNEL_OWNER:
                 channel->SendWhoOwner(GetPlayer());
                 break;

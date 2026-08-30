@@ -127,7 +127,7 @@ Chat::Chat(Chat const& chat) : ServerPacket(SMSG_CHAT, chat._worldPacket.size())
     SenderVirtualAddress(chat.SenderVirtualAddress), TargetVirtualAddress(chat.TargetVirtualAddress), SenderName(chat.SenderName), TargetName(chat.TargetName),
     Prefix(chat.Prefix), _Channel(chat._Channel), ChatText(chat.ChatText), AchievementID(chat.AchievementID), _ChatFlags(chat._ChatFlags),
     DisplayTime(chat.DisplayTime), SpellID(chat.SpellID), BroadcastTextID(chat.BroadcastTextID), HideChatLog(chat.HideChatLog), FakeSenderName(chat.FakeSenderName),
-    ChannelGUID(chat.ChannelGUID)
+    ChannelGUID(chat.ChannelGUID), EncounterEventID(chat.EncounterEventID)  // Bestand B5: EncounterEventID was dropped here
 {
 }
 
@@ -324,6 +324,10 @@ void ChatReportIgnored::Read()
 WorldPacket const* ChatPlayerAmbiguous::Write()
 {
     _worldPacket << SizedString::BitsSize<9>(Name);
+    // Bestand B4: the FlushBits was missing. WriteString appends nothing for an empty name, so
+    // nothing flushed the 9 length bits and they fell out of the packet. ChatPlayerNotfound::Write
+    // has always had it.
+    _worldPacket.FlushBits();
 
     _worldPacket << SizedString::Data(Name);
 
@@ -362,5 +366,116 @@ WorldPacket const* UpdateAADCStatusResponse::Write()
     _worldPacket.FlushBits();
 
     return &_worldPacket;
+}
+
+WorldPacket const* ExpectedSpamRecords::Write()
+{
+    // Reader 0x72F170: byte aligned uint32 count, then per element a 9 bit length followed by the
+    // raw pattern bytes. The reader restarts byte aligned for every element (two Read<uint8> calls,
+    // not the bit reader), so each element needs its own FlushBits between length and data.
+    _worldPacket << uint32(Records ? Records->size() : 0);
+
+    if (Records)
+    {
+        for (std::string const& record : *Records)
+        {
+            _worldPacket << SizedString::BitsSize<9>(record);
+            _worldPacket.FlushBits();
+
+            _worldPacket << SizedString::Data<Strings::DontValidateUtf8>(record);
+        }
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ChatNotInParty::Write()
+{
+    _worldPacket << int32(ChatType);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CautionaryChatMessage::Write()
+{
+    _worldPacket << SizedCString::BitsSize<9>(TargetName);
+    _worldPacket << SizedCString::BitsSize<11>(Text);
+    _worldPacket.FlushBits();
+
+    _worldPacket << SenderGUID;
+    _worldPacket << uint32(Unused);
+    _worldPacket << uint32(ConfirmNumber);
+
+    _worldPacket << SizedCString::Data(TargetName);
+    _worldPacket << SizedCString::Data<Strings::DontValidateUtf8>(Text);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CautionaryChannelMessage::Write()
+{
+    _worldPacket << SizedCString::BitsSize<11>(Text);
+    _worldPacket.FlushBits();
+
+    _worldPacket << uint32(ConfirmNumber);
+
+    _worldPacket << SizedCString::Data<Strings::DontValidateUtf8>(Text);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ChatAutoResponded::Write()
+{
+    _worldPacket << Bits<1>(IsDND);
+    _worldPacket << SizedString::BitsSize<11>(Text);
+    _worldPacket.FlushBits();
+
+    _worldPacket << uint32(SenderVirtualRealmAddress);
+
+    // ReadBytes, not ReadString - no null terminator on the wire, the client appends its own
+    _worldPacket << SizedString::Data<Strings::DontValidateUtf8>(Text);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ChatRegionalServiceStatus::Write()
+{
+    _worldPacket << uint8(Status);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ChatNotInGuild::Write()
+{
+    _worldPacket << uint32(GuildCommandError);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ChatLairDifficultyMessage::Write()
+{
+    _worldPacket << uint32(Unused);
+    _worldPacket << uint16(DifficultyID);
+
+    return &_worldPacket;
+}
+
+CautionaryAction::CautionaryAction(WorldPacket&& packet) : ClientPacket(std::move(packet))
+{
+    switch (packet.GetOpcode())
+    {
+        case CMSG_CHAT_DROP_CAUTIONARY_CHAT_MESSAGE:
+        case CMSG_CHAT_SEND_CAUTIONARY_CHANNEL_MESSAGE:
+        case CMSG_CHAT_SEND_CAUTIONARY_CHAT_MESSAGE:
+            break;
+        default:
+            ABORT();
+            break;
+    }
+}
+
+void CautionaryAction::Read()
+{
+    _worldPacket >> ConfirmNumber;
 }
 }

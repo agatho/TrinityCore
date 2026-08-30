@@ -104,6 +104,7 @@ public:
             { "creature_queststarter",         rbac::RBAC_PERM_COMMAND_RELOAD_CREATURE_QUESTSTARTER,            true,  &HandleReloadCreatureQuestStarterCommand,       "" },
             { "creature_summon_groups",        rbac::RBAC_PERM_COMMAND_RELOAD_CREATURE_SUMMON_GROUPS,           true,  &HandleReloadCreatureSummonGroupsCommand,       "" },
             { "creature_template",             rbac::RBAC_PERM_COMMAND_RELOAD_CREATURE_TEMPLATE,                true,  &HandleReloadCreatureTemplateCommand,           "" },
+            { "chat_spam_record",              rbac::RBAC_PERM_COMMAND_RELOAD_CHAT_SPAM_RECORD,                 true,  &HandleReloadChatSpamRecordCommand,             "" },
             { "criteria_data",                 rbac::RBAC_PERM_COMMAND_RELOAD_CRITERIA_DATA,                    true,  &HandleReloadCriteriaDataCommand,               "" },
             { "disables",                      rbac::RBAC_PERM_COMMAND_RELOAD_DISABLES,                         true,  &HandleReloadDisablesCommand,                   "" },
             { "disenchant_loot_template",      rbac::RBAC_PERM_COMMAND_RELOAD_DISENCHANT_LOOT_TEMPLATE,         true,  &HandleReloadLootTemplatesDisenchantCommand,    "" },
@@ -346,6 +347,15 @@ public:
         TC_LOG_INFO("misc", "Re-Loading Access Requirement definitions...");
         sObjectMgr->LoadAccessRequirements();
         handler->SendGlobalGMSysMessage("DB table `access_requirement` reloaded.");
+        return true;
+    }
+
+    static bool HandleReloadChatSpamRecordCommand(ChatHandler* handler, char const* /*args*/)
+    {
+        TC_LOG_INFO("misc", "Re-Loading Chat Spam Records...");
+        sObjectMgr->LoadChatSpamRecords();
+        handler->SendGlobalGMSysMessage("DB table `chat_spam_record` reloaded. Already connected clients keep the "
+            "pattern list they were given at login (SMSG_EXPECTED_SPAM_RECORDS is a login-once packet).");
         return true;
     }
 
