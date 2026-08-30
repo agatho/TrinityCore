@@ -452,6 +452,8 @@ namespace WorldPackets
         class ActivateSoulbind;
         class RequestCovenantCallings;
         class CovenantRenownRequestCatchupState;
+    }
+
     namespace Commentator
     {
         class CommentatorEnable;
@@ -814,6 +816,8 @@ namespace WorldPackets
     namespace MajorFactions
     {
         class RequestCatchupState;
+    }
+
     namespace ClubFinder
     {
         class ClubFinderPost;
@@ -826,6 +830,8 @@ namespace WorldPackets
         class ClubFinderRespondToApplicant;
         class ClubFinderApplicationResponse;
         class ClubFinderWhisperApplicantRequest;
+    }
+
     namespace BattlePay
     {
         class UpdateVasPurchaseStates;
@@ -838,6 +844,8 @@ namespace WorldPackets
         class ConfirmPurchaseResponse;
         class DistributionAssignToTarget;
         class CharacterUpgradeStart;
+    }
+
     namespace ChallengeMode
     {
         class RequestMythicPlusSeasonData;
@@ -858,6 +866,8 @@ namespace WorldPackets
         class RequestPartyEligibilityForDelveTiers;
         class SelectDelveEntranceTier;
         class TieredEntranceOpen;
+    }
+
     namespace Housing
     {
         // Patch 12.1.0 (build 69299) blueprint packets (HousingBlueprintPackets.h)
@@ -938,6 +948,8 @@ namespace WorldPackets
         // Retired 2026-05-12 (batch 2): 8 fake SVCS CMSG class forward decls deleted.
         // Retired 2026-05-12: group 0x35 system CMSG classes (HouseStatusQuery, GetHouseInfoAlt,
         // HouseSnapshot, ExportHouse, UpdateHouseInfo) â€” no client senders in build 67186.
+    }
+
     namespace Social
     {
         class AddFriend;
@@ -952,6 +964,8 @@ namespace WorldPackets
         class SetContactNotes;
         class SocialContractRequest;
         class AcceptSocialContract;
+    }
+
     namespace Contribution
     {
         class ContributionContribute;
