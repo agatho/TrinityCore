@@ -451,7 +451,6 @@ namespace WorldPackets
             Damager = 2
         };
 
-        std::size_t constexpr PVP_QUEUE_ROLE_COUNT = 3;
 
         class BattlemasterJoin final : public ClientPacket
         {
@@ -1206,18 +1205,6 @@ namespace WorldPackets
         // It also finally explains the bracket space referenced by BattlemasterJoinSkirmish above - the
         // rated-only subset {0,1,2,3,6,8} that C_PvP.GetPersonalRatedInfo accepts, and the value 4 that
         // C_PvP.JoinSkirmish always sends, are exactly the Skirmish and rated entries of this table.
-        enum class PVPMatchBracket : uint8
-        {
-            Arena2v2            = 0,    // "2v2"
-            Arena3v3            = 1,    // "3v3"
-            Arena5v5            = 2,    // "5v5"
-            RatedBattleground   = 3,    // "Rated BG"
-            Skirmish            = 4,    // "Skirmish"
-            BrawlSoloShuffle    = 5,    // "Brawl Solo Shuffle"
-            RatedSoloShuffle    = 6,    // "Rated Solo Shuffle"
-            BrawlSoloRBG        = 7,    // "Brawl Solo RBG"
-            RatedSoloRBG        = 8     // "Rated Solo RBG"
-        };
 
         // SMSG_PVP_MATCH_START (0x48002D), body = 22 bytes in the one capture we have.
         //

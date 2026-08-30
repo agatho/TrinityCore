@@ -436,15 +436,6 @@ namespace WorldPackets
         //   3 (RAID), 39 (RAID_LEADER), 40 (RAID_WARNING) -> GameError 552 ERR_NOT_IN_RAID
         // Taken over from origin/feature/gap-closers (ChatPackets.h:342); wire and typing
         // re-verified against 69382.
-        class ChatNotInParty final : public ServerPacket
-        {
-        public:
-            explicit ChatNotInParty(ChatMsg chatType) : ServerPacket(SMSG_CHAT_NOT_IN_PARTY, 4), ChatType(chatType) { }
-
-            WorldPacket const* Write() override;
-
-            ChatMsg ChatType;
-        };
 
         // SMSG_CAUTIONARY_CHAT_MESSAGE (0x4A0008) - the server withholds a whisper and asks the
         // player to confirm or drop it. Dispatcher case 4849672:
@@ -495,7 +486,6 @@ namespace WorldPackets
         class CautionaryChannelMessage final : public ServerPacket
         {
         public:
-            static constexpr std::size_t MaxTextLength = 2046;
 
             explicit CautionaryChannelMessage() : ServerPacket(SMSG_CAUTIONARY_CHANNEL_MESSAGE, 2 + 4 + 32) { }
 
@@ -516,7 +506,6 @@ namespace WorldPackets
         class ChatAutoResponded final : public ServerPacket
         {
         public:
-            static constexpr std::size_t MaxTextLength = 1282;
 
             explicit ChatAutoResponded() : ServerPacket(SMSG_CHAT_AUTO_RESPONDED, 2 + 4 + 32) { }
 
