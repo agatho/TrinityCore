@@ -1640,6 +1640,16 @@ void Battleground::SendMatchScoreState(Player* player) const
     if (!_maxTeamScore)
         return;
 
+    if (!_maxTeamScore)
+        return;
+
+    // Capture order at battleground entry (C:\sniff\rated BG 12.0.7.pkt, tick 915464, instance connection):
+    // SMSG_BATTLEGROUND_INIT first, then SMSG_BATTLEGROUND_POINTS for horde and then for alliance.
+    WorldPackets::Battleground::BattlegroundInit battlegroundInit;
+    battlegroundInit.ServerTime = GameTime::GetGameTimeMS();
+    battlegroundInit.MaxPoints = _maxTeamScore;
+    player->SendDirectMessage(battlegroundInit.Write());
+
     for (TeamId teamId : { TEAM_HORDE, TEAM_ALLIANCE })
     {
         WorldPackets::Battleground::BattlegroundPoints battlegroundPoints;

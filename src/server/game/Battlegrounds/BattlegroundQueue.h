@@ -68,6 +68,13 @@ struct GroupQueueInfo                                       // stores informatio
                                                             // SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS, the Role byte
                                                             // of SMSG_BATTLEFIELD_STATUS_NEED_CONFIRMATION) reads
                                                             // PlayerQueueInfo::Role, which exists for every member.
+    uint8   Roles;                                          // lfg::PLAYER_ROLE_* mask from the join packet.
+                                                            // For a group this is the QUEUER's mask only: the wire
+                                                            // carries no per-member roles. Matchmaking therefore
+                                                            // does NOT read this - it reads PlayerQueueInfo::Role,
+                                                            // which exists for every member. This is kept as the
+                                                            // record of what the queuer asked for, and is what
+                                                            // narrows their own PlayerQueueInfo::Role.
 };
 
 enum BattlegroundQueueGroupTypes
@@ -125,6 +132,9 @@ struct BattlegroundProposalMember
         whose halves answered differently therefore leaves together, the accepting half included, with one
         SMSG_BATTLEFIELD_STATUS_NONE and no SMSG_BATTLEFIELD_STATUS_QUEUED before it. ResolveProposal settles
         that up front instead of letting it fall out of the removal order;
+      - the members who DID accept keep their GroupQueueInfo, and with it their JoinTime, so they return to
+        the queue in the position they already held rather than at the back of it - they get their invite
+        revoked, SMSG_BATTLEFIELD_STATUS_GROUP_PROPOSAL_FAILED, and then SMSG_BATTLEFIELD_STATUS_QUEUED again;
       - the battleground that was created for the proposal is dropped, so the next attempt picks a fresh map -
         which is exactly what retail does across the three proposal runs in C:\sniff\rated BG 12.0.7.pkt.
 */
@@ -168,6 +178,9 @@ class TC_GAME_API BattlegroundQueue
         // Returns false and leaves the pools untouched when the queue cannot yet field two full role-valid teams.
         bool CheckSoloQueueMatch(BattlegroundBracketId bracket_id, uint32 playersPerTeam, uint32 tanksPerTeam, uint32 healersPerTeam);
         GroupQueueInfo* AddGroup(Player const* leader, Group const* group, Team team, PVPDifficultyEntry const*  bracketEntry, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating, uint8 roles = 0);
+        // War games bypass matchmaking: both premade groups are known up front, so this queues one side onto a
+        // forced team and immediately sends its members the enter-confirmation for the given battleground.
+        bool AddWargameSide(Player* leader, Group* group, Battleground* bg, PVPDifficultyEntry const* bracketEntry, Team team);
         void RemovePlayer(ObjectGuid guid, bool decreaseInvitedCount);
         bool IsPlayerInvited(ObjectGuid pl_guid, const uint32 bgInstanceGuid, const uint32 removeTime);
         bool GetPlayerGroupInfoData(ObjectGuid guid, GroupQueueInfo* ginfo);
@@ -218,6 +231,8 @@ class TC_GAME_API BattlegroundQueue
 
         /* All-or-nothing group proposals - see BattlegroundProposal above. */
 
+        // True when this player is held by a proposal, i.e. their accept/decline must not be acted on alone.
+        bool IsInProposal(ObjectGuid guid) const;
         // Records an accept. Returns false when the player is not in a proposal, in which case the caller
         // must fall back to the ordinary per-player invite handling. When the accept completes the proposal
         // this ports every member.
@@ -239,6 +254,10 @@ class TC_GAME_API BattlegroundQueue
         // in Battleground.h - and suppresses the per-player BGQueueRemoveEvent, because the proposal's own
         // deadline owns the removal; two independent removers racing on the same tick would strand half the
         // lobby.
+        // inviteTime is how long the invited players have to answer. A proposal-managed invite passes
+        // PROPOSAL_ACCEPT_WAIT_TIME and suppresses the per-player BGQueueRemoveEvent, because the proposal's
+        // own deadline owns the removal - two independent removers racing on the same tick would strand half
+        // the lobby.
         bool InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg, Team side, uint32 inviteTime = INVITE_ACCEPT_WAIT_TIME, bool proposalManaged = false);
 
         // Opens a proposal over the two filled selection pools and tells its members it is running.

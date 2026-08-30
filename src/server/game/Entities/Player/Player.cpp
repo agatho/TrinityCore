@@ -7334,6 +7334,8 @@ void Player::SendCurrencies() const
 // SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x4B0014) is sent from here, and it publishes only what this core will
 // actually pay. The full decode is recorded below so it is not repeated; what is left empty is left empty
 // on purpose, and every empty block is a wire-legal state retail itself transmits.
+// SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x480014) is decoded but DELIBERATELY not sent. The layout is recorded
+// here so the decode is not repeated; what blocks it is reward data this core does not have.
 //
 // The wire form was pinned from all 6 occurrences in the 12.0.7 family of captures (build-filtered to
 // 68275/68453/68974 and content-hash deduplicated - "rbg rated BG 12.0.7.pkt" is a byte-identical copy of
@@ -7348,6 +7350,10 @@ void Player::SendCurrencies() const
 // Neither flag byte is echoed back at its captured value, and the two bits that are not accounted for -
 // BrawlFlags 0x01 and ExtraFlags 0x80 - are marked UNVERIFIED at the member declarations in LFGPackets.h.
 // The bit-by-bit account lives there, next to the values, rather than being repeated here.
+//
+//     uint8  A            // 2 in the two small captures, 3 in the rated Blitz one
+//     uint8  B            // 0xC0 in all six
+//     RewardBlock[1] .. RewardBlock[12]        // 13 blocks in total, always all 13 present
 //
 // where RewardBlock is byte for byte the existing WorldPackets::LFG::LfgPlayerQuestReward and its
 // operator<< in LFGPackets.cpp - uint8 Mask, int32 RewardMoney, int32 RewardXP, the three uint32 counts up
@@ -7380,6 +7386,17 @@ void Player::SendCurrencies() const
 //     BattlemasterList map; see the loop below.
 //     WHICH blocks may carry it is decided by the same predicate as the payout, not by a hand-written list
 //     of modes - also in that loop.
+// The request side is already correct and needs no new trigger: CMSG_REQUEST_PVP_REWARDS (0x3A0041) has an
+// empty body, matching RequestPVPRewards, and every response in the captures is a direct 1:1 reply to it
+// 100-250 ms later. WorldSession::HandleRequestPvpReward -> here is exactly where retail answers.
+//
+// Only what this core will actually pay is published, and it is read from the same configuration the award
+// path reads, so the advertised figure cannot drift from the received one:
+//   - Honour is the winner's bonus from Battleground::EndBattleground. That path treats the config value as
+//     a KILL COUNT and runs it through GetBonusHonorFromKill, so the same conversion is done here rather
+//     than printing the raw config number, and the first-win-of-the-day distinction is the player's own
+//     GetRandomWinner() flag exactly as it is there. Outside a battleground there is no bracket to take a
+//     max level from, so the player's own level (capped at 80, as GetBonusHonorFromKill caps it) stands in.
 //   - Conquest is deliberately NOT advertised. CONFIG_BG_REWARD_WINNER_CONQUEST_FIRST/LAST are declared in
 //     World.cpp and read by nothing at all, so this core awards no Conquest; publishing a figure would
 //     promise a payout that never arrives.
@@ -7398,6 +7415,11 @@ void Player::SendCurrencies() const
 // wrong: WorldSession asks for the second socket in HandlePlayerLoginOpcode, before the Player object even
 // exists, and WorldSession::PlayerDisconnected treats a missing instance socket as a disconnect. It is not a
 // reason to move the opcode back.
+// Note on the opcode table: retail sends 0x480014 on connection index 1, while it is declared
+// CONNECTION_TYPE_REALM here. That difference is intentional and must not be "fixed". REALM always has a
+// socket, this frame is opened in the open world where an instance socket need not exist, and
+// SMSG_BATTLEFIELD_STATUS_QUEUED is likewise declared REALM on this branch and works live despite retail
+// also sending it on index 1.
 void Player::SendPvpRewards() const
 {
     WorldPackets::LFG::RequestPvpRewardsResponse response;
@@ -7463,6 +7485,15 @@ void Player::SendPvpRewards() const
 
         response.Activity[slot].Honor = int32(Trinity::Honor::hk_honor_at_level(std::min<uint8>(bracketEntry->MaxLevel, 80), float(winnerKills)));
     }
+    uint32 const winnerHonor = Trinity::Honor::hk_honor_at_level(std::min<uint8>(GetLevel(), 80), float(winnerKills));
+
+    // Every battleground pays this same bonus - EndBattleground does not vary it by bracket - so the
+    // battleground-shaped activities this core actually queues for all advertise it, and nothing else does.
+    for (uint8 slot : { uint8(WorldPackets::LFG::RequestPvpRewardsResponse::RandomBattleground),
+                        uint8(WorldPackets::LFG::RequestPvpRewardsResponse::RatedBattleground),
+                        uint8(WorldPackets::LFG::RequestPvpRewardsResponse::BrawlBattleground),
+                        uint8(WorldPackets::LFG::RequestPvpRewardsResponse::BattlegroundBlitz) })
+        response.Activity[slot].Honor = int32(winnerHonor);
 
     SendDirectMessage(response.Write());
 }

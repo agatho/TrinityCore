@@ -237,6 +237,12 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPackets::Battleground::Batt
         // the premade flag is deliberately left where upstream put it. (Here isPremade is still false anyway -
         // it is only computed in the group branch.)
         GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, nullptr, getQueueTeam(), bracketEntry, false, isPremade, 0, battlemasterJoin.Roles);
+        // The parameter order is (…, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating, uint8 roles).
+        // This call used to read (…, false, isPremade, 0): isPremade was landing in ArenaRating while the real
+        // isPremade parameter was hardcoded false. Because AddGroup buckets with
+        // `if (!m_queueId.Rated && !isPremade) index += PVP_TEAMS_COUNT`, every unrated group was filed under
+        // BG_QUEUE_NORMAL_* and CheckPremadeMatch could never fire.
+        GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, nullptr, getQueueTeam(), bracketEntry, isPremade, 0, 0, battlemasterJoin.Roles);
         uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
         uint32 queueSlot = _player->AddBattlegroundQueueId(bgQueueTypeId);
 
@@ -280,6 +286,8 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPackets::Battleground::Batt
             // byte-for-byte as upstream wrote it (`false, isPremade, 0` - the flag lands in ArenaRating, which no
             // unrated code path reads) and only gains the role mask that the 12.1 role-aware queue needs.
             ginfo = bgQueue.AddGroup(_player, grp, getQueueTeam(), bracketEntry, false, isPremade, 0, battlemasterJoin.Roles);
+            // Same argument-order fix as the solo path above.
+            ginfo = bgQueue.AddGroup(_player, grp, getQueueTeam(), bracketEntry, isPremade, 0, 0, battlemasterJoin.Roles);
             avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
         }
 
@@ -311,6 +319,7 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPackets::Battleground::Batt
 }
 
 // CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ (0x3E00C0) - rated 8v8 solo/duo queue.
+// CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ (0x3B00BE) - rated 8v8 solo/duo queue.
 //
 // Unlike CMSG_BATTLEMASTER_JOIN, this packet carries NO queue identity: the client sends a single role-mask
 // byte and the mode is implied entirely by the opcode. The server therefore builds the queue id itself. The
@@ -387,6 +396,13 @@ void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground
     if (!bracketEntry)
         return;
 
+    auto sendFailed = [&](GroupJoinBattlegroundResult result)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result);
+        SendPacket(battlefieldStatus.Write());
+    };
+
     // The retail client refuses to send this opcode with no role selected, so a zero mask means either a
     // modified client or a UI state we do not model. Either way the matchmaker cannot place the player.
     if (!packet.Roles)
@@ -396,6 +412,7 @@ void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground
     }
 
     Group* grp = _player->GetGroup();
+    Group const* grp = _player->GetGroup();
     if (grp)
     {
         if (grp->GetLeaderGUID() != _player->GetGUID())
@@ -403,6 +420,7 @@ void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground
 
         // BattlemasterList 1101 caps the queueing party at MaxGroupSize (2 on retail - solo or duo).
         if (int32(grp->GetMembersCount()) > battlemasterListEntry->MaxGroupSize)
+        if (grp->GetMembersCount() > battlemasterListEntry->MaxGroupSize)
         {
             sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
             return;
@@ -518,6 +536,7 @@ void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground
 }
 
 // CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3E00C1) - unrated 3v3 arena, solo or small group.
+// CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3B00BF) - unrated 3v3 arena, solo or small group.
 //
 // Like the Blitz join this packet carries no queue identity; the mode is implied by the opcode. It queues
 // against BattlemasterList 6 ("All Arenas"), which already has a battleground_template row and whose 15
@@ -639,6 +658,8 @@ void WorldSession::HandleBattlemasterJoinSkirmish(WorldPackets::Battleground::Ba
     // Unrated, so no rating is carried. The role mask narrows the queuer's own PlayerQueueInfo::Role in
     // AddGroup and is not kept beyond that - no skirmish matchmaker consults it, and the wire only ever
     // tells us the queuer's own mask, never the other party members'.
+    // Unrated, so no rating is carried. Roles are stored but no skirmish matchmaker consults them - the wire
+    // only ever tells us the queuer's own mask, never the other party members'.
     GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, false, 0, 0, packet.Roles);
     uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
 
@@ -670,6 +691,7 @@ void WorldSession::HandleBattlemasterJoinSkirmish(WorldPackets::Battleground::Ba
 }
 
 // CMSG_JOIN_RATED_BATTLEGROUND (0x3D0025) - the classic 10v10 rated battleground, premade-group only.
+// CMSG_JOIN_RATED_BATTLEGROUND (0x3A0025) - the classic 10v10 rated battleground, premade-group only.
 //
 // Like the Blitz and Skirmish joins this carries no queue identity, only the role mask; the mode is implied
 // by the opcode. The queue id is { BattlemasterListId = 100, Type = 0 (BATTLEGROUND), Rated = true,
@@ -688,11 +710,13 @@ void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinR
 {
     BattlegroundQueueTypeId bgQueueTypeId =
         BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_RATED_10_VS_10, BattlegroundQueueIdType::Battleground, true, 0);
+        BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_RATED_BG, BattlegroundQueueIdType::Battleground, true, 0);
 
     if (!BattlegroundMgr::IsValidQueueId(bgQueueTypeId))
     {
         TC_LOG_ERROR("network", "Rated Battleground: queue id rejected by IsValidQueueId - BattlemasterList {} missing from the client DB2.",
             uint32(BATTLEGROUND_RATED_10_VS_10));
+            uint32(BATTLEGROUND_RATED_BG));
         return;
     }
 
@@ -713,6 +737,17 @@ void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinR
         TC_LOG_ERROR("bg.battleground", "Rated Battleground: no battleground_template row for {} - apply the rated-BG world migration.", uint32(BATTLEGROUND_RATED_10_VS_10));
         return;
     }
+
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BATTLEGROUND_RATED_BG);
+    if (!bgTemplate)
+    {
+        TC_LOG_ERROR("bg.battleground", "Rated Battleground: no battleground_template row for {} - apply the rated-BG world migration.", uint32(BATTLEGROUND_RATED_BG));
+        return;
+    }
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
 
     auto sendFailed = [&](GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid = nullptr)
     {
@@ -762,6 +797,8 @@ void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinR
     // and GetMaxPlayersPerTeam() reads MaxPlayers. MinPlayers 5 is the number the match may START with once
     // formed, not a queueing size; RatedPlayers and MaxGroupSize both agree on 10, so the gate matches the
     // client whichever of the three the field order is read against.
+    // Rated battlegrounds are a full-roster mode: BattlemasterList 100 is 10v10 and the client's own UI
+    // refuses to send unless the group is full.
     if (grp->GetMembersCount() != bgTemplate->GetMaxPlayersPerTeam())
     {
         sendFailed(ERR_ARENA_TEAM_PARTY_SIZE);
@@ -820,6 +857,7 @@ void WorldSession::HandleJoinRatedBattleground(WorldPackets::Battleground::JoinR
 }
 
 // CMSG_BATTLEMASTER_JOIN_BRAWL (0x3E00C4) - the rotating PvP Brawl. Body is uint8 Roles + one bit
+// CMSG_BATTLEMASTER_JOIN_BRAWL (0x3B00C2) - the rotating PvP Brawl. Body is uint8 Roles + one bit
 // IsSpecialBrawl (see BattlemasterJoinBrawl's comment for the serializer that says so).
 //
 // Like the other three joins in this file the packet carries no queue identity, but here that is not just a
@@ -879,6 +917,11 @@ void WorldSession::HandleBattlemasterJoinBrawl(WorldPackets::Battleground::Battl
         sendFailedBeforeQueueKnown(ERR_BATTLEGROUND_JOIN_FAILED);
         return;
     }
+        return;
+
+    Optional<BattlegroundMgr::ActiveBrawl> brawl = sBattlegroundMgr->GetActiveBrawl();
+    if (!brawl)
+        return;
 
     BattlegroundQueueTypeId bgQueueTypeId =
         BattlegroundMgr::BGQueueTypeId(uint16(brawl->BattlemasterListId), BattlegroundQueueIdType::Battleground, false, 0);
@@ -895,6 +938,10 @@ void WorldSession::HandleBattlemasterJoinBrawl(WorldPackets::Battleground::Battl
     // configuration error.
     BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BattlegroundTypeId(bgQueueTypeId.BattlemasterListId));
     if (!bgTemplate)
+        return;
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
         return;
 
     auto sendFailed = [&](GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid = nullptr)
@@ -937,6 +984,8 @@ void WorldSession::HandleBattlemasterJoinBrawl(WorldPackets::Battleground::Battl
         // (c:/dumps/sr_scratch/BattlemasterList.csv row 879, wago.tools). The 5 an earlier revision of this
         // comment named is MinPlayers, not the cap; the read below always used the right field.
         if (int32(grp->GetMembersCount()) > battlemasterListEntry->MaxGroupSize)
+        // BattlemasterList.MaxGroupSize is the brawl's own party cap (5 for Deep Six).
+        if (grp->GetMembersCount() > battlemasterListEntry->MaxGroupSize)
         {
             sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
             return;
@@ -1006,6 +1055,10 @@ void WorldSession::HandleBattlemasterJoinBrawl(WorldPackets::Battleground::Battl
     // MaxGroupSize 6, so a full party would otherwise be invisible to CheckNormalMatch for up to
     // Battleground.PremadeGroupWaitForMatch (30 min).
     GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, false, 0, 0, packet.Roles);
+    // isPremade true only for a group that already fills a side, matching HandleBattlemasterJoinOpcode.
+    bool const isPremade = grp && grp->GetMembersCount() >= bgTemplate->GetMinPlayersPerTeam();
+
+    GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, grp, Team(_player->GetTeam()), bracketEntry, isPremade, 0, 0, packet.Roles);
     uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
 
     if (grp)
@@ -1461,6 +1514,9 @@ void WorldSession::HandleRequestScheduledPvpInfo(WorldPackets::Battleground::Req
         // The brawl id rotates with that window in retail (8, 11, 120, 6, 10, 9 over the nine builds); ours
         // is a fixed configuration instead, so re-asking after the reset gets a fresh window on the same
         // brawl. That is a content decision, not a wire one.
+        // decoration. The brawl here is a fixed configuration rather than a rotation, so the honest deadline is
+        // the next weekly reset: that is when an operator changing the config would take effect, and it is the
+        // cadence retail rotates on. Re-asking after the reset gets a fresh window.
         time_t const now = GameTime::GetGameTime();
         time_t const nextChange = sWorld->GetNextWeeklyQuestsResetTime();
         info.SecondsUntilNextChange = nextChange > now ? uint32(nextChange - now) : uint32(WEEK);

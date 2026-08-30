@@ -318,6 +318,15 @@ namespace WorldPackets
         // sql/updates/auth/master/2026_08_22_00_auth.sql adds build 69404 (12.1.0), and the opcode table is on
         // the 12.1 values (SMSG_PONG = 0x4C0009). Emitting the 12.0.7 order here would desync every reply.
         // Reverting for a 12.0.7 realm is one loop and one pair of writes, right here in Write().
+        // SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x480014). Reply to the empty CMSG_REQUEST_PVP_REWARDS
+        // (0x3A0041); in every capture the reply follows the request 100-250 ms later, 1:1.
+        //
+        // The body is a FIXED thirteen activity blocks - there is no count field - with two loose bytes
+        // after the first block. Each block is exactly LfgPlayerQuestReward above, which is why that struct
+        // already carries the `Honor` optional. Decoded from all 6 occurrences in the 12.0.7 captures
+        // (bodies 304, 304, 348, 348, 584, 592); the parser consumes every one with zero bytes left over,
+        // and the client reader sub_7FF7290FB600 independently calls the per-block reader sub_7FF7291DAB70
+        // exactly thirteen times with the same two loose u8 reads after block 0.
         //
         // Retail leaves blocks it has nothing to say about entirely zero - the rated Blitz capture sent 11
         // of 13 populated, a levelling character only 4 - so an unimplemented activity is written empty
@@ -375,6 +384,13 @@ namespace WorldPackets
             // say what setting it would promise the client, and clear is the value two of the three distinct
             // captures carried. A capture taken from a session with and without an active rated Blitz week
             // would decide it - see aufnahme_noetig.
+            // The two loose bytes are twelve MSB-first booleans, of which only half are understood. Five of
+            // them (BrawlFlags 0x08/0x04/0x02 and ExtraFlags 0x40) are the per-brawl-type "has already won
+            // this brawl" markers the client returns as the extra `hasWon` value from GetBrawlRewards; we
+            // run no brawl rotation, so those are false and are written false. ExtraFlags 0x80 was set in
+            // every capture and gates something inside the client's Rated Solo Shuffle path; its meaning is
+            // not established, so it is written at the value that was observed and nothing more. The
+            // remaining six bits were zero in every capture and are left zero.
             uint8 BrawlFlags = 0x00;
             uint8 ExtraFlags = 0x80;
         };

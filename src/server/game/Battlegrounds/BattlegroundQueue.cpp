@@ -224,6 +224,7 @@ GroupQueueInfo* BattlegroundQueue::AddGroup(Player const* leader, Group const* g
     ginfo->ArenaMatchmakerRating     = MatchmakerRating;
     ginfo->OpponentsTeamRating       = 0;
     ginfo->OpponentsMatchmakerRating = 0;
+    ginfo->Roles                     = roles;
 
     ginfo->Players.clear();
 
@@ -562,6 +563,8 @@ bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg,
             // leaves ginfo->IsInvitedToBGInstanceGUID and ginfo->RemoveInviteTime alone, so the
             // IsPlayerInvited check in BGQueueInviteEvent::Execute stays true for the whole window.
             if (!proposalManaged && inviteTime > INVITATION_REMIND_TIME)
+            // create remind invite events
+            if (inviteTime > INVITATION_REMIND_TIME)
             {
                 BGQueueInviteEvent* inviteEvent = new BGQueueInviteEvent(player->GetGUID(), ginfo->IsInvitedToBGInstanceGUID, bgTypeId, ginfo->RemoveInviteTime, m_queueId);
                 m_events.AddEvent(inviteEvent, m_events.CalculateTime(Milliseconds(inviteTime - INVITATION_REMIND_TIME)));
@@ -582,6 +585,7 @@ bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg,
 
             WorldPackets::Battleground::BattlefieldStatusNeedConfirmation battlefieldStatus;
             BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(bgQueueTypeId), inviteTime, bgQueueTypeId, itr->second->Role);
+            BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(bgQueueTypeId), inviteTime, bgQueueTypeId);
             player->SendDirectMessage(battlefieldStatus.Write());
         }
         return true;
@@ -1029,6 +1033,11 @@ BattlegroundProposal const* BattlegroundQueue::FindProposalFor(ObjectGuid guid) 
     return nullptr;
 }
 
+bool BattlegroundQueue::IsInProposal(ObjectGuid guid) const
+{
+    return FindProposalFor(guid) != nullptr;
+}
+
 void BattlegroundQueue::StartProposal(Battleground* bg, BattlegroundBracketId bracketId, uint32 playersPerTeam, PvpRoleHeadcount const& perSideQuota)
 {
     BattlegroundProposal proposal;
@@ -1191,6 +1200,10 @@ bool BattlegroundQueue::ProposalDecline(ObjectGuid guid)
         member.Accepted = false;
         member.Declined = true;
     }
+    // The decliner is dropped from the proposal first: their own removal from the queue is the caller's
+    // ordinary leave-queue path, and the collapse below must not touch them twice.
+    uint32 const instanceId = proposal->BgInstanceGUID;
+    std::erase_if(proposal->Members, [guid](BattlegroundProposalMember const& member) { return member.Guid == guid; });
 
     ResolveProposal(instanceId, false);
     return true;
@@ -1284,6 +1297,11 @@ void BattlegroundQueue::ResolveProposal(uint32 bgInstanceGuid, bool accepted)
         if (member.Declined)
             continue;
 
+    // they accepted.
+    SendProposalStatus(proposal, BattlegroundProposalStatus::Failed);
+
+    for (BattlegroundProposalMember const& member : proposal.Members)
+    {
         // The invited count was raised once per invited PLAYER, so it has to come back down once per member,
         // while the group's invite flag is a per-entry thing that is only cleared the first time.
         if (PlayerQueueInfo const* playerInfo = Trinity::Containers::MapGetValuePtr(m_QueuedPlayers, member.Guid))
@@ -1319,6 +1337,7 @@ void BattlegroundQueue::ResolveProposal(uint32 bgInstanceGuid, bool accepted)
         PlayerQueueInfo const* playerInfo = Trinity::Containers::MapGetValuePtr(m_QueuedPlayers, member.Guid);
         if (!playerInfo)
             continue;
+        player->SetInviteForBattlegroundQueueType(m_queueId, 0);
 
         uint32 const queueSlot = player->GetBattlegroundQueueIndex(m_queueId);
         if (queueSlot >= PLAYER_MAX_BATTLEGROUND_QUEUES)
@@ -1333,6 +1352,9 @@ void BattlegroundQueue::ResolveProposal(uint32 bgInstanceGuid, bool accepted)
             // partner who declined, that player sees the cascade BATTLEFIELD_STATUS_NONE shortly before the
             // one its own session sends - the same ticket in the same state twice, a repeat rather than the
             // QUEUED-then-NONE contradiction this ordering exists to prevent.
+        if (!member.Accepted)
+        {
+            // Never answered, or answered no. Same outcome a plain invite timeout has: out of the queue.
             player->RemoveBattlegroundQueueId(m_queueId);
             RemovePlayer(member.Guid, false);
 
@@ -1355,6 +1377,11 @@ void BattlegroundQueue::ResolveProposal(uint32 bgInstanceGuid, bool accepted)
         WorldPackets::Battleground::BattlefieldStatusQueued packet;
         BattlegroundMgr::BuildBattlegroundStatusQueued(&packet, player, queueSlot, joinTime, m_queueId, avgWaitTime,
             hasGroupInfo && groupInfo.Players.size() > 1);
+        uint32 const avgWaitTime = GetPlayerGroupInfoData(member.Guid, &groupInfo)
+            ? GetAverageQueueWaitTime(&groupInfo, proposal.BracketId) : 0;
+
+        WorldPackets::Battleground::BattlefieldStatusQueued packet;
+        BattlegroundMgr::BuildBattlegroundStatusQueued(&packet, player, queueSlot, joinTime, m_queueId, avgWaitTime, false);
         player->SendDirectMessage(packet.Write());
     }
 
@@ -1663,6 +1690,7 @@ void BattlegroundQueue::BattlegroundQueueUpdate(uint32 /*diff*/, BattlegroundBra
             for (uint32 i = 0; i < PVP_TEAMS_COUNT; ++i)
                 for (GroupsQueueType::const_iterator citr = m_SelectionPools[TEAM_ALLIANCE + i].SelectedGroups.begin(); citr != m_SelectionPools[TEAM_ALLIANCE + i].SelectedGroups.end(); ++citr)
                     InviteGroupToBG((*citr), bg2, (*citr)->Team, PROPOSAL_CONFIRM_WAIT_TIME, true);
+                    InviteGroupToBG((*citr), bg2, (*citr)->Team, PROPOSAL_ACCEPT_WAIT_TIME, true);
 
             TC_LOG_DEBUG("bg.battleground", "Proposing a Battleground Blitz match ({} per team: {} tanks, {} healers, {} damagers)",
                 perTeam, tanks, healers, perTeam - tanks - healers);

@@ -481,6 +481,7 @@ class TC_GAME_API Battleground
         // All three funnel through SetTeamScore so that every score movement, wherever it originates, reaches
         // the client as SMSG_BATTLEGROUND_POINTS - but only on battlegrounds that declared a score cap via
         // SetMaxTeamScore. See SetTeamScore for why the flag battlegrounds are excluded.
+        // the client as SMSG_BATTLEGROUND_POINTS.
         void AddPoint(Team team, uint32 points = 1) { SetTeamScore(GetTeamIndexByTeamId(team), m_TeamScores[GetTeamIndexByTeamId(team)] + int32(points)); }
         void SetTeamPoint(Team team, uint32 points = 0) { SetTeamScore(GetTeamIndexByTeamId(team), int32(points)); }
         void RemovePoint(Team team, uint32 points = 1) { SetTeamScore(GetTeamIndexByTeamId(team), m_TeamScores[GetTeamIndexByTeamId(team)] - int32(points)); }
@@ -491,6 +492,10 @@ class TC_GAME_API Battleground
         // unconditional. What a capless battleground does not get is the score baseline. See
         // SendMatchScoreState, and the reader census above SMSG_BATTLEGROUND_INIT in BattlegroundPackets.h.
         void SetMaxTeamScore(uint16 maxTeamScore);
+        // at zero, and then no SMSG_BATTLEGROUND_INIT is sent at all - which is what the client wants, since
+        // its handler discards a zero cap anyway.
+        void SetMaxTeamScore(uint16 maxTeamScore);
+        uint16 GetMaxTeamScore() const { return _maxTeamScore; }
 
         Trinity::unique_weak_ptr<Battleground> GetWeakPtr() const { return m_weakRef; }
         void SetWeakPtr(Trinity::unique_weak_ptr<Battleground> weakRef) { m_weakRef = std::move(weakRef); }

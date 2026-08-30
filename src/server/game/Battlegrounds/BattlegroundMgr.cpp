@@ -180,6 +180,12 @@ void BattlegroundMgr::Update(uint32 diff)
                 GetBattlegroundQueue(ratedBgQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
 
             m_NextRatedArenaUpdate = ratedUpdateTimer;
+            // premades at join time retries instead of sitting idle.
+            BattlegroundQueueTypeId ratedBgQueueId = BGQueueTypeId(BATTLEGROUND_RATED_BG, BattlegroundQueueIdType::Battleground, true, 0);
+            for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
+                GetBattlegroundQueue(ratedBgQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
+
+            m_NextRatedArenaUpdate = sWorld->getIntConfig(CONFIG_ARENA_RATED_UPDATE_TIMER);
         }
         else
             m_NextRatedArenaUpdate -= diff;
@@ -291,6 +297,7 @@ void BattlegroundMgr::PortPlayerToBattleground(Player* player, Battleground* bg,
     // and BattlegroundQueue::ResolveProposal for the solo queue - so a corpse entering is handled the same way
     // whichever queue it came from. See the note in HandleBattleFieldPortOpcode for why no path refuses the port
     // of a dead player instead.
+    // resurrect the player
     if (!player->IsAlive())
     {
         player->ResurrectPlayer(1.0f);
@@ -572,6 +579,7 @@ void BattlegroundMgr::LoadBattlegroundTemplates()
 
         if (bgTemplate.Id != BATTLEGROUND_AA && bgTemplate.Id != BATTLEGROUND_BLITZ
             && bgTemplate.Id != BATTLEGROUND_RATED_10_VS_10 && !IsRandomBattleground(bgTemplate.Id) && !isMultiMapBrawl)
+            && bgTemplate.Id != BATTLEGROUND_RATED_BG && !IsRandomBattleground(bgTemplate.Id) && !isMultiMapBrawl)
         {
             uint32 startId = fields[1].GetUInt32();
             if (WorldSafeLocsEntry const* start = sObjectMgr->GetWorldSafeLoc(startId))

@@ -250,6 +250,8 @@ namespace WorldPackets
 
         // SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS (0x4B000D) and
         // SMSG_BATTLEFIELD_STATUS_GROUP_PROPOSAL_FAILED (0x4B000E).
+        // SMSG_BATTLEFIELD_STATUS_WAIT_FOR_GROUPS (0x48000D) and
+        // SMSG_BATTLEFIELD_STATUS_GROUP_PROPOSAL_FAILED (0x48000E).
         //
         // Both were decoded byte for byte from the 18 + 2 occurrences in C:\sniff\rated BG 12.0.7.pkt and
         // confirmed against the client readers. (Note that "rbg rated BG 12.0.7.pkt" is a byte-identical copy
@@ -348,6 +350,16 @@ namespace WorldPackets
         // The per-role counters below are indexed in wire order, which is identical to ChrSpecializationRole
         // (Tank 0, Healer 1, Dps 2) - and that enum is what the queue code actually indexes with
         // (PlayerQueueInfo::Role, RoleIndex, FoldRole), so no second enum is declared here for it.
+        // both on connection index 0 in the capture, unlike SMSG_BATTLEFIELD_STATUS_QUEUED on index 1.
+
+        // Wire order of the per-role counters, identical to ChrSpecializationRole (Tank 0, Healer 1, Dps 2).
+        enum class PvpQueueRole : uint8
+        {
+            Tank    = 0,
+            Healer  = 1,
+            Damager = 2
+        };
+
         std::size_t constexpr PVP_QUEUE_ROLE_COUNT = 3;
 
         struct PvpRoleQueueCounts
@@ -409,6 +421,7 @@ namespace WorldPackets
         };
 
         // CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ (0x3E00C0), body = exactly 1 byte.
+        // CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ (0x3B00BE), body = exactly 1 byte.
         //
         // The client serializer at VA 0x7FF729153060 writes a single uint8 from obj+0x20 and returns;
         // C_PvP.JoinRatedBGBlitz (RVA 0x1278130) fills that byte with (selectedPvpRoles & ChrClasses.RolesMask).
@@ -432,6 +445,7 @@ namespace WorldPackets
         };
 
         // CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3E00C1), body = 3 bytes.
+        // CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3B00BF), body = 3 bytes.
         //
         // Serializer VA 0x7FF729153120 writes obj+0x20 then obj+0x21, then one bit from obj+0x22 and flushes.
         // Producers are C_PvP.JoinSkirmish(id) (RVA 0x2024F30) and C_PvP.RequeueSkirmish() (RVA 0x2025000).
@@ -460,6 +474,7 @@ namespace WorldPackets
         };
 
         // CMSG_JOIN_RATED_BATTLEGROUND (0x3D0025), body = exactly 1 byte: uint8 Roles.
+        // CMSG_JOIN_RATED_BATTLEGROUND (0x3A0025), body = exactly 1 byte: uint8 Roles.
         //
         // Same shape as the Blitz join despite the different opcode group. Client serializer
         // VA 0x7FF7291455E0 writes one uint8 from obj+0x20; producer is the Lua binding
@@ -477,6 +492,7 @@ namespace WorldPackets
         };
 
         // CMSG_BATTLEMASTER_JOIN_BRAWL (0x3E00C4), body = 2 bytes.
+        // CMSG_BATTLEMASTER_JOIN_BRAWL (0x3B00C2), body = 2 bytes.
         //
         // Client serializer VA 0x7FF7291531A0: after the opcode header it writes one uint8 from obj+0x20,
         // then a single bit from obj+0x21 and flushes. Derived by the same reading of the same three
@@ -726,6 +742,7 @@ namespace WorldPackets
         };
 
         // SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE (0x4B0015). This is the packet that tells the client which
+        // SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE (0x480015). This is the packet that tells the client which
         // PvP Brawl is currently running; there is no other source. Its handler, VA 0x7FF72AAC2120, is the only
         // writer of the two globals the whole brawl UI reads: dword_7FF72F082BB8 (the active brawl) and
         // dword_7FF72F082BBC (the active special-event brawl). Both are PvpBrawl.db2 row ids - the handler feeds
@@ -874,6 +891,7 @@ namespace WorldPackets
         };
 
         // SMSG_BATTLEGROUND_POINTS (0x4B0028), body = exactly 3 bytes.
+        // SMSG_BATTLEGROUND_POINTS (0x480028), body = exactly 3 bytes.
         //
         // Client reader at VA 0x7FF7290FD3F3: one uint16 (helper 0x7FF72BE6C3C0) then one byte whose top bit
         // is taken as a bool (helper 0x7FF72BE6C370 followed by `shr al, 7`). The handler, VA 0x7FF72AABB450,
@@ -903,6 +921,7 @@ namespace WorldPackets
         };
 
         // SMSG_BATTLEGROUND_INIT (0x4B0029), body = exactly 6 bytes.
+        // SMSG_BATTLEGROUND_INIT (0x480029), body = exactly 6 bytes.
         //
         // The reader at VA 0x7FF7290FD47E does not parse this one: helper 0x7FF72BE6C980 just hands the
         // handler a pointer to the remaining bytes. The field split comes from the handler instead,
@@ -924,6 +943,8 @@ namespace WorldPackets
         // have left every arena with an offset of zero and a CC bar computed across two unrelated epochs.
         // Sending it with MaxPoints = 0 costs nothing: the client's own `if (value)` discards the zero cap,
         // and with it both Lua events, so a capless match gets the clock and nothing else.
+        //                      writes. Guarded by `if (value)`, so a zero cap is ignored outright - which is
+        //                      why this core only sends the packet for battlegrounds that declare a cap.
         // Field names below are ours; the client exports none. The sole capture reads
         // 73 E0 B5 38 | DC 05 = { 951820403, 1500 }, and 1500 is the cap the winning team stopped on.
         class BattlegroundInit final : public ServerPacket
@@ -956,6 +977,7 @@ namespace WorldPackets
         };
 
         // SMSG_PVP_MATCH_START (0x4B002D), body = 22 bytes in the one capture we have.
+        // SMSG_PVP_MATCH_START (0x48002D), body = 22 bytes in the one capture we have.
         //
         // Reader at VA 0x7FF7290FD73D, in wire order: uint32, uint32, uint8, one bit + flush, uint32 element
         // count, int64, then that many 720-byte elements. The capture's count is 0, which accounts for all
@@ -1010,6 +1032,10 @@ namespace WorldPackets
             // 0 in the only capture, which is why the 22-byte body parses with nothing left over. Write()
             // therefore emits the observed count of zero and this packet carries no per-player payload. A
             // capture of a match end with populated statistics is what decodes it - see aufnahme_noetig.
+            uint32 ArenaSeason = 0;
+            PVPMatchBracket Bracket = PVPMatchBracket::Arena2v2;
+            bool Unknown1207 = false;
+            Timestamp<> StartTime;
         };
 
         enum class BattlegroundCapturePointState : uint8
