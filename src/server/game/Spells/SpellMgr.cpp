@@ -5316,6 +5316,25 @@ void SpellMgr::LoadSpellInfoCorrections()
             spellInfo->MaxAffectedTargets = 1;
     }
 
+    // Fel Rush air dash (197923): the client-side bundle triggers the momentum/dash-end helpers from
+    // effects 8 and 10 while effect 6 points at a dead trigger. UNVERIFIED against a live sniff -
+    // ported from the source branch, re-check the trigger ids if air Fel Rush misbehaves.
+    ApplySpellFix({ 197923 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_6, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TriggerSpell = 0;
+        });
+        ApplySpellEffectFix(spellInfo, EFFECT_8, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TriggerSpell = 199737;
+        });
+        ApplySpellEffectFix(spellInfo, EFFECT_10, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TriggerSpell = 346123;
+        });
+    });
+
     DB2HotfixGenerator summonProperties(sSummonPropertiesStore);
     summonProperties.ApplyHotfix(121, [](SummonPropertiesEntry* properties)
     {

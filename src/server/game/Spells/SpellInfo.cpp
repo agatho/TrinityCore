@@ -1572,6 +1572,16 @@ bool SpellInfo::HasAura(AuraType aura) const
     return false;
 }
 
+bool SpellInfo::IsDashMovementBundle() const
+{
+    // Many spells share HasAura(SPELL_AURA_MOD_SPEED_NO_CONTROL) && HasAura(SPELL_AURA_DISABLE_GRAVITY)
+    // (Evoker Hover, Void Dash, Crane Rush, ...), but FinalizeDashMovementSpeedUpdates and
+    // PrepareDashMovementState model the Fel Rush *air* dash specifically and must not fire on the
+    // others. Keep this an explicit allowlist rather than an aura-shape test.
+    return Id == 197923  // Fel Rush air bundle
+        || Id == 389659; // Fel Rush air bundle (variant)
+}
+
 bool SpellInfo::HasAreaAuraEffect() const
 {
     for (SpellEffectInfo const& effect : GetEffects())

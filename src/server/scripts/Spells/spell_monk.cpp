@@ -465,11 +465,6 @@ class spell_monk_roll : public SpellScript
 // 109131 - Roll (backward)
 class spell_monk_roll_aura : public AuraScript
 {
-    void CalcMovementAmount(AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
-    {
-        amount += 100.0;
-    }
-
     void CalcImmunityAmount(AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
     {
         amount -= 100.0;
@@ -487,9 +482,10 @@ class spell_monk_roll_aura : public AuraScript
 
     void Register() override
     {
-        // Values need manual correction
-        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_monk_roll_aura::CalcMovementAmount, EFFECT_0, SPELL_AURA_MOD_SPEED_NO_CONTROL);
-        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_monk_roll_aura::CalcMovementAmount, EFFECT_2, SPELL_AURA_MOD_MINIMUM_SPEED);
+        // EFFECT_0 (SPELL_AURA_MOD_SPEED_NO_CONTROL) and EFFECT_2 (SPELL_AURA_MOD_MINIMUM_SPEED) used to be
+        // corrected here by a flat +100. That workaround is replaced by the hotfix that puts the corrected
+        // base points on the DB2 rows themselves (see sql/updates/hotfixes/master, monk roll scaling), now
+        // that aura 373 is handled by the core.
         DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_monk_roll_aura::CalcImmunityAmount, EFFECT_5, SPELL_AURA_MECHANIC_IMMUNITY);
         DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_monk_roll_aura::CalcImmunityAmount, EFFECT_6, SPELL_AURA_MECHANIC_IMMUNITY);
 

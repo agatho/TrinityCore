@@ -1201,6 +1201,21 @@ void WorldSession::HandleMountClearFanfare(WorldPackets::Misc::MountClearFanfare
 }
 void WorldSession::HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& closeInteraction)
 {
+    InteractionData& interactionData = _player->PlayerTalkClass->GetInteractionData();
+
+    if (interactionData.PendingAutoLaunchedQuestId)
+    {
+        if (interactionData.Type != PlayerInteractionType::QuestGiver
+            || interactionData.SourceGuid != closeInteraction.SourceGuid)
+        {
+            TC_LOG_DEBUG("network", "CMSG_CLOSE_INTERACTION pending quest {} - SourceGuid mismatch (offer={} close={}), clearing",
+                interactionData.PendingAutoLaunchedQuestId,
+                interactionData.SourceGuid.ToString(), closeInteraction.SourceGuid.ToString());
+        }
+
+        interactionData.ClearPendingAutoLaunchedQuest(_player);
+    }
+
     if (_player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest)
         _player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest = false;
     else if (_player->PlayerTalkClass->GetInteractionData().SourceGuid == closeInteraction.SourceGuid)
