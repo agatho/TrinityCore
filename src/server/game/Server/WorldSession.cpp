@@ -148,7 +148,13 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _timeSyncTimer(0),
     _calendarEventCreationCooldown(0),
     _battlePetMgr(std::make_unique<BattlePets::BattlePetMgr>(this)),
-    _collectionMgr(std::make_unique<CollectionMgr>(this))
+    _collectionMgr(std::make_unique<CollectionMgr>(this)),
+    // Einheit w4_cmsg_43_3D - fluechtiger Sitzungszustand der Sammelfamilien 0x43 / 0x3D
+    _excludedChatCensorSources(0),
+    _quickJoinAutoAcceptRequests(false),
+    _engineSurveyReceived(false),
+    _lastReportServerLagTime(0),
+    _warden3DisabledSent(false)
 {
     if (m_Socket[CONNECTION_TYPE_REALM])
     {

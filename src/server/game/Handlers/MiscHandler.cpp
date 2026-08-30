@@ -37,6 +37,7 @@
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "InstancePackets.h"
+#include "InstanceScenario.h"
 #include "InstanceScript.h"
 #include "Language.h"
 #include "Log.h"
@@ -55,6 +56,7 @@
 #include "WhoPackets.h"
 #include "World.h"
 #include <cstdarg>
+#include <sstream>
 #include <zlib.h>
 
 void WorldSession::HandleRepopRequest(WorldPackets::Misc::RepopRequest& /*packet*/)
@@ -1238,4 +1240,556 @@ void WorldSession::HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownT
 void WorldSession::HandleSetCurrencyFlags(WorldPackets::Misc::SetCurrencyFlags const& setCurrenctFlags)
 {
     _player->SetCurrencyFlagsFromClient(setCurrenctFlags.CurrencyID, setCurrenctFlags.Flags);
+}
+
+// ================================================================================================
+// Einheit w4_cmsg_43_3D - Sendeseite der Sammelfamilien 0x43 / 0x3D, Phase A.
+// Track A, B3 (Telemetrie) und B11 (Warden3). B4 liegt in BattlenetHandler.cpp, B5 in
+// LiveRegionHandler.cpp, B6/B7 in LobbyMatchmakerHandler.cpp, B8 in BleepHandler.cpp,
+// B9 in VoiceChatHandler.cpp.
+//
+// Zur Ehrlichkeit dieser Datei: ein Teil dieser Opcodes gehoert zu Systemen, die TrinityCore
+// nicht hat - Zuschauermodus, Inselexpeditionen, Runenschmiede, Kontokosmetik, QuickJoin-Umlauf.
+// Fuer die ist der Handler bewusst NUR Eingangspruefung und Protokoll, und in
+// orchestrierung/status/w4_cmsg_43_3D.json steht D2 dafuer auf "offen", nicht auf "ok".
+// Eine erfundene Wirkung waere nach DEFINITION_OF_DONE_pro_opcode.md Abschnitt 1 der teurere
+// Fehler: sie funktioniert im Test und weicht still von Retail ab.
+// ================================================================================================
+
+// --- Track A: reine Notify ohne Gegenstueck -----------------------------------------------------
+
+// 0x3D0032, Writer 0x6CBEA0, leere Nutzlast.
+// UNVERIFIED: es gibt kein Gegenstueck und keinen Konsumenten - die Retail-Serverwirkung ist aus
+// dem Binary nicht ableitbar, weil die Nachricht nur in eine Richtung geht.
+void WorldSession::HandleUsedFollow(WorldPackets::Misc::UsedFollow& /*usedFollow*/)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_USED_FOLLOW from {}", GetPlayerInfo());
+}
+
+// 0x3D02DB, Writer 0x6D29C0, leere Nutzlast.
+// Abschlussvermerk des nahtlosen Kartenwechsels. Im Baum laeuft die Transferquittierung
+// vollstaendig ueber MSG_MOVE_WORLDPORT_ACK.
+// UNVERIFIED: kein Gegenstueck, kein Konsument.
+void WorldSession::HandleSeamlessTransferComplete(WorldPackets::Misc::SeamlessTransferComplete& /*seamlessTransferComplete*/)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_SEAMLESS_TRANSFER_COMPLETE from {}", GetPlayerInfo());
+}
+
+// 0x3D00BA, Writer 0x6CD470, leere Nutzlast. Gegenstueck SMSG_CHALLENGE_MODE_RESET.
+// Cheat-Opcode. Retail gibt ihn ueber den Entwicklerclient frei; ein oeffentlicher Realm darf das
+// nicht ungeprueft durchlassen - dieselbe Begruendung wie bei CMSG_KIOSK_ENABLE_GOD_MODE auf
+// feature/gm-tools. Es wird bewusst NICHT geantwortet: die Struktur von SMSG_CHALLENGE_MODE_RESET
+// ist nicht nachgelesen, und ein geratenes Antwortpaket ist schlimmer als keines (DoD Abschnitt 1,
+// "falsch befuellte Antwort" - der Client verwirft still).
+void WorldSession::HandleResetChallengeModeCheat(WorldPackets::Misc::ResetChallengeModeCheat& /*resetChallengeModeCheat*/)
+{
+    if (!HasPermission(rbac::RBAC_PERM_COMMAND_DEBUG))
+    {
+        TC_LOG_INFO("entities.player.cheat", "{} tried to reset the challenge mode timer without permission", GetPlayerInfo());
+        return;
+    }
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_RESET_CHALLENGE_MODE_CHEAT from {} - no challenge mode system in this tree", GetPlayerInfo());
+}
+
+// 0x3D02BA, Writer 0x6D21F0, leere Nutzlast. Test-Opcode des Talentbaums.
+void WorldSession::HandleTraitsTalentTestUnlearnSpells(WorldPackets::Misc::TraitsTalentTestUnlearnSpells& /*traitsTalentTestUnlearnSpells*/)
+{
+    if (!HasPermission(rbac::RBAC_PERM_COMMAND_DEBUG))
+    {
+        TC_LOG_INFO("entities.player.cheat", "{} tried to use the talent test unlearn path without permission", GetPlayerInfo());
+        return;
+    }
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_TRAITS_TALENT_TEST_UNLEARN_SPELLS from {}", GetPlayerInfo());
+}
+
+// 0x3D00C7 (Writer 0x6CD620) und 0x3D02C6 (Writer 0x6D2550), je ein uint32.
+// 0x3D02C6 ist am Draht belegt: 1 Paket, konstant 4 Byte.
+// Beides sind Rueckmeldungen des Talent-UI ueber Enum.LoadConfigResult (0 Error,
+// 1 NoChangesNecessary, 2 LoadInProgress, 3 Ready): der Client meldet, dass die zuletzt
+// geschickte Konfiguration leer war bzw. die Validierung nicht bestanden hat. Der Server haelt
+// die Konfiguration bereits.
+//
+// UNVERIFIED: dass Retail hier NICHTS tut, ist nicht belegt - Enum.LoadConfigResult benennt nur
+// den Wertebereich, es ist kein Konsument und keine RVA, aus der eine Serverwirkung folgte. Beide
+// Nachrichten bleiben deshalb bei D2 = offen, in derselben Beweislage wie CMSG_USED_FOLLOW: reine
+// CMSG-Notify ohne Gegenstueck, Serverwirkung aus dem Binary nicht ableitbar. Protokollieren ist
+// die ehrliche Untergrenze, nicht die belegte Vollstaendigkeit.
+void WorldSession::HandleClassTalentsNotifyEmptyConfig(WorldPackets::Misc::ClassTalentsNotifyEmptyConfig& classTalentsNotifyEmptyConfig)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_CLASS_TALENTS_NOTIFY_EMPTY_CONFIG from {} for config {}",
+        GetPlayerInfo(), classTalentsNotifyEmptyConfig.ConfigID);
+}
+
+void WorldSession::HandleClassTalentsNotifyValidationFailed(WorldPackets::Misc::ClassTalentsNotifyValidationFailed& classTalentsNotifyValidationFailed)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_CLASS_TALENTS_NOTIFY_VALIDATION_FAILED from {} for config {}",
+        GetPlayerInfo(), classTalentsNotifyValidationFailed.ConfigID);
+}
+
+// --- Track A: Eingangspruefung fuer Systeme, die der Baum nicht hat ------------------------------
+
+// 0x3D0171, Writer 0x6CEF70, gepackte ObjectGuid. Gegenstueck SMSG_ACCOUNT_COSMETIC_ADDED.
+// Der Baum hat keinen Kontokosmetik-Speicher; AccountStoreItem / AccountStoreCategory sind
+// DB2-Tabellen ohne Serverseite. Keine Antwort - die Struktur des Gegenstuecks ist nicht gelesen.
+void WorldSession::HandleAddAccountCosmetic(WorldPackets::Misc::AddAccountCosmetic& addAccountCosmetic)
+{
+    if (!_player->GetItemByGuid(addAccountCosmetic.ItemGUID))
+    {
+        TC_LOG_DEBUG("network.opcode", "CMSG_ADD_ACCOUNT_COSMETIC from {} for item {} which the player does not own",
+            GetPlayerInfo(), addAccountCosmetic.ItemGUID.ToString());
+        return;
+    }
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_ADD_ACCOUNT_COSMETIC from {} item {} - no account cosmetic store in this tree",
+        GetPlayerInfo(), addAccountCosmetic.ItemGUID.ToString());
+}
+
+// 0x3D01E6, Writer 0x6D0550, gepackte ObjectGuid des Handwerks-NPC.
+// Datenbasis waere NPCCraftingOrderSet / NPCCraftingOrderSetXCraftOrder; der Baum haelt dafuer
+// keinen Serverzustand.
+void WorldSession::HandleUpdateCraftingNpcRecipes(WorldPackets::Misc::UpdateCraftingNpcRecipes& updateCraftingNpcRecipes)
+{
+    if (!_player->GetNPCIfCanInteractWith(updateCraftingNpcRecipes.NpcGUID, UNIT_NPC_FLAG_NONE, UNIT_NPC_FLAG_2_NONE))
+    {
+        TC_LOG_DEBUG("network.opcode", "CMSG_UPDATE_CRAFTING_NPC_RECIPES from {} for unreachable npc {}",
+            GetPlayerInfo(), updateCraftingNpcRecipes.NpcGUID.ToString());
+        return;
+    }
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_UPDATE_CRAFTING_NPC_RECIPES from {} npc {} - no crafting order system in this tree",
+        GetPlayerInfo(), updateCraftingNpcRecipes.NpcGUID.ToString());
+}
+
+// 0x3D0263, Writer 0x6D1710, guid + uint32.
+// Lua C_IslandsQueue.QueueForIsland(difficultyID); die GUID ist der Warteschlangen-NPC. Die
+// Antwort laeuft im Retail ueber den LFG-Warteschlangenkanal, nicht ueber ein eigenes Gegenstueck.
+void WorldSession::HandleIslandQueue(WorldPackets::Misc::IslandQueue& islandQueue)
+{
+    if (!_player->GetNPCIfCanInteractWith(islandQueue.NpcGUID, UNIT_NPC_FLAG_NONE, UNIT_NPC_FLAG_2_NONE))
+    {
+        TC_LOG_DEBUG("network.opcode", "CMSG_ISLAND_QUEUE from {} for unreachable npc {}",
+            GetPlayerInfo(), islandQueue.NpcGUID.ToString());
+        return;
+    }
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_ISLAND_QUEUE from {} difficulty {} - no island expedition system in this tree",
+        GetPlayerInfo(), islandQueue.DifficultyID);
+}
+
+// 0x4300F1, Writer 0x6ABE20, guid + uint32 + uint32.
+// Ausgeloest durch Klick auf einen "trade:"-Chat-Hyperlink (ItemRef.lua:46), nicht durch eine
+// C_-Funktion. Gegenstueck SMSG_SHOW_TRADE_SKILL_RESPONSE, dessen Struktur nicht gelesen ist.
+void WorldSession::HandleShowTradeSkill(WorldPackets::Misc::ShowTradeSkill& showTradeSkill)
+{
+    if (!ObjectAccessor::FindConnectedPlayer(showTradeSkill.PlayerGUID))
+    {
+        TC_LOG_DEBUG("network.opcode", "CMSG_SHOW_TRADE_SKILL from {} for offline player {}",
+            GetPlayerInfo(), showTradeSkill.PlayerGUID.ToString());
+        return;
+    }
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_SHOW_TRADE_SKILL from {} target {} spell {} skillLine {}",
+        GetPlayerInfo(), showTradeSkill.PlayerGUID.ToString(), showTradeSkill.SpellID, showTradeSkill.SkillLineID);
+}
+
+// 0x3D0291, Writer 0x6D1B90, uint32 + vier uint8.
+// Lua C_LegendaryCrafting.UpgradeRuneforgeLegendary(runeforgeLegendary: ItemLocation,
+// upgradeItem: ItemLocation) - die vier uint8 sind zwei ItemLocations (Tasche, Platz).
+// Der Baum hat den Shadowlands-Runenschnitzer nicht; das Ergebnis kaeme im Retail ueber ein
+// Item-Update, nicht ueber ein eigenes Gegenstueck.
+void WorldSession::HandleUpgradeRuneforgeLegendary(WorldPackets::Misc::UpgradeRuneforgeLegendary& upgradeRuneforgeLegendary)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_UPGRADE_RUNEFORGE_LEGENDARY from {} ({}: {}/{} -> {}/{}) - no runeforge system in this tree",
+        GetPlayerInfo(), upgradeRuneforgeLegendary.Field0,
+        upgradeRuneforgeLegendary.LegendaryBagSlot, upgradeRuneforgeLegendary.LegendarySlot,
+        upgradeRuneforgeLegendary.UpgradeItemBagSlot, upgradeRuneforgeLegendary.UpgradeItemSlot);
+}
+
+// 0x43007E, Writer 0x6A83E0. Hausmuster der 0x43-Gruppenopcodes (Praesenzbit zuerst).
+// Lua ChannelSetPartyMemberSilent(partyMemberName, silenceOn) -> Ereignis
+// VOICE_CHAT_CHANNEL_MEMBER_SILENCED_CHANGED. Die Stummschaltung gehoert zum Sprachchat; der Baum
+// hat kein Sprach-Backend (Block B9), es gibt also keinen Zustand zu setzen.
+void WorldSession::HandleSilenceTalkerInParty(WorldPackets::Misc::SilenceTalkerInParty& silenceTalkerInParty)
+{
+    Group* group = _player->GetGroup();
+    if (!group || !group->IsMember(silenceTalkerInParty.Target))
+    {
+        TC_LOG_DEBUG("network.opcode", "CMSG_SILENCE_PARTY_TALKER from {} for {} who is not in the group",
+            GetPlayerInfo(), silenceTalkerInParty.Target.ToString());
+        return;
+    }
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_SILENCE_PARTY_TALKER from {} target {} silence {} - no voice backend in this tree",
+        GetPlayerInfo(), silenceTalkerInParty.Target.ToString(), silenceTalkerInParty.Silence);
+}
+
+// 0x43000B, Writer 0x6A2150. Zwei ausgeschriebene Spielerbloecke, dann QueueID und EIN Bit.
+// Gegenstueck SMSG_CHECK_WARGAME_ENTRY (StaticPopup-Dialog 63, Zusage per
+// CMSG_ACCEPT_WARGAME_INVITE). Die Kriegsspielbasis liegt auf feature/war-games, wo der
+// Zuschauerpfad ausdruecklich an das Commentator-System zurueckgestellt ist. Hier wird deshalb
+// nicht geantwortet - eine zweite Kriegsspiel-Wahrheit neben HandleStartWarGame waere genau der
+// Fehler, den CMSG_DELVE_TELEPORT_OUT dokumentiert.
+void WorldSession::HandleStartSpectatorWarGame(WorldPackets::Misc::StartSpectatorWarGame& startSpectatorWarGame)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_START_SPECTATOR_WAR_GAME from {} queue {} tournamentRules {} - war game base lives on feature/war-games",
+        GetPlayerInfo(), startSpectatorWarGame.QueueID, startSpectatorWarGame.TournamentRules);
+}
+
+// 0x3D02D3 / 0x3D02D4 / 0x3D02D5, Writer 0x6D2650 / 0x6D26C0 / 0x6D2710.
+// Lua C_SpectatingUI.SpectateChange(nextTarget) bzw. LeaveSpectateMode().
+//
+// Befund fuer die spaetere Umsetzung: SMSG_SPECTATE_NEXT ist eine AUFFORDERUNG, keine Antwort.
+// Der Server sagt nur "weiter"; der Client sucht das Ziel selbst aus (Konsument 0x22C61D0) und
+// meldet es mit CMSG_SPECTATE_SET_NEXT_TARGET zurueck - oder beendet mit CMSG_SPECTATE_END, wenn
+// die Zielliste leer ist. Ein Server, der SMSG_SPECTATE_NEXT schickt und danach nichts erwartet,
+// verpasst die Antwort.
+// Track A hat kein Fehlercode-Enum: Callsite-Scan auf die GameError-Anzeige 0x209AD90 ueber
+// 0x22C5A00..0x22C6A00 und 0x21C1210 ergibt null Treffer. Der einzige Rueckkanal fuer Fehler ist
+// die ABWESENHEIT von SMSG_SPECTATE_PLAYER bzw. ein SMSG_SPECTATE_RESET.
+void WorldSession::HandleSpectateChange(WorldPackets::Misc::SpectateChange& spectateChange)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_SPECTATE_CHANGE from {} nextTarget {} - no spectator system in this tree",
+        GetPlayerInfo(), spectateChange.NextTarget);
+}
+
+void WorldSession::HandleSpectateSetNextTarget(WorldPackets::Misc::SpectateSetNextTarget& spectateSetNextTarget)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_SPECTATE_SET_NEXT_TARGET from {} target {} - no spectator system in this tree",
+        GetPlayerInfo(), spectateSetNextTarget.Target.ToString());
+}
+
+void WorldSession::HandleSpectateEnd(WorldPackets::Misc::SpectateEnd& /*spectateEnd*/)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_SPECTATE_END from {} - no spectator system in this tree", GetPlayerInfo());
+}
+
+// 0x43012F / 0x430130 / 0x430131 / 0x430160.
+// QuickJoin haengt vollstaendig an C_SocialQueue, also am Battle.net-Praesenzdienst: es gibt im
+// 12.1-Katalog KEINEN SMSG_QUICK_JOIN_*, ueber den der Weltserver den Gruppenleiter
+// benachrichtigen koennte. Der Umlauf Anfrage -> Leiter benachrichtigen -> antworten ist im
+// Weltserver nicht herstellbar. Diese drei Umlaufopcodes werden deshalb geprueft und
+// protokolliert, nicht beantwortet. CMSG_QUICK_JOIN_AUTO_ACCEPT_REQUESTS (Einstellung) und
+// CMSG_QUICK_JOIN_SIGNAL_TOAST_DISPLAYED (Telemetrie) sind davon NICHT betroffen.
+//
+// UNVERIFIED: die Serverwirkung ist unbelegt. C_SocialQueue.SignalToastDisplayed erklaert den
+// float Priority, nennt aber keinen Konsumenten auf der Serverseite; dass Retail die Meldung nur
+// verbucht, ist Vermutung. D2 = offen.
+void WorldSession::HandleQuickJoinSignalToastDisplayed(WorldPackets::Misc::QuickJoinSignalToastDisplayed& quickJoinSignalToastDisplayed)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_QUICK_JOIN_SIGNAL_TOAST_DISPLAYED from {} group {} priority {} members {}",
+        GetPlayerInfo(), quickJoinSignalToastDisplayed.GroupGUID.ToString(),
+        quickJoinSignalToastDisplayed.Priority, quickJoinSignalToastDisplayed.Members.size());
+}
+
+void WorldSession::HandleQuickJoinRespondToInvite(WorldPackets::Misc::QuickJoinRespondToInvite& quickJoinRespondToInvite)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_QUICK_JOIN_RESPOND_TO_INVITE from {} queue {} applicant {} accept {} - round trip runs over Bnet presence",
+        GetPlayerInfo(), quickJoinRespondToInvite.QueueGUID.ToString(),
+        quickJoinRespondToInvite.ApplicantGUID.ToString(), quickJoinRespondToInvite.Accept);
+}
+
+void WorldSession::HandleQuickJoinRequestInvite(WorldPackets::Misc::QuickJoinRequestInvite& quickJoinRequestInvite)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_QUICK_JOIN_REQUEST_INVITE from {} group {} target '{}'-'{}' roles {} - round trip runs over Bnet presence",
+        GetPlayerInfo(), quickJoinRequestInvite.GroupGUID.ToString(),
+        quickJoinRequestInvite.TargetName, quickJoinRequestInvite.TargetRealm, quickJoinRequestInvite.Roles);
+}
+
+void WorldSession::HandleQuickJoinRequestInviteWithConfirmation(WorldPackets::Misc::QuickJoinRequestInviteWithConfirmation& quickJoinRequestInviteWithConfirmation)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_QUICK_JOIN_REQUEST_INVITE_WITH_CONFIRMATION from {} group {} request {} target '{}'-'{}' - round trip runs over Bnet presence",
+        GetPlayerInfo(), quickJoinRequestInviteWithConfirmation.GroupGUID.ToString(),
+        quickJoinRequestInviteWithConfirmation.RequestID,
+        quickJoinRequestInviteWithConfirmation.TargetName, quickJoinRequestInviteWithConfirmation.TargetRealm);
+}
+
+// --- Track A: echte Zustandsaenderungen ---------------------------------------------------------
+
+// 0x430132, Writer 0x6AFAD0, ein Bit. Am Draht belegt: 37 Pakete, konstant 1 Byte.
+// Reine Einstellung ohne Umlauf, fluechtig: der Client haelt sie im UI und sendet sie nach jedem
+// Login erneut - genau das zeigen die 37 Pakete ueber vier Builds.
+//
+// UNVERIFIED: der Wert wird gehalten, aber von nichts gelesen - der QuickJoin-Umlauf ist im
+// Weltserver gar nicht herstellbar (siehe Block oben), also gibt es nichts, was die Einstellung
+// steuern koennte. Sobald ein QuickJoin-Einladungspfad existiert, ist DIES das Feld, das ihn
+// unterdrueckt. Bis dahin D2 = offen und ausdruecklich keine erfundene Wirkung.
+void WorldSession::HandleQuickJoinAutoAcceptRequests(WorldPackets::Misc::QuickJoinAutoAcceptRequests& quickJoinAutoAcceptRequests)
+{
+    _quickJoinAutoAcceptRequests = quickJoinAutoAcceptRequests.AutoAccept;
+}
+
+// 0x4300CF, Writer 0x6AB1E0, ein Bit. Schalter "niedrigstufige Schlachtzuege betreten duerfen".
+//
+// D2 - der Traeger ist KEIN Sitzungsfeld, sondern ein Spielerflag, das der Baum bereits fuehrt:
+// PLAYER_FLAGS_LOW_LEVEL_RAID_ENABLED (0x00010000). Es wird mit m_playerData->PlayerFlags nach
+// characters.playerFlags geschrieben, beim Laden ueber ReplaceAllPlayerFlags zurueckgeholt und in
+// der Charakterliste nach CHARACTER_FLAG_2_LOW_LEVEL_RAID_ENABLED gespiegelt
+// (CharacterPackets.cpp: EnumCharactersResult::CharacterInfo). Wer den Wert stattdessen in ein
+// Sitzungsfeld legt, gibt dem Client den Schalter nach dem Relog nicht zurueck.
+//
+// D5 - Quelle der Semantik: PlayerScript.SetAllowLowLevelRaid(allow) / GetAllowLowLevelRaid()
+// (wow-ui-source Blizzard_APIDocumentationGenerated/PlayerScriptDocumentation.lua), dazu die
+// Ereignisse ENABLE_LOW_LEVEL_RAID / DISABLE_LOW_LEVEL_RAID in EncounterInfoDocumentation.lua.
+// Der Getter liest den Zustand, den der Server haelt - der Schalter ist damit dauerhaft (D4:
+// persistiert in characters.playerFlags), nicht fluechtig.
+void WorldSession::HandleLowLevelRaid1(WorldPackets::Misc::LowLevelRaid1& lowLevelRaid1)
+{
+    if (lowLevelRaid1.Enable)
+        _player->SetPlayerFlag(PLAYER_FLAGS_LOW_LEVEL_RAID_ENABLED);
+    else
+        _player->RemovePlayerFlag(PLAYER_FLAGS_LOW_LEVEL_RAID_ENABLED);
+}
+
+// 0x430133, Writer 0x6AFB60, ein uint8. Am Draht belegt: 22 Pakete, konstant 1 Byte.
+// Enum.ExcludedCensorSources als BITMASKE: 0 None, 1 Friends, 2 Guild, 4/8/16/32/64/128
+// Reserve1..6. Gesetzt ueber die CVar "excludedCensorSources".
+//
+// AUSDRUECKLICHE ABWEICHUNG von Abschnitt 11.6 des Briefs, der hier "dauerhaft, gehoert zu den
+// Kontodaten" empfiehlt: der Traeger ist eine CVar, und CVars speichert der CLIENT. Er sendet den
+// Wert nach jedem Login neu - genau das bilden die 22 Pakete ueber vier Builds ab. Eine
+// serverseitige Spalte waere ein zweiter Wahrheitstraeger, der beim ersten Login ueberschrieben
+// wird. Deshalb fluechtig in der Sitzung. D4 ist damit ENTSCHIEDEN, nicht vergessen.
+//
+// UNVERIFIED: D2 ist NICHT erfuellt. Der Baum hat keinen Chat-Zensurpfad, von dem die Maske etwas
+// ausnehmen koennte - der Wert wird gehalten und von nichts gelesen. Sobald eine Zensur im
+// Chatweg existiert, ist DIES die Maske, die sie je Quelle abschaltet. Bis dahin D2 = offen.
+void WorldSession::HandleSetExcludedChatCensorSources(WorldPackets::Misc::SetExcludedChatCensorSources& setExcludedChatCensorSources)
+{
+    _excludedChatCensorSources = setExcludedChatCensorSources.Sources;
+}
+
+// 0x430004, Writer 0x6A1C70, Element-Serializer 0x69FDE0 (JamCliAddOnInfo, 88 Byte).
+// Antwort auf SMSG_ADDON_LIST_REQUEST; die drei Kopffelder sind Echos aus dieser Anfrage
+// (0x209C8B0 liest sie aus der eingegangenen Nachricht). Der Server bekommt seine eigene
+// Korrelationskennung zurueck und kann damit zwei gleichzeitige Abfragen unterscheiden.
+//
+// Der Abgleich gegen DB2 BannedAddons (LayoutHash 56583F69: ID, Name, Version, Flags) ist
+// TrinityCore-Hauskonvention, also Server-Vertrag - er ist KEIN Beleg fuer Retail-Semantik.
+//
+// AUF EINEM UNVERAENDERTEN REALM ERREICHT DIESE NACHRICHT DEN HANDLER NIE, und das ist keine
+// Vermutung: der Ausloeser SMSG_ADDON_LIST_REQUEST (0x4500EB) steht in Opcodes.cpp weiterhin auf
+// STATUS_UNHANDLED und hat im ganzen Baum weder Paketklasse noch Sendestelle - grep ueber
+// src/server/game trifft ausser Opcodes.h/Opcodes.cpp nur die Kommentare dieser Einheit. CMSG ist
+// hier die ANTWORT, nicht der Anfang; ohne Anfrage sendet der Client nichts. Ein beobachteter
+// Umlauf braucht deshalb entweder eine Aufnahme eines Retail-Realms oder zuerst die
+// Gegenrichtung (Paketklasse, Sender und Statusdrehung fuer SMSG_ADDON_LIST_REQUEST). Beides
+// liegt ausserhalb dieser Einheit; der Handler ist gebaut, damit er steht, wenn die Anfrage
+// entsteht.
+//
+// UNVERIFIED: D2 ist NICHT erfuellt. Was Retail mit der gemeldeten Addonliste tut, ist von
+// aussen nicht messbar: der Client ist hier ausschliesslich Sender, es gibt kein Gegenpaket
+// (D3 gegenstandslos) und kein Lua-Ereignis, an dem sich eine Serverwirkung ablesen liesse -
+// Blizzard_AddOnList/AddonList.lua ist reine Clientverwaltung des Addonfensters ohne Bezug zu
+// dieser Nachricht. Eine DB2-Tabelle sagt, welche Daten der Client hat, nicht welchen Zustand
+// der Server aendert. Der Handler unten aendert deshalb bewusst KEINEN Zustand: er
+// protokolliert den Treffer und nichts weiter. Weder Kick noch Flag noch Persistenz sind
+// belegt, und keines davon wird geraten. Bis eine Aufnahme eines Retail-Realms zeigt, was auf
+// einen gesperrten Addonnamen folgt, bleibt D2 = offen.
+void WorldSession::HandleAddonList(WorldPackets::Misc::AddonList& addonList)
+{
+    for (WorldPackets::Misc::AddonInfo const& addon : addonList.AddOns)
+    {
+        for (BannedAddonsEntry const* banned : sBannedAddonsStore)
+        {
+            if (!banned->Name || addon.Name != banned->Name)
+                continue;
+
+            // Leere Version in der Tabelle heisst: jede Version ist gesperrt.
+            if (banned->Version && *banned->Version && addon.Version != banned->Version)
+                continue;
+
+            TC_LOG_INFO("entities.player.cheat", "{} reported banned addon '{}' version '{}' (BannedAddons.ID {})",
+                GetPlayerInfo(), addon.Name, addon.Version, banned->ID);
+            break;
+        }
+    }
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_ADDON_LIST from {} request {} with {} addons",
+        GetPlayerInfo(), addonList.RequestGUID.ToString(), addonList.AddOns.size());
+}
+
+// 0x3D02D7, Writer 0x6D2740 - das uint32 steht VOR der GUID.
+// Lua C_WorldLootObject.OnWorldLootObjectClick(unitToken, isLeftClick) -> Ereignis
+// WORLD_LOOT_OBJECT_INFO_UPDATED(guid), danach LOOT_OPENED. Gegenstueck SMSG_LOOT_RESPONSE, das
+// im Baum bereits auf STATUS_NEVER steht - einer von nur zwei sendefaehigen Faellen des Satzes.
+//
+// UNVERIFIED, und der Grund, warum hier NICHT gelootet wird: "World Loot Object" ist im
+// 12.x-Client ein eigener Beutetopf mit eigener Registratur (Delve- und Weltkisten), nicht der
+// normale GameObject- oder Creature-Loot. Der Baum modelliert diesen Topf nicht. Wer hier
+// ersatzweise den normalen Loot oeffnet, baut eine Wirkung, die im Test funktioniert und still
+// von Retail abweicht - nach DoD Abschnitt 1 der teurere Fehler. Die Eingangspruefung steht, die
+// Wirkung ist in der Statusdatei als offen ausgewiesen.
+void WorldSession::HandleWorldLootObjectClick(WorldPackets::Misc::WorldLootObjectClick& worldLootObjectClick)
+{
+    if (!ObjectAccessor::GetWorldObject(*_player, worldLootObjectClick.ObjectGUID))
+    {
+        TC_LOG_DEBUG("network.opcode", "CMSG_WORLD_LOOT_OBJECT_CLICK from {} for unknown object {}",
+            GetPlayerInfo(), worldLootObjectClick.ObjectGUID.ToString());
+        return;
+    }
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_WORLD_LOOT_OBJECT_CLICK from {} object {} clickType {} - no world loot object registry in this tree",
+        GetPlayerInfo(), worldLootObjectClick.ObjectGUID.ToString(), worldLootObjectClick.ClickType);
+}
+
+// 0x3D02F6, Writer 0x6D3660 - siehe den Korrekturblock in MiscPackets.h: Subplan und Brief
+// hatten hier den Draht eines FREMDEN Opcodes (CMSG_TRANSFER_CURRENCY_FROM_ACCOUNT_CHARACTER).
+//
+// Feldbedeutung ueber DB2 QuestDrivenScenario (LayoutHash 408DD33F, Feld 2 = int<Scenario::ID>)
+// und ScenarioStep (StepOrderIndex). Gegenstueck SMSG_SCENARIO_STATE steht im Baum bereits auf
+// STATUS_NEVER - der volle Umlauf ist hier ohne eine einzige Statusaenderung testbar.
+//
+// Der Server ist der Eigentuemer des Szenariofortschritts. Diese Nachricht ist die MELDUNG des
+// Clients ueber seinen eigenen Stand, nicht eine Anweisung: der Client schickt seine Stufenliste
+// mit Start- und Endzeiten und seine Waehrungsstaende mit. Die richtige Antwort ist deshalb, den
+// MASSGEBLICHEN Zustand erneut zu senden - nicht, den gemeldeten zu uebernehmen. Wer die
+// Clientwerte uebernaehme, haette einen Szenariofortschritt, den der Client diktiert.
+void WorldSession::HandleQuestDrivenScenarioStateChange(WorldPackets::Misc::QuestDrivenScenarioStateChange& questDrivenScenarioStateChange)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_QUEST_DRIVEN_SCENARIO_STATE_CHANGE from {} type {} scenario {} questDrivenScenario {} stages {} currencies {}",
+        GetPlayerInfo(), questDrivenScenarioStateChange.StateChangeType,
+        questDrivenScenarioStateChange.ScenarioID, questDrivenScenarioStateChange.QuestDrivenScenarioID,
+        questDrivenScenarioStateChange.Stages.size(), questDrivenScenarioStateChange.Currencies.size());
+
+    // Der Szenariozustand haengt an der InstanceMap, nicht an Map - ausserhalb einer Instanz
+    // gibt es nichts nachzuziehen.
+    InstanceMap* instanceMap = _player->GetMap()->ToInstanceMap();
+    if (!instanceMap)
+        return;
+
+    InstanceScenario* scenario = instanceMap->GetInstanceScenario();
+    if (!scenario)
+        return;
+
+    scenario->SendScenarioState(_player);
+}
+
+// --- B3: Telemetrie & Support -------------------------------------------------------------------
+//
+// D4 - Persistenz: FLUECHTIG, und das ist eine Korrektur gegenueber dem ersten Stand dieser
+// Einheit. Der hatte characters.client_telemetry angelegt und beide Meldungen dort abgelegt.
+// Damit galt fuer B3 genau die Konstruktion, die dieselbe Einheit fuer B5 zwei Dateien weiter
+// ausdruecklich zurueckweist (LiveRegionHandler.cpp): eine Tabelle, in die nur geschrieben und
+// aus der nie gelesen wird, ist kein geloestes D4, sondern ein leerer Migrationssatz. Es gab
+// keinen SELECT, keinen Ladepfad und keine Loeschung in AccountMgr::DeleteAccount - die Zeilen
+// haetten geloeschte Konten ueberlebt und waeren unbegrenzt gewachsen. Der Massstab muss in
+// beide Richtungen derselbe sein, deshalb ist die Tabelle zurueckgenommen; sie gehoert in
+// dieselbe Aenderung wie der Auswertungspfad, der sie liest.
+//
+// Bis dahin sind die beiden Meldungen Protokollhandler wie die uebrigen 51 - mit Entprellung,
+// weil beide vom Client aus ausloesbar sind und der Standardwert der DoS-Bremse 100 Pakete je
+// Sekunde und Sitzung betraegt (WorldSession::DosProtection::GetMaxPacketCounterAllowed).
+//
+// WARUM DIE ENTPRELLUNG HIER STEHT UND NICHT IN GetMaxPacketCounterAllowed: ein Eintrag dort ist
+// KEINE Drossel. Ab dem ersten ueberzaehligen Paket verwirft DosProtection::EvaluateOpcode es
+// ungelesen und trennt bei der Vorgabepolitik POLICY_KICK die Sitzung; der Zaehler laeuft dabei je
+// KALENDERSEKUNDE, ein Stoss von N+1 innerhalb einer beliebigen Sekunde genuegt also. Fuer
+// CMSG_REPORT_SERVER_LAG, das an dem Lua-Knopf GMReportLag haengt, waere ein enger Eintrag damit
+// ein Doppelklick-Kick eines ehrlichen Spielers - und der einzige Hinweis darauf waere dieselbe
+// "AntiDOS: flooding packet"-Warnung, die eine echte Flut auch erzeugt. Beide Handler kosten nach
+// der Ruecknahme der Tabelle nichts mehr als ein TC_LOG_DEBUG, dessen Argumente bei abgeschaltetem
+// Protokoll gar nicht erst ausgewertet werden (TC_LOG_MESSAGE_BODY prueft GetEnabledLogger zuerst).
+// Die Last, gegen die entprellt wird, ist damit die des PROTOKOLLS, nicht die des Weltthreads -
+// und dagegen ist eine Sitzungsdrossel das richtige Mittel: sie verwirft die Wiederholung, ohne
+// irgendjemanden zu trennen.
+
+// 0x3D0273, Writer 0x6D1870, leere Nutzlast.
+// WIDERSPRUCH, der nicht weggeglaettet wird: der Serializer ist leer, das Lua-Binding heisst aber
+// GMReportLag(number) und nimmt einen Parameter. Entweder gehoert GMReportLag zu einem anderen
+// Opcode, oder der Parameter waehlt clientseitig aus mehreren Meldungen aus. Am Draht kommt
+// jedenfalls nichts an; verwertbar sind nur Zeitpunkt und Absender.
+void WorldSession::HandleReportServerLag(WorldPackets::Misc::ReportServerLag& /*reportServerLag*/)
+{
+    // Sitzungsdrossel: hoechstens eine Meldung je REPORT_SERVER_LAG_INTERVAL. Kein DosProtection-
+    // Eintrag, Begruendung im Blockkopf oben.
+    time_t const now = GameTime::GetGameTime();
+    if (now - _lastReportServerLagTime < REPORT_SERVER_LAG_INTERVAL)
+        return;
+
+    _lastReportServerLagTime = now;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_REPORT_SERVER_LAG from {} latency {}ms", GetPlayerInfo(), GetLatency());
+}
+
+// 0x4300BD, Writer 0x6AAA60, ein uint32.
+// FALLE: das uint32 ist NICHT die GMSurveySurveys.ID, sondern der caseIndex aus
+// SMSG_UPDATE_WEB_TICKET. Wer es als Umfrage-ID liest, quittiert die falsche Umfrage.
+// Der Baum hat kein Web-Ticket-System mit Umfrage-Rueckkanal.
+void WorldSession::HandleGMTicketAcknowledgeSurvey(WorldPackets::Misc::GMTicketAcknowledgeSurvey& gmTicketAcknowledgeSurvey)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_GM_TICKET_ACKNOWLEDGE_SURVEY from {} caseIndex {}",
+        GetPlayerInfo(), gmTicketAcknowledgeSurvey.CaseIndex);
+}
+
+// 0x430113, Writer 0x6AE330 -> Rumpf 0x6AD300, Fuellfunktion 0x20B530.
+// Hardware- und Engineprofil, 294 Byte im Sniff. Der Client sendet es EINMAL je
+// (Schema-Version 8, Client-Patch): 0x210940 baut und sendet nur, wenn engineSurvey < 8 oder
+// engineSurveyPatch != aktueller Patch, und setzt danach beide CVars.
+// Kein Gegenstueck - reine Telemetrie. D4: FLUECHTIG, siehe den Blockkopf oben.
+//
+// Die Retail-Invariante wird hier NACHGEPRUEFT und nicht nur beschrieben: eine Sitzung, die das
+// Profil ein zweites Mal schickt, ist per Analyse kein Retail-Client. Die Wiederholung wird
+// verworfen, damit eine 294-Byte-Nutzlast nicht 100 Mal je Sekunde durch den Handler laeuft.
+void WorldSession::HandleEngineSurvey(WorldPackets::Misc::EngineSurvey& engineSurvey)
+{
+    if (_engineSurveyReceived)
+    {
+        TC_LOG_DEBUG("network.opcode", "CMSG_ENGINE_SURVEY from {} - repeated in the same session, dropped", GetPlayerInfo());
+        return;
+    }
+
+    _engineSurveyReceived = true;
+
+    std::ostringstream profile;
+    profile << engineSurvey.CpuVendor << ' ' << engineSurvey.CpuBrand
+            << " (" << engineSurvey.CpuCores << 'C' << engineSurvey.CpuThreads << "T)"
+            << ", ram " << engineSurvey.PhysicalMemory
+            << ", gpu " << engineSurvey.GpuName
+            << " [" << engineSurvey.GpuVendorID << ':' << engineSurvey.GpuDeviceID << ']'
+            << " vram " << engineSurvey.DedicatedVideoMemory
+            << ", os " << engineSurvey.OsName << " build " << engineSurvey.OsBuildNumber
+            << ", desktop " << engineSurvey.DesktopWidth << 'x' << engineSurvey.DesktopHeight
+            << ", monitor " << engineSurvey.MonitorWidth << 'x' << engineSurvey.MonitorHeight
+            << " (" << uint32(engineSurvey.MonitorCountMinusOne) + 1 << ')'
+            << ", board " << engineSurvey.BaseBoardManufacturer << ' ' << engineSurvey.BaseBoardProduct
+            << ", bios " << engineSurvey.BiosVendor << ' ' << engineSurvey.BiosVersion;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_ENGINE_SURVEY from {} version {} patch {}: {}",
+        GetPlayerInfo(), engineSurvey.SurveyVersion, engineSurvey.SurveyPatch, profile.str());
+}
+
+// 0x430197, Writer 0x6B2860 - bits24 Laenge INKLUSIVE NUL, dann uint32 und guid, dann die Bytes.
+// OFFEN, und ausdruecklich nicht geraten: es gibt in TC 12.1 keinen SMSG_SERVER_VALIDATION_* und
+// auch keinen unter den wiederhergestellten Client-Handlern. Das Gegenstueck ist unbekannt.
+void WorldSession::HandleServerValidationSignatureRequest(WorldPackets::Misc::ServerValidationSignatureRequest& serverValidationSignatureRequest)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_SERVER_VALIDATION_SIGNATURE_REQUEST from {} request {} guid {} signature length {} - no counterpart known",
+        GetPlayerInfo(), serverValidationSignatureRequest.RequestID,
+        serverValidationSignatureRequest.Guid.ToString(), serverValidationSignatureRequest.Signature.length());
+}
+
+// --- B11: Warden3 -------------------------------------------------------------------------------
+
+// 0x430018, Writer 0x6A2940: uint32 Kind; uint32 Size; byte Data[Size].
+// Am Draht belegt: 1398 Pakete, 40..16280 Byte - 8 + Size geht auf.
+//
+// Der Baum hat kein Anti-Cheat. Ohne Gegenstelle schickt der Client rund 1400 Datenpakete je
+// Sitzung ins Leere. Die definierte Abschaltmeldung ist SMSG_WARDEN3_DISABLED (0x4502CC); ihr
+// Reader 0x606F30 nimmt den Rest des Pakets als undurchsichtigen Block, eine leere Nutzlast ist
+// also gueltig.
+// UNVERIFIED: der Konsument 0x1CE2CD0 liegt nicht im Dekompilat-Cache. Dass der Client danach
+// aufhoert zu senden, ist nicht am Konsumenten belegt. Deshalb genau EIN Versuch je Sitzung -
+// wirkt er nicht, kostet er ein Paket.
+void WorldSession::HandleWarden3Data(WorldPackets::Misc::Warden3Data& warden3Data)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_WARDEN3_DATA from {} kind {} size {}",
+        GetPlayerInfo(), warden3Data.Kind, warden3Data.Data.size());
+
+    if (_warden3DisabledSent)
+        return;
+
+    _warden3DisabledSent = true;
+    SendPacket(WorldPackets::Misc::Warden3Disabled().Write());
 }

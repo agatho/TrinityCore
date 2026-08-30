@@ -17,6 +17,7 @@
 
 #include "MiscPackets.h"
 #include "PacketOperators.h"
+#include "PacketUtilities.h"
 #include "Player.h"
 
 namespace WorldPackets::Misc
@@ -848,5 +849,372 @@ WorldPacket const* AccountWarbandSceneUpdate::Write()
     _worldPacket.FlushBits();
 
     return &_worldPacket;
+}
+
+// ----------------------------------------------------------------------------------------
+// Einheit w4_cmsg_43_3D - Sendeseite der Sammelfamilien 0x43 / 0x3D, Phase A.
+// Belege: Client-Serializer 12.1.0.69382, RVA je Methode. Bit-Sektionen sind MSB-first;
+// ein Write<uint8> mit Schiebeausdruck ist kein Feld, sondern Teil der Bit-Sektion.
+// ----------------------------------------------------------------------------------------
+
+void SpectateChange::Read()
+{
+    // 0x6D2650: ein eingebettetes Bit, dann FlushBits.
+    _worldPacket >> Bits<1>(NextTarget);
+    _worldPacket.ResetBitPos();
+}
+
+void SpectateSetNextTarget::Read()
+{
+    // 0x6D26C0: WritePackedGuid.
+    _worldPacket >> Target;
+}
+
+void LowLevelRaid1::Read()
+{
+    // 0x6AB1E0
+    _worldPacket >> Bits<1>(Enable);
+    _worldPacket.ResetBitPos();
+}
+
+void QuickJoinAutoAcceptRequests::Read()
+{
+    // 0x6AFAD0
+    _worldPacket >> Bits<1>(AutoAccept);
+    _worldPacket.ResetBitPos();
+}
+
+void RequestChatLogin::Read()
+{
+    // 0x6A3600
+    _worldPacket >> Bits<1>(Login);
+    _worldPacket.ResetBitPos();
+}
+
+void ClassTalentsNotifyEmptyConfig::Read()
+{
+    // 0x6CD620
+    _worldPacket >> ConfigID;
+}
+
+void ClassTalentsNotifyValidationFailed::Read()
+{
+    // 0x6D2550
+    _worldPacket >> ConfigID;
+}
+
+void GMTicketAcknowledgeSurvey::Read()
+{
+    // 0x6AAA60
+    _worldPacket >> CaseIndex;
+}
+
+void AddAccountCosmetic::Read()
+{
+    // 0x6CEF70
+    _worldPacket >> ItemGUID;
+}
+
+void UpdateCraftingNpcRecipes::Read()
+{
+    // 0x6D0550
+    _worldPacket >> NpcGUID;
+}
+
+void IslandQueue::Read()
+{
+    // 0x6D1710: guid @+0x20, uint32 @+0x30
+    _worldPacket >> NpcGUID;
+    _worldPacket >> DifficultyID;
+}
+
+void ShowTradeSkill::Read()
+{
+    // 0x6ABE20: guid @+0x20, uint32 @+0x30, uint32 @+0x34
+    _worldPacket >> PlayerGUID;
+    _worldPacket >> SpellID;
+    _worldPacket >> SkillLineID;
+}
+
+void QuestDrivenScenarioStateChange::Read()
+{
+    // Writer 0x6D3660. Die BEIDEN Zaehler stehen vorne hintereinander, beide Elementbloecke
+    // kommen danach - dasselbe Deklarationsstellen-Muster wie im Lobby-Matchmaker-Block.
+    // Der Client schreibt sie als int32 aus wachsenden Vektoren OHNE clientseitige Obergrenze;
+    // die Schranke ist ausschliesslich serverseitig, und negative Werte muessen abgewiesen
+    // werden (der Client laeuft mit vorzeichenbehafteten > 0 - Tests).
+    _worldPacket >> StateChangeType;
+    _worldPacket >> ScenarioID;
+    _worldPacket >> QuestDrivenScenarioID;
+    _worldPacket >> Field48;
+    _worldPacket >> ClientUnixTime;
+    _worldPacket >> Field64;
+    _worldPacket >> Field68;
+
+    _worldPacket >> Size<int32>(Stages);
+    _worldPacket >> Size<int32>(Currencies);
+
+    for (ScenarioStageInfo& stage : Stages)
+    {
+        _worldPacket >> stage.StartTime;
+        _worldPacket >> stage.EndTime;
+        _worldPacket >> stage.Field16;
+        _worldPacket >> stage.StepOrderIndex;
+    }
+
+    for (ScenarioCurrencyInfo& currency : Currencies)
+    {
+        _worldPacket >> currency.CurrencyID;
+        _worldPacket >> currency.Quantity;
+    }
+}
+
+void WorldLootObjectClick::Read()
+{
+    // 0x6D2740: uint32 @+0x20 VOR der guid @+0x28
+    _worldPacket >> ClickType;
+    _worldPacket >> ObjectGUID;
+}
+
+void UpgradeRuneforgeLegendary::Read()
+{
+    // 0x6D1B90: uint32 aus **(a1+32), dann vier uint8 aus (*(a1+32))+4..+7
+    _worldPacket >> Field0;
+    _worldPacket >> LegendaryBagSlot;
+    _worldPacket >> LegendarySlot;
+    _worldPacket >> UpgradeItemBagSlot;
+    _worldPacket >> UpgradeItemSlot;
+}
+
+void SetExcludedChatCensorSources::Read()
+{
+    // 0x6AFB60
+    _worldPacket >> Sources;
+}
+
+void SilenceTalkerInParty::Read()
+{
+    // 0x6A83E0 - Hausmuster der 0x43-Gruppenopcodes. Das Praesenzbit steht ZUERST
+    // (hoeherwertiges Bit des Akkumulators), das bedingte uint8 NACH der GUID.
+    _worldPacket >> OptionalInit(PartyIndex);
+    _worldPacket >> Bits<1>(Silence);
+    _worldPacket.ResetBitPos();
+
+    _worldPacket >> Target;
+
+    if (PartyIndex)
+        _worldPacket >> *PartyIndex;
+}
+
+void Warden3Data::Read()
+{
+    // 0x6A2940: uint32 @+0x20, uint32 Size @+0x3C, dann Size Rohbytes aus *(a1+0x30).
+    // Sniff: 1398 Pakete, 40..16280 Byte - 8 + Size geht auf.
+    _worldPacket >> Kind;
+    _worldPacket >> Bytes::Size<uint32>(Data);
+    _worldPacket >> Bytes::Data(Data);
+}
+
+void AddonList::Read()
+{
+    // Aussennachricht 0x6A1C70. Reihenfolge am Draht weicht von der Objektreihenfolge ab:
+    // das uint8 @+0x34 steht NACH dem uint32 @+0x38.
+    _worldPacket >> RequestGUID;
+    _worldPacket >> Field30;
+    _worldPacket >> Field38;
+    _worldPacket >> Field34;
+
+    _worldPacket >> Size<uint32>(AddOns);
+
+    // Element 0x69FDE0 (JamCliAddOnInfo, 88 Byte). Beide Laengen sind 10 Bit und
+    // schliessen die NUL EIN. Der Elementkopf ist genau 3 Byte: 10 + 10 + 1 + 1 = 22 Bit,
+    // LSB-seitig mit 2 Null-Bit gepolstert (FlushBits 0x5D4EA0, Fall 6). Die drei
+    // Write<uint8> der Subplanzeile sind zwei ausgefuehrte - der dritte ist der else-Zweig
+    // desselben Bytes bzw. der inline ausgeschriebene Uebertrag von WriteBits 0x5D4A20,
+    // der bei 4 bzw. 5 anstehenden Bit nicht laeuft. Herleitung am Serializer in
+    // MiscPackets.h ueber der Struktur AddonInfo.
+    for (AddonInfo& addon : AddOns)
+    {
+
+        _worldPacket >> SizedCString::BitsSize<10>(addon.Name);
+        _worldPacket >> SizedCString::BitsSize<10>(addon.Version);
+        _worldPacket >> Bits<1>(addon.Flag1);
+        _worldPacket >> Bits<1>(addon.Flag2);
+        _worldPacket.ResetBitPos();
+
+        _worldPacket >> SizedCString::Data(addon.Name);
+        _worldPacket >> SizedCString::Data(addon.Version);
+    }
+}
+
+void EngineSurvey::Read()
+{
+    // Rumpf 0x6AD300. Die Feldliste ist gegen das 294-Byte-Paket aus
+    // 12.1.0.69273_preyandwqpart1.pkt byteweise nachgerechnet: 141 Byte feste Breite,
+    // 104 Bit Bit-Sektion (13 Byte, geht ohne Fuellbits auf), 140 Byte Rohbytes.
+    _worldPacket >> SurveyVersion;
+    _worldPacket >> SurveyPatch;
+    _worldPacket >> CpuVendorID;
+    _worldPacket >> CpuPackages;
+    _worldPacket >> CpuCores;
+    _worldPacket >> CpuThreads;
+    _worldPacket >> Const2;
+    _worldPacket >> CpuField1C;
+    _worldPacket >> Reserved0;
+    _worldPacket >> OsField0;
+    _worldPacket >> OsMajorVersion;
+    _worldPacket >> OsMinorVersion;
+    _worldPacket >> OsField10;
+    _worldPacket >> OsBuildNumber;
+    _worldPacket >> PhysicalMemory;
+    _worldPacket >> Field240;
+    _worldPacket >> MonitorCountMinusOne;
+    _worldPacket >> DesktopWidth;
+    _worldPacket >> DesktopHeight;
+    _worldPacket >> MonitorWidth;
+    _worldPacket >> MonitorHeight;
+    _worldPacket >> GpuVendorID;
+    _worldPacket >> GpuDeviceID;
+    _worldPacket >> GxField0;
+    _worldPacket >> GxField1;
+    _worldPacket >> GxField2;
+    _worldPacket >> GxField3;
+    _worldPacket >> DedicatedVideoMemory;
+    _worldPacket >> SharedSystemMemory;
+    _worldPacket >> GxApi;
+    _worldPacket >> OsField4;
+    _worldPacket >> OsField18;
+    _worldPacket >> OsField1C;
+    _worldPacket >> OsField20;
+    _worldPacket >> OsField24;
+    _worldPacket >> CpuFeatureMask;
+    _worldPacket >> CpuExtra;
+    _worldPacket >> CpuField14;
+    _worldPacket >> CpuField16;
+    _worldPacket >> CpuField17;
+
+    // Bit-Sektion: die Laengenfelder stehen an der Deklarationsposition ihres Strings,
+    // die Bool-Bloecke dazwischen. Die Rohbytes wandern geschlossen ans Ende.
+    std::size_t flag = 0;
+
+    _worldPacket >> SizedString::BitsSize<6>(CpuVendor);
+    _worldPacket >> SizedString::BitsSize<6>(CpuBrand);
+    for (std::size_t i = 0; i < 21; ++i)
+        Flags[flag++] = _worldPacket.ReadBit();
+
+    _worldPacket >> SizedString::BitsSize<6>(GpuName);
+    for (std::size_t i = 0; i < 5; ++i)
+        Flags[flag++] = _worldPacket.ReadBit();
+
+    _worldPacket >> SizedString::BitsSize<7>(OsName);
+    _worldPacket >> SizedString::BitsSize<6>(OsExtra);
+    for (std::size_t i = 0; i < 16; ++i)
+        Flags[flag++] = _worldPacket.ReadBit();
+
+    _worldPacket >> SizedString::BitsSize<7>(BaseBoardManufacturer);
+    _worldPacket >> SizedString::BitsSize<7>(BaseBoardProduct);
+    _worldPacket >> SizedString::BitsSize<7>(BiosVendor);
+    _worldPacket >> SizedString::BitsSize<4>(BiosReleaseDate);
+    _worldPacket >> SizedString::BitsSize<4>(BiosVersion);
+    for (std::size_t i = 0; i < 2; ++i)
+        Flags[flag++] = _worldPacket.ReadBit();
+
+    _worldPacket.ResetBitPos();
+
+    _worldPacket >> SizedString::Data(CpuVendor);
+    _worldPacket >> SizedString::Data(CpuBrand);
+    _worldPacket >> SizedString::Data(GpuName);
+    _worldPacket >> SizedString::Data(OsName);
+    _worldPacket >> SizedString::Data(OsExtra);
+    _worldPacket >> SizedString::Data(BaseBoardManufacturer);
+    _worldPacket >> SizedString::Data(BaseBoardProduct);
+    _worldPacket >> SizedString::Data(BiosVendor);
+    _worldPacket >> SizedString::Data(BiosReleaseDate);
+    _worldPacket >> SizedString::Data(BiosVersion);
+}
+
+void StartSpectatorWarGame::Read()
+{
+    // 0x6A2150: zwei ausgeschriebene Bloecke {guid, uint32, uint16}, dann uint64, dann EIN Bit.
+    for (SpectatorWarGamePlayer& player : Players)
+    {
+        _worldPacket >> player.PlayerGUID;
+        _worldPacket >> player.VirtualRealmAddress;
+        _worldPacket >> player.RealmIndex;
+    }
+
+    _worldPacket >> QueueID;
+    _worldPacket >> Bits<1>(TournamentRules);
+    _worldPacket.ResetBitPos();
+}
+
+void QuickJoinRespondToInvite::Read()
+{
+    // 0x6AF830
+    _worldPacket >> QueueGUID;
+    _worldPacket >> ApplicantGUID;
+    _worldPacket >> Bits<1>(Accept);
+    _worldPacket.ResetBitPos();
+}
+
+void QuickJoinSignalToastDisplayed::Read()
+{
+    // 0x6AF6B0. Der float steht bei Objekt +0x30; im Dekompilat ist er unsichtbar, weil IDA
+    // das xmm-Argument verliert - im Disassemblat steht movss xmm1, [rbp+0x30].
+    _worldPacket >> GroupGUID;
+    _worldPacket >> Priority;
+
+    _worldPacket >> Size<uint32>(Members);
+    for (ObjectGuid& member : Members)
+        _worldPacket >> member;
+
+    _worldPacket >> Bits<1>(Flag0);
+    _worldPacket >> Bits<1>(Flag1);
+    _worldPacket.ResetBitPos();
+}
+
+void QuickJoinRequestInvite::Read()
+{
+    // 0x6AF8C0. Bit-Sektion 9 + 9 + 1 = 19 Bit -> 3 Byte.
+    _worldPacket >> SizedString::BitsSize<9>(TargetName);
+    _worldPacket >> SizedString::BitsSize<9>(TargetRealm);
+    _worldPacket >> Bits<1>(Flag);
+    _worldPacket.ResetBitPos();
+
+    _worldPacket >> QueueID;
+    _worldPacket >> GroupGUID;
+    _worldPacket >> ClubID;
+    _worldPacket >> Roles;
+
+    _worldPacket >> SizedString::Data(TargetName);
+    _worldPacket >> SizedString::Data(TargetRealm);
+}
+
+void QuickJoinRequestInviteWithConfirmation::Read()
+{
+    // 0x6B1420. Bit-Sektion 9 + 9 = 18 Bit -> ebenfalls 3 Byte, aber OHNE das dritte Bit.
+    _worldPacket >> SizedString::BitsSize<9>(TargetName);
+    _worldPacket >> SizedString::BitsSize<9>(TargetRealm);
+    _worldPacket.ResetBitPos();
+
+    _worldPacket >> QueueID;
+    _worldPacket >> GroupGUID;
+    _worldPacket >> RequestID;
+
+    _worldPacket >> SizedString::Data(TargetName);
+    _worldPacket >> SizedString::Data(TargetRealm);
+}
+
+void ServerValidationSignatureRequest::Read()
+{
+    // 0x6B2860: bits24 = Laenge inkl. NUL (0 bedeutet: gar keine Bytes, auch kein NUL).
+    // Der FlushBits danach schreibt kein Byte - 24 mod 8 == 0.
+    _worldPacket >> SizedCString::BitsSize<24>(Signature);
+    _worldPacket.ResetBitPos();
+
+    _worldPacket >> RequestID;
+    _worldPacket >> Guid;
+
+    _worldPacket >> SizedCString::Data(Signature);
 }
 }
