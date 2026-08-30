@@ -991,6 +991,13 @@ void LFGMgr::MakeNewGroup(LfgProposal const& proposal)
 
         Group* group = player->GetGroup();
         if (group && group != grp)
+            // Deliberately GROUP_REMOVEMETHOD_DEFAULT and deliberately silent. This is not a kick:
+            // every player of this loop is added to grp two statements down, so the removal is the
+            // first half of a move into the dungeon group, and the player asked for it by queueing.
+            // It is also not a per-player event - a premade party is not an LFG group, so
+            // proposal.group stays empty (LFGQueue.cpp, IsLfgGroup check), grp starts out null and
+            // every single member of that party runs through here. Telling them "you have been
+            // removed from the group" would be wrong for all of them.
             group->RemoveMember(player->GetGUID());
 
         if (!grp)

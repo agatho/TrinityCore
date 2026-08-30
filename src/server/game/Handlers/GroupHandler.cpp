@@ -16,11 +16,14 @@
  */
 
 #include "WorldSession.h"
+#include "CharacterCache.h"
 #include "Common.h"
 #include "DatabaseEnv.h"
+#include "GameTime.h"
 #include "Group.h"
 #include "GroupMgr.h"
 #include "LFG.h"
+#include "LFGMgr.h"
 #include "Log.h"
 #include "Loot.h"
 #include "MiscPackets.h"
@@ -29,6 +32,7 @@
 #include "Player.h"
 #include "SocialMgr.h"
 #include "World.h"
+#include <algorithm>
 
 class Aura;
 
@@ -56,6 +60,384 @@ void WorldSession::SendPartyResult(PartyOperation operation, const std::string& 
     SendPacket(packet.Write());
 }
 
+// Maps how the leader knows the player who suggested the invite onto Enum.PartyRequestJoinRelation
+// (PartyConstantsDocumentation.lua:22-38). The client uses it to pick between the
+// INVITE_CONFIRMATION_REQUEST_FRIEND / _GUILD / _COMMUNITY wordings.
+static uint8 GetPartyRequestJoinRelation(Player const* leader, Player const* referredBy)
+{
+    if (leader->GetSocial()->HasFriend(referredBy->GetGUID()))
+        return 1;                           // Enum.PartyRequestJoinRelation.Friend
+
+    if (leader->GetGuildId() && leader->GetGuildId() == referredBy->GetGuildId())
+        return 2;                           // Enum.PartyRequestJoinRelation.Guild
+
+    return 0;                               // Enum.PartyRequestJoinRelation.None
+}
+
+// The rules that decide whether inviter may put invitee in a group at all - everything
+// HandlePartyInviteOpcode used to check inline, in its original order and with its original codes.
+//
+// Pulled out because there are now TWO doors that issue an invite, and they issue it in the name of
+// DIFFERENT players. CMSG_PARTY_INVITE checks the sender; the confirmation path checks nothing and
+// then issues the invite in the LEADER's name a moment later, so none of the checks that ran
+// against the suggesting member carry over. Left unshared, a leader whom the target has on the
+// ignore list gets in through any group member as a middleman - the very refusal
+// ERR_IGNORING_YOU_S exists for.
+//
+// Every caller reports the result as SendPartyResult(PARTY_OP_INVITE, invitee->GetName(), result),
+// which is why the codes and not the messages live here.
+static PartyResult CheckPartyInviteEligibility(Player const* inviter, Player const* invitee)
+{
+    // player trying to invite himself (most likely cheating)
+    if (inviter == invitee)
+        return ERR_BAD_PLAYER_NAME_S;
+
+    // restrict invite to GMs
+    if (!sWorld->getBoolConfig(CONFIG_ALLOW_GM_GROUP) && !inviter->IsGameMaster() && invitee->IsGameMaster())
+        return ERR_BAD_PLAYER_NAME_S;
+
+    // can't group with
+    if (!inviter->IsGameMaster() && !sWorld->getBoolConfig(CONFIG_ALLOW_TWO_SIDE_INTERACTION_GROUP) && inviter->GetTeam() != invitee->GetTeam())
+        return ERR_PLAYER_WRONG_FACTION;
+
+    if (inviter->GetInstanceId() != 0 && invitee->GetInstanceId() != 0 && inviter->GetInstanceId() != invitee->GetInstanceId() && inviter->GetMapId() == invitee->GetMapId())
+        return ERR_TARGET_NOT_IN_INSTANCE_S;
+
+    // just ignore us
+    if (invitee->GetInstanceId() != 0 && invitee->GetDungeonDifficultyID() != inviter->GetDungeonDifficultyID())
+        return ERR_IGNORING_YOU_S;
+
+    if (invitee->GetSocial()->HasIgnore(inviter->GetGUID(), inviter->GetSession()->GetAccountGUID()))
+        return ERR_IGNORING_YOU_S;
+
+    if (!invitee->GetSocial()->HasFriend(inviter->GetGUID()) && inviter->GetLevel() < sWorld->getIntConfig(CONFIG_PARTY_LEVEL_REQ))
+        return ERR_INVITE_RESTRICTED;
+
+    return ERR_PARTY_RESULT_OK;
+}
+
+// Forwards a suggested invite from a member without invite rights to the group leader.
+//
+// Two different messages carry this, split by whether the leader can still act on the suggestion:
+//   * group has room -> SMSG_CONFIRM_PARTY_INVITE with ReferredByGUID set, which the client turns
+//     into confirmationType 2 (LE_INVITE_CONFIRMATION_SUGGEST) and shows as an Accept/Decline
+//     dialog built from INVITE_CONFIRMATION_SUGGEST (LFGUtil.lua:270). Answering it sends
+//     CMSG_QUICK_JOIN_RESPOND_TO_INVITE back.
+//   * group is full  -> SMSG_SUGGEST_INVITE_INFORM, a plain chat line
+//     (ERR_INFORM_SUGGEST_INVITE_SS, consumer RVA 0x1E20770). There is nothing to confirm, so the
+//     leader is only informed. The same line covers the case where the leader already holds the
+//     four confirmations the client can keep.
+// UNVERIFIED: the split itself. Both messages exist and both are addressed to the leader, but no
+// recording shows which one retail picks for which case, and the client cannot be asked - it simply
+// renders whichever arrives. See AGENT_BRIEF_W4_GRUPPE_PARTY.md O-A.
+// Returns false whenever the suggestion was not handed on, which is the caller's signal to answer
+// the suggester with ERR_NOT_LEADER. Exactly one case is swallowed and still reported as handled:
+// a REPETITION for the same target inside the running cooldown, because the leader already has
+// that very suggestion in front of him, so the server dropped a duplicate of one it did deliver a
+// moment ago and answering that with an error would put back the false line this return value
+// exists to remove. A suggestion for a DIFFERENT target inside the same window is not a duplicate,
+// nothing was delivered for it, and it therefore returns false - see the cooldown below.
+bool WorldSession::SendSuggestedInvite(Group* group, Player* suggester, Player* target)
+{
+    Player* leader = ObjectAccessor::FindConnectedPlayer(group->GetLeaderGUID());
+    if (!leader)
+        return false;                       // nobody to suggest to - the suggester gets the error line
+
+    // One suggestion per cooldown and session, counted on the SUGGESTER. This path is the only one
+    // in the invite flow where a packet is produced at a THIRD player on somebody else's command:
+    // every CMSG_PARTY_INVITE from a member without invite rights lands on the leader's screen, at
+    // whatever rate the member chooses to send. Neither branch below throttles itself - the
+    // confirmation refuses a duplicate ticket, but the chat line is exactly the fallback for that
+    // refusal, so without this the message merely changes shape and keeps coming.
+    //
+    // The interval is a server side choice with no measured counterpart; nothing in the client
+    // prescribes one.
+    //
+    // GAP, named rather than left implicit: retail answers a refused group action with
+    // SMSG_GROUP_ACTION_THROTTLED (0x450024), the immediate neighbour of
+    // SMSG_SUMMON_RAID_MEMBER_VALIDATE_FAILED and part of this same flow. That opcode sits in
+    // rest_kern_weltzustand of zuschnitt_0x45.json and is NOT in this unit's cut (brief 1.3 O5),
+    // which requires a written change to extend. Until it is built, this tree has no throttle line
+    // to show and has to answer with what it does have.
+    //
+    // The window is therefore split by WHAT was suppressed, because the two cases owe the suggester
+    // different answers and lumping them together answered both with silence:
+    TimePoint const now = GameTime::Now();
+    if (now < _nextSuggestedInviteTime)
+    {
+        // Same target again: a genuine repetition of a suggestion that WAS delivered, and the
+        // leader is still looking at it. Swallowed, and reported as handled - there is nothing to
+        // report a failure about.
+        if (_lastSuggestedInviteTarget == target->GetGUID())
+            return true;
+
+        // A different target: not a duplicate, nothing was delivered for it, and the suggester's
+        // own UI labels the button "Suggest Invite", so silence here reads as success. Reported as
+        // not handed on instead, which is what false means here.
+        // UNVERIFIED: ERR_NOT_LEADER as the stand-in for the missing throttle line. No recording
+        // shows a party result for a throttled suggestion, and none can be expected - the interval
+        // is ours. It is at least true of the suggester, it is the same line he already gets when
+        // the leader is offline, and unlike silence it does not claim the suggestion went through.
+        return false;
+    }
+
+    _nextSuggestedInviteTime = now + SuggestedInviteCooldown;
+    // Set unconditionally: past this point every path below delivers something to the leader - the
+    // confirmation dialog or the chat line - so the next call really does have a delivered
+    // suggestion to be a repetition of.
+    _lastSuggestedInviteTarget = target->GetGUID();
+
+    // The chat line is also the fallback when the leader's confirmation queue is already full: four
+    // outstanding dialogs is all the client holds, so the fifth would be dropped clientside. Better
+    // one line in the chat frame than a suggestion that vanishes.
+    if (!group->IsFull() && SendInviteConfirmation(leader, group, target, suggester))
+        return true;
+
+    WorldPackets::Party::SuggestInviteInform suggestInviteInform;
+    // UNVERIFIED: name order. ERR_INFORM_SUGGEST_INVITE_SS takes two %s and the client passes
+    // both through unchanged, so the binary cannot decide it. (suggester, target) follows the
+    // argument order of INVITE_CONFIRMATION_SUGGEST in LFGUtil.lua:270 and the reading of the
+    // neighbouring GameError codes 81..85 as one direction.
+    suggestInviteInform.SuggesterName = suggester->GetName();
+    suggestInviteInform.TargetName = target->GetName();
+    leader->SendDirectMessage(suggestInviteInform.Write());
+    return true;
+}
+
+// Asks a group leader to confirm inviting target. referredBy set produces confirmationType 2
+// (SUGGEST), leaving it empty produces 3 (QUEUE_WARNING); type 1 (REQUEST) additionally needs
+// ShowChatLine and belongs to the quick join flow.
+bool WorldSession::SendInviteConfirmation(Player* leader, Group* group, Player* target, Player* referredBy)
+{
+    WorldPackets::Party::ConfirmPartyInvite confirmPartyInvite;
+    confirmPartyInvite.PartyGUID = group->GetGUID();
+    confirmPartyInvite.InitializeApplicant(target);
+
+    confirmPartyInvite.IsCrossFaction = leader->GetTeam() != target->GetTeam();
+
+    // WillConvertToRaid is false in this tree, and that is a measured constant rather than an
+    // oversight. The flag means "accepting this turns your party into a raid", which needs the
+    // party to already hold MAX_GROUP_SIZE members - but TrinityCore has no convert-on-invite at
+    // all: Group::AddMember refuses the sixth member with ERR_GROUP_FULL, and this dialog is only
+    // ever built for a group that is not full, because SendSuggestedInvite routes the full group to
+    // the chat line instead. Setting the bit would promise the client the
+    // LFG_LIST_CONVERT_TO_RAID_WARNING and then have the accept path answer ERR_GROUP_FULL.
+    confirmPartyInvite.WillConvertToRaid = false;
+
+    // Queues the applicant is stuck in. The client hands these to Lua through
+    // C_PartyInfo.GetInviteConfirmationInvalidQueues and formats the queue warning from them.
+    if (sLFGMgr->GetState(target->GetGUID()) == lfg::LFG_STATE_QUEUED)
+        for (uint32 dungeonId : sLFGMgr->GetSelectedDungeons(target->GetGUID()))
+            confirmPartyInvite.InvalidLFG.push_back(dungeonId);
+
+    // UNVERIFIED: InvalidLFGList stays empty because the premade group finder (C_LFGList) does not
+    // exist in this tree; InvalidPvP stays empty because the wire ids the client expects for the
+    // battleground queues are not decoded. Both may legitimately be empty - that is the normal case.
+
+    if (referredBy)
+    {
+        confirmPartyInvite.ReferredByGUID = referredBy->GetGUID();
+        confirmPartyInvite.ReferredByName = referredBy->GetName();
+        confirmPartyInvite.ReferralRelation = GetPartyRequestJoinRelation(leader, referredBy);
+        // UNVERIFIED: ReferredByClubID and the three unnamed referral numbers (wire offsets +776,
+        // +796, +808) are sent as 0. C_PartyInfo.GetInviteReferralInfo reads them, but its
+        // evaluation is not readable in the memory image, so their meaning is unknown. Zero does not
+        // make the client discard the message; it only affects which of the seven
+        // INVITE_CONFIRMATION_REQUEST_* wordings is chosen.
+    }
+
+    WorldSession* leaderSession = leader->GetSession();
+    if (!leaderSession->AddPendingInviteConfirmation({
+            .ApplicantGUID = confirmPartyInvite.ApplicantGUID,
+            .PartyGUID = confirmPartyInvite.PartyGUID,
+            .ReferredByGUID = confirmPartyInvite.ReferredByGUID,
+            .ExpireTime = GameTime::Now() + PendingInviteConfirmationTimeout }))
+        return false;   // leader already has four unanswered confirmations, the client would drop this one
+
+    leader->SendDirectMessage(confirmPartyInvite.Write());
+    return true;
+}
+
+bool WorldSession::AddPendingInviteConfirmation(PendingInviteConfirmation confirmation)
+{
+    TimePoint const now = GameTime::Now();
+    std::erase_if(_pendingInviteConfirmations, [&](PendingInviteConfirmation const& pending)
+    {
+        return pending.ExpireTime <= now;
+    });
+
+    // A repeated suggestion for the same applicant is refused rather than replacing the live
+    // ticket. Dropping the old entry first would have let the four-at-a-time limit be walked past
+    // by simply asking again - the count never grows, so every repetition produced another
+    // SMSG_CONFIRM_PARTY_INVITE at the leader. The leader already has this dialog open; there is
+    // nothing to redraw.
+    if (std::ranges::any_of(_pendingInviteConfirmations, [&](PendingInviteConfirmation const& pending)
+        { return pending.ApplicantGUID == confirmation.ApplicantGUID; }))
+        return false;
+
+    if (_pendingInviteConfirmations.size() >= MaxPendingInviteConfirmations)
+        return false;
+
+    _pendingInviteConfirmations.push_back(confirmation);
+    return true;
+}
+
+// Both guids are part of the key, and deliberately so: matching on the applicant alone and
+// checking the party afterwards would let an answer carrying a wrong PartyGUID consume the ticket
+// and return it unused, so the leader's real Accept would then find nothing and do nothing. Here a
+// mismatch simply finds no ticket and leaves the open confirmation standing.
+// ExpireTime is deliberately NOT part of the match: a ticket that ran out is still handed out, and
+// the caller answers the leader instead of dropping his click on the floor. Filtering it here would
+// make "expired" indistinguishable from "never existed".
+Optional<WorldSession::PendingInviteConfirmation> WorldSession::TakePendingInviteConfirmation(ObjectGuid applicantGuid, ObjectGuid partyGuid)
+{
+    auto itr = std::ranges::find_if(_pendingInviteConfirmations, [&](PendingInviteConfirmation const& pending)
+    {
+        return pending.ApplicantGUID == applicantGuid && pending.PartyGUID == partyGuid;
+    });
+
+    if (itr == _pendingInviteConfirmations.end())
+        return {};
+
+    PendingInviteConfirmation confirmation = *itr;
+    _pendingInviteConfirmations.erase(itr);
+    return confirmation;
+}
+
+// Drops everything this session holds for the two party flows above. Called from
+// WorldSession::LogoutPlayer, and that placement is the whole point: the WorldSession is NOT the
+// character. In TrinityCore it outlives a logout - it stays up for the character selection and
+// then takes on a different character of the same account - so without this the state below is
+// inherited by whoever logs in next on this account.
+//
+// The consequence was not a wrong invite - HandleInviteConfirmationResponse re-checks
+// group->IsLeader for the CURRENT player, so a stale ticket cannot be redeemed - but the four
+// ticket slots stayed occupied for the new character for up to PendingInviteConfirmationTimeout,
+// and they were only reclaimed by the erase_if of the NEXT AddPendingInviteConfirmation. Inside
+// that window the new character could not be asked to confirm anything at all. The suggestion
+// cooldown was inherited the same way, which let one character's suggestion silence the next
+// character's.
+//
+// This is what makes the "must not survive a relog" in the declaration of
+// _pendingInviteConfirmations true of the code and not only of the comment.
+void WorldSession::ClearPendingPartyInviteState()
+{
+    _pendingInviteConfirmations.clear();
+    _nextSuggestedInviteTime = TimePoint::min();
+    _lastSuggestedInviteTarget.Clear();
+}
+
+// CMSG_QUICK_JOIN_RESPOND_TO_INVITE (0x430130) - the leader pressed Accept or Decline in the
+// GROUP_INVITE_CONFIRMATION dialog. This closes the round trip that SMSG_CONFIRM_PARTY_INVITE
+// opens, so it is registered here, next to the send side, rather than left to the CMSG family
+// sweep: the copy of this opcode on feature/cmsg-sweep answers with a TC_LOG_DEBUG and its comment
+// states the round trip cannot be built in the worldserver - which the measurement of the client
+// disproves (AGENT_BRIEF_W4_GRUPPE_PARTY.md 2 K1). See registrierung/w4_gruppe_party.frag.json:
+// when the branches are merged, THIS registration and this body are the ones to keep, and the
+// MiscPackets/MiscHandler copy is the one to drop.
+void WorldSession::HandleQuickJoinRespondToInvite(WorldPackets::Party::QuickJoinRespondToInvite& packet)
+{
+    // Mind the order - the client sends the applicant guid first, see PartyPackets.h.
+    HandleInviteConfirmationResponse(packet.ApplicantGUID, packet.PartyGUID, packet.Accept);
+}
+
+void WorldSession::HandleInviteConfirmationResponse(ObjectGuid applicantGuid, ObjectGuid partyGuid, bool accept)
+{
+    // The client echoes back both guids we sent, so a mismatch is not something a well behaved
+    // client produces - it is looked up by both so that a crafted one cannot spend somebody's
+    // ticket by naming the wrong group, see TakePendingInviteConfirmation.
+    Optional<PendingInviteConfirmation> confirmation = TakePendingInviteConfirmation(applicantGuid, partyGuid);
+    if (!confirmation)
+        return;                             // unknown, wrong group or already answered
+
+    Player* leader = GetPlayer();
+    if (!leader)
+        return;
+
+    Group* group = sGroupMgr->GetGroupByGUID(confirmation->PartyGUID);
+    if (!group || !group->IsLeader(leader->GetGUID()))
+        return;
+
+    // The name comes from the cache, not from a Player object. Every line below needs it, and two
+    // of them - the decline and the expiry - must go out even when the applicant is no longer
+    // online. Taking it from a lookup that may fail is what put an empty %s into the leader's chat
+    // frame ("No player named  is currently playing").
+    std::string applicantName;
+    sCharacterCache->GetCharacterNameByGuid(applicantGuid, applicantName);
+
+    // The ticket ran out under an open dialog. The client is not known to close that dialog by
+    // itself (see PendingInviteConfirmationTimeout), so this is a click the leader really made and
+    // it gets an answer instead of a silent return: he learns the invite did not happen, and the
+    // suggester learns it too, exactly as on a decline - from his side the outcome is the same.
+    // UNVERIFIED: the code. There is no measured party result for a lapsed confirmation, and none
+    // can be measured - the timeout is ours. ERR_INVITE_RESTRICTED is the same "not allowed, no
+    // reason given" stand-in the decline path uses below, chosen for consistency and guessed.
+    if (confirmation->ExpireTime <= GameTime::Now())
+    {
+        SendPartyResult(PARTY_OP_INVITE, applicantName, ERR_INVITE_RESTRICTED);
+        if (Player* referredBy = ObjectAccessor::FindConnectedPlayer(confirmation->ReferredByGUID))
+            referredBy->GetSession()->SendPartyResult(PARTY_OP_INVITE, applicantName, ERR_INVITE_RESTRICTED);
+        return;
+    }
+
+    // Declining comes BEFORE the applicant is looked up, and that order is the point: a refusal
+    // cannot fail and must not depend on the applicant still being online. With the lookup first,
+    // an applicant who logged out while the dialog stood open turned the leader's Decline into
+    // ERR_BAD_PLAYER_NAME_S - an error for an action that succeeded. Nothing here needs a Player,
+    // only the name for the line to the suggester.
+    if (!accept)
+    {
+        // Tell whoever suggested the invite that the leader turned it down.
+        // UNVERIFIED: the code itself. Nothing decides it - the binary does not evaluate a refusal
+        // path, the Lua has no handler for one, and there is no recording of this direction. Brief
+        // 7.3 documents only the opposite direction (GameError 82, ERR_SUGGEST_INVITE_PLAYER_S);
+        // whether retail answers a declined suggestion at all is unknown. ERR_INVITE_RESTRICTED is
+        // picked as the one party result that says "not allowed, no reason given", and it is a
+        // guess. It also collides with the level requirement in CheckPartyInviteEligibility, so the
+        // suggester sees the same line for two unrelated causes.
+        if (Player* referredBy = ObjectAccessor::FindConnectedPlayer(confirmation->ReferredByGUID))
+            referredBy->GetSession()->SendPartyResult(PARTY_OP_INVITE, applicantName, ERR_INVITE_RESTRICTED);
+        return;
+    }
+
+    Player* target = ObjectAccessor::FindConnectedPlayer(applicantGuid);
+    if (!target)
+    {
+        SendPartyResult(PARTY_OP_INVITE, applicantName, ERR_BAD_PLAYER_NAME_S);
+        return;
+    }
+
+    if (group->IsFull())
+    {
+        SendPartyResult(PARTY_OP_INVITE, "", ERR_GROUP_FULL);
+        return;
+    }
+
+    if (target->GetGroup() || target->GetGroupInvite())
+    {
+        SendPartyResult(PARTY_OP_INVITE, target->GetName(), ERR_ALREADY_IN_GROUP_S);
+        return;
+    }
+
+    // The invite goes out in the LEADER's name from here on, so the leader has to pass the same
+    // seven rules a leader who typed /invite would face. They were checked against the suggesting
+    // member when CMSG_PARTY_INVITE arrived and say nothing about the leader.
+    if (PartyResult eligibility = CheckPartyInviteEligibility(leader, target); eligibility != ERR_PARTY_RESULT_OK)
+    {
+        SendPartyResult(PARTY_OP_INVITE, target->GetName(), eligibility);
+        return;
+    }
+
+    if (!group->AddInvite(target))
+        return;
+
+    WorldPackets::Party::PartyInvite partyInvite;
+    partyInvite.Initialize(leader, 0, true);
+    target->SendDirectMessage(partyInvite.Write());
+
+    SendPartyResult(PARTY_OP_INVITE, target->GetName(), ERR_PARTY_RESULT_OK);
+}
+
 void WorldSession::HandlePartyInviteOpcode(WorldPackets::Party::PartyInviteClient& packet)
 {
     Player* invitingPlayer = GetPlayer();
@@ -68,47 +450,11 @@ void WorldSession::HandlePartyInviteOpcode(WorldPackets::Party::PartyInviteClien
         return;
     }
 
-    // player trying to invite himself (most likely cheating)
-    if (invitedPlayer == invitingPlayer)
+    // Self invite, GM, faction, instance, difficulty, ignore list and level requirement - the same
+    // seven rules the confirmation path applies to the leader, see CheckPartyInviteEligibility.
+    if (PartyResult eligibility = CheckPartyInviteEligibility(invitingPlayer, invitedPlayer); eligibility != ERR_PARTY_RESULT_OK)
     {
-        SendPartyResult(PARTY_OP_INVITE, invitedPlayer->GetName(), ERR_BAD_PLAYER_NAME_S);
-        return;
-    }
-
-    // restrict invite to GMs
-    if (!sWorld->getBoolConfig(CONFIG_ALLOW_GM_GROUP) && !invitingPlayer->IsGameMaster() && invitedPlayer->IsGameMaster())
-    {
-        SendPartyResult(PARTY_OP_INVITE, invitedPlayer->GetName(), ERR_BAD_PLAYER_NAME_S);
-        return;
-    }
-
-    // can't group with
-    if (!invitingPlayer->IsGameMaster() && !sWorld->getBoolConfig(CONFIG_ALLOW_TWO_SIDE_INTERACTION_GROUP) && invitingPlayer->GetTeam() != invitedPlayer->GetTeam())
-    {
-        SendPartyResult(PARTY_OP_INVITE, invitedPlayer->GetName(), ERR_PLAYER_WRONG_FACTION);
-        return;
-    }
-    if (invitingPlayer->GetInstanceId() != 0 && invitedPlayer->GetInstanceId() != 0 && invitingPlayer->GetInstanceId() != invitedPlayer->GetInstanceId() && invitingPlayer->GetMapId() == invitedPlayer->GetMapId())
-    {
-        SendPartyResult(PARTY_OP_INVITE, invitedPlayer->GetName(), ERR_TARGET_NOT_IN_INSTANCE_S);
-        return;
-    }
-    // just ignore us
-    if (invitedPlayer->GetInstanceId() != 0 && invitedPlayer->GetDungeonDifficultyID() != invitingPlayer->GetDungeonDifficultyID())
-    {
-        SendPartyResult(PARTY_OP_INVITE, invitedPlayer->GetName(), ERR_IGNORING_YOU_S);
-        return;
-    }
-
-    if (invitedPlayer->GetSocial()->HasIgnore(invitingPlayer->GetGUID(), invitingPlayer->GetSession()->GetAccountGUID()))
-    {
-        SendPartyResult(PARTY_OP_INVITE, invitedPlayer->GetName(), ERR_IGNORING_YOU_S);
-        return;
-    }
-
-    if (!invitedPlayer->GetSocial()->HasFriend(invitingPlayer->GetGUID()) && invitingPlayer->GetLevel() < sWorld->getIntConfig(CONFIG_PARTY_LEVEL_REQ))
-    {
-        SendPartyResult(PARTY_OP_INVITE, invitedPlayer->GetName(), ERR_INVITE_RESTRICTED);
+        SendPartyResult(PARTY_OP_INVITE, invitedPlayer->GetName(), eligibility);
         return;
     }
 
@@ -139,7 +485,37 @@ void WorldSession::HandlePartyInviteOpcode(WorldPackets::Party::PartyInviteClien
         if (!group->IsLeader(invitingPlayer->GetGUID()) && !group->IsAssistant(invitingPlayer->GetGUID()))
         {
             if (group->IsCreated())
-                SendPartyResult(PARTY_OP_INVITE, "", ERR_NOT_LEADER);
+            {
+                // This is the "Suggest Invite" path: the client of a member who may not invite still
+                // sends CMSG_PARTY_INVITE (Blizzard_UnitPopup/Mainline/UnitPopupUtils.lua:94-106,
+                // GetDisplayedInviteType in Blizzard_LFGUtil/Mainline/LFGUtil.lua:88-111). Retail
+                // forwards the suggestion to the leader; before this it was dropped on the floor.
+                //
+                // ERR_NOT_LEADER goes out only when the suggestion could NOT be handed on. The
+                // member's own UI labels this button "Suggest Invite", so on the path where the
+                // suggestion reaches the leader, telling him "you are not the leader" reports a
+                // failure for an action that worked. Retail's answer to the suggester on that path
+                // is GameError 82 ERR_SUGGEST_INVITE_PLAYER_S (SharedDefines.h, brief 7.3), which
+                // carries a %s; SMSG_DISPLAY_GAME_ERROR has no string carrying ctor form (brief 1.4
+                // F3), so it cannot be sent from this tree. The suggester therefore gets no
+                // confirmation - silence where retail confirms, which is a named gap, rather than
+                // an error where retail confirms, which was a wrong statement.
+                //
+                // MEMBERSHIP is the precondition of the whole path, not a formality. `group` above
+                // falls back to invitingPlayer->GetGroupInvite(), so a player who merely holds an
+                // UNANSWERED invite to this group arrives here too, and nothing between there and
+                // here asks whether he belongs to it. The client never sends a suggestion in that
+                // state - GetDisplayedInviteType (LFGUtil.lua:89) gates the whole SUGGEST_INVITE
+                // branch behind IsInGroup(), which a pending invite does not satisfy, so such a
+                // player is offered plain "Invite". Letting him through would let a stranger to the
+                // group put a confirmation dialog on the leader's screen and hold one of his four
+                // ticket slots for up to 120 s, on the strength of an invite he never accepted. He
+                // gets exactly what he got before this path existed: ERR_NOT_LEADER.
+                if (!group->IsMember(invitingPlayer->GetGUID()))
+                    SendPartyResult(PARTY_OP_INVITE, "", ERR_NOT_LEADER);
+                else if (!SendSuggestedInvite(group, invitingPlayer, invitedPlayer))
+                    SendPartyResult(PARTY_OP_INVITE, "", ERR_NOT_LEADER);
+            }
             return;
         }
         // not have place

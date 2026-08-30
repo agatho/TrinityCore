@@ -571,6 +571,28 @@ bool Group::RemoveMember(ObjectGuid guid, RemoveMethod method /*= GROUP_REMOVEME
     if (player)
         player->FailCriteria(CriteriaFailEvent::ModifyPartyStatus, 0);
 
+    // Removed by the server itself, so there is no kicker to name. The message carries no payload;
+    // the client answers it with ERR_UNINVITE_YOU in the chat frame (consumer RVA 0x1E20110 at
+    // build 12.1.0.69382). It goes to the removed player only - sending it to the group would tell
+    // everybody they had been removed.
+    // Sent here, ahead of the group size branch, on purpose: a removal that leaves fewer than two
+    // members falls into the Disband() branch below, which never reaches the notifications inside
+    // the branch. Without this the last removal of a three member party would be the one that stays
+    // silent. GROUP_UNINVITE has that same gap for the manual kick; it is left alone because
+    // changing the manual kick is not this change's business.
+    //
+    // UNVERIFIED: that retail sends SMSG_GROUP_AUTO_KICK at THIS trigger, or at any trigger. What
+    // the packet means is measured; what makes retail send it is not. There is no recording of the
+    // opcode (brief 10), no server side trigger anywhere in this tree (brief 1.4 F5) and no UI text
+    // that names one (brief 9.7). Retail may just as well answer a server initiated removal with
+    // the SMSG_GROUP_UNINVITE this tree already sends and keep this opcode for a case nobody has
+    // seen. Binding it to GROUP_REMOVEMETHOD_AUTO is therefore a decision, not a reconstruction
+    // (brief 7.2, 11.1 O-B); it needs a recording of a server initiated removal to settle. The
+    // decision is deliberately narrow: GROUP_REMOVEMETHOD_AUTO has exactly one caller (.group
+    // remove, cs_group.cpp), so a wrong guess here misinforms nobody but a GM's target.
+    if (player && method == GROUP_REMOVEMETHOD_AUTO)
+        player->SendDirectMessage(WorldPackets::Party::GroupAutoKick().Write());
+
     // remove member and change leader (if need) only if strong more 2 members _before_ member remove (BG/BF allow 1 member group)
     if (GetMembersCount() > ((isBGGroup() || isLFGGroup() || isBFGroup()) ? 1u : 2u))
     {

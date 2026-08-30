@@ -355,7 +355,11 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         Trinity::unique_weak_ptr<Map> GetWeakPtr() const { return m_weakRef; }
         void SetWeakPtr(Trinity::unique_weak_ptr<Map> weakRef) { m_weakRef = std::move(weakRef); }
 
-        static TransferAbortParams PlayerCannotEnter(uint32 mapid, Player* player);
+        // report == true lets the access requirement check talk to the player directly (chat line
+        // or notification, see Player::Satisfy). That is right when the player himself is trying to
+        // get in, and wrong when a THIRD party asks the question about him - he then receives an
+        // entry refusal for something he never attempted. Callers of the second kind pass false.
+        static TransferAbortParams PlayerCannotEnter(uint32 mapid, Player* player, bool report = true);
         virtual TransferAbortParams CannotEnter(Player* /*player*/) { return { TRANSFER_ABORT_NONE }; }
         char const* GetMapName() const;
 

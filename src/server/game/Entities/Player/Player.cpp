@@ -26477,18 +26477,135 @@ bool Player::HasSummonPending() const
     return m_summon_expire >= GameTime::GetGameTime();
 }
 
+Optional<WorldPackets::Party::SummonRaidMemberValidateReason> Player::ValidateSummonRequestFrom(Unit* summoner) const
+{
+    using Reason = WorldPackets::Party::SummonRaidMemberValidateReason;
+
+    // Dead or in ghost form. Retail refuses the summon here and names the reason; TrinityCore used
+    // to summon the corpse walker silently.
+    //
+    // The step that decides this one is the spell, so the spell is named rather than assumed
+    // (2 and 3 are producible as well, out of the map branch at the bottom; 1 and 5 are not):
+    //
+    //   * The only spell in the client data carrying SPELL_EFFECT_SUMMON_PLAYER (85) is 7720
+    //     "Ritual of Summoning". Full scan of SpellEffect.db2 (WOWSTATIC_12_0_7_67808, layout
+    //     0x5362E3D4): exactly one row with Effect == 85, SpellID 7720, EffectIndex 0,
+    //     ImplicitTarget [0, 0]. Both gameobject paths in GameObject::Use reach it through it -
+    //     spell 61994 / 59782 only place the TRANS_DOOR portal (GO 179944), whose ritual then
+    //     casts 7720.
+    //   * Spell 7720 does NOT allow a dead target. SpellMisc.Attributes = 0x10000000
+    //     (SPELL_ATTR0_NOT_IN_COMBAT_ONLY_PEACEFUL), 0x100 (SPELL_ATTR1_ONLY_PEACEFUL_TARGETS),
+    //     0x4 (SPELL_ATTR2_IGNORE_LINE_OF_SIGHT), rest zero - SPELL_ATTR2_ALLOW_DEAD_TARGET (0x1)
+    //     is absent; it has no SpellTargetRestrictions row at all, so Targets == 0 and none of
+    //     TARGET_FLAG_CORPSE_ALLY / CORPSE_ENEMY / UNIT_DEAD is set; and neither implicit target is
+    //     a corpse type. SpellInfo::IsAllowingDeadTarget() is therefore false, and
+    //     SpellInfo::CheckTarget would answer SPELL_FAILED_TARGETS_DEAD.
+    //   * It never gets asked about the summoned player. SPELL_EFFECT_SUMMON_PLAYER is one of the
+    //     two effects Spell::SelectEffectTypeImplicitTargets short-circuits: it resolves
+    //     m_caster->ToPlayer()->GetTarget() - the caster's SELECTION, not the explicit spell target
+    //     - and hands that guid to Map::AddFarSpellCallback, which calls HandleEffects directly.
+    //     AddUnitTarget, and with it CheckTarget, is skipped by design ("target is not stored in
+    //     target map for those spells"); the only surviving filter is IsImmunedToSpellEffect. The
+    //     explicit unit target that CheckTarget does see is the player who clicked the ritual
+    //     portal, who is necessarily alive and is not the one being summoned.
+    //   * The effect specific block for SPELL_EFFECT_SUMMON_PLAYER in Spell::CheckCast requires a
+    //     selection, refuses the caster himself, requires the same raid (except 48955), refuses a
+    //     pending summon and checks the instance lock. It does not check IsAlive.
+    //
+    // So a summoner whose selection is a dead raid member completes the ritual, EffectSummonPlayer
+    // runs on that dead player, and this branch fires. The send site exists.
+    if (!IsAlive())
+        return Reason::DeadOrGhost;
+
+    // UNREACHABLE in this tree, kept as the guard it will be the day cross realm exists: both
+    // players hang off the same worldserver instance, so VirtualPlayerRealm is the same value for
+    // both and the comparison is constantly false. Reason::RealmMismatch (1) therefore never goes
+    // out today. Reason::Offline (5) cannot be produced either - the only caller is
+    // Spell::EffectSummonPlayer, which requires unitTarget to be a player object present in the
+    // world. Of the five wire reasons 2, 3 and 4 are producible, 1 and 5 are not; see the status
+    // file and the map branch below.
+    if (Player const* playerSummoner = summoner->ToPlayer())
+        if (*playerSummoner->m_playerData->VirtualPlayerRealm != *m_playerData->VirtualPlayerRealm)
+            return Reason::RealmMismatch;
+
+    // Everything the destination map itself refuses. The two lock reasons get their own client
+    // string, the remainder collapses into the generic map condition.
+    //
+    // The map id comparison is NOT a shortcut, it is the precondition of the function being asked.
+    // Map::PlayerCannotEnter answers "may this player ENTER that map" and assumes he is not
+    // standing in it: for an instanceable map it resolves the player's OWN bound instance
+    // (MapManager::FindInstanceIdForPlayer) and hands that map to InstanceMap::CannotEnter, whose
+    // first statement is ABORT() when player->GetMapRef().getTarget() == this (Map.cpp, WPAbort -
+    // a process abort, so the return below it is dead code). Asking about the map a player already
+    // occupies takes the worldserver down; hence the guard, and hence it must stay. It cannot
+    // misfire in the other direction either: past the comparison the requested map id differs from
+    // the one this player stands on, so FindMap(mapid, ...) can never return his own map.
+    //
+    // The branch is the NORMAL case, not an exception - this corrects a claim that stood here
+    // before. Spell::SelectEffectTypeImplicitTargets resolves the summon target with the GLOBAL
+    // ObjectAccessor::FindPlayer (Spell.cpp) and queues the effect on target->GetMap() via
+    // AddFarSpellCallback, which is precisely the machinery for reaching a player on another map;
+    // Spell::CheckCast asks only IsInSameRaidWith for SPELL_EFFECT_SUMMON_PLAYER, neither map nor
+    // range. A ritual of summoning fetching a raid mate from the city into the instance therefore
+    // enters here every time, and RaidLocked (2) and MapCondition (3) are ordinary outcomes.
+    //
+    // report = false is the point of the parameter. Map::PlayerCannotEnter passes the flag to
+    // Player::Satisfy, which on failure writes to the checked player DIRECTLY - PSendSysMessage
+    // with the access requirement's questFailedText, or SendNotification with
+    // LANG_LEVEL_MINREQUIRED_AND_ITEM / LANG_LEVEL_MINREQUIRED. The checked player here is the one
+    // being summoned, who asked for nothing: with report on, a raid mate standing in the city gets
+    // "you must be at least level X and own item Y" the moment somebody ritualises him, an entry
+    // refusal for an entry he never attempted. The refusal belongs to the SUMMONER, and he gets it
+    // as the reason code of this function, carried by SMSG_SUMMON_RAID_MEMBER_VALIDATE_FAILED.
+    if (GetMapId() != summoner->GetMapId())
+    {
+        if (TransferAbortParams denyReason = Map::PlayerCannotEnter(summoner->GetMapId(), const_cast<Player*>(this), false))
+        {
+            switch (denyReason.Reason)
+            {
+                case TRANSFER_ABORT_LOCKED_TO_DIFFERENT_INSTANCE:
+                case TRANSFER_ABORT_ALREADY_COMPLETED_ENCOUNTER:
+                    return Reason::RaidLocked;
+                default:
+                    return Reason::MapCondition;
+            }
+        }
+    }
+
+    return {};
+}
+
 void Player::SendSummonRequestFrom(Unit* summoner)
 {
     if (!summoner)
         return;
 
-    // Player already has active summon request
+    // Player already has active summon request.
+    // UNVERIFIED: the client enum (RVA 0x1E2E860) has no value for "already pending", so retail
+    // presumably stays silent here as well. Kept silent rather than inventing a reason code.
     if (HasSummonPending())
         return;
 
     // Evil Twin (ignore player summon, but hide this for summoner)
+    // UNVERIFIED: no client reason code matches this either, and the existing comment says the
+    // refusal is deliberately hidden from the summoner, so nothing is reported.
     if (HasAura(23445))
         return;
+
+    // Tell the summoner, per target player, why this one is not coming along. The client resolves
+    // each guid through its name cache and prints one chat line per entry; a reason of 0 and a guid
+    // the receiver cannot resolve both stay silent, so neither is ever sent.
+    // Reason enum from the consumer comparison chain at RVA 0x1E2E860, build 12.1.0.69382.
+    if (Optional<WorldPackets::Party::SummonRaidMemberValidateReason> failure = ValidateSummonRequestFrom(summoner))
+    {
+        if (Player* playerSummoner = summoner->ToPlayer())
+        {
+            WorldPackets::Party::SummonRaidMemberValidateFailed validateFailed;
+            validateFailed.Entries.push_back({ .PlayerGUID = GetGUID(), .Reason = *failure });
+            playerSummoner->SendDirectMessage(validateFailed.Write());
+        }
+        return;
+    }
 
     m_summon_expire = GameTime::GetGameTime() + MAX_PLAYER_SUMMON_DELAY;
     m_summon_location.Location.WorldRelocate(*summoner);

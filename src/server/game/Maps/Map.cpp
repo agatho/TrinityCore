@@ -1804,7 +1804,7 @@ void Map::RequestRebuildNavMeshOnGameObjectModelChange(GameObjectModel const& mo
             m_mmapTileRebuilder->AddTile(terrainMapId, x, y);
 }
 
-TransferAbortParams Map::PlayerCannotEnter(uint32 mapid, Player* player)
+TransferAbortParams Map::PlayerCannotEnter(uint32 mapid, Player* player, bool report)
 {
     MapEntry const* entry = sMapStore.LookupEntry(mapid);
     if (!entry)
@@ -1827,7 +1827,12 @@ TransferAbortParams Map::PlayerCannotEnter(uint32 mapid, Player* player)
     //Other requirements
     {
         TransferAbortParams params(TRANSFER_ABORT_NONE);
-        if (!player->Satisfy(sObjectMgr->GetAccessRequirement(mapid, Difficulty(mapDiff->DifficultyID)), mapid, &params, true))
+        // With report == false Satisfy skips the whole reporting block, and with it the refinement
+        // of params->Reason from TRANSFER_ABORT_ERROR to TRANSFER_ABORT_DIFFICULTY (plus Arg and
+        // MapDifficultyXConditionId) that only happens inside it. A silent caller therefore gets
+        // the generic error instead of the difficulty detail - it still gets a refusal, and the
+        // detail exists to fill a client string it is not going to show anyway.
+        if (!player->Satisfy(sObjectMgr->GetAccessRequirement(mapid, Difficulty(mapDiff->DifficultyID)), mapid, &params, report))
             return params;
     }
 

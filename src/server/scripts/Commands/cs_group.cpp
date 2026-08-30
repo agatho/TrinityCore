@@ -368,7 +368,19 @@ public:
             return false;
         }
 
-        group->RemoveMember(guid);
+        // GROUP_REMOVEMETHOD_AUTO, so the removed player is told with SMSG_GROUP_AUTO_KICK instead
+        // of dropping out of the party frame without a word. Of the removals this tree has, this is
+        // the one whose shape matches the message: it comes from outside the group, so there is no
+        // kicker to name, the removed player did not ask for it, and they are normally online to
+        // receive it.
+        //
+        // UNVERIFIED: that this is what retail sends here. Fitting best among the triggers we have
+        // is not evidence that retail has this trigger at all - see the marker at the send site in
+        // Group::RemoveMember. Without a recording it stays undecidable whether retail answers a
+        // server initiated removal with SMSG_GROUP_AUTO_KICK or with the existing SMSG_GROUP_UNINVITE
+        // (brief 7.2, 11.1 O-B). If it turns out to be the latter, THIS line is the one to change:
+        // pass GROUP_REMOVEMETHOD_KICK and the send site goes quiet on its own.
+        group->RemoveMember(guid, GROUP_REMOVEMETHOD_AUTO);
         return true;
     }
 

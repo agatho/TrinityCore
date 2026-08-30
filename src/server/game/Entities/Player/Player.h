@@ -135,6 +135,11 @@ namespace WorldPackets
         enum class UpdateCollisionHeightReason : uint8;
     }
 
+    namespace Party
+    {
+        enum class SummonRaidMemberValidateReason : uint8;
+    }
+
     namespace Traits
     {
         struct TraitConfig;
@@ -1326,6 +1331,9 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         bool TeleportToBGEntryPoint();
 
         bool HasSummonPending() const;
+        // Returns the reason this player cannot be summoned by summoner, or nothing when the summon
+        // may proceed. Values are the wire enum of SMSG_SUMMON_RAID_MEMBER_VALIDATE_FAILED.
+        Optional<WorldPackets::Party::SummonRaidMemberValidateReason> ValidateSummonRequestFrom(Unit* summoner) const;
         void SendSummonRequestFrom(Unit* summoner);
         void SummonIfPossible(bool agree);
 
