@@ -20,6 +20,7 @@
 */
 
 #include "World.h"
+#include "WorldQuestMgr.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "AreaTriggerDataStore.h"
@@ -1647,6 +1648,9 @@ bool World::SetInitialWorldSettings()
     QuestMgr::Load();
     sObjectMgr->LoadQuests();                                    // must be loaded after DBCs, creature_template, items, gameobject tables
 
+    TC_LOG_INFO("server.loading", "Loading World Quests...");
+    sWorldQuestMgr->LoadFromDB();
+
     TC_LOG_INFO("server.loading", "Checking Quest Disables");
     DisableMgr::CheckQuestDisables();                           // must be after loading quests
 
@@ -2451,6 +2455,7 @@ void World::Update(uint32 diff)
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update LFG"));
         sLFGMgr->Update(diff);
+    sWorldQuestMgr->Update(diff);
     }
 
     {
