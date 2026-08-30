@@ -2732,6 +2732,8 @@ bool Guild::Validate()
 bool Guild::HasChatRankRight(Player const* player, bool officerOnly) const
 {
     return _HasRankRight(player, officerOnly ? GR_RIGHT_OFFCHATSPEAK : GR_RIGHT_GCHATSPEAK);
+}
+
 void Guild::LoadDiscordSettingsFromDB(Field* fields)
 {
     // fields: 0 guildid, 1 settings, 2 discordGuildId, 3 discordChannelId
