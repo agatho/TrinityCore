@@ -5362,6 +5362,138 @@ void ObjectMgr::LoadQuests()
     TC_LOG_INFO("server.loading", ">> Loaded {} quests definitions in {} ms", _questTemplates.size(), GetMSTimeDiffToNow(oldMSTime));
 }
 
+void ObjectMgr::LoadTreasurePickerTemplates()
+{
+    uint32 oldMSTime = getMSTime();
+
+    _treasurePickerStore.clear();
+
+    //                                               0                 1      2         3
+    QueryResult result = WorldDatabase.Query("SELECT TreasurePickerID, Flags, IsChoice, Gold FROM treasure_picker");
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 treasure pickers. DB table `treasure_picker` is empty.");
+        return;
+    }
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        TreasurePickerTemplate& treasurePicker = _treasurePickerStore[fields[0].GetUInt32()];
+        treasurePicker.ID = fields[0].GetUInt32();
+        treasurePicker.Flags = fields[1].GetInt32();
+        treasurePicker.IsChoice = fields[2].GetBool();
+        treasurePicker.Gold = fields[3].GetUInt64();
+    } while (result->NextRow());
+
+    //                                   0                 1    2       3             4            5
+    result = WorldDatabase.Query("SELECT TreasurePickerID, Idx, ItemID, ItemQuantity, BonusListID, Context FROM treasure_picker_items ORDER BY TreasurePickerID ASC, Idx ASC");
+    if (result)
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+            uint32 treasurePickerId = fields[0].GetUInt32();
+
+            auto itr = _treasurePickerStore.find(treasurePickerId);
+            if (itr == _treasurePickerStore.end())
+            {
+                TC_LOG_ERROR("sql.sql", "Table `treasure_picker_items` has data for TreasurePickerID {} but such treasure picker does not exist", treasurePickerId);
+                continue;
+            }
+
+            uint32 itemId = fields[2].GetUInt32();
+            if (!GetItemTemplate(itemId))
+            {
+                TC_LOG_ERROR("sql.sql", "Table `treasure_picker_items` has non-existing ItemID {} for TreasurePickerID {}", itemId, treasurePickerId);
+                continue;
+            }
+
+            TreasurePickerItem& item = itr->second.Items.emplace_back();
+            item.ItemID = itemId;
+            item.Quantity = fields[3].GetUInt32();
+            item.BonusListID = fields[4].GetInt32();
+            item.Context = fields[5].GetUInt8();
+        } while (result->NextRow());
+    }
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} treasure pickers in {} ms", _treasurePickerStore.size(), GetMSTimeDiffToNow(oldMSTime));
+}
+TreasurePickerTemplate const* ObjectMgr::GetTreasurePicker(uint32 treasurePickerId) const
+{
+    return Trinity::Containers::MapGetValuePtr(_treasurePickerStore, treasurePickerId);
+}
+bool ObjectMgr::IsTreasurePickerItemEligibleForPlayer(Player const* player, uint32 itemId) const
+{
+    if (!player)
+        return false;
+
+    ItemTemplate const* proto = GetItemTemplate(itemId);
+    if (!proto)
+        return false;
+
+    // ItemSparse.AllowableClass: -1 means all class bits set (any class)
+    if ((proto->GetAllowableClass() & player->GetClassMask()) == 0)
+        return false;
+
+    // AllowableClass=-1 weapons/armor still require class proficiency (GetSkill -> SKILL_*).
+    // Weapons: Illidari Warglaive 160513 is AllowableClass=-1 (ItemSparse 12.0.7.67808) yet the
+    // Priest/Hunter/Warrior SMSG_TREASURE_PICKER_RESPONSE captures omit it; only DH has SKILL_WARGLAIVES.
+    // Armor: the Expeditionary cloth/leather/mail/plate rows are AllowableClass=-1 as well and are
+    // separated by SKILL_CLOTH / LEATHER / MAIL / PLATE_MAIL.
+    // Misc armor (necks, cloaks) and mounts have skill 0, so they are not gated here.
+    // Bags/containers with AllowableClass=-1 are neither weapon nor armor and stay class-any.
+    if (proto->GetAllowableClass() == -1 &&
+        (proto->GetClass() == ITEM_CLASS_WEAPON || proto->GetClass() == ITEM_CLASS_ARMOR))
+    {
+        if (uint32 skill = proto->GetSkill())
+            if (player->GetSkillValue(skill) == 0)
+                return false;
+    }
+
+    // Race + faction (sibling to Player::CanUseItem). Needed for faction-paired rows living in one
+    // picker: Horde rows are often AllowableRace=-1 while the Alliance twin is race-masked, and
+    // race-any pairs (e.g. the faction neck items) are disambiguated by ITEM_FLAG2_FACTION_*.
+    if (!proto->GetAllowableRace().HasRace(player->GetRace()))
+        return false;
+
+    if (proto->HasFlag(ITEM_FLAG2_FACTION_HORDE) && player->GetTeam() != HORDE)
+        return false;
+
+    if (proto->HasFlag(ITEM_FLAG2_FACTION_ALLIANCE) && player->GetTeam() != ALLIANCE)
+        return false;
+
+    return true;
+}
+TreasurePickerItem const* ObjectMgr::SelectTreasurePickerItem(TreasurePickerTemplate const* treasurePicker, Player const* player, uint32 choiceItemId /*= 0*/) const
+{
+    if (!treasurePicker || !player || treasurePicker->Items.empty())
+        return nullptr;
+
+    if (treasurePicker->IsChoice)
+    {
+        for (TreasurePickerItem const& item : treasurePicker->Items)
+            if (item.ItemID == choiceItemId && IsTreasurePickerItemEligibleForPlayer(player, item.ItemID))
+                return &item;
+
+        return nullptr;
+    }
+
+    // Non-choice pickers grant exactly one row and the client is never asked which. We take the
+    // first row that survives the eligibility filter.
+    //
+    // CAVEAT - this is a single-sample inference, not established behaviour: it rests on ONE
+    // retail capture (a Shaman turn-in) where SMSG_QUEST_GIVER_QUEST_COMPLETE.ItemReward happened
+    // to equal the first eligible entry of the offered list. Retail may well weight, randomise, or
+    // spec-match instead; a capture from a second class/spec on the same picker would settle it.
+    // Revisit before treating this ordering as authoritative.
+    for (TreasurePickerItem const& item : treasurePicker->Items)
+        if (IsTreasurePickerItemEligibleForPlayer(player, item.ItemID))
+            return &item;
+
+    return nullptr;
+}
 void ObjectMgr::LoadQuestStartersAndEnders()
 {
     TC_LOG_INFO("server.loading", "Loading GO Start Quest Data...");
