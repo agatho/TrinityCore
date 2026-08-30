@@ -203,6 +203,16 @@ enum class RestrictPingsTo : int32
     TankHealer  = 3,
 };
 
+// Vote state of a single member in a running instance abandon vote.
+// The client models this as a nilable bool (PartyInfoDocumentation.lua:230-238, "nil for not yet") and derives
+// it from the three write sites in consumers 0x2192960 / 0x2192A60: 0 = not voted, 1 = yes, 2 = no.
+enum class InstanceAbandonVoteState : uint8
+{
+    Pending = 0,
+    Agree   = 1,
+    Deny    = 2
+};
+
 /** request member stats checken **/
 /// @todo uninvite people that not accepted invite
 class TC_GAME_API Group
@@ -218,6 +228,7 @@ class TC_GAME_API Group
             uint8       flags;
             uint8       roles;
             bool        readyChecked;
+            InstanceAbandonVoteState instanceAbandonVote;
         };
         typedef std::list<MemberSlot> MemberSlotList;
         typedef MemberSlotList::const_iterator member_citerator;
@@ -291,6 +302,22 @@ class TC_GAME_API Group
 
         void SetMemberReadyChecked(MemberSlot* slot);
         void ResetMemberReadyChecked(void);
+
+        // Instance abandon vote
+        void UpdateInstanceAbandonVote(uint32 diff);
+        bool IsInstanceAbandonVoteInProgress() const { return m_instanceAbandonVoteStarted; }
+        bool CanStartInstanceAbandonVote(Player const* starter, GameError* denyReason = nullptr) const;
+        void StartInstanceAbandonVote(ObjectGuid initiatorGuid);
+        void SetInstanceAbandonVoteResponse(ObjectGuid voterGuid, bool accept);
+        void EndInstanceAbandonVote(bool votePassed);
+        void CancelInstanceAbandonVoteForLeaver(ObjectGuid playerGuid);
+        void SendInstanceAbandonVoteStateTo(Player* player) const;
+        uint32 GetInstanceAbandonVotesRequired() const;
+        Milliseconds GetInstanceAbandonVoteCooldown() const { return m_instanceAbandonVoteCooldown; }
+
+        // Instance group state
+        // excludedMember is left out of the count and gets no message - used while he is being removed from the map
+        void SendInstanceGroupSizeChanged(ObjectGuid excludedMember = ObjectGuid::Empty) const;
 
         // Raid Markers
         void AddRaidMarker(uint8 markerId, uint32 mapId, float positionX, float positionY, float positionZ, ObjectGuid transportGuid = ObjectGuid::Empty);
@@ -456,6 +483,14 @@ class TC_GAME_API Group
         // Ready Check
         bool                m_readyCheckStarted;
         Milliseconds        m_readyCheckTimer;
+
+        // Instance abandon vote
+        bool                m_instanceAbandonVoteStarted;
+        Milliseconds        m_instanceAbandonVoteTimer;
+        Milliseconds        m_instanceAbandonVoteCooldown;
+        Milliseconds        m_instanceAbandonShutdownTimer;
+        ObjectGuid          m_instanceAbandonVoteInitiator;
+        ObjectGuid          m_instanceAbandonLeaverGuid;
 
         // Raid markers
         std::array<std::unique_ptr<RaidMarker>, RAID_MARKERS_COUNT> m_markers;

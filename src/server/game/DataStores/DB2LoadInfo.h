@@ -1897,6 +1897,24 @@ struct EmotesTextSoundLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 6, &EmotesTextSoundMeta::Instance, HOTFIX_SEL_EMOTES_TEXT_SOUND };
 };
 
+struct EncounterEventLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[9] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Unknown1200" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "BroadcastTextID" },
+        { .IsSigned = true, .Type = FT_BYTE, .Name = "Severity" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Unknown1200_2" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "IconFileDataID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DungeonEncounterID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 9, &EncounterEventMeta::Instance, HOTFIX_SEL_ENCOUNTER_EVENT };
+};
+
 struct ExpectedStatLoadInfo
 {
     static constexpr DB2FieldMeta Fields[13] =

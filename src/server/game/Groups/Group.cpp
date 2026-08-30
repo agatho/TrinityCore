@@ -25,10 +25,13 @@
 #include "GameObject.h"
 #include "GameTime.h"
 #include "GroupMgr.h"
+#include "InstancePackets.h"
+#include "InstanceScript.h"
 #include "Item.h"
 #include "LFGMgr.h"
 #include "Log.h"
 #include "Loot.h"
+#include "Map.h"
 #include "MapManager.h"
 #include "MiscPackets.h"
 #include "ObjectAccessor.h"
@@ -38,6 +41,48 @@
 #include "Player.h"
 #include "UpdateData.h"
 #include "WorldSession.h"
+
+
+// Instance abandon vote - the numbers below are server side constants.
+// UNVERIFIED: neither a DB2 nor a CVar carries any of them. All 846 client DB2 meta blocks and the full cvar
+// dump were searched for Vote/Abandon/Leaver/Deserter without a hit, and the client displays whatever the
+// server sends without validating it. The starting points are the established LFG boot values
+// (LFGMgr.h:57 LFG_TIME_BOOT = 120, LFGMgr.h:63 LFG_GROUP_KICK_VOTES_NEEDED = 3).
+static constexpr Milliseconds INSTANCE_ABANDON_VOTE_DURATION = Minutes(1);
+static constexpr Milliseconds INSTANCE_ABANDON_VOTE_COOLDOWN = Minutes(5);
+static constexpr Milliseconds INSTANCE_ABANDON_SHUTDOWN_TIME = Seconds(10);
+// UNVERIFIED: shown next to the required vote count (VOTE_TO_ABANDON_VOTES_NEEDED_KEYHOLDER carries two %d).
+// There is no keystone lifecycle in this tree, so there is no keystone owner and every vote weighs the same.
+static constexpr uint32 INSTANCE_ABANDON_KEYSTONE_OWNER_VOTE_WEIGHT = 1;
+
+// The instance the player currently stands in, but only if it belongs to this group.
+static InstanceMap* GetGroupInstanceMap(Player const* player, Group const* group)
+{
+    if (!player)
+        return nullptr;
+
+    Map* map = player->FindMap();
+    InstanceMap* instanceMap = map ? map->ToInstanceMap() : nullptr;
+    if (!instanceMap || instanceMap->GetOwningGroup() != group)
+        return nullptr;
+
+    return instanceMap;
+}
+
+// The instance the player currently stands in, whoever it belongs to. Deliberately not GetGroupInstanceMap:
+// the number the client shows is how many party members stand in this very copy, and ownership is a separate
+// bookkeeping. A copy created without a group has no owner at all (MapManager.cpp:110 calls TrySetOwningGroup
+// only when a group asked for the map), and Group::Create claims it for the leader's map alone (Group.cpp:233)
+// - so a member can well be standing in an instance his group does not own. Asking for the owner there would
+// send him nothing, and nothing leaves the client on the number of the instance he was in before.
+static InstanceMap* GetPlayerInstanceMap(Player const* player)
+{
+    if (!player)
+        return nullptr;
+
+    Map* map = player->FindMap();
+    return map ? map->ToInstanceMap() : nullptr;
+}
 
 Seconds Group::CountdownInfo::GetTimeLeft() const
 {
@@ -59,7 +104,10 @@ Group::Group() : m_leaderGuid(), m_leaderFactionGroup(0), m_leaderName(""), m_gr
 m_dungeonDifficulty(DIFFICULTY_NORMAL), m_raidDifficulty(DIFFICULTY_NORMAL_RAID), m_legacyRaidDifficulty(DIFFICULTY_10_N),
 m_bgGroup(nullptr), m_bfGroup(nullptr), m_lootMethod(PERSONAL_LOOT), m_lootThreshold(ITEM_QUALITY_UNCOMMON), m_looterGuid(),
 m_masterLooterGuid(), m_subGroupsCounts(nullptr), m_guid(), m_dbStoreId(0), m_isLeaderOffline(false),
-m_readyCheckStarted(false), m_readyCheckTimer(Milliseconds::zero()), m_activeMarkers(0), m_scriptRef(this, NoopGroupDeleter())
+m_readyCheckStarted(false), m_readyCheckTimer(Milliseconds::zero()),
+m_instanceAbandonVoteStarted(false), m_instanceAbandonVoteTimer(Milliseconds::zero()), m_instanceAbandonVoteCooldown(Milliseconds::zero()),
+m_instanceAbandonShutdownTimer(Milliseconds::zero()), m_instanceAbandonVoteInitiator(), m_instanceAbandonLeaverGuid(),
+m_activeMarkers(0), m_scriptRef(this, NoopGroupDeleter())
 {
     for (uint8 i = 0; i < TARGET_ICONS_COUNT; ++i)
         m_targetIcons[i].Clear();
@@ -100,6 +148,7 @@ void Group::Update(uint32 diff)
     }
 
     UpdateReadyCheck(diff);
+    UpdateInstanceAbandonVote(diff);
 }
 
 void Group::SelectNewPartyOrRaidLeader()
@@ -270,6 +319,7 @@ void Group::LoadMemberFromDB(ObjectGuid::LowType guidLow, uint8 memberFlags, uin
     member.flags        = memberFlags;
     member.roles        = roles;
     member.readyChecked = false;
+    member.instanceAbandonVote = InstanceAbandonVoteState::Pending;
 
     m_memberSlots.push_back(member);
 
@@ -450,6 +500,7 @@ bool Group::AddMember(Player* player)
     member.flags        = 0;
     member.roles        = 0;
     member.readyChecked = false;
+    member.instanceAbandonVote = InstanceAbandonVoteState::Pending;
     m_memberSlots.push_back(member);
 
     SubGroupCounterIncrease(subGroup);
@@ -492,6 +543,7 @@ bool Group::AddMember(Player* player)
     }
 
     SendUpdate();
+    SendInstanceGroupSizeChanged();
     sScriptMgr->OnGroupAddMember(this, player->GetGUID());
 
     player->SetGroupUpdateFlag(GROUP_UPDATE_FULL);
@@ -548,9 +600,31 @@ bool Group::RemoveMember(ObjectGuid guid, RemoveMethod method /*= GROUP_REMOVEME
 {
     BroadcastGroupUpdate();
 
+    // still a member here, so the message reaches him as well - consumer 0x2192C00 suppresses the chat line
+    // for the player it names and prints it for everybody else
+    CancelInstanceAbandonVoteForLeaver(guid);
+
     sScriptMgr->OnGroupRemoveMember(this, guid, method, kicker, reason);
 
     Player* player = ObjectAccessor::FindConnectedPlayer(guid);
+
+    // Walking out of a running mythic keystone group flags the account as a deserter -
+    // "considered a leaver for repeatedly abandoning mythic+ groups" (InstanceLeaverInfoDocumentation.lua:11-19).
+    // Only a voluntary departure counts; a kick is somebody else's decision, and after a passed abandon vote
+    // the whole group is being moved out on purpose.
+    if (player && m_instanceAbandonShutdownTimer == Milliseconds::zero()
+        && (method == GROUP_REMOVEMETHOD_DEFAULT || method == GROUP_REMOVEMETHOD_LEAVE))
+    {
+        // NOT REACHABLE ON THIS BRANCH: Map::IsMythicPlus() tests i_spawnMode == DIFFICULTY_MYTHIC_KEYSTONE
+        // and no writer in this tree ever sets that difficulty - CMSG_START_CHALLENGE_MODE is STATUS_UNHANDLED
+        // and HandleSetDungeonDifficultyOpcode rejects every difficulty without DIFFICULTY_FLAG_CAN_SELECT.
+        // The gate is retail semantics and stays; the keystone lifecycle is feature/mythic-plus. Until it
+        // lands, SMSG_SET_INSTANCE_LEAVER has no reachable send site and its effect is untested.
+        if (InstanceMap const* instanceMap = GetGroupInstanceMap(player, this))
+            if (instanceMap->IsMythicPlus())
+                player->GetSession()->SetInstanceLeaver(true);
+    }
+
     if (player)
     {
         for (GroupReference const& itr : GetMembers())
@@ -652,6 +726,7 @@ bool Group::RemoveMember(ObjectGuid guid, RemoveMethod method /*= GROUP_REMOVEME
         }
 
         SendUpdate();
+        SendInstanceGroupSizeChanged();
 
         if (isLFGGroup() && GetMembersCount() == 1)
         {
@@ -761,6 +836,25 @@ void Group::Disband(bool hideDestroy /* = false */)
             player->SendDirectMessage(WorldPackets::Party::GroupDestroyed().Write());
 
         SendUpdateDestroyGroupToPlayer(player);
+
+        // The third way out of RemoveMember - the two-man dungeon party where one leaves - ends here, and
+        // without this the survivor keeps the old party size on screen forever. Group.cpp:707 only runs in the
+        // branch that keeps the group alive, and InstanceMap::RemovePlayerFromMap cannot catch up later: its
+        // sender hangs on player->GetGroup(), which is the nullptr set right above by the time he walks out.
+        // The next correction would be his next instance entry (Map.cpp:3041). SendUpdateDestroyGroupToPlayer
+        // does not cover it either - if it did, Group.cpp:707 would be dead code.
+        // The value is 1 and not a recount: he has no group from here on, which is exactly the group-less
+        // branch of InstanceMap::AddPlayerToMap - alone in the instance he is one. The client keeps the number
+        // in a global (0x6808EE8) with a single writer and no reset (AGENT_BRIEF 7.6), so nothing but a sent
+        // packet moves it.
+        // Asked after the unlink on purpose: in the BG/BF branch RemoveFromBattlegroundOrBattlefieldRaid puts
+        // him back into his original party, and that group's own size is none of this group's business.
+        if (!player->GetGroup() && GetPlayerInstanceMap(player))
+        {
+            WorldPackets::Instance::InstanceGroupSizeChanged groupSizeChanged;
+            groupSizeChanged.GroupSize = 1;
+            player->SendDirectMessage(groupSizeChanged.Write());
+        }
 
         _homebindIfInstance(player);
     }
@@ -907,6 +1001,25 @@ void Group::SendUpdateToPlayer(Player* player, MemberSlot const* slot /*= nullpt
         partyUpdate.DifficultySettings->DungeonDifficultyID = m_dungeonDifficulty;
         partyUpdate.DifficultySettings->RaidDifficultyID = m_raidDifficulty;
         partyUpdate.DifficultySettings->LegacyRaidDifficultyID = m_legacyRaidDifficulty;
+    }
+
+    // ChallengeMode - the client gates both entry points into the abandon vote on this block:
+    // ChallengeModeRestrictionsActive() decides whether the menu entry and /abandon exist at all
+    // (UnitPopupSharedButtonMixins.lua:970, SlashCommandsOverrides.lua:133), CanStartInstanceAbandonVote()
+    // whether it is clickable (:974), and GetInstanceAbandonVoteCooldownTime() prints the remaining cooldown.
+    if (InstanceMap const* instanceMap = GetGroupInstanceMap(player, this))
+    {
+        WorldPackets::Party::ChallengeModeData& challengeMode = partyUpdate.ChallengeMode.emplace();
+        challengeMode.MapID = instanceMap->GetId();
+        challengeMode.InstanceID = instanceMap->GetInstanceId();
+        challengeMode.LeaverGUID = m_instanceAbandonLeaverGuid;
+        challengeMode.InstanceAbandonVoteCooldown = m_instanceAbandonVoteCooldown;
+        // Retail restricts the abandon vote to mythic keystone runs; the client shows nothing outside of them.
+        challengeMode.IsActive = instanceMap->IsMythicPlus();
+        challengeMode.HasRestrictions = instanceMap->IsMythicPlus();
+        challengeMode.CanVoteAbandon = CanStartInstanceAbandonVote(player);
+        // StartTime, InitialPlayerCount and KeystoneOwnerGUID belong to the keystone lifecycle, which does not
+        // exist in this tree - they stay at their defaults instead of being guessed.
     }
 
     // LfgInfos
@@ -1511,6 +1624,308 @@ void Group::EndReadyCheck(void)
     readyCheckCompleted.PartyIndex = 0;
     readyCheckCompleted.PartyGUID = m_guid;
     BroadcastPacket(readyCheckCompleted.Write(), false);
+}
+
+
+void Group::UpdateInstanceAbandonVote(uint32 diff)
+{
+    if (m_instanceAbandonVoteCooldown > Milliseconds::zero())
+    {
+        m_instanceAbandonVoteCooldown -= Milliseconds(diff);
+        if (m_instanceAbandonVoteCooldown < Milliseconds::zero())
+            m_instanceAbandonVoteCooldown = Milliseconds::zero();
+    }
+
+    if (m_instanceAbandonVoteStarted)
+    {
+        m_instanceAbandonVoteTimer -= Milliseconds(diff);
+        if (m_instanceAbandonVoteTimer <= Milliseconds::zero())
+        {
+            // The client sends nothing when the dialog times out - StaticPopup.lua calls OnCancel with
+            // reason "timeout" and InstanceAbandon.lua:10-15 only reacts to reason "clicked". There is no
+            // implicit no vote, the server has to resolve the vote itself.
+            uint32 agreeCount = 0;
+            for (MemberSlot const& member : m_memberSlots)
+                if (member.instanceAbandonVote == InstanceAbandonVoteState::Agree)
+                    ++agreeCount;
+
+            EndInstanceAbandonVote(agreeCount >= GetInstanceAbandonVotesRequired());
+        }
+    }
+
+    if (m_instanceAbandonShutdownTimer > Milliseconds::zero())
+    {
+        m_instanceAbandonShutdownTimer -= Milliseconds(diff);
+        if (m_instanceAbandonShutdownTimer <= Milliseconds::zero())
+        {
+            m_instanceAbandonShutdownTimer = Milliseconds::zero();
+
+            // VOTE_ABANDON_INSTANCE_SHUTDOWN only announces the removal (InstanceAbandon.lua:28-33) -
+            // the server has to actually move the group out of the instance.
+            for (MemberSlot const& member : m_memberSlots)
+                if (Player* player = ObjectAccessor::FindConnectedPlayer(member.guid))
+                    if (GetGroupInstanceMap(player, this))
+                        player->TeleportTo(player->m_homebind);
+        }
+    }
+}
+
+uint32 Group::GetInstanceAbandonVotesRequired() const
+{
+    // UNVERIFIED: no source gives the retail threshold. A simple majority yields 3 for the usual five man
+    // group, which is what the comparable LFG boot uses (LFG_GROUP_KICK_VOTES_NEEDED).
+    return std::max<uint32>(1, GetMembersCount() / 2 + 1);
+}
+
+bool Group::CanStartInstanceAbandonVote(Player const* starter, GameError* denyReason /*= nullptr*/) const
+{
+    InstanceMap* instanceMap = GetGroupInstanceMap(starter, this);
+    if (!instanceMap)
+    {
+        // Not inside an instance of this group - the client hides the menu entry in that case, so this is
+        // only reachable through a macro or a race. ERR_VOTE_TO_ABANDON_NOT_YET is the closer of the two
+        // codes the client knows for this flow.
+        if (denyReason)
+            *denyReason = GameError::ERR_VOTE_TO_ABANDON_NOT_YET;
+        return false;
+    }
+
+    // The vote exists only inside a mythic keystone run. Both client entry points are gated on
+    // ChallengeModeRestrictionsActive() - the menu entry (UnitPopupSharedButtonMixins.lua:970) and the
+    // /abandon command (SlashCommandsOverrides.lua:133) - and the flag behind it is the one SendUpdate
+    // fills from InstanceMap::IsMythicPlus(). The client gate is not a server check, though: a macro or a
+    // race reaches this handler anyway, and without this line a passed vote would teleport a whole raid or
+    // a normal dungeon group out of its instance, which retail never does.
+    // ERR_VOTE_TO_ABANDON_NOT_YET is the fallback of the two codes the client knows - outside a keystone
+    // run the UI never offers the entry, so retail has no text for this refusal at all.
+    // NOT REACHABLE ON THIS BRANCH: nothing in this tree sets DIFFICULTY_MYTHIC_KEYSTONE, so IsMythicPlus()
+    // is always false and this handler answers every request with the refusal below. That makes the four vote
+    // SMSG unreachable too. The condition is retail semantics and is deliberately kept - the missing piece is
+    // the keystone lifecycle on feature/mythic-plus, not this check.
+    if (!instanceMap->IsMythicPlus())
+    {
+        if (denyReason)
+            *denyReason = GameError::ERR_VOTE_TO_ABANDON_NOT_YET;
+        return false;
+    }
+
+    // UnitPopupSharedButtonMixins.lua:1003-1005 returns exactly this error while an encounter is running
+    if (InstanceScript const* instanceScript = instanceMap->GetInstanceScript())
+    {
+        if (instanceScript->IsEncounterInProgress())
+        {
+            if (denyReason)
+                *denyReason = GameError::ERR_VOTE_TO_ABANDON_ENCOUNTER;
+            return false;
+        }
+    }
+
+    if (m_instanceAbandonVoteStarted || m_instanceAbandonVoteCooldown > Milliseconds::zero())
+    {
+        if (denyReason)
+            *denyReason = GameError::ERR_VOTE_TO_ABANDON_NOT_YET;
+        return false;
+    }
+
+    return true;
+}
+
+void Group::StartInstanceAbandonVote(ObjectGuid initiatorGuid)
+{
+    if (m_instanceAbandonVoteStarted)
+        return;
+
+    m_instanceAbandonVoteStarted = true;
+    m_instanceAbandonVoteTimer = INSTANCE_ABANDON_VOTE_DURATION;
+    m_instanceAbandonVoteInitiator = initiatorGuid;
+    m_instanceAbandonLeaverGuid.Clear();
+
+    // Consumer 0x2192960 marks the initiator as having voted yes on its own, so the server must count the
+    // initiator the same way - otherwise both sides differ by one vote.
+    for (MemberSlot& member : m_memberSlots)
+        member.instanceAbandonVote = member.guid == initiatorGuid ? InstanceAbandonVoteState::Agree : InstanceAbandonVoteState::Pending;
+
+    WorldPackets::Instance::InstanceAbandonVoteStarted voteStarted;
+    // UNVERIFIED: the leading byte is read by the client and used by nobody, and no lua enum describes it.
+    // Sent as the group category because that is what every other party message puts in this slot; for a
+    // home group that is 0.
+    voteStarted.PartyIndex = GetGroupCategory();
+    voteStarted.PartyGUID = m_guid;
+    voteStarted.InitiatorGUID = initiatorGuid;
+    voteStarted.VoteDuration = INSTANCE_ABANDON_VOTE_DURATION;
+    voteStarted.VotesRequired = GetInstanceAbandonVotesRequired();
+    voteStarted.KeystoneOwnerVoteWeight = INSTANCE_ABANDON_KEYSTONE_OWNER_VOTE_WEIGHT;
+    BroadcastPacket(voteStarted.Write(), false);
+
+    // a one man group passes immediately
+    uint32 agreeCount = 0;
+    for (MemberSlot const& member : m_memberSlots)
+        if (member.instanceAbandonVote == InstanceAbandonVoteState::Agree)
+            ++agreeCount;
+
+    if (agreeCount >= GetInstanceAbandonVotesRequired())
+        EndInstanceAbandonVote(true);
+}
+
+void Group::SetInstanceAbandonVoteResponse(ObjectGuid voterGuid, bool accept)
+{
+    if (!m_instanceAbandonVoteStarted)
+        return;
+
+    member_witerator slot = _getMemberWSlot(voterGuid);
+    if (slot == m_memberSlots.end())
+        return;
+
+    // no double voting - the client switches to VOTE_ABANDON_INSTANCE_WAIT optimistically and never asks again
+    if (slot->instanceAbandonVote != InstanceAbandonVoteState::Pending)
+        return;
+
+    slot->instanceAbandonVote = accept ? InstanceAbandonVoteState::Agree : InstanceAbandonVoteState::Deny;
+
+    // One message for everybody - it carries the voter guid and the client assigns it itself. This is
+    // deliberately not the per receiver form the LFG boot uses.
+    WorldPackets::Instance::InstanceAbandonVoteUpdated voteUpdated;
+    voteUpdated.PartyGUID = m_guid;
+    voteUpdated.VoterGUID = voterGuid;
+    voteUpdated.Accept = accept;
+    BroadcastPacket(voteUpdated.Write(), false);
+
+    uint32 agreeCount = 0;
+    uint32 pendingCount = 0;
+    for (MemberSlot const& member : m_memberSlots)
+    {
+        switch (member.instanceAbandonVote)
+        {
+            case InstanceAbandonVoteState::Agree:   ++agreeCount; break;
+            case InstanceAbandonVoteState::Pending: ++pendingCount; break;
+            default: break;
+        }
+    }
+
+    if (agreeCount >= GetInstanceAbandonVotesRequired())
+        EndInstanceAbandonVote(true);
+    else if (!pendingCount)
+        EndInstanceAbandonVote(false);
+}
+
+void Group::EndInstanceAbandonVote(bool votePassed)
+{
+    if (!m_instanceAbandonVoteStarted)
+        return;
+
+    m_instanceAbandonVoteStarted = false;
+    m_instanceAbandonVoteTimer = Milliseconds::zero();
+    m_instanceAbandonVoteInitiator.Clear();
+    m_instanceAbandonVoteCooldown = INSTANCE_ABANDON_VOTE_COOLDOWN;
+
+    WorldPackets::Instance::InstanceAbandonVoteCompleted voteCompleted;
+    voteCompleted.PartyIndex = GetGroupCategory();
+    voteCompleted.PartyGUID = m_guid;
+    voteCompleted.VoteCooldown = INSTANCE_ABANDON_VOTE_COOLDOWN;
+    voteCompleted.ShutdownTime = votePassed ? INSTANCE_ABANDON_SHUTDOWN_TIME : Milliseconds::zero();
+    voteCompleted.VotePassed = votePassed;
+    BroadcastPacket(voteCompleted.Write(), false);
+
+    // Members that never voted keep state Pending until here - consumer 0x2192B20 prints VOTE_TO_ABANDON_AFK
+    // for exactly those, so the state must not be cleared before the message goes out.
+    for (MemberSlot& member : m_memberSlots)
+        member.instanceAbandonVote = InstanceAbandonVoteState::Pending;
+
+    m_instanceAbandonShutdownTimer = votePassed ? INSTANCE_ABANDON_SHUTDOWN_TIME : Milliseconds::zero();
+
+    SendUpdate();
+}
+
+void Group::CancelInstanceAbandonVoteForLeaver(ObjectGuid playerGuid)
+{
+    if (!m_instanceAbandonVoteStarted)
+        return;
+
+    m_instanceAbandonVoteStarted = false;
+    m_instanceAbandonVoteTimer = Milliseconds::zero();
+    m_instanceAbandonVoteInitiator.Clear();
+    m_instanceAbandonLeaverGuid = playerGuid;
+
+    for (MemberSlot& member : m_memberSlots)
+        member.instanceAbandonVote = InstanceAbandonVoteState::Pending;
+
+    // Not interchangeable with a failed InstanceAbandonVoteCompleted: consumer 0x2192C00 stores the guid and
+    // prints VOTE_TO_ABANDON_PLAYER_LEFT for everybody except the player who left, then runs the same
+    // teardown a failed vote would. It is therefore sent to the leaving player as well.
+    WorldPackets::Instance::InstanceAbandonVotePlayerLeft playerLeft;
+    playerLeft.PartyIndex = GetGroupCategory();
+    playerLeft.PartyGUID = m_guid;
+    playerLeft.PlayerGUID = playerGuid;
+    BroadcastPacket(playerLeft.Write(), false);
+
+    SendUpdate();
+}
+
+void Group::SendInstanceAbandonVoteStateTo(Player* player) const
+{
+    if (!m_instanceAbandonVoteStarted || !player)
+        return;
+
+    // InstanceAbandon.lua:146-148 re-runs CheckShowVoteDialog on PLAYER_ENTERING_WORLD, but only the server
+    // can restore the state it reads. Without this a running vote is invisible after a zone change or relog.
+    WorldPackets::Instance::InstanceAbandonVoteStarted voteStarted;
+    voteStarted.PartyIndex = GetGroupCategory();
+    voteStarted.PartyGUID = m_guid;
+    voteStarted.InitiatorGUID = m_instanceAbandonVoteInitiator;
+    voteStarted.VoteDuration = m_instanceAbandonVoteTimer;  // remaining time - the client adds its own clock on top
+    voteStarted.VotesRequired = GetInstanceAbandonVotesRequired();
+    voteStarted.KeystoneOwnerVoteWeight = INSTANCE_ABANDON_KEYSTONE_OWNER_VOTE_WEIGHT;
+    player->SendDirectMessage(voteStarted.Write());
+
+    for (MemberSlot const& member : m_memberSlots)
+    {
+        // the initiator is already counted by the client itself, resending would count that vote twice
+        if (member.instanceAbandonVote == InstanceAbandonVoteState::Pending || member.guid == m_instanceAbandonVoteInitiator)
+            continue;
+
+        WorldPackets::Instance::InstanceAbandonVoteUpdated voteUpdated;
+        voteUpdated.PartyGUID = m_guid;
+        voteUpdated.VoterGUID = member.guid;
+        voteUpdated.Accept = member.instanceAbandonVote == InstanceAbandonVoteState::Agree;
+        player->SendDirectMessage(voteUpdated.Write());
+    }
+}
+
+void Group::SendInstanceGroupSizeChanged(ObjectGuid excludedMember /*= ObjectGuid::Empty*/) const
+{
+    // excludedMember is the member who is being removed from an instance map right now. He still looks like he
+    // is standing in it - Map::RemovePlayerFromMap leaves m_currMap set, WorldObject::ResetMap is what clears
+    // it and on the teleport path that only happens at the client ack - so he has to be left out of both the
+    // count and the recipients, otherwise everyone else sees a size one too high.
+    // The client caches the number in a global and shows it as "size / maxPlayers"
+    // (InstanceDifficulty.lua:139-150), so it is the number of group members inside that instance.
+    std::map<Map const*, uint32> playersPerInstance;
+    for (MemberSlot const& member : m_memberSlots)
+        if (member.guid != excludedMember)
+            if (Player* player = ObjectAccessor::FindConnectedPlayer(member.guid))
+                if (InstanceMap const* instanceMap = GetPlayerInstanceMap(player))
+                    ++playersPerInstance[instanceMap];
+
+    if (playersPerInstance.empty())
+        return;
+
+    for (MemberSlot const& member : m_memberSlots)
+    {
+        if (member.guid == excludedMember)
+            continue;
+
+        Player* player = ObjectAccessor::FindConnectedPlayer(member.guid);
+        if (!player)
+            continue;
+
+        InstanceMap const* instanceMap = GetPlayerInstanceMap(player);
+        if (!instanceMap)
+            continue;
+
+        WorldPackets::Instance::InstanceGroupSizeChanged groupSizeChanged;
+        groupSizeChanged.GroupSize = playersPerInstance[instanceMap];
+        player->SendDirectMessage(groupSizeChanged.Write());
+    }
 }
 
 bool Group::IsReadyCheckCompleted(void) const

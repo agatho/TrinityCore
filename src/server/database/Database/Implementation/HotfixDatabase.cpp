@@ -631,6 +631,11 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_EMOTES_TEXT_SOUND, "SELECT MAX(ID) + 1 FROM emotes_text_sound", CONNECTION_SYNCH);
 
+    // EncounterEvent.db2
+    PrepareStatement(HOTFIX_SEL_ENCOUNTER_EVENT, "SELECT ID, SpellID, Unknown1200, BroadcastTextID, Severity, Unknown1200_2, Flags, "
+        "IconFileDataID, DungeonEncounterID FROM encounter_event WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_ENCOUNTER_EVENT, "SELECT MAX(ID) + 1 FROM encounter_event", CONNECTION_SYNCH);
+
     // ExpectedStat.db2
     PrepareStatement(HOTFIX_SEL_EXPECTED_STAT, "SELECT ID, ExpansionID, CreatureHealth, PlayerHealth, CreatureAutoAttackDps, CreatureArmor, "
         "PlayerMana, PlayerPrimaryStat, PlayerSecondaryStat, ArmorConstant, CreatureSpellDamage, ContentSetID, Lvl FROM expected_stat"

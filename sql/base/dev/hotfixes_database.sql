@@ -3207,6 +3207,28 @@ CREATE TABLE `emotes_text_sound` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `encounter_event`
+--
+
+DROP TABLE IF EXISTS `encounter_event`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `encounter_event` (
+  `ID` int unsigned NOT NULL DEFAULT '0',
+  `SpellID` int NOT NULL DEFAULT '0',
+  `Unknown1200` int NOT NULL DEFAULT '0',
+  `BroadcastTextID` int NOT NULL DEFAULT '0',
+  `Severity` tinyint NOT NULL DEFAULT '0',
+  `Unknown1200_2` int NOT NULL DEFAULT '0',
+  `Flags` int NOT NULL DEFAULT '0',
+  `IconFileDataID` int NOT NULL DEFAULT '0',
+  `DungeonEncounterID` int NOT NULL DEFAULT '0',
+  `VerifiedBuild` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ID`,`VerifiedBuild`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `expected_stat`
 --
 

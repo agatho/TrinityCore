@@ -1639,6 +1639,21 @@ struct EmotesTextSoundEntry
     uint32 EmotesTextID;
 };
 
+// The only DB2 whose contents travel on the SMSG_INSTANCE_ENCOUNTER_EVENT_* wire.
+// Introduced in 12.0.0.64741, which is where the two placeholder names come from.
+struct EncounterEventEntry
+{
+    uint32 ID;
+    int32 SpellID;
+    int32 Unknown1200;
+    int32 BroadcastTextID;
+    int8 Severity;                  // Enum.EncounterEventSeverity
+    int32 Unknown1200_2;            // bit 0 is evaluated inverted by the client reader at 0x2411DA0
+    int32 Flags;                    // Enum.EncounterEventIconmask
+    int32 IconFileDataID;           // 0 is legal, the client then falls back to the spell icon
+    int32 DungeonEncounterID;
+};
+
 struct ExpectedStatEntry
 {
     uint32 ID;

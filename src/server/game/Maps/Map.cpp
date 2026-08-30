@@ -2987,10 +2987,66 @@ bool InstanceMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
     Map::AddPlayerToMap(player, initPlayer);
 
     if (i_data)
+    {
         i_data->OnPlayerEnter(player);
+
+        // Late joiners get the running timeline with the delays converted to the time that is still left
+        i_data->SendEncounterTimelineTo(player);
+    }
 
     if (i_scenario)
         i_scenario->OnPlayerEnter(player);
+
+    if (Group* group = player->GetGroup())
+    {
+        // SMSG_DIFFERENT_INSTANCE_FROM_PARTY - a party member stands in another copy of this very map.
+        // Payload-less signal, consumer 0x209AA20 only raises ENTERED_DIFFERENT_INSTANCE_FROM_PARTY, which
+        // no Blizzard addon listens to; it exists for third party addons.
+        // The question is deliberately asked of the members and not of Group::GetRecentInstanceId(): the
+        // cached value is already overwritten by the time this runs. MapManager::CreateMap calls
+        // Group::SetRecentInstance unconditionally whenever the target map has to be created (MapManager.cpp
+        // :232) and Group::SetRecentInstance overwrites without a test, while the call order in
+        // WorldSession::HandleMoveWorldportAck is CreateMap first, AddPlayerToMap second - so in the ordinary
+        // case (first one in, target instance not loaded yet) both sides of the comparison would be equal and
+        // the message would never go out. Where the members actually are cannot be stale.
+        bool differentInstanceFromParty = false;
+        for (Group::MemberSlot const& member : group->GetMemberSlots())
+        {
+            if (member.guid == player->GetGUID())
+                continue;
+
+            Player const* otherMember = ObjectAccessor::FindConnectedPlayer(member.guid);
+            Map const* otherMap = otherMember ? otherMember->FindMap() : nullptr;
+            if (otherMap && otherMap->IsDungeon() && otherMap->GetId() == GetId() && otherMap->GetInstanceId() != GetInstanceId())
+            {
+                differentInstanceFromParty = true;
+                break;
+            }
+        }
+
+        if (differentInstanceFromParty)
+            player->SendDirectMessage(WorldPackets::Instance::DifferentInstanceFromParty().Write());
+
+        // Reaches the arriving player himself as well - he is one of the member slots, and Map::AddPlayerToMap
+        // above has already set his m_currMap, so he is counted for this instance.
+        group->SendInstanceGroupSizeChanged();
+
+        // InstanceAbandon.lua:146-148 re-checks the dialog on PLAYER_ENTERING_WORLD but cannot restore the
+        // state on its own - a vote that is still running has to be replayed to the arriving player.
+        group->SendInstanceAbandonVoteStateTo(player);
+    }
+    else
+    {
+        // Without a group there is no broadcast, and the client cannot fill the number in himself: it lives in
+        // a global (0x6808EE8) with exactly one writer - this opcode's consumer 0x2098A20 - and four readers,
+        // none of which resets it (AGENT_BRIEF 7.6). GetInstanceInfo() hands the cached value out as
+        // instanceGroupSize, and InstanceDifficulty.lua:139-150 prints it for every instanceType ~= "none",
+        // blanking only on 0. So a player who enters alone after a group run would keep reading 5.
+        // Alone in the instance he is exactly one.
+        WorldPackets::Instance::InstanceGroupSizeChanged groupSizeChanged;
+        groupSizeChanged.GroupSize = 1;
+        player->SendDirectMessage(groupSizeChanged.Write());
+    }
 
     return true;
 }
@@ -3003,6 +3059,7 @@ void InstanceMap::Update(uint32 t_diff)
     {
         i_data->Update(t_diff);
         i_data->UpdateCombatResurrection(t_diff);
+        i_data->UpdateEncounterTimeline(t_diff);
     }
 
     if (i_scenario)
@@ -3029,7 +3086,36 @@ void InstanceMap::RemovePlayerFromMap(Player* player, bool remove)
     if (i_scenario)
         i_scenario->OnPlayerExit(player);
 
+    Group* group = player->GetGroup();
+    bool wasOwningGroup = group && group == GetOwningGroup();
+    // Read before the base call: with remove == true it runs Map::DeleteFromWorld(Player*), which deletes the
+    // object (WorldSession::LogoutPlayer is that caller). The Group itself outlives it - ~Player only unlinks
+    // the GroupReference and never erases the member slot - so the guid is all that has to be carried across.
+    ObjectGuid const leaverGuid = player->GetGUID();
+
     Map::RemovePlayerFromMap(player, remove);
+    // player may be a dangling pointer from here on - use leaverGuid instead
+
+    if (wasOwningGroup)
+    {
+        // Leaving the instance while a vote is running aborts it - SMSG_INSTANCE_ABANDON_VOTE_PLAYER_LEFT,
+        // which is deliberately not the same as a failed SMSG_INSTANCE_ABANDON_VOTE_COMPLETED.
+        // This one does belong to the owning group: the vote is held over its instance.
+        group->CancelInstanceAbandonVoteForLeaver(leaverGuid);
+    }
+
+    // The size, unlike the vote, is not tied to ownership - it is what the remaining party members see on
+    // screen, and they see it in every copy they stand in. Gating this on wasOwningGroup would leave a group
+    // that does not own its instance on the departed member's count, with no later sender to correct it.
+    if (group)
+    {
+        // The leaver has to be excluded by hand: Map::RemovePlayerFromMap does not clear m_currMap - only
+        // WorldObject::ResetMap does, and on the teleport path (remove == false) that happens ticks later at
+        // the client ack in MovementHandler. Without the exclusion GetPlayerInstanceMap still reports him as
+        // standing in this instance, every remaining member would be told a size one too high, and he himself
+        // would get a count for the instance he is leaving. No later sender corrects it on the normal way out.
+        group->SendInstanceGroupSizeChanged(leaverGuid);
+    }
 }
 
 void InstanceMap::CreateInstanceData()

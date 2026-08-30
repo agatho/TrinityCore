@@ -592,6 +592,9 @@ void BossAI::_JustEngagedWith(Unit* who)
             return;
         }
         instance->SetBossState(_bossId, IN_PROGRESS);
+        // Only entry point of the encounter timeline. It is a no-op for every boss in this tree, because
+        // `instance_encounter_timeline` ships without rows - see the comment on InstanceScript::StartEncounterTimeline.
+        instance->StartEncounterTimelineForBoss(_bossId, me->GetGUID());
     }
 
     me->setActive(true);

@@ -35,6 +35,7 @@
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "Hyperlinks.h"
+#include "InstancePackets.h"
 #include "IpAddress.h"
 #include "Log.h"
 #include "Map.h"
@@ -136,6 +137,7 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     m_latency(0),
     _tutorials(),
     _tutorialsChanged(TUTORIALS_FLAG_NONE),
+    _challengeModeTotalLeaves(0),
     _filterAddonMessages(false),
     recruiterId(recruiter),
     isRecruiter(isARecruiter),
@@ -584,6 +586,10 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
     //logout procedure should happen only in World::UpdateSessions() method!!!
     if (updater.ProcessUnsafe())
     {
+        // Only on the world tick, not on the map filter: this is account state, every session passes here
+        // exactly once per tick (character select included), and the map pass would only duplicate the work.
+        UpdateInstanceLeaverState();
+
         ///- If necessary, log the player out
         if (ShouldLogOut(currentTime) && m_playerLoading.IsEmpty())
             LogoutPlayer(true);
@@ -1105,6 +1111,110 @@ void WorldSession::UpdateInstanceEnterTimes()
     });
 }
 
+// UNVERIFIED: no DB2, no CVar and no lua constant carries the deserter duration - the client only asks
+// C_InstanceLeaver.IsPlayerLeaver() and never learns how long the flag lasts. 30 minutes mirrors the
+// established dungeon deserter aura (LFG_SPELL_DUNGEON_DESERTER = 71041), which is a different state but
+// the only comparable number this tree has.
+static constexpr Seconds INSTANCE_LEAVER_PENALTY_DURATION = Minutes(30);
+
+// UNVERIFIED: the client states the rule but not the number - a player is "considered a leaver for
+// repeatedly abandoning mythic+ groups" (InstanceLeaverInfoDocumentation.lua:11-19). No DB2, no CVar and no
+// lua constant carries the count, and the client never learns it either; it only asks
+// C_InstanceLeaver.IsPlayerLeaver(). Two is the smallest count the word "repeatedly" permits, so the first
+// abandon is counted and forgiven and every one after it carries the penalty.
+static constexpr uint32 INSTANCE_LEAVER_PENALTY_THRESHOLD = 2;
+
+void WorldSession::LoadChallengeModeHistory(PreparedQueryResult result)
+{
+    if (!result)
+        return;
+
+    Field* fields = result->Fetch();
+    _challengeModeTotalLeaves = fields[0].GetUInt32();
+    _challengeModeLeaverPenaltyExpiration = SystemTimePoint::clock::from_time_t(fields[1].GetUInt64());
+}
+
+void WorldSession::SaveChallengeModeHistory() const
+{
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_ACCOUNT_CHALLENGE_MODE_HISTORY);
+    stmt->setUInt32(0, GetAccountId());
+    stmt->setUInt32(1, _challengeModeTotalLeaves);
+    stmt->setUInt64(2, SystemTimePoint::clock::to_time_t(_challengeModeLeaverPenaltyExpiration));
+    CharacterDatabase.Execute(stmt);
+}
+
+bool WorldSession::IsInstanceLeaver() const
+{
+    return _challengeModeLeaverPenaltyExpiration > GameTime::GetSystemTime();
+}
+
+void WorldSession::SetInstanceLeaver(bool apply)
+{
+    bool const wasLeaver = IsInstanceLeaver();
+
+    if (apply)
+    {
+        // Counted first and counted unconditionally - also while an earlier penalty is still running, because
+        // otherwise "repeatedly" could never be measured. The count is what the threshold is tested against;
+        // it is the only reason the column exists.
+        ++_challengeModeTotalLeaves;
+
+        if (_challengeModeTotalLeaves < INSTANCE_LEAVER_PENALTY_THRESHOLD)
+        {
+            // Below the threshold nothing but the count changes - no penalty, and therefore no message.
+            SaveChallengeModeHistory();
+            return;
+        }
+
+        _challengeModeLeaverPenaltyExpiration = GameTime::GetSystemTime() + INSTANCE_LEAVER_PENALTY_DURATION;
+    }
+    else
+    {
+        // Keyed on the stored timepoint and not on IsInstanceLeaver(): the expiry path clears a penalty that
+        // has already lapsed, so the flag is false at that moment and testing it would swallow the reset.
+        // The leave count deliberately survives - it is what "repeatedly" is measured on.
+        if (_challengeModeLeaverPenaltyExpiration == SystemTimePoint())
+            return;
+
+        _challengeModeLeaverPenaltyExpiration = SystemTimePoint();
+    }
+
+    SaveChallengeModeHistory();
+
+    // The two messages are edge triggered on the client - 0x24B6050 and 0x24B5FD0 set and clear one bool - so
+    // only a real transition is announced. Extending a running penalty is persisted but not resent. Clearing
+    // always is one: either the penalty was still running, or it has lapsed and the client still holds it.
+    if (!apply || IsInstanceLeaver() != wasLeaver)
+        SendInstanceLeaverState();
+}
+
+// The penalty ends by the clock and by nothing else: no aura, no event and no other tick observes
+// _challengeModeLeaverPenaltyExpiration. Without this the server considers the account clean again while the
+// client keeps showing the deserter state - both messages are edge triggered (consumers 0x24B6050 / 0x24B5FD0
+// set and clear one bool), so nobody would ever clear it - and C_InstanceLeaver.IsPlayerLeaver() would keep the
+// mythic+ entries locked (LFGList.lua:1382, :2965) until the next login.
+void WorldSession::UpdateInstanceLeaverState()
+{
+    // Never flagged, or the expiry was already announced - SetInstanceLeaver(false) resets the timepoint.
+    if (_challengeModeLeaverPenaltyExpiration == SystemTimePoint())
+        return;
+
+    if (IsInstanceLeaver())
+        return;
+
+    SetInstanceLeaver(false);
+}
+
+void WorldSession::SendInstanceLeaverState()
+{
+    // Retail sends the clearing message unprompted on every login, between SMSG_TUTORIAL_FLAGS and
+    // SMSG_DISPLAY_PROMOTION - 33 of 33 captured packets sit in exactly that spot and are 0 bytes long.
+    if (IsInstanceLeaver())
+        SendPacket(WorldPackets::Instance::SetInstanceLeaver().Write());
+    else
+        SendPacket(WorldPackets::Instance::UnsetInstanceLeaver().Write());
+}
+
 void WorldSession::LoadPlayerDataAccount(PreparedQueryResult const& elementsResult, PreparedQueryResult const& flagsResult)
 {
     if (elementsResult)
@@ -1347,6 +1457,7 @@ public:
         GLOBAL_ACCOUNT_DATA = 0,
         TUTORIALS,
         INSTANCE_TIMES,
+        CHALLENGE_MODE_HISTORY,
 
         MAX_QUERIES
     };
@@ -1368,6 +1479,10 @@ public:
         stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_ACCOUNT_INSTANCELOCKTIMES);
         stmt->setUInt32(0, accountId);
         ok = SetPreparedQuery(INSTANCE_TIMES, stmt) && ok;
+
+        stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_ACCOUNT_CHALLENGE_MODE_HISTORY);
+        stmt->setUInt32(0, accountId);
+        ok = SetPreparedQuery(CHALLENGE_MODE_HISTORY, stmt) && ok;
 
         return ok;
     }
@@ -1502,6 +1617,7 @@ void WorldSession::InitializeSessionCallback(LoginDatabaseQueryHolder const& hol
     LoadAccountData(realmHolder.GetPreparedResult(AccountInfoQueryHolderPerRealm::GLOBAL_ACCOUNT_DATA), GLOBAL_CACHE_MASK);
     LoadTutorialsData(realmHolder.GetPreparedResult(AccountInfoQueryHolderPerRealm::TUTORIALS));
     LoadInstanceTimeRestrictions(realmHolder.GetPreparedResult(AccountInfoQueryHolderPerRealm::INSTANCE_TIMES));
+    LoadChallengeModeHistory(realmHolder.GetPreparedResult(AccountInfoQueryHolderPerRealm::CHALLENGE_MODE_HISTORY));
     _collectionMgr->LoadAccountToys(holder.GetPreparedResult(AccountInfoQueryHolder::GLOBAL_ACCOUNT_TOYS));
     _collectionMgr->LoadAccountHeirlooms(holder.GetPreparedResult(AccountInfoQueryHolder::GLOBAL_ACCOUNT_HEIRLOOMS));
     _collectionMgr->LoadAccountMounts(holder.GetPreparedResult(AccountInfoQueryHolder::MOUNTS));
@@ -1525,6 +1641,7 @@ void WorldSession::InitializeSessionCallback(LoginDatabaseQueryHolder const& hol
     SendAvailableHotfixes();
     SendAccountDataTimes(ObjectGuid::Empty, GLOBAL_CACHE_MASK);
     SendTutorialsData();
+    SendInstanceLeaverState();
 
     if (PreparedQueryResult characterCountsResult = holder.GetPreparedResult(AccountInfoQueryHolder::GLOBAL_REALM_CHARACTER_COUNTS))
     {
