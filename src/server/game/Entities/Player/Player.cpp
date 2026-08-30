@@ -4413,15 +4413,6 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
  *
  * @see Player::DeleteFromDB
  */
-void Player::DeleteOldCharacters()
-{
-    uint32 keepDays = sWorld->getIntConfig(CONFIG_CHARDELETE_KEEP_DAYS);
-    if (!keepDays)
-        return;
-
-    Player::DeleteOldCharacters(keepDays);
-}
-
 /**
  * Characters which were kept back in the database after being deleted and are older than the specified amount of days, will be completely deleted.
  *
@@ -7135,11 +7126,6 @@ void Player::_InitHonorLevelOnLoadFromDB(uint32 honor, uint32 honorLevel)
     AddHonorXP(honor);
 }
 
-void Player::RewardPlayerWithRewardPack(uint32 rewardPackID)
-{
-    RewardPlayerWithRewardPack(sRewardPackStore.LookupEntry(rewardPackID));
-}
-
 void Player::RewardPlayerWithRewardPack(RewardPackEntry const* rewardPackEntry)
 {
     if (!rewardPackEntry)
@@ -7849,12 +7835,6 @@ uint32 Player::GetCurrencyWeeklyCap(uint32 id) const
         return 0;
 
     return GetCurrencyWeeklyCap(currency);
-}
-
-uint32 Player::GetCurrencyWeeklyCap(CurrencyTypesEntry const* currency) const
-{
-    // TODO: CurrencyTypeFlags::ComputedWeeklyMaximum
-    return currency->MaxEarnablePerWeek;
 }
 
 bool Player::HasCurrency(uint32 id, uint32 amount) const
@@ -11877,65 +11857,6 @@ InventoryResult Player::CanAccountBankItem(uint8 bag, uint8 slot, ItemPosCountVe
     return EQUIP_ERR_BANK_FULL;
 }
 
-InventoryResult Player::CanUseItem(Item* pItem, bool not_loading) const
-{
-    if (pItem)
-    {
-        TC_LOG_DEBUG("entities.player.items", "Player::CanUseItem: Player '{}' ({}),  Item: {}",
-            GetName(), GetGUID().ToString(), pItem->GetEntry());
-
-        if (!IsAlive() && not_loading)
-            return EQUIP_ERR_PLAYER_DEAD;
-
-        //if (isStunned())
-        //    return EQUIP_ERR_GENERIC_STUNNED;
-
-        ItemTemplate const* pProto = pItem->GetTemplate();
-        if (pProto)
-        {
-            if (pItem->IsBindedNotWith(this))
-                return EQUIP_ERR_NOT_OWNER;
-
-            if (GetLevel() < pItem->GetRequiredLevel())
-                return EQUIP_ERR_CANT_EQUIP_LEVEL_I;
-
-            InventoryResult res = CanUseItem(pProto, true);
-            if (res != EQUIP_ERR_OK)
-                return res;
-
-            if (pItem->GetSkill() != 0)
-            {
-                bool allowEquip = false;
-                uint32 itemSkill = pItem->GetSkill();
-                // Armor that is binded to account can "morph" from plate to mail, etc. if skill is not learned yet.
-                if (pProto->GetQuality() == ITEM_QUALITY_HEIRLOOM && pProto->GetClass() == ITEM_CLASS_ARMOR && !HasSkill(itemSkill))
-                {
-                    /// @todo when you right-click already equipped item it throws EQUIP_ERR_PROFICIENCY_NEEDED.
-                    // In fact it's a visual bug, everything works properly... I need sniffs of operations with
-                    // binded to account items from off server.
-
-                    switch (GetClass())
-                    {
-                        case CLASS_HUNTER:
-                        case CLASS_SHAMAN:
-                            allowEquip = (itemSkill == SKILL_MAIL);
-                            break;
-                        case CLASS_PALADIN:
-                        case CLASS_WARRIOR:
-                            allowEquip = (itemSkill == SKILL_PLATE_MAIL);
-                            break;
-                    }
-                }
-                if (!allowEquip && GetSkillValue(itemSkill) == 0)
-                    return EQUIP_ERR_PROFICIENCY_NEEDED;
-            }
-
-            return EQUIP_ERR_OK;
-        }
-    }
-    return EQUIP_ERR_ITEM_NOT_FOUND;
-}
-
 InventoryResult Player::CanUseItem(ItemTemplate const* proto, bool skipRequiredLevelCheck /*= false*/) const
 {
     // Used by group, function GroupLoot, to know if a prototype can be used by a player
@@ -15240,11 +15161,6 @@ uint32 Player::GetGossipMenuForSource(WorldObject const* source) const
 /***                    QUEST SYSTEM                   ***/
 /*********************************************************/
 
-int32 Player::GetQuestMinLevel(Quest const* quest) const
-{
-    return GetQuestMinLevel(quest->GetContentTuningId());
-}
-
 int32 Player::GetQuestMinLevel(uint32 contentTuningId) const
 {
     if (Optional<ContentTuningLevels> questLevels = sDB2Manager.GetContentTuningData(contentTuningId, m_playerData->CtrOptions->ConditionalFlags))
@@ -15259,14 +15175,6 @@ int32 Player::GetQuestMinLevel(uint32 contentTuningId) const
     }
 
     return 0;
-}
-
-int32 Player::GetQuestLevel(Quest const* quest) const
-{
-    if (!quest)
-        return 0;
-
-    return GetQuestLevel(quest->GetContentTuningId());
 }
 
 int32 Player::GetQuestLevel(uint32 contentTuningId) const
@@ -22723,24 +22631,6 @@ void Player::SetActiveCovenant(uint32 covenantId)
     ApplyConduitSpells();
 }
 
-void Player::SetActiveCovenant(uint32 covenantId)
-{
-    // Blizzlike join order is: choose covenant (this) -> then its soulbinds unlock. Driven by
-    // SPELL_EFFECT_SET_COVENANT (the covenant-choice quest's reward spell); there is no covenant opcode.
-    // Unlike ActivateSoulbind (which implies the covenant), this sets the covenant WITHOUT touching the
-    // active soulbind, so a player can join before picking a soulbind.
-    if (m_activeCovenantId == covenantId)
-        return;
-
-    m_activeCovenantId = covenantId;
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_COVENANT);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    stmt->setUInt32(1, m_activeCovenantId);
-    stmt->setUInt32(2, m_activeSoulbindId);
-    CharacterDatabase.Execute(stmt);
-}
-
 void Player::_LoadSoulbindConduits(PreparedQueryResult result)
 {
     if (!result)
@@ -22995,6 +22885,8 @@ void Player::RemoveSoulbindTraitSpells()
     {
         RemoveAurasDueToSpell(spellId);
     });
+}
+
 void Player::_LoadAccountBankTabSettings(PreparedQueryResult result)
 {
     uint8 tabCount = 0;
@@ -25347,11 +25239,6 @@ void Player::WhisperAddon(std::string const& text, std::string const& prefix, bo
     WorldPackets::Chat::Chat packet;
     packet.Initialize(CHAT_MSG_WHISPER, isLogged ? LANG_ADDON_LOGGED : LANG_ADDON, this, this, text, 0, "", DEFAULT_LOCALE, prefix);
     receiver->SendDirectMessage(packet.Write());
-}
-
-void Player::TextEmote(uint32 textId, WorldObject const* target /*= nullptr*/, bool /*isBossEmote = false*/)
-{
-    Talk(textId, CHAT_MSG_EMOTE, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_TEXTEMOTE), target);
 }
 
 void Player::Whisper(std::string_view text, Language language, Player* target, bool /*= false*/)
@@ -27889,57 +27776,6 @@ void Player::UpdateVisibilityOf(Trinity::IteratorPair<WorldObject**> targets)
 
     for (WorldObject* visibleUnit : newVisibleObjects)
         SendInitialVisiblePackets(visibleUnit);
-}
-
-void Player::UpdateVisibilityOf(WorldObject* target)
-{
-    if (HaveAtClient(target))
-    {
-        if (!CanSeeOrDetect(target, { .DistanceCheck = true }))
-        {
-            switch (target->GetTypeId())
-            {
-                case TYPEID_UNIT:
-                    BeforeVisibilityDestroy<Creature>(target->ToCreature(), this);
-                    break;
-                case TYPEID_PLAYER:
-                    BeforeVisibilityDestroy<Player>(target->ToPlayer(), this);
-                    break;
-                case TYPEID_GAMEOBJECT:
-                    BeforeVisibilityDestroy<GameObject>(target->ToGameObject(), this);
-                    break;
-                default:
-                    break;
-            }
-
-            if (!target->IsDestroyedObject())
-                target->SendOutOfRangeForPlayer(this);
-            else
-                target->DestroyForPlayer(this);
-
-            m_clientGUIDs.erase(target->GetGUID());
-
-            #ifdef TRINITY_DEBUG
-                TC_LOG_DEBUG("maps", "Object {} out of range for player {}. Distance = {}", target->GetGUID().ToString(), GetGUID().ToString(), GetDistance(target));
-            #endif
-        }
-    }
-    else
-    {
-        if (CanSeeOrDetect(target, { .DistanceCheck = true }))
-        {
-            target->SendUpdateToPlayer(this);
-            m_clientGUIDs.insert(target->GetGUID());
-
-            #ifdef TRINITY_DEBUG
-                TC_LOG_DEBUG("maps", "Object {} is visible now for player {}. Distance = {}", target->GetGUID().ToString(), GetGUID().ToString(), GetDistance(target));
-            #endif
-
-            // target aura duration for caster show only if target exist at caster client
-            // send data at target visibility change (adding to client)
-            SendInitialVisiblePackets(target);
-        }
-    }
 }
 
 void Player::UpdateTriggerVisibility()
