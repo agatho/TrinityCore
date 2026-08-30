@@ -235,8 +235,6 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPackets::Battleground::Batt
         BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
         // Argument list unchanged from upstream; only the role mask is new. See the group branch below for why
         // the premade flag is deliberately left where upstream put it. (Here isPremade is still false anyway -
-        // it is only computed in the group branch.)
-        GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, nullptr, getQueueTeam(), bracketEntry, false, isPremade, 0, battlemasterJoin.Roles);
         // The parameter order is (ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦, bool isPremade, uint32 ArenaRating, uint32 MatchmakerRating, uint8 roles).
         // This call used to read (ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦, false, isPremade, 0): isPremade was landing in ArenaRating while the real
         // isPremade parameter was hardcoded false. Because AddGroup buckets with
