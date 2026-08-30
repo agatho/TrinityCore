@@ -235,6 +235,52 @@ namespace WorldPackets
 
             float Delay = 0.0f;
         };
+
+        class GetRegionwideCharacterRestrictionAndMailData final : public ClientPacket
+        {
+        public:
+            explicit GetRegionwideCharacterRestrictionAndMailData(WorldPacket&& packet) : ClientPacket(CMSG_GET_REGIONWIDE_CHARACTER_RESTRICTION_AND_MAIL_DATA, std::move(packet)) { }
+
+            void Read() override;
+
+            std::vector<ObjectGuid> Characters;
+        };
+
+        class RegionwideCharacterMailData final : public ServerPacket
+        {
+        public:
+            struct MailDataEntry
+            {
+                ObjectGuid Character;
+                uint8 Flags = 0;
+                uint32 MailCount = 0;
+                uint32 NextDeliveryTime = 0;
+            };
+
+            explicit RegionwideCharacterMailData() : ServerPacket(SMSG_REGIONWIDE_CHARACTER_MAIL_DATA, 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<MailDataEntry> Characters;
+        };
+
+        class RegionwideCharacterRestrictionsData final : public ServerPacket
+        {
+        public:
+            struct RestrictionEntry
+            {
+                ObjectGuid Character;
+                uint8 Flags = 0;
+                uint32 Restriction = 0;
+                uint32 Value = 0;
+            };
+
+            explicit RegionwideCharacterRestrictionsData() : ServerPacket(SMSG_REGIONWIDE_CHARACTER_RESTRICTIONS_DATA, 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<RestrictionEntry> Characters;
+        };
     }
 }
 
