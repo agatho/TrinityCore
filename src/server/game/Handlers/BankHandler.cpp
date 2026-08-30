@@ -39,8 +39,8 @@ bool WorldSession::CanMutateAccountBank() const
         return false;
 
     // Only the single server-side lock holder may mutate the shared account bank. A session
-    // that does not hold the reservation is rejected, so concurrent same-bnet mutation — the
-    // root of the item (C1/CR-2) and coinage (C2/CR-3) duplication vectors — cannot happen.
+    // that does not hold the reservation is rejected, so concurrent same-bnet mutation Ã¢â‚¬â€� the
+    // root of the item (C1/CR-2) and coinage (C2/CR-3) duplication vectors Ã¢â‚¬â€� cannot happen.
     return _player->HasPlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK);
 }
 
@@ -208,7 +208,7 @@ void WorldSession::HandleBuyBankTab(WorldPackets::Bank::BuyBankTab const& buyBan
         return;
     }
 
-    // Buying an account bank tab mutates shared account state — gate on the account bank lock.
+    // Buying an account bank tab mutates shared account state Ã¢â‚¬â€� gate on the account bank lock.
     if (buyBankTab.BankType == BankType::Account && !CanMutateAccountBank())
         return;
 
@@ -370,7 +370,7 @@ void WorldSession::HandleAutoDepositCharacterBank(WorldPackets::Bank::AutoDeposi
 
     // Character bank's "Deposit All" button is labelled "Deposit All Reagents"
     // (GlobalStrings.CHARACTER_BANK_DEPOSIT_BUTTON_LABEL) and only deposits items
-    // flagged as crafting reagents. The tab-routing below still applies — reagents
+    // flagged as crafting reagents. The tab-routing below still applies Ã¢â‚¬â€� reagents
     // go to whichever tab has BagSlotFlags::PriorityReagents set, falling back to
     // any non-disabled tab.
     bool anyDeposited = false;

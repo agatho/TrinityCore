@@ -201,7 +201,7 @@ void WorldSession::HandleGarrisonCompleteMission(WorldPackets::Garrison::Garriso
     if (mission)
     {
         completeResult.Mission = mission->PacketInfo;
-        // Report the outcome CompleteMission already rolled and stored — do NOT roll again here, or the
+        // Report the outcome CompleteMission already rolled and stored ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ do NOT roll again here, or the
         // banner the player sees could disagree with the rewards granted at finalize.
         completeResult.Succeeded = mission->Succeeded;
         succeeded = mission->Succeeded;
@@ -241,7 +241,7 @@ void WorldSession::HandleGarrisonMissionBonusRoll(WorldPackets::Garrison::Garris
     WorldPackets::Garrison::GarrisonMissionBonusRollResult bonusResult;
     bonusResult.MissionRecID = garrisonMissionBonusRoll.MissionRecID;
 
-    // Snapshot the mission (including its overmax/chest rewards) BEFORE finalizing — MissionBonusRoll grants
+    // Snapshot the mission (including its overmax/chest rewards) BEFORE finalizing ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ MissionBonusRoll grants
     // the rewards and removes the mission, so the record is gone afterwards and the chest reveal needs it.
     if (Garrison::Mission const* mission = garrison->GetMissionByRecID(garrisonMissionBonusRoll.MissionRecID))
         bonusResult.Mission = mission->PacketInfo;
@@ -397,7 +397,7 @@ void WorldSession::HandleGarrisonGenerateRecruits(WorldPackets::Garrison::Garris
     uint32 faction = static_cast<uint32>(Garrison::GetFaction(_player->GetTeam()));
     garrison->GenerateRecruits(faction);
 
-    // SMSG_GARRISON_GENERATE_FOLLOWERS_RESULT (§8.42): exactly 3 inline GarrisonFollowers.
+    // SMSG_GARRISON_GENERATE_FOLLOWERS_RESULT (Ãƒâ€šÃ‚Â§8.42): exactly 3 inline GarrisonFollowers.
     auto const& recruits = garrison->GetAvailableRecruits();
     WorldPackets::Garrison::GarrisonGenerateFollowersResult result;
     for (size_t i = 0; i < result.Followers.size(); ++i)
@@ -783,7 +783,7 @@ void WorldSession::HandleSetUsingPartyGarrison(WorldPackets::Garrison::SetUsingP
     }
     else
     {
-        // Player wants to leave the party garrison — teleport back out.
+        // Player wants to leave the party garrison ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ teleport back out.
         // CMSG carries GarrTypeID (GarrisonPackets.h SetUsingPartyGarrison::GarrTypeID, parsed in its Read()),
         // and the enter branch above already resolves the leader's garrison with it; the leave branch resolved
         // only the WoD garrison, so leaving a non-WoD party garrison was a silent no-op.
@@ -794,8 +794,8 @@ void WorldSession::HandleSetUsingPartyGarrison(WorldPackets::Garrison::SetUsingP
 
 void WorldSession::HandleQueryGarrisonPetName(WorldPackets::Garrison::QueryGarrisonPetName& queryGarrisonPetName)
 {
-    // IDA case 4980801 (§8.51 pet name): {ObjectGuid NpcGUID, SizedString PetName}.
-    // Look up the queried NPC and echo back its custom name (if any) — for non-pet NPCs
+    // IDA case 4980801 (Ãƒâ€šÃ‚Â§8.51 pet name): {ObjectGuid NpcGUID, SizedString PetName}.
+    // Look up the queried NPC and echo back its custom name (if any) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ for non-pet NPCs
     // or NPCs without a stored custom name, send an empty string.
     WorldPackets::Garrison::QueryGarrisonPetNameResponse response;
     response.NpcGUID = queryGarrisonPetName.NpcGUID;
@@ -812,7 +812,7 @@ void WorldSession::HandleQueryGarrisonPetName(WorldPackets::Garrison::QueryGarri
 
 void WorldSession::HandleRequestGarrisonTalentWorldQuestUnlocks(WorldPackets::Garrison::RequestGarrisonTalentWorldQuestUnlocks& /*requestGarrisonTalentWorldQuestUnlocks*/)
 {
-    // SMSG_GARRISON_TALENT_WORLD_QUEST_UNLOCKS_RESPONSE (0x4F004E) — Legion+ talent-gated
+    // SMSG_GARRISON_TALENT_WORLD_QUEST_UNLOCKS_RESPONSE (0x4F004E) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Legion+ talent-gated
     // map POIs. IDA dispatcher uses opaque helper so exact field shape is unconfirmed; the
     // best conservative match is a size-prefixed list of unlocked talent tree IDs (the
     // server's view of which trees the player has unlocked talents in for world-quest UI).
@@ -1123,18 +1123,4 @@ void WorldSession::HandleGarrisonSocketTalent(WorldPackets::Garrison::GarrisonSo
 
     for (WorldPackets::Garrison::GarrisonTalentSocketData const& socket : packet.Sockets)
         garrison->SocketTalent(packet.GarrTalentID, socket.SoulbindConduitID, socket.SoulbindConduitRank);
-}
-
-void WorldSession::HandleGarrisonSocketTalent(WorldPackets::Garrison::GarrisonSocketTalent& packet)
-{
-    // Soulbind conduit socketing. The client only edits the currently-active soulbind's tree, so the target tree is
-    // the active soulbind's GarrTalentTreeID. Each socket is validated server-side (conduit exists, is owned, and its
-    // covenant matches) inside Player::SocketConduit, which fails closed on any invalid/unowned id.
-    SoulbindEntry const* soulbind = sSoulbindStore.LookupEntry(_player->GetActiveSoulbind());
-    if (!soulbind)
-        return;
-
-    uint32 treeId = uint32(soulbind->GarrTalentTreeID);
-    for (WorldPackets::Garrison::GarrisonTalentSocketData const& socket : packet.Sockets)
-        _player->SocketConduit(treeId, uint32(packet.GarrTalentID), uint32(socket.SoulbindConduitID));
 }

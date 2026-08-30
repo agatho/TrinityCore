@@ -451,6 +451,7 @@ bool LoginQueryHolder::Initialize()
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_COVENANT_CALLINGS);
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_COVENANT_CALLINGS, stmt);
+
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_ACCOUNT_BANK_TAB_SETTINGS);
     stmt->setUInt32(0, m_battlenetAccountId);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_TAB_SETTINGS, stmt);
@@ -484,6 +485,22 @@ bool LoginQueryHolder::Initialize()
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_WARBAND_ACHIEVEMENT_PROGRESS);
     stmt->setUInt32(0, m_battlenetAccountId);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_WARBAND_ACHIEVEMENT_PROGRESS, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_COVENANT);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_COVENANT, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_SOULBIND_CONDUIT);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUITS, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_SOULBIND_CONDUIT_SOCKET);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUIT_SOCKETS, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_COVENANT_RENOWN);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_RENOWN_REWARDS, stmt);
 
     return res;
 }
@@ -1830,6 +1847,19 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
 
     pCurrChar->SendInitialPacketsAfterAddToMap();
 
+    // Now in world: grant any covenant renown rewards earned before this character was last saved / before the feature existed.
+    pCurrChar->UpdateAllRenownRewards();
+
+    // Mythic+ weekly keystone maintenance: after a weekly reset the carried keystone is adjusted from last week's
+    // runs and restamped with the new week's affixes (no new key is granted here; the Great Vault does that).
+    sChallengeModeMgr.UpdateKeystoneForNewWeek(pCurrChar, false /*createIfMissing*/);
+
+    // Matrix Catalyst charge accrual (biweekly drip, lazily granted at login).
+    sItemConversionMgr.UpdateCharges(pCurrChar);
+
+    // Item upgrade watermarks (per-slot crest-waiver levels shown by the upgrade UI).
+    sItemUpgradeMgr.LoadWatermarks(pCurrChar);
+
     // SMSG_CACHE_INFO belongs to the enter world burst, not to the auth sequence: it is sent once
     // per login, after the player is on the map, one packet per cache domain.
     //
@@ -1857,15 +1887,7 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     // acts on cached data, and the handler (RVA 0x341AD0) is order independent - it compares
     // stamps against CVars and flushes on mismatch, whenever it runs.
     SendCacheInfo();
-    // Mythic+ weekly keystone maintenance: after a weekly reset the carried keystone is adjusted from last week's
-    // runs and restamped with the new week's affixes (no new key is granted here; the Great Vault does that).
-    sChallengeModeMgr.UpdateKeystoneForNewWeek(pCurrChar, false /*createIfMissing*/);
 
-    // Matrix Catalyst charge accrual (biweekly drip, lazily granted at login).
-    sItemConversionMgr.UpdateCharges(pCurrChar);
-
-    // Item upgrade watermarks (per-slot crest-waiver levels shown by the upgrade UI).
-    sItemUpgradeMgr.LoadWatermarks(pCurrChar);
     // Now in world: grant any covenant renown rewards earned before this character was last saved / before the feature existed.
     pCurrChar->UpdateAllRenownRewards();
 

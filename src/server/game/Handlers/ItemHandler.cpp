@@ -1314,6 +1314,31 @@ void WorldSession::HandleSetBankAutosortDisabled(WorldPackets::Item::SetBankAuto
     _player->SetBankAutoSortDisabled(setBankAutosortDisabled.Disable);
 }
 
+void WorldSession::HandlePerformItemInteraction(WorldPackets::Item::PerformItemInteraction& performItemInteraction)
+{
+    Player* player = GetPlayer();
+
+    WorldPackets::Item::ItemInteractionComplete response;
+    response.Error = true;
+
+    // UIItemInteractionType::ItemConversion (4) is the only interaction the server implements (Matrix Catalyst).
+    constexpr int32 UI_ITEM_INTERACTION_ITEM_CONVERSION = 4;
+
+    // The interaction agent the client has open must exist near the player (the Catalyst console/steward).
+    // Kept as a range check only: which unit/GO offers the UI is world content (UiItemInteractionID links).
+    bool agentOk = performItemInteraction.AgentGuid.IsEmpty();
+    if (!agentOk)
+        if (WorldObject const* agent = ObjectAccessor::GetWorldObject(*player, performItemInteraction.AgentGuid))
+            agentOk = player->IsWithinDistInMap(agent, INTERACTION_DISTANCE * 4);
+
+    if (agentOk && performItemInteraction.InteractionType == UI_ITEM_INTERACTION_ITEM_CONVERSION)
+        if (Item* item = player->GetItemByGuid(performItemInteraction.ItemGuid))
+            if (sItemConversionMgr.PerformConversion(player, item))
+                response.Error = false;
+
+    SendPacket(response.Write());
+}
+
 // Asks the client to open one of the player's own bags. The client resolves the guid against the
 // backpack and its 16 container slots and fires BAG_OPEN(bagID), which ContainerFrame.lua turns
 // into OpenBag(bagID) (client handler RVA 0x1E1DB80). A guid that is not a carried container is
@@ -1343,43 +1368,6 @@ void WorldSession::SendOpenContainer(ObjectGuid containerGuid)
     openContainer.ContainerGUID = containerGuid;
 
     SendPacket(openContainer.Write());
-void WorldSession::HandlePerformItemInteraction(WorldPackets::Item::PerformItemInteraction& performItemInteraction)
-{
-    Player* player = GetPlayer();
-
-    WorldPackets::Item::ItemInteractionComplete response;
-    response.Error = true;
-
-    // UIItemInteractionType::ItemConversion (4) is the only interaction the server implements (Matrix Catalyst).
-    constexpr int32 UI_ITEM_INTERACTION_ITEM_CONVERSION = 4;
-
-    // The interaction agent the client has open must exist near the player (the Catalyst console/steward).
-    // Kept as a range check only: which unit/GO offers the UI is world content (UiItemInteractionID links).
-    bool agentOk = performItemInteraction.AgentGuid.IsEmpty();
-    if (!agentOk)
-        if (WorldObject const* agent = ObjectAccessor::GetWorldObject(*player, performItemInteraction.AgentGuid))
-            agentOk = player->IsWithinDistInMap(agent, INTERACTION_DISTANCE * 4);
-
-    if (agentOk && performItemInteraction.InteractionType == UI_ITEM_INTERACTION_ITEM_CONVERSION)
-        if (Item* item = player->GetItemByGuid(performItemInteraction.ItemGuid))
-            if (sItemConversionMgr.PerformConversion(player, item))
-                response.Error = false;
-
-    SendPacket(response.Write());
-void WorldSession::HandlePerformItemInteraction(WorldPackets::Item::PerformItemInteraction& performItemInteraction)
-{
-    if (!_player->GetNPCIfCanInteractWith(performItemInteraction.Banker, UNIT_NPC_FLAG_NONE, UNIT_NPC_FLAG_2_NONE))
-        return;
-
-    Item* item = _player->GetItemByGuid(performItemInteraction.ItemGuid);
-    if (!item)
-        return;
-
-    // TODO: Implement specific item interaction logic based on InteractionID
-    // For now, acknowledge the interaction
-    WorldPackets::Item::ItemInteractionComplete result;
-    result.InteractionID = performItemInteraction.InteractionID;
-    SendPacket(result.Write());
 }
 
 void WorldSession::HandleConvertItemToBindToAccount(WorldPackets::Item::ConvertItemToBindToAccount& /*convertItemToBindToAccount*/)

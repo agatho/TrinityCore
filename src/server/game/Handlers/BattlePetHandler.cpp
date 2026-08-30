@@ -367,7 +367,7 @@ static void BuildRoundEffects(std::vector<WorldPackets::BattlePet::PetBattleEffe
         effect.Flags = roundEffect.Flags;
         effect.SourceAuraInstanceID = 0;
         effect.TurnInstanceID = 0;
-        // Wire offset 12 is the PetBattleEffectType â€” client switches on this to process effects
+        // Wire offset 12 is the PetBattleEffectType ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ client switches on this to process effects
         // (SetHealth=0, AuraApply=1, PetSwap=4, SetState=6, etc.), NOT a sequential index
         effect.PetBattleEffectType = roundEffect.EffectType;
         effect.CasterPBOID = static_cast<int32>(roundEffect.SourceTeam * PetBattles::MAX_PET_BATTLE_TEAM_SIZE + roundEffect.SourcePet);
@@ -395,7 +395,7 @@ static void BuildRoundEffects(std::vector<WorldPackets::BattlePet::PetBattleEffe
             case PetBattles::PET_BATTLE_EFFECT_AURA_CHANGE:
             {
                 // Sniff-verified retail wire order is [AbilityID, InstanceID, RoundsRemaining, CurrentRound]
-                // (we historically stored Param1=InstanceID, Param2=AbilityID â€” swap on the wire so
+                // (we historically stored Param1=InstanceID, Param2=AbilityID ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ swap on the wire so
                 // existing call sites keep their semantic naming)
                 target.Type = 1; // Aura: 4 params
                 target.Params.push_back(roundEffect.Param2); // AuraAbilityID
@@ -431,7 +431,7 @@ static void BuildRoundEffects(std::vector<WorldPackets::BattlePet::PetBattleEffe
                 break;
             case PetBattles::PET_BATTLE_EFFECT_AURA_PROCESSING_BEGIN:
             case PetBattles::PET_BATTLE_EFFECT_AURA_PROCESSING_END:
-                target.Type = 0; // No data â€” sentinel markers with PBOID 9
+                target.Type = 0; // No data ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ sentinel markers with PBOID 9
                 break;
             case PetBattles::PET_BATTLE_EFFECT_REPLACE_PET:
             {
@@ -519,7 +519,7 @@ void WorldSession::HandlePetBattleRequestWild(WorldPackets::BattlePet::PetBattle
         return;
     }
 
-    // Distance check â€” player must be reasonably close to the creature
+    // Distance check ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ player must be reasonably close to the creature
     if (!player->IsWithinDistInMap(creature, 50.0f))
     {
         WorldPackets::BattlePet::PetBattleRequestFailed failed;
@@ -814,7 +814,7 @@ void WorldSession::HandlePetBattleInput(WorldPackets::BattlePet::PetBattleInput&
     if (!battle)
         return;
 
-    // Only accept input during active round â€” not during pet replacement, final round, or finished
+    // Only accept input during active round ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ not during pet replacement, final round, or finished
     if (battle->GetBattleState() != PetBattles::PET_BATTLE_STATE_ROUND_IN_PROGRESS)
         return;
 
@@ -1014,7 +1014,7 @@ void WorldSession::HandlePetBattleFinalNotify(WorldPackets::BattlePet::PetBattle
     if (battle->HasPendingFinishDelay())
         return;
 
-    // Transition FINAL_ROUND â†’ FINISHED (sends Finished packet, syncs health, sends journal)
+    // Transition FINAL_ROUND ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ FINISHED (sends Finished packet, syncs health, sends journal)
     battle->CompleteBattle();
 
     // Remove the battle from tracking maps so player can start a new one

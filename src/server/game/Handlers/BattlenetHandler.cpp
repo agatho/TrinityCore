@@ -56,17 +56,6 @@ void WorldSession::SendBattlenetResponse(uint32 serviceHash, uint32 methodId, ui
     SendPacket(bnetResponse.Write());
 }
 
-void WorldSession::SendBattlenetResponse(uint32 serviceHash, uint32 methodId, uint32 token, uint32 status)
-{
-    WorldPackets::Battlenet::Response bnetResponse;
-    bnetResponse.BnetStatus = BattlenetRpcErrorCode(status);
-    bnetResponse.Method.Type = MAKE_PAIR64(methodId, serviceHash);
-    bnetResponse.Method.ObjectId = 1;
-    bnetResponse.Method.Token = token;
-
-    SendPacket(bnetResponse.Write());
-}
-
 void WorldSession::SendBattlenetRequest(uint32 serviceHash, uint32 methodId, pb::Message const* request, std::function<void(MessageBuffer)> callback)
 {
     _battlenetResponseCallbacks[_battlenetRequestToken] = std::move(callback);

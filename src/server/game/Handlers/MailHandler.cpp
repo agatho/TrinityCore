@@ -218,10 +218,9 @@ void WorldSession::HandleSendMail(WorldPackets::Mail::SendMail& sendMail)
             }
 
             if ((item->IsBoundAccountWide() || item->IsWarbandBound()) && item->IsSoulBound() && player->GetSession()->GetAccountId() != receiverAccountId)
-            {
-                if (!(item->IsBattlenetAccountBound() || item->IsWarbandBound()) || !player->GetSession()->GetBattlenetAccountId() || player->GetSession()->GetBattlenetAccountId() != receiverBnetAccountId)
             if ((item->IsBoundAccountWide() || false /* warband-bound: fork Item ext absent in base */) && item->IsSoulBound() && player->GetSession()->GetAccountId() != receiverAccountId)
             {
+                if (!(item->IsBattlenetAccountBound() || item->IsWarbandBound()) || !player->GetSession()->GetBattlenetAccountId() || player->GetSession()->GetBattlenetAccountId() != receiverBnetAccountId)
                 if (!(item->IsBattlenetAccountBound() || false /* warband-bound: fork Item ext absent in base */) || !player->GetSession()->GetBattlenetAccountId() || player->GetSession()->GetBattlenetAccountId() != receiverBnetAccountId)
                 {
                     player->SendMailResult(0, MAIL_SEND, MAIL_ERR_EQUIP_ERROR, EQUIP_ERR_NOT_SAME_ACCOUNT);

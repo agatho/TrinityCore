@@ -16,8 +16,8 @@
  */
 
 #include "CharacterCache.h"
-#include "Config.h"
 #include "Chat.h"
+#include "Config.h"
 #include "DB2Stores.h"
 #include "WorldSession.h"
 #include "GameTime.h"

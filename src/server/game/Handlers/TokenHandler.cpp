@@ -38,7 +38,7 @@
 //   * REDEEM: a consumable token is consumed. On retail a token redeems into game time or Battle.net
 //             balance, neither of which exists on this core, so the redeem SINK here is GOLD equal to the
 //             market price (the private-realm interpretation of "balance"; see COMMERCE_RETAIL_PARITY.md
-//             §2.3). Because every legitimately-acquired token traces back to a gold Shop purchase
+//             Ã‚Â§2.3). Because every legitimately-acquired token traces back to a gold Shop purchase
 //             (GrantType-3, a gold SINK of the same price), redeem-for-gold is economy-neutral over a full
 //             buy->sell->redeem loop and cannot mint gold from a token nobody paid for.
 //

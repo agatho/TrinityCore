@@ -1055,8 +1055,3 @@ void WorldSession::HandleQueryQuestItemUsability(WorldPackets::Quest::QueryQuest
 
     SendPacket(response.Write());
 }
-
-void WorldSession::HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& /*closeQuestChoice*/)
-{
-    // Client notification that player closed quest choice UI - no server action needed
-}
