@@ -198,6 +198,12 @@ class TC_GAME_API GameObject : public WorldObject, public GridObject<GameObject>
         void AddToWorld() override;
         void RemoveFromWorld() override;
         void CleanupsBeforeDelete(bool finalCleanup = true) override;
+        void InitHousingCornerstoneData(uint64 cost, int32 plotIndex);
+        void InitHousingDecorData(ObjectGuid decorGuid, ObjectGuid houseGuid,
+            uint8 flags, ObjectGuid attachParent = ObjectGuid::Empty,
+            uint8 sourceType = 0, std::string sourceValue = {});
+        void InitHousingDecorMirroredPosition(Position const& localPos, QuaternionData const& localRot,
+            float localScale, ObjectGuid attachParent, uint8 attachFlags = 3);
 
     private:
         bool Create(uint32 entry, Map* map, Position const& pos, QuaternionData const& rotation, uint32 animProgress, GOState goState, uint32 artKit, bool dynamic, ObjectGuid::LowType spawnid);
@@ -461,6 +467,8 @@ class TC_GAME_API GameObject : public WorldObject, public GridObject<GameObject>
         void HandleCustomTypeCommand(GameObjectTypeBase::CustomCommand const& command) const;
 
         UF::UpdateField<UF::GameObjectData, int32(WowCS::EntityFragment::CGObject), TYPEID_GAMEOBJECT> m_gameObjectData;
+        UF::OptionalUpdateField<UF::HousingCornerstoneData, int32(WowCS::EntityFragment::FJamHousingCornerstone_C), 0> m_housingCornerstoneData;
+        UF::UpdateField<UF::MirroredPositionData, int32(WowCS::EntityFragment::FMirroredPositionData_C), 0> m_mirroredPositionData;
 
         TeamId GetControllingTeam() const;
 
