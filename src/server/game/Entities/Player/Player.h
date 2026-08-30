@@ -380,7 +380,6 @@ struct SpellPctPvpModifierByLabel : SpellModifier
     SpellPctPvpModifierByLabel(SpellModOp _op, SpellPvpModifier _pvpOp, uint32 _spellId, Aura* _ownerAura, int32 _label)
         : SpellModifier(_op, SPELLMOD_LABEL_PCT_PVP, _spellId, _ownerAura), pvpOp(_pvpOp)
     {
-        value.PvpModIndex = int32(_pvpOp);
         value.ModifierValue = 1.0f;  // neutrales Element des multiplikativen Modifikators; wird in CalculateSpellMod sofort ueberschrieben
         value.LabelID = _label;
     }
@@ -394,7 +393,6 @@ struct SpellPctModifierByLabel : SpellModifier
     SpellPctModifierByLabel(SpellModOp _op, uint32 _spellId, Aura* _ownerAura, int32 _label)
         : SpellModifier(_op, SPELLMOD_LABEL_PCT, _spellId, _ownerAura)
     {
-        value.ModIndex = int32(_op);
         value.ModifierValue = 0.0f;
         value.LabelID = _label;
     }
@@ -1135,9 +1133,6 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_RENOWN_REWARDS,
     PLAYER_LOGIN_QUERY_LOAD_COVENANT_CALLINGS,
     PLAYER_LOGIN_QUERY_LOAD_COVENANT_SOULBINDS,
-    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS,
-    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY,
-    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT,
     PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_TAB_SETTINGS,
     PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_ITEMS,
     PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_COINAGE,
@@ -1199,7 +1194,7 @@ enum PlayerCommandStates
     CHEAT_COOLDOWN  = 0x04,
     CHEAT_POWER     = 0x08,
     CHEAT_WATERWALK = 0x10,
-    CHEAT_IGNORE_DIMINISHING_RETURNS = 0x20      // SMSG_CHEAT_IGNORE_DIMISHING_RETURNS (0x670002)
+    CHEAT_IGNORE_DIMINISHING_RETURNS = 0x20,     // SMSG_CHEAT_IGNORE_DIMISHING_RETURNS (0x670002)
     // 0x20 is taken on feature/spell (CHEAT_IGNORE_DIMINISHING_RETURNS) - do not reuse
     CHEAT_PET_GOD   = 0x40
 };
@@ -1657,7 +1652,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SetAccountBankTabSettings(uint32 tabId, std::string const& name, std::string const& icon, std::string const& description, BagSlotFlags depositFlags)
         {
             auto setter = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::AccountBankTabSettings, tabId);
-            SetBankTabSettings(setter, name, icon, description, depositFlags);
         }
         void SetBankTabSettings(UF::MutableFieldReferenceWithChangesMask<UF::BankTabSettings, false> setter, std::string const& name, std::string const& icon, std::string const& description, BagSlotFlags depositFlags)
         {
@@ -3138,7 +3132,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         void CreateGarrison(uint32 garrSiteId);
         void DeleteGarrison();
-        Garrison* GetGarrison() const { return _garrison.get(); }
         MythicPlusData* GetMythicPlusData() const { return _mythicPlusData.get(); }
         // Rebuilds the Mythic+ rating update fields (PlayerData + ActivePlayerData DungeonScore) from
         // MythicPlusData. Called on load and after every recorded keystone run.
@@ -3272,32 +3265,17 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendCovenantCallingsUpdate();
         // A calling quest was turned in - free its slot so the next daily reset issues a replacement.
         void OnCovenantCallingCompleted(uint32 questId);
-        void UpdateDungeonScore();
 
         uint8 GetWarbandMaxLevelCharCount() const { return _warbandMaxLevelCharCount; }
 
         // Covenant / Soulbind
-        uint32 GetActiveCovenant() const { return m_activeCovenantId; }
-        uint32 GetActiveSoulbind() const { return m_activeSoulbindId; }
-        void ActivateSoulbind(SoulbindEntry const* soulbind);   // validates + persists; reapplies conduit effects
 
         // Soulbind conduit collection (server-authoritative: conduitId -> owned RankIndex)
-        bool HasConduit(uint32 conduitId) const { return m_soulbindConduits.find(conduitId) != m_soulbindConduits.end(); }
-        int32 GetConduitRank(uint32 conduitId) const;
-        bool CollectConduit(uint32 conduitId, int32 rankIndex = -1);   // grant/upgrade; rankIndex < 0 => lowest defined rank
         void SetActiveCovenant(uint32 covenantId);              // SPELL_EFFECT_SET_COVENANT: join covenant, persist (soulbind-independent)
-        void TryCollectConduitFromItem(Item* item);                    // auto-collect when a conduit item is acquired (SoulbindConduitItem)
         // Socketed conduits for a soulbind tree: GarrTalent node id -> conduitId
-        bool SocketConduit(uint32 garrTalentTreeId, uint32 garrTalentId, uint32 conduitId);   // validates ownership + covenant, persists, applies spell
-        void RemoveConduitSocket(uint32 garrTalentId);
-        void ApplyConduitSpells();      // (re)apply spells for all currently-socketed conduits of the active soulbind
-        void RemoveConduitSpells();     // strip conduit spells (on soulbind switch)
-        int32 GetConduitSpell(uint32 conduitId) const;   // owned rank -> SoulbindConduitRank.SpellID (0 if none)
 
         // Covenant renown rewards. The renown LEVEL itself is a renown-reputation (TC ReputationMgr) and is client-synced
         // by the standard reputation packets; this grants the per-level RenownRewards (item/spell/title/mount) once each.
-        void UpdateRenownRewards(FactionEntry const* renownFaction);
-        void UpdateAllRenownRewards();   // login catch-up: grant any renown rewards earned before this feature existed
 
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }
@@ -3618,10 +3596,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         // Shared tail of both renown engines: grant every not-yet-granted RenownRewards row up to currentLevel
         // for this covenant, then persist the new high-water mark to character_covenant_renown.
         void GrantRenownRewardsUpTo(uint32 covenantId, int32 currentLevel);
-        void _LoadSoulbindConduits(PreparedQueryResult result);
-        void _LoadSoulbindConduitSockets(PreparedQueryResult result);
-        void _LoadRenownRewards(PreparedQueryResult result);
-        void GrantRenownReward(RenownRewardsEntry const* reward);
         void _LoadQuestStatus(PreparedQueryResult result);
         void _LoadQuestStatusObjectives(PreparedQueryResult result);
         void _LoadQuestStatusObjectiveSpawnTrackings(PreparedQueryResult result);

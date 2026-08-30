@@ -807,7 +807,6 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
             switch (type)
             {
                 default:
-                    ABORT();
                 case SPAWN_TYPE_CREATURE:
                     return &_creatureRespawnTimesBySpawnId;
                 case SPAWN_TYPE_GAMEOBJECT:
@@ -963,7 +962,6 @@ class TC_GAME_API BattlegroundMap : public Map
         void SetBG(Battleground* bg) { m_bg = bg; }
 
         uint32 GetScriptId() const { return _scriptId; }
-        std::string const& GetScriptName() const;
         BattlegroundScript* GetBattlegroundScript() { return _battlegroundScript.get(); }
         BattlegroundScript const* GetBattlegroundScript() const { return _battlegroundScript.get(); }
 
