@@ -872,19 +872,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::KickVoterInLFRDungeon:
         case CriteriaType::KickTargetInLFRDungeon:
         case CriteriaType::GroupedTankLeftEarlyInLFRDungeon:
-        case CriteriaType::AccountObtainPetThroughBattle:
-        case CriteriaType::WinPetBattle:
-        case CriteriaType::PlayerObtainPetThroughBattle:
-        case CriteriaType::ActivateGarrisonBuilding:
-        case CriteriaType::UpgradeGarrison:
-        case CriteriaType::StartAnyGarrisonMissionWithFollowerType:
-        case CriteriaType::SucceedAnyGarrisonMissionWithFollowerType:
-        case CriteriaType::SucceedGarrisonMission:
-        case CriteriaType::RecruitAnyGarrisonFollower:
-        case CriteriaType::LearnAnyGarrisonBlueprint:
-        case CriteriaType::CollectGarrisonShipment:
-        case CriteriaType::ItemLevelChangedForGarrisonFollower:
-        case CriteriaType::LevelChangedForGarrisonFollower:
         case CriteriaType::LearnToy:
         case CriteriaType::LearnAnyToy:
         case CriteriaType::FindResearchObject:
@@ -905,8 +892,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::PlayerHasEarnedHonor:
         case CriteriaType::ChooseRelicTalent:
         case CriteriaType::AccountHonorLevelReached:
-        case CriteriaType::SocketAnySoulbindConduit:
-        case CriteriaType::MythicPlusCompleted:
         case CriteriaType::ObtainAnyItemWithCurrencyValue:
         case CriteriaType::EarnExpansionLevel:
         case CriteriaType::LearnTransmog:
