@@ -525,6 +525,7 @@ namespace WorldPackets
         class LoadSelectedTrophy;
         class ChangeMonumentAppearance;
         class RevertMonumentAppearance;
+        class GarrisonSocketTalent;
     }
 
     namespace Guild
@@ -2811,6 +2812,7 @@ class TC_GAME_API WorldSession
         void HandleLoadSelectedTrophy(WorldPackets::Garrison::LoadSelectedTrophy& loadSelectedTrophy);
         void HandleChangeMonumentAppearance(WorldPackets::Garrison::ChangeMonumentAppearance& changeMonumentAppearance);
         void HandleRevertMonumentAppearance(WorldPackets::Garrison::RevertMonumentAppearance& revertMonumentAppearance);
+        void HandleGarrisonSocketTalent(WorldPackets::Garrison::GarrisonSocketTalent& garrisonSocketTalent);
 
         // Battle Pets
         void HandleBattlePetRequestJournal(WorldPackets::BattlePet::BattlePetRequestJournal& battlePetRequestJournal);

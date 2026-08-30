@@ -26,6 +26,7 @@ namespace WorldPackets
 namespace Covenant
 {
     // CMSG_ACTIVATE_SOULBIND (0x3D028B). Serializer sub_7FF72914B2B0 writes a single uint32 (the soulbind id).
+    // CMSG_ACTIVATE_SOULBIND (0x3A028F). Serializer sub_7FF72914B2B0 writes a single uint32 (the soulbind id).
     class ActivateSoulbind final : public ClientPacket
     {
     public:
@@ -97,6 +98,7 @@ namespace Covenant
     };
 
     // CMSG_REQUEST_COVENANT_CALLINGS (0x3D0265). Empty payload; the client asks which covenant callings (bounties) are available.
+    // CMSG_REQUEST_COVENANT_CALLINGS (0x3A0269). Empty payload; the client asks which covenant callings (bounties) are available.
     class RequestCovenantCallings final : public ClientPacket
     {
     public:
@@ -106,6 +108,7 @@ namespace Covenant
     };
 
     // SMSG_COVENANT_CALLINGS_AVAILABILITY_RESPONSE (0x650024). Deserializer reads Bits<1> CallingsUnlocked, then uint32 count, then count x uint32 Bounty.db2 ID.
+    // SMSG_COVENANT_CALLINGS_AVAILABILITY_RESPONSE (0x600024). Deserializer reads Bits<1> CallingsUnlocked, then uint32 count, then count x uint32 Bounty.db2 ID.
     class CovenantCallingsAvailabilityResponse final : public ServerPacket
     {
     public:
@@ -118,6 +121,7 @@ namespace Covenant
     };
 
     // CMSG_COVENANT_RENOWN_REQUEST_CATCHUP_STATE (0x3E0113). Empty payload; the client asks whether accelerated
+    // CMSG_COVENANT_RENOWN_REQUEST_CATCHUP_STATE (0x3B0111). Empty payload; the client asks whether accelerated
     // renown catch-up is currently active for the player.
     class CovenantRenownRequestCatchupState final : public ClientPacket
     {
@@ -128,6 +132,7 @@ namespace Covenant
     };
 
     // SMSG_COVENANT_RENOWN_SEND_CATCHUP_STATE (0x45030F). Wire (client reader, all_smsg_layouts): a single Bits<1>.
+    // SMSG_COVENANT_RENOWN_SEND_CATCHUP_STATE (0x42030D). Wire (client reader, all_smsg_layouts): a single Bits<1>.
     // Core does not implement accelerated renown catch-up, so the answer is false (no catch-up active).
     class CovenantRenownSendCatchupState final : public ServerPacket
     {

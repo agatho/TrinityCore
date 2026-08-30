@@ -19858,6 +19858,12 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     _LoadCovenantCallings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_COVENANT_CALLINGS));
     ApplyConduitSpells();   // spell/aura systems are ready by here (mirrors _LoadGlyphAuras above)
 
+    _LoadCovenant(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_COVENANT));
+    _LoadSoulbindConduits(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUITS));
+    _LoadSoulbindConduitSockets(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUIT_SOCKETS));
+    _LoadRenownRewards(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_RENOWN_REWARDS));
+    ApplyConduitSpells();   // spell/aura systems are ready by here (mirrors _LoadGlyphAuras above)
+
     _LoadInventory(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_INVENTORY),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ARTIFACTS),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_AZERITE),
@@ -22426,6 +22432,11 @@ void Player::GrantRenownReward(RenownRewardsEntry const* reward)
     // on the Renown 1, 4, 5 and 6 rows, which award nothing, a companion, a campaign milestone and a transmog
     // respectively). It reads as the quest the UI links the row to, not something to hand out; pushing 424
     // quests at a character would be destructive. Left until the field's meaning is confirmed in-game.
+        if (Garrison* garrison = GetGarrison())
+            garrison->AddFollower(uint32(reward->GarrFollowerID));
+
+    // Remaining RenownRewards fields with no clean single-call grant path (follow-up): TransmogIllusionID (no
+    // CollectionMgr add-illusion API) and QuestID (reward-quest grant semantics need confirmation).
 }
 
 void Player::UpdateRenownRewards(FactionEntry const* renownFaction)
@@ -22479,6 +22490,7 @@ void Player::GrantRenownRewardsUpTo(uint32 covenantId, int32 currentLevel)
     if (!covenantId || currentLevel <= 0)
         return;
 
+    int32 currentLevel = GetReputationMgr().GetRenownLevel(renownFaction);
     uint32& granted = m_renownRewardsGranted[covenantId];
     if (int32(granted) >= currentLevel)
         return;
@@ -22518,6 +22530,9 @@ void Player::UpdateAllRenownRewards()
     // so that repointing the view cannot cost anybody the anima they had.
     MigrateLegacyReservoirAnima();
     SyncCovenantAnimaDisplayCurrency();
+    for (CovenantEntry const* covenant : sCovenantStore)
+        if (FactionEntry const* faction = sFactionStore.LookupEntry(uint32(covenant->FactionID)))
+            UpdateRenownRewards(faction);
 }
 
 void Player::ActivateSoulbind(SoulbindEntry const* soulbind)
@@ -22537,6 +22552,14 @@ void Player::ActivateSoulbind(SoulbindEntry const* soulbind)
     m_activeSoulbindId = soulbind->ID;
 
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::SoulbindID), int32(m_activeSoulbindId));
+
+    // Switching soulbinds changes the active tree, so strip the previously-applied conduit spells first.
+    RemoveConduitSpells();
+
+    // Activating a soulbind implies membership in its covenant (there is no separate covenant-choice opcode in
+    // the client protocol), so keep the active covenant consistent with the chosen soulbind.
+    m_activeCovenantId = uint32(soulbind->CovenantID);
+    m_activeSoulbindId = soulbind->ID;
 
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_COVENANT);
     stmt->setUInt64(0, GetGUID().GetCounter());
@@ -22715,6 +22738,26 @@ void Player::SetActiveCovenant(uint32 covenantId)
     // Covenant membership drives phases and CONDITION_COVENANT, and spell 338503 carries SPELL_EFFECT_UPDATE_
     // PLAYER_PHASE (167) + SPELL_EFFECT_UPDATE_ZONE_AURAS_AND_PHASES (170) for exactly that reason.
     PhasingHandler::OnConditionChange(this);
+    // Re-apply the conduits socketed into the newly-active soulbind's tree.
+    ApplyConduitSpells();
+}
+
+void Player::SetActiveCovenant(uint32 covenantId)
+{
+    // Blizzlike join order is: choose covenant (this) -> then its soulbinds unlock. Driven by
+    // SPELL_EFFECT_SET_COVENANT (the covenant-choice quest's reward spell); there is no covenant opcode.
+    // Unlike ActivateSoulbind (which implies the covenant), this sets the covenant WITHOUT touching the
+    // active soulbind, so a player can join before picking a soulbind.
+    if (m_activeCovenantId == covenantId)
+        return;
+
+    m_activeCovenantId = covenantId;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_COVENANT);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    stmt->setUInt32(1, m_activeCovenantId);
+    stmt->setUInt32(2, m_activeSoulbindId);
+    CharacterDatabase.Execute(stmt);
 }
 
 void Player::_LoadSoulbindConduits(PreparedQueryResult result)

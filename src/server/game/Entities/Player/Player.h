@@ -3267,6 +3267,29 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         uint8 GetWarbandMaxLevelCharCount() const { return _warbandMaxLevelCharCount; }
 
+        // Covenant / Soulbind
+        uint32 GetActiveCovenant() const { return m_activeCovenantId; }
+        uint32 GetActiveSoulbind() const { return m_activeSoulbindId; }
+        void ActivateSoulbind(SoulbindEntry const* soulbind);   // validates + persists; reapplies conduit effects
+
+        // Soulbind conduit collection (server-authoritative: conduitId -> owned RankIndex)
+        bool HasConduit(uint32 conduitId) const { return m_soulbindConduits.find(conduitId) != m_soulbindConduits.end(); }
+        int32 GetConduitRank(uint32 conduitId) const;
+        bool CollectConduit(uint32 conduitId, int32 rankIndex = -1);   // grant/upgrade; rankIndex < 0 => lowest defined rank
+        void SetActiveCovenant(uint32 covenantId);              // SPELL_EFFECT_SET_COVENANT: join covenant, persist (soulbind-independent)
+        void TryCollectConduitFromItem(Item* item);                    // auto-collect when a conduit item is acquired (SoulbindConduitItem)
+        // Socketed conduits for a soulbind tree: GarrTalent node id -> conduitId
+        bool SocketConduit(uint32 garrTalentTreeId, uint32 garrTalentId, uint32 conduitId);   // validates ownership + covenant, persists, applies spell
+        void RemoveConduitSocket(uint32 garrTalentId);
+        void ApplyConduitSpells();      // (re)apply spells for all currently-socketed conduits of the active soulbind
+        void RemoveConduitSpells();     // strip conduit spells (on soulbind switch)
+        int32 GetConduitSpell(uint32 conduitId) const;   // owned rank -> SoulbindConduitRank.SpellID (0 if none)
+
+        // Covenant renown rewards. The renown LEVEL itself is a renown-reputation (TC ReputationMgr) and is client-synced
+        // by the standard reputation packets; this grants the per-level RenownRewards (item/spell/title/mount) once each.
+        void UpdateRenownRewards(FactionEntry const* renownFaction);
+        void UpdateAllRenownRewards();   // login catch-up: grant any renown rewards earned before this feature existed
+
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }
 
@@ -3586,6 +3609,10 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         // Shared tail of both renown engines: grant every not-yet-granted RenownRewards row up to currentLevel
         // for this covenant, then persist the new high-water mark to character_covenant_renown.
         void GrantRenownRewardsUpTo(uint32 covenantId, int32 currentLevel);
+        void _LoadSoulbindConduits(PreparedQueryResult result);
+        void _LoadSoulbindConduitSockets(PreparedQueryResult result);
+        void _LoadRenownRewards(PreparedQueryResult result);
+        void GrantRenownReward(RenownRewardsEntry const* reward);
         void _LoadQuestStatus(PreparedQueryResult result);
         void _LoadQuestStatusObjectives(PreparedQueryResult result);
         void _LoadQuestStatusObjectiveSpawnTrackings(PreparedQueryResult result);
@@ -3859,6 +3886,9 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         bool m_covenantCallingsChanged = false;
         // Re-entrancy latch for the 1813 <-> 1859-1862 reservoir-anima mirror; see Player::CurrencyChanged.
         bool m_covenantAnimaSyncing = false;
+        std::unordered_map<uint32 /*conduitId*/, uint32 /*rankIndex*/> m_soulbindConduits;
+        // garrTalent node id -> (conduitId, garrTalentTreeID); tree id lets us apply only the active soulbind's sockets
+        std::unordered_map<uint32 /*garrTalentId*/, std::pair<uint32 /*conduitId*/, uint32 /*treeId*/>> m_soulbindConduitSockets;
 
         uint32 m_lastFallTime;
         float  m_lastFallZ;

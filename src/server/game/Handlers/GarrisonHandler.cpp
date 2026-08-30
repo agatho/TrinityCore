@@ -22,6 +22,7 @@
 #include "DB2Structure.h"
 #include "GameObject.h"
 #include "GameTime.h"
+#include "DB2Stores.h"
 #include "Garrison.h"
 #include "GarrisonMgr.h"
 #include "GossipDef.h"
@@ -1122,4 +1123,18 @@ void WorldSession::HandleGarrisonSocketTalent(WorldPackets::Garrison::GarrisonSo
 
     for (WorldPackets::Garrison::GarrisonTalentSocketData const& socket : packet.Sockets)
         garrison->SocketTalent(packet.GarrTalentID, socket.SoulbindConduitID, socket.SoulbindConduitRank);
+}
+
+void WorldSession::HandleGarrisonSocketTalent(WorldPackets::Garrison::GarrisonSocketTalent& packet)
+{
+    // Soulbind conduit socketing. The client only edits the currently-active soulbind's tree, so the target tree is
+    // the active soulbind's GarrTalentTreeID. Each socket is validated server-side (conduit exists, is owned, and its
+    // covenant matches) inside Player::SocketConduit, which fails closed on any invalid/unowned id.
+    SoulbindEntry const* soulbind = sSoulbindStore.LookupEntry(_player->GetActiveSoulbind());
+    if (!soulbind)
+        return;
+
+    uint32 treeId = uint32(soulbind->GarrTalentTreeID);
+    for (WorldPackets::Garrison::GarrisonTalentSocketData const& socket : packet.Sockets)
+        _player->SocketConduit(treeId, uint32(packet.GarrTalentID), uint32(socket.SoulbindConduitID));
 }
