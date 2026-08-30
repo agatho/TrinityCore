@@ -486,6 +486,7 @@ namespace WorldPackets
         class CautionaryChannelMessage final : public ServerPacket
         {
         public:
+            static constexpr std::size_t MaxTextLength = 2046;
 
             explicit CautionaryChannelMessage() : ServerPacket(SMSG_CAUTIONARY_CHANNEL_MESSAGE, 2 + 4 + 32) { }
 
@@ -506,6 +507,7 @@ namespace WorldPackets
         class ChatAutoResponded final : public ServerPacket
         {
         public:
+            static constexpr std::size_t MaxTextLength = 1282;
 
             explicit ChatAutoResponded() : ServerPacket(SMSG_CHAT_AUTO_RESPONDED, 2 + 4 + 32) { }
 

@@ -384,6 +384,7 @@ namespace WorldPackets
 
         // Sent when the client throws away time sync work it had queued, typically around a map
         // transfer. Everything up to and including MaxSequenceIndex will never be answered.
+
         class TriggerCinematic final : public ServerPacket
         {
         public:
@@ -1356,6 +1357,7 @@ namespace WorldPackets
             bool KeepTimer = false;
         };
 
+
         // One entry of the client's "world elapsed timer" list (client type name: JamElaspedTimer).
         //
         // Wire, derived from the 68275 client deserializers and cross-checked against the
@@ -1367,15 +1369,19 @@ namespace WorldPackets
         // TimerID indexes WorldElapsedTimer.db2. The client reads the timer *type* from that DB2
         // row - it is NOT on the wire - and Blizzard_ScenarioObjectiveTracker only renders rows
         // whose Type is ChallengeMode(1) or ProvingGround(2). See ElapsedTimerMgr.h.
+
         ByteBuffer& operator<<(ByteBuffer& data, ElapsedTimer const& timer);
 
         // Starts (or re-bases) a single elapsed timer. CurrentDuration is the time already elapsed;
         // the client free-runs its own clock from that baseline.
+
         // Bulk form, used to resynchronise every active timer on zone-in / relog. The client's
         // PLAYER_ENTERING_WORLD handler calls GetWorldElapsedTimers(), so this is the packet that
         // repopulates that list.
+
         // Wire: { uint32 TimerID; bit KeepTimer; } - verified against the client deserializer,
         // which reads the flag as the top bit of one byte (matching OptionalInit/FlushBits packing).
+
         class QueryCountdownTimer final : public ClientPacket
         {
         public:
@@ -2901,6 +2907,7 @@ namespace WorldPackets
             std::string Text;
         };
 
+
         class TransferCurrencyFromAccountCharacter final : public ClientPacket
         {
         public:
@@ -2913,6 +2920,8 @@ namespace WorldPackets
             int32 CurrencyID = 0;
             int32 Quantity = 0;
         };
+
+
 
         class CurrencyTransferResult final : public ServerPacket
         {

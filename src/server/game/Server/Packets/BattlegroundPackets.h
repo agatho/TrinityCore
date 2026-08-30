@@ -452,6 +452,9 @@ namespace WorldPackets
         };
 
 
+
+
+
         class BattlemasterJoin final : public ClientPacket
         {
         public:
@@ -583,6 +586,7 @@ namespace WorldPackets
         //
         // NOTE the field order differs from BattlemasterJoinArena above, which reads TeamSizeIndex THEN Roles.
         // Here Roles comes first and there is no second byte at all.
+
         // CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3B00BF), body = 3 bytes.
         //
         // Serializer VA 0x7FF729153120 writes obj+0x20 then obj+0x21, then one bit from obj+0x22 and flushes.
@@ -598,12 +602,14 @@ namespace WorldPackets
         // PVPBracketTypes: the client's valid bracket space from GetPersonalRatedInfo is {0,1,2,3,6,8} and
         // does not contain 4. JoinSkirmish only ever sends 4 (and hard-rejects anything else with the Lua
         // error "Invalid bracket id."); RequeueSkirmish sends 255 together with the Requeue bit set.
+
         // CMSG_JOIN_RATED_BATTLEGROUND (0x3A0025), body = exactly 1 byte: uint8 Roles.
         //
         // Same shape as the Blitz join despite the different opcode group. Client serializer
         // VA 0x7FF7291455E0 writes one uint8 from obj+0x20; producer is the Lua binding
         // JoinRatedBattlefield (RVA 0x2024540), called with no arguments from Blizzard_PVPUI.lua.
         // The byte is the LFG role mask (0x01 leader, 0x02 tank, 0x04 healer, 0x08 damage).
+
         // CMSG_BATTLEMASTER_JOIN_BRAWL (0x3B00C2), body = 2 bytes.
         //
         // Client serializer VA 0x7FF7291531A0: after the opcode header it writes one uint8 from obj+0x20,
@@ -620,6 +626,7 @@ namespace WorldPackets
         // to send at all (error 0x33A) when that intersection is empty - and obj+0x21 with the parsed
         // isSpecialBrawl argument (`mov byte [rsp+0x51], r14b` at 0x7FF729D178FA, r14b = byte [rbp+0x70],
         // the bool the argument parser wrote).
+
         class BattlefieldLeave final : public ClientPacket
         {
         public:
@@ -895,6 +902,7 @@ namespace WorldPackets
             Optional<BrawlInfo> SpecialEventBrawl;
         };
 
+
         // SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE (0x480015). This is the packet that tells the client which
         // PvP Brawl is currently running; there is no other source. Its handler, VA 0x7FF72AAC2120, is the only
         // writer of the two globals the whole brawl UI reads: dword_7FF72F082BB8 (the active brawl) and
@@ -931,11 +939,14 @@ namespace WorldPackets
         // The second block's SecondsUntilNextChange is read off the wire and then dropped on the floor: the
         // handler never stores it, and C_PvP.GetSpecialEventBrawlInfo hardcodes canQueue = 1. It is written
         // here only because the client's reader consumes the four bytes.
+
+
         // SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE (0x480015): describes the currently-scheduled special PvP event
         // (e.g. a PvP brawl / timewalking-PvP rotation). Wire from the client reader (all_smsg_layouts):
         // { uint8; uint32; uint32; bit; uint32; uint32; bit }. TrinityCore has no PvP-event scheduler, so the
         // response is all-inactive (every field 0 / flag false) -- the truthful "no scheduled PvP event", mirroring
         // how HandleRequestRatedPvpInfo answers with a default/empty RatedPvpInfo.
+
         class RatedPvpInfo final : public ServerPacket
         {
         public:
@@ -1187,6 +1198,7 @@ namespace WorldPackets
         //
         // Retail sends this only when a team's score actually moves: across all 322 captured packets no
         // stream ever repeats a value, even though the source battleground ticks every two seconds.
+
         // SMSG_BATTLEGROUND_INIT (0x480029), body = exactly 6 bytes.
         //
         // The reader at VA 0x7FF7290FD47E does not parse this one: helper 0x7FF72BE6C980 just hands the
@@ -1200,6 +1212,7 @@ namespace WorldPackets
         //                      why this core only sends the packet for battlegrounds that declare a cap.
         // Field names below are ours; the client exports none. The sole capture reads
         // 73 E0 B5 38 | DC 05 = { 951820403, 1500 }, and 1500 is the cap the winning team stopped on.
+
         // Match kinds the client can name. This is not a guessed enum: it is the client's own label table at
         // 0x7FF72C3C61B0, read in order, which SMSG_PVP_MATCH_START's uint8 indexes directly (see below).
         // It also finally explains the bracket space referenced by BattlemasterJoinSkirmish above - the
@@ -1236,6 +1249,7 @@ namespace WorldPackets
         //                of zero and this packet carries no per-player payload.
         //   StartTime    1783169973, seven seconds after SMSG_PVP_MATCH_INITIALIZE's StartTime and 29 ms
         //                after SMSG_PVP_MATCH_SET_STATE(Engaged) - i.e. the moment the gates open.
+
         enum class BattlegroundCapturePointState : uint8
         {
             Neutral             = 1,

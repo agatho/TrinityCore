@@ -925,13 +925,6 @@ namespace WorldPackets
             std::vector<uint8> Usabilities;
         };
 
-        class CloseQuestChoice final : public ClientPacket
-        {
-        public:
-            explicit CloseQuestChoice(WorldPacket&& packet) : ClientPacket(CMSG_CLOSE_QUEST_CHOICE, std::move(packet)) { }
-
-            void Read() override { }
-        };
 
         class DisplayQuestPopup final : public ServerPacket
         {

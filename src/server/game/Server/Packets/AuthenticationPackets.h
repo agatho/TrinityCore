@@ -456,9 +456,11 @@ namespace WorldPackets
         // single issuer of the serial: it mints the value, remembers it and registers the matching time sync
         // counter, and WorldSession::HandleSuspendCommsAck accepts the acknowledgement only for a serial issued
         // there. A hand rolled send would hand the serial space back to the client.
+
         // CMSG_SUSPEND_COMMS_ACK (12.1 0x440000) - two uint32, 8 bytes. Writer 0x5D54B0.
         // Over the corpus: 78 packets, all 8 bytes, serial echo 78/78, always on the same PKT connection index as
         // the SMSG_SUSPEND_COMMS it answers.
+
         // SMSG_DROP_NEW_CONNECTION (12.1 0x4C0007) - empty.
         // Measured: consumer 0x18C1500 never touches msg+0x20. It resolves its target slot from the RECEIVING
         // socket, not from the payload: it searches NetClient+0x1A0[0..3] for the socket the message arrived on,

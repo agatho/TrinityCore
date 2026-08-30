@@ -392,6 +392,7 @@ namespace WorldPackets
         // Retail leaves blocks it has nothing to say about entirely zero - the rated Blitz capture sent 11
         // of 13 populated, a levelling character only 4 - so an unimplemented activity is written empty
         // rather than omitted, and that is a wire-legal state rather than a stub.
+
         // SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x480014). Reply to the empty CMSG_REQUEST_PVP_REWARDS
         // (0x3A0041); in every capture the reply follows the request 100-250 ms later, 1:1.
         //
@@ -405,6 +406,7 @@ namespace WorldPackets
         // Retail leaves blocks it has nothing to say about entirely zero - the rated Blitz capture sent 11
         // of 13 populated, a levelling character only 4 - so an unimplemented activity is written empty
         // rather than omitted, and that is a wire-legal state rather than a stub.
+
         class LfgPartyInfo final : public ServerPacket
         {
         public:
@@ -833,10 +835,12 @@ namespace WorldPackets
         // !! INFERRED (needs sniff validation): no serializer and no 0x811C9DC5 reflection descriptor for this
         // opcode was recovered offline; a single uint32 dungeon id is the asserted body. Senders must gate this
         // behind a config opt-in (see WarfrontMgr::IsNativeUiEnabled / Warfront.NativeUI.Enable).
+
         // Dispatcher case 5636127 (0x56001F) inside the 0x56 group dispatcher @ RVA 0x739420 is a single
         // RideTicket read and nothing else; the registered handler @ RVA 0x2301A90 copies msg+0x20..+0x48
         // (guid 16 + id 4 + type 4 + time 8 + bit) into a global and fires SHOW_LFG_EXPAND_SEARCH_PROMPT,
         // which LFGInfoDocumentation.lua declares with an empty payload. So: ticket only.
+
         // Dispatcher case 5636116 (0x560014) only takes a reference to the remaining bytes - the parse is
         // deferred to the handler. That handler (registration site RVA 0x1EE580E stores RVA 0x2301A40 into
         // the slot at RVA 0x4404890) reads exactly three dwords off the tail:

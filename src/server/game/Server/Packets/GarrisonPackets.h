@@ -534,7 +534,7 @@ namespace WorldPackets
             uint32 Result = 0;
         };
 
-        // IDA case 4980791 (§8.45): PackedGuid NpcGUID, sub-call (likely a small descriptor),
+        // IDA case 4980791 (Ãƒâ€šÃ‚Â§8.45): PackedGuid NpcGUID, sub-call (likely a small descriptor),
         // varU32 size, varU32[size]. Conservative interpretation: {NpcGUID, u32 GarrTypeID,
         // u32[] CraftableItemIDs}.
         class GarrisonOpenCrafter final : public ServerPacket
@@ -581,7 +581,7 @@ namespace WorldPackets
             uint32 NewMinLevel = 0;
         };
 
-        // IDA case 4980772 (§8.30): u8 GarrTypeID + GarrisonSmallStruct (likely
+        // IDA case 4980772 (Ãƒâ€šÃ‚Â§8.30): u8 GarrTypeID + GarrisonSmallStruct (likely
         // {u32 MissionRecID, u32 BonusAbilityID}). Sent when a mission bonus ability activates.
         class GarrisonActivateMissionBonusAbility final : public ServerPacket
         {
@@ -617,7 +617,7 @@ namespace WorldPackets
             // Enum GarrAutoBoardIndex (client 12.0.7.68275 reflection, GARRISON_ENUMS_68275.md):
             // None = -1, AllyLeftBack 0, AllyRightBack 1, AllyLeftFront 2, AllyCenterFront 3,
             // AllyRightFront 4 (5..12 are the enemy slots). The WoD/Legion mission UIs have no board
-            // and send None; the Shadowlands Adventures UI sends a real slot per follower — it is the
+            // and send None; the Shadowlands Adventures UI sends a real slot per follower ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ it is the
             // optional third argument of C_Garrison.AddFollowerToMission(missionID, followerID, boardIndex)
             // (GarrisonInfoDocumentation.lua:11-25, Blizzard_CovenantMissionUI.lua:729).
             std::vector<int32> FollowerBoardIndexes;
@@ -657,7 +657,7 @@ namespace WorldPackets
             // NOTE: the 68275 client appends a trailing uint8 (GarrFollowerTypeID) after the PackedGuid
             // (client serializer RVA 0x6A9A70: write_PackedGuid then write_uint8). No field is declared for
             // it on purpose: the handler ignores the packet entirely, and adding a member here changed the
-            // packet object's size, which — against a stale opcode-table wrapper — placed the field write on
+            // packet object's size, which ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ against a stale opcode-table wrapper ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ placed the field write on
             // the stack GS cookie and hard-crashed (FAST_FAIL_STACK_COOKIE_CHECK). Read() consumes the byte
             // without storing it, which keeps the object layout identical and clears the tail warning.
         };
@@ -666,9 +666,9 @@ namespace WorldPackets
         // Mission SMSG packets
         // ============================================================
 
-        // Per-follower entry — IDA-confirmed 17-byte (or 21-byte) tuple. The first 17 bytes
+        // Per-follower entry ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ IDA-confirmed 17-byte (or 21-byte) tuple. The first 17 bytes
         // mirror the CMSG_GARRISON_START_MISSION shape; if HasFollowerEntry is set the wire
-        // appends an additional u32 FollowerEntry. See SNIFF_AUDIT_12.0.1.66102.md §8.1.
+        // appends an additional u32 FollowerEntry. See SNIFF_AUDIT_12.0.1.66102.md Ãƒâ€šÃ‚Â§8.1.
         struct GarrisonMissionFollowerEntry
         {
             uint64 DbID = 0;
@@ -688,7 +688,7 @@ namespace WorldPackets
             // IDA-confirmed (12.0.5.67186) + sniff-verified (12.0.1.66102) layout:
             //   u32 Result, u16 NumOfferedToday, u32 FollowerInfoCount, u32 FollowersCount,
             //   GarrisonMission Mission, FollowerInfo[FollowerInfoCount], GarrisonFollower[FollowersCount].
-            // See SNIFF_AUDIT_12.0.1.66102.md §8.1 for the byte-by-byte trace.
+            // See SNIFF_AUDIT_12.0.1.66102.md Ãƒâ€šÃ‚Â§8.1 for the byte-by-byte trace.
             uint32 Result = 0;
             uint16 NumOfferedToday = 0;
             GarrisonMission Mission;
@@ -696,19 +696,19 @@ namespace WorldPackets
             std::vector<GarrisonFollower> Followers;
         };
 
-        // 32-byte per-follower complete-mission record — IDA-confirmed
+        // 32-byte per-follower complete-mission record ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ IDA-confirmed
         // (12.0.5.67186) via Deserialize_CompleteMissionFollowerInfo @ 0x7FF75C175900.
-        // See SNIFF_AUDIT §10.1.3 + §11 (deepest-pass field-naming).
+        // See SNIFF_AUDIT Ãƒâ€šÃ‚Â§10.1.3 + Ãƒâ€šÃ‚Â§11 (deepest-pass field-naming).
         //
         // Wire format:
-        //     varint64  DbID              CONFIRMED — follower DbID
-        //     varU32    Health            CONFIRMED — HP at end of auto-combat
-        //     varint64  HealingTimestamp  CONFIRMED — 68275 reflection descriptor
+        //     varint64  DbID              CONFIRMED ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ follower DbID
+        //     varU32    Health            CONFIRMED ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ HP at end of auto-combat
+        //     varint64  HealingTimestamp  CONFIRMED ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ 68275 reflection descriptor
         //                                            (GARRISON_WIRE_NAMED_68275.md):
         //                                            JamGarrisonCompleteMissionFollowerInfo =
         //                                            followerDBID@0, newHealth@8,
         //                                            healingTimestamp@16, missionCompleteState@24.
-        //     varU32    State             CONFIRMED — GarrFollowerMissionCompleteState enum:
+        //     varU32    State             CONFIRMED ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ GarrFollowerMissionCompleteState enum:
         //                                            0=Alive, 1=KilledByMissionFailure,
         //                                            2=SavedByPreventDeath, 3=OutOfDurability.
         struct GarrisonCompleteMissionFollowerInfo
@@ -721,7 +721,7 @@ namespace WorldPackets
 
         // 24-byte per-target record produced by one auto-combat event. IDA-confirmed
         // via the inner combatant loop in sub_7FF75C1750F0 + Lua C-binding accessor
-        // sub_7FF75CB37FF0 — see SNIFF_AUDIT §10.1.6. All 6 fields CONFIRMED via
+        // sub_7FF75CB37FF0 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see SNIFF_AUDIT Ãƒâ€šÃ‚Â§10.1.6. All 6 fields CONFIRMED via
         // matching Lua table keys ("boardIndex", "oldHealth", "newHealth", "maxHealth",
         // "points").
         struct GarrisonAutoMissionTargetInfo
@@ -735,7 +735,7 @@ namespace WorldPackets
 
         // 48-byte per-event auto-combat record (one spell cast / aura tick / ...).
         // IDA-confirmed via Deserialize @ 0x7FF75C1750F0 + Lua C-binding accessor
-        // sub_7FF75CB38250 — see SNIFF_AUDIT §10.1.5. All 7 fields CONFIRMED via
+        // sub_7FF75CB38250 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see SNIFF_AUDIT Ãƒâ€šÃ‚Â§10.1.5. All 7 fields CONFIRMED via
         // matching Lua table keys ("type", "spellID", "schoolMask", "effectIndex",
         // "casterBoardIndex", "auraType", "targetInfo").
         struct GarrisonAutoMissionEvent
@@ -749,8 +749,8 @@ namespace WorldPackets
             std::vector<GarrisonAutoMissionTargetInfo> TargetInfo;
         };
 
-        // 24-byte pure-container round struct — IDA-confirmed via the cleanup symbol
-        // string "struct JamGarrisonAutoMissionRoundInfo" — see SNIFF_AUDIT §10.1.4.
+        // 24-byte pure-container round struct ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ IDA-confirmed via the cleanup symbol
+        // string "struct JamGarrisonAutoMissionRoundInfo" ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see SNIFF_AUDIT Ãƒâ€šÃ‚Â§10.1.4.
         // The Lua API only exposes "events"; no scalar fields. The round index is
         // implicit by array position.
         struct GarrisonAutoMissionRound
@@ -758,7 +758,7 @@ namespace WorldPackets
             std::vector<GarrisonAutoMissionEvent> Events;
         };
 
-        // IDA-confirmed (12.0.5.67186) layout — see SNIFF_AUDIT §10.1.
+        // IDA-confirmed (12.0.5.67186) layout ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see SNIFF_AUDIT Ãƒâ€šÃ‚Â§10.1.
         //   u32 Result, u32 MissionRecID, u8 GarrTypeID,
         //   u32 FollowerInfoCount, u32 RoundsCount,
         //   FollowerInfo[FollowerInfoCount]  (32 bytes each),
@@ -782,11 +782,11 @@ namespace WorldPackets
             std::vector<GarrisonAutoMissionRound> Rounds;
         };
 
-        // IDA-confirmed (12.0.5.67186) layout — see SNIFF_AUDIT §10.2.
+        // IDA-confirmed (12.0.5.67186) layout ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see SNIFF_AUDIT Ãƒâ€šÃ‚Â§10.2.
         //   GarrisonMission Mission, u32 MissionRecID, u32 Result,
         //   u32 FollowerInfoCount, FollowerInfo[FollowerInfoCount]   (32 bytes each),
         //   single byte (bit7=Succeeded, 7 padding bits).
-        // Same FollowerInfo struct as COMPLETE_MISSION_RESULT (§10.1.3).
+        // Same FollowerInfo struct as COMPLETE_MISSION_RESULT (Ãƒâ€šÃ‚Â§10.1.3).
         class GarrisonMissionBonusRollResult final : public ServerPacket
         {
         public:
@@ -803,7 +803,7 @@ namespace WorldPackets
 
         // IDA case 4980762: u8 GarrTypeID, u32 Result, u8 State, Bits<1>, GarrisonMission.
         // The Mission carries its own Rewards/OvermaxRewards inline, so the wire has no
-        // outer reward arrays. See SNIFF_AUDIT §8.23.
+        // outer reward arrays. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.23.
         class GarrisonAddMissionResult final : public ServerPacket
         {
         public:
@@ -865,7 +865,7 @@ namespace WorldPackets
             uint32 Result = 0;
         };
 
-        // IDA case 4980765 (§8.25): u32 Result, u32 MissionRecID, GarrisonMission.
+        // IDA case 4980765 (Ãƒâ€šÃ‚Â§8.25): u32 Result, u32 MissionRecID, GarrisonMission.
         // Sent when a mission's start time is moved (e.g., Master Plan reduces wait).
         class GarrisonChangeMissionStartTimeResult final : public ServerPacket
         {
@@ -879,7 +879,7 @@ namespace WorldPackets
             GarrisonMission Mission;
         };
 
-        // IDA case 4980766 (§8.26): u32 Result, u64 LastUsedTimestamp.
+        // IDA case 4980766 (Ãƒâ€šÃ‚Â§8.26): u32 Result, u64 LastUsedTimestamp.
         class GarrisonGetRecallPortalLastUsedTimeResult final : public ServerPacket
         {
         public:
@@ -891,7 +891,7 @@ namespace WorldPackets
             uint64 LastUsedTimestamp = 0;
         };
 
-        // IDA case 4980767 (§8.27): u32 Result, u32 ?, u64 ?, GarrisonMission.
+        // IDA case 4980767 (Ãƒâ€šÃ‚Â§8.27): u32 Result, u32 ?, u64 ?, GarrisonMission.
         // Conservative interpretation: {Result, MissionRecID, RecallTimestamp, Mission}.
         class GarrisonUseRecallPortalResult final : public ServerPacket
         {
@@ -906,7 +906,7 @@ namespace WorldPackets
             GarrisonMission Mission;
         };
 
-        // IDA case 4980803 (§8.53): u32 Result, u64 ItemDbID, u32 size, u32 size,
+        // IDA case 4980803 (Ãƒâ€šÃ‚Â§8.53): u32 Result, u64 ItemDbID, u32 size, u32 size,
         // GarrisonMissionReward[size], GarrisonMissionReward[size].
         // Conservative naming: {Result, ItemDbID, Rewards, OvermaxRewards}.
         class GarrisonMissionRequestRewardInfoResponse final : public ServerPacket
@@ -1106,7 +1106,7 @@ namespace WorldPackets
         };
 
         // IDA case 4980782: u32 Result, GarrisonFollower (the renamed CustomName lives in
-        // the trailing SizedString INSIDE the follower struct). See SNIFF_AUDIT §8.39.
+        // the trailing SizedString INSIDE the follower struct). See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.39.
         class GarrisonRenameFollowerResult final : public ServerPacket
         {
         public:
@@ -1177,7 +1177,7 @@ namespace WorldPackets
         };
 
         // IDA case 4980788: u32 Result, GarrisonFollower (single follower, no array prefix).
-        // See SNIFF_AUDIT §8.43.
+        // See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.43.
         class GarrisonRecruitFollowerResult final : public ServerPacket
         {
         public:
@@ -1189,7 +1189,7 @@ namespace WorldPackets
             GarrisonFollower Follower;
         };
 
-        // IDA-confirmed (12.0.5.67186) layout — see SNIFF_AUDIT §10.3, all 6 fields
+        // IDA-confirmed (12.0.5.67186) layout ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see SNIFF_AUDIT Ãƒâ€šÃ‚Â§10.3, all 6 fields
         // CONFIRMED with two-source evidence (IDA + Lua C-binding accessor names).
         //   PackedGuid NpcGUID, u32 MechanicTypeID, u32 TraitID,
         //   GarrisonFollower Followers[3]   (FIXED 3, no count prefix),
@@ -1209,7 +1209,7 @@ namespace WorldPackets
             bool CanSetRecruitmentPreference = false;
         };
 
-        // IDA case 4980778 (§8.35): u8, u32. Conservative: u8 GarrTypeID, u32 Result.
+        // IDA case 4980778 (Ãƒâ€šÃ‚Â§8.35): u8, u32. Conservative: u8 GarrTypeID, u32 Result.
         class GarrisonFollowerFatigueCleared final : public ServerPacket
         {
         public:
@@ -1221,7 +1221,7 @@ namespace WorldPackets
             uint32 Result = 0;
         };
 
-        // IDA case 4980783 (§8.40): single full GarrisonFollower.
+        // IDA case 4980783 (Ãƒâ€šÃ‚Â§8.40): single full GarrisonFollower.
         class GarrisonRemoveFollowerAbilityResult final : public ServerPacket
         {
         public:
@@ -1232,7 +1232,7 @@ namespace WorldPackets
             GarrisonFollower Follower;
         };
 
-        // IDA case 4980787 (§8.42): exactly 3 inline GarrisonFollowers (no count prefix).
+        // IDA case 4980787 (Ãƒâ€šÃ‚Â§8.42): exactly 3 inline GarrisonFollowers (no count prefix).
         // Sent in response to CMSG_GARRISON_GENERATE_RECRUITS once new offers are rolled.
         class GarrisonGenerateFollowersResult final : public ServerPacket
         {
@@ -1244,8 +1244,8 @@ namespace WorldPackets
             std::array<GarrisonFollower, 3> Followers;
         };
 
-        // IDA case 4980761 (§8.22): u32 size, GarrisonFollower[size].
-        // Cheat opcode — invoked by .garrison list-followers GM command.
+        // IDA case 4980761 (Ãƒâ€šÃ‚Â§8.22): u32 size, GarrisonFollower[size].
+        // Cheat opcode ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ invoked by .garrison list-followers GM command.
         class GarrisonListFollowersCheatResult final : public ServerPacket
         {
         public:
@@ -1256,8 +1256,8 @@ namespace WorldPackets
             std::vector<GarrisonFollower> Followers;
         };
 
-        // IDA case 4980800 (§8.50): u32 size, u32[size].
-        // Cheat opcode — list of completed mission rec IDs.
+        // IDA case 4980800 (Ãƒâ€šÃ‚Â§8.50): u32 size, u32[size].
+        // Cheat opcode ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ list of completed mission rec IDs.
         class GarrisonListCompletedMissionsCheatResult final : public ServerPacket
         {
         public:
@@ -1268,8 +1268,8 @@ namespace WorldPackets
             std::vector<uint32> MissionRecIDs;
         };
 
-        // IDA case 4980816 (§8.62-8.66 group): u32 Result, u32 MissionRecID, u32 NewState, GarrisonMission.
-        // Cheat opcode — used by GM commands to force a mission state change.
+        // IDA case 4980816 (Ãƒâ€šÃ‚Â§8.62-8.66 group): u32 Result, u32 MissionRecID, u32 NewState, GarrisonMission.
+        // Cheat opcode ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ used by GM commands to force a mission state change.
         class GarrisonUpdateMissionCheatResult final : public ServerPacket
         {
         public:
@@ -1349,7 +1349,7 @@ namespace WorldPackets
             uint32 EntryID = 0;
         };
 
-        // IDA case 4980807 (§8.56): u8 GarrTypeID, u32 CollectionType.
+        // IDA case 4980807 (Ãƒâ€šÃ‚Â§8.56): u8 GarrTypeID, u32 CollectionType.
         class GarrisonClearCollection final : public ServerPacket
         {
         public:
@@ -1361,7 +1361,7 @@ namespace WorldPackets
             uint32 CollectionType = 0;
         };
 
-        // IDA case 4980808 (§8.57): u8 GarrTypeID, u32 EventListID, u64 Timestamp, u32 EventValue.
+        // IDA case 4980808 (Ãƒâ€šÃ‚Â§8.57): u8 GarrTypeID, u32 EventListID, u64 Timestamp, u32 EventValue.
         class GarrisonAddEvent final : public ServerPacket
         {
         public:
@@ -1375,7 +1375,7 @@ namespace WorldPackets
             uint32 EventValue = 0;
         };
 
-        // IDA case 4980809 (§8.58): u8 GarrTypeID, u32 EventListID, u32 EventValue.
+        // IDA case 4980809 (Ãƒâ€šÃ‚Â§8.58): u8 GarrTypeID, u32 EventListID, u32 EventValue.
         class GarrisonRemoveEvent final : public ServerPacket
         {
         public:
@@ -1388,7 +1388,7 @@ namespace WorldPackets
             uint32 EventValue = 0;
         };
 
-        // IDA case 4980810 (§8.59): u8 GarrTypeID, u32 EventListID.
+        // IDA case 4980810 (Ãƒâ€šÃ‚Â§8.59): u8 GarrTypeID, u32 EventListID.
         class GarrisonClearEventList final : public ServerPacket
         {
         public:
@@ -1423,7 +1423,7 @@ namespace WorldPackets
             std::vector<GarrisonSpecGroup> SpecGroups;
         };
 
-        // IDA case 4980812 (§8.61): single byte GarrTypeID.
+        // IDA case 4980812 (Ãƒâ€šÃ‚Â§8.61): single byte GarrTypeID.
         class GarrisonClearSpecGroups final : public ServerPacket
         {
         public:
@@ -1512,10 +1512,10 @@ namespace WorldPackets
             uint32 PlotInstanceID2 = 0;
         };
 
-        // IDA case 4980796: 3 × u32. Likely shape is {Result, PlotInstanceID1, PlotInstanceID2}
+        // IDA case 4980796: 3 ÃƒÆ’Ã¢â‚¬â€� u32. Likely shape is {Result, PlotInstanceID1, PlotInstanceID2}
         // mirroring the CMSG. Field meaning of the trailing two u32 is not byte-confirmed
         // (no sniff sample); echoing the CMSG plot pair is the conservative choice.
-        // See SNIFF_AUDIT §8.46.
+        // See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.46.
         class GarrisonSwapBuildingsResponse final : public ServerPacket
         {
         public:
@@ -1562,8 +1562,8 @@ namespace WorldPackets
             bool Unused = false;
         };
 
-        // IDA case 4980750: u32 Result, u8 GarrTypeID, Bits<1> (purpose unknown — observed
-        // value 0 in the static analysis), GarrisonTalent. See SNIFF_AUDIT §8.11.
+        // IDA case 4980750: u32 Result, u8 GarrTypeID, Bits<1> (purpose unknown ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ observed
+        // value 0 in the static analysis), GarrisonTalent. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.11.
         class GarrisonResearchTalentResult final : public ServerPacket
         {
         public:
@@ -1578,7 +1578,7 @@ namespace WorldPackets
         };
 
         // IDA case 4980751: u8 GarrTypeID, u32 GarrTalentID, u32 Rank, u32 ResearchStartTime.
-        // Sent when a talent's research timer finishes. See SNIFF_AUDIT §8.12.
+        // Sent when a talent's research timer finishes. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.12.
         class GarrisonTalentCompleted final : public ServerPacket
         {
         public:
@@ -1592,7 +1592,7 @@ namespace WorldPackets
             uint32 ResearchStartTime = 0;
         };
 
-        // IDA case 4980752: u8 GarrTypeID, u32 GarrTalentID. See SNIFF_AUDIT §8.13.
+        // IDA case 4980752: u8 GarrTypeID, u32 GarrTalentID. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.13.
         class GarrisonTalentRemoved final : public ServerPacket
         {
         public:
@@ -1605,7 +1605,7 @@ namespace WorldPackets
         };
 
         // IDA case 4980753: u8 GarrTypeID, u32 GarrTalentID, optional<GarrisonTalentSocketData>
-        // (top-bit-gated by Bits<1>). See SNIFF_AUDIT §8.14.
+        // (top-bit-gated by Bits<1>). See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.14.
         class GarrisonTalentUpdateSocketData final : public ServerPacket
         {
         public:
@@ -1618,7 +1618,7 @@ namespace WorldPackets
             Optional<GarrisonTalentSocketData> Socket;
         };
 
-        // IDA case 4980754: u8 GarrTypeID, u32 GarrTalentID. See SNIFF_AUDIT §8.15.
+        // IDA case 4980754: u8 GarrTypeID, u32 GarrTalentID. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.15.
         class GarrisonTalentRemoveSocketData final : public ServerPacket
         {
         public:
@@ -1630,7 +1630,7 @@ namespace WorldPackets
             uint32 GarrTalentID = 0;
         };
 
-        // IDA case 4980755: u8 GarrTypeID, u32 GarrTalentTreeID. See SNIFF_AUDIT §8.16.
+        // IDA case 4980755: u8 GarrTypeID, u32 GarrTalentTreeID. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.16.
         class GarrisonResetTalentTree final : public ServerPacket
         {
         public:
@@ -1642,7 +1642,7 @@ namespace WorldPackets
             uint32 GarrTalentTreeID = 0;
         };
 
-        // IDA case 4980756: u8 GarrTypeID, u32 GarrTalentTreeID. See SNIFF_AUDIT §8.17.
+        // IDA case 4980756: u8 GarrTypeID, u32 GarrTalentTreeID. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.17.
         class GarrisonResetTalentTreeSocketData final : public ServerPacket
         {
         public:
@@ -1654,7 +1654,7 @@ namespace WorldPackets
             uint32 GarrTalentTreeID = 0;
         };
 
-        // IDA case 4980813: u8 GarrTypeID, u32 size, GarrisonTalent[size]. See SNIFF_AUDIT §8.62.
+        // IDA case 4980813: u8 GarrTypeID, u32 size, GarrisonTalent[size]. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.62.
         class GarrisonSwitchTalentTreeBranch final : public ServerPacket
         {
         public:
@@ -1668,7 +1668,7 @@ namespace WorldPackets
 
         // IDA case 4980814: opaque generic-byte-block helper. Field shape unknown without sniff.
         // TC sends a single u8 GarrTypeID + size-prefixed list of unlocked talent tree IDs as
-        // the conservative interpretation. See SNIFF_AUDIT §8.63.
+        // the conservative interpretation. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.63.
         class GarrisonTalentWorldQuestUnlocksResponse final : public ServerPacket
         {
         public:
@@ -1771,7 +1771,7 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
-            bool Success = true;   // leading bit — sniff-verified (0x80): without it the client misaligns the guid read and crashes
+            bool Success = true;   // leading bit ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ sniff-verified (0x80): without it the client misaligns the guid read and crashes
             ObjectGuid NpcGUID;
             uint32 CharShipmentContainerID = 0;
         };
@@ -1858,7 +1858,7 @@ namespace WorldPackets
             ObjectGuid NpcGUID;
         };
 
-        // IDA case 4980801 (§8.51 in main audit table — pet name): u64 NpcGUID-as-DBID + sub-call
+        // IDA case 4980801 (Ãƒâ€šÃ‚Â§8.51 in main audit table ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ pet name): u64 NpcGUID-as-DBID + sub-call
         // (likely PackedGuid serializer) + 1-byte top-bit-prefixed string. Conservative shape:
         // {ObjectGuid NpcGUID, SizedString PetName}.
         class QueryGarrisonPetNameResponse final : public ServerPacket
