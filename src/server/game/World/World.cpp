@@ -917,6 +917,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "BlackMarket.MaxAuctions"sv, .DefaultValue = 12, .Index = CONFIG_BLACKMARKET_MAXAUCTIONS },
         { .Name = "BlackMarket.UpdatePeriod"sv, .DefaultValue = 24, .Index = CONFIG_BLACKMARKET_UPDATE_PERIOD },
         { .Name = "Pvp.FactionBalance.LevelCheckDiff"sv, .DefaultValue = 0, .Index = CONFIG_FACTION_BALANCE_LEVEL_CHECK_DIFF },
+        { .Name = "FeatureSystem.ReturningPlayerExperience.InactiveDays"sv, .DefaultValue = 60, .Index = CONFIG_RETURNING_PLAYER_EXPERIENCE_INACTIVE_DAYS },
     } };
 
     static constexpr ConfigOptionLoadDefinitionArray<uint64, INT64_CONFIG_VALUE_COUNT> int64s =

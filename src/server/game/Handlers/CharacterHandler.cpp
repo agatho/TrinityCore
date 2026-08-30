@@ -44,6 +44,7 @@
 #include "Language.h"
 #include "Log.h"
 #include "Map.h"
+#include "MapManager.h"
 #include "MapUtils.h"
 #include "Metric.h"
 #include "MiscPackets.h"
@@ -440,6 +441,53 @@ bool LoginQueryHolder::Initialize()
     return res;
 }
 
+namespace
+{
+// Arathi Returning Player Experience ("Catch Up"): CMSG_PLAYER_LOGIN.RPE drops the character
+// into the dedicated Arathi Highlands RPE map instead of its saved position.
+// Landing spot taken from a retail 12.0.7.68453 capture of the Catch Up login.
+// UNVERIFIED: map id 2927 could not be cross-checked against our Map.db2 in this worktree -
+// the lookup below degrades to a logged error and a normal login if it is absent.
+constexpr uint32 ARATHI_RPE_MAP_ID = 2927;
+constexpr float ARATHI_RPE_POSITION_X = -1101.67f;
+constexpr float ARATHI_RPE_POSITION_Y = -3554.37f;
+constexpr float ARATHI_RPE_POSITION_Z = 48.9203f;
+constexpr float ARATHI_RPE_ORIENTATION = 6.2583666f;
+
+// Launch spell for the IN-GAME Adventure-Guide tile: the player casts "Teleport to Arathi
+// Highlands" (a ~10s cast the player sees as a cast bar), and its SPELL_EFFECT_TELEPORT_UNITS /
+// TARGET_DEST_DB effect does the actual move on completion, reading the destination from the
+// content branch's spell_target_position row (1260320 -> map 2927, same landing pad as above).
+// This is the retail flow - the direct TeleportTo skips the cast bar, so the tile path casts.
+constexpr uint32 ARATHI_RPE_LAUNCH_SPELL = 1260320;
+
+// The NoRpeReason enum is not decoded; 4 is the value CharacterPackets.h already documents as
+// "recently active" and is the packet default. UNVERIFIED beyond that comment.
+constexpr uint32 ARATHI_RPE_NO_REASON_RECENTLY_ACTIVE = 4;
+
+// One gate for both the character list (RpeAvailable) and the actual CMSG_PLAYER_LOGIN.RPE
+// teleport, so a modified client cannot relocate a recently active character to the RPE map.
+// The retail inactivity window is unknown, so it is a worldserver.conf value rather than a
+// baked in constant; 0 removes the inactivity requirement entirely.
+bool IsArathiRpeEligible(time_t lastActive)
+{
+    uint32 const inactiveDays = sWorld->getIntConfig(CONFIG_RETURNING_PLAYER_EXPERIENCE_INACTIVE_DAYS);
+    if (!inactiveDays)
+        return true;
+
+    return lastActive > 0
+        && GameTime::GetGameTime() >= lastActive + time_t(inactiveDays) * DAY;
+}
+
+void ApplyArathiRpeEnumEligibility(WorldPackets::Character::EnumCharactersResult::CharacterInfo& characterInfo)
+{
+    bool const eligible = IsArathiRpeEligible(time_t(characterInfo.Basic.LastActiveTime));
+
+    characterInfo.RestrictionsAndMails.RpeAvailable = eligible;
+    characterInfo.RestrictionsAndMails.NoRpeReason = eligible ? 0 : ARATHI_RPE_NO_REASON_RECENTLY_ACTIVE;
+}
+}
+
 class EnumCharactersQueryHolder : public CharacterDatabaseQueryHolder
 {
 public:
@@ -513,10 +561,14 @@ void WorldSession::HandleCharEnum(CharacterDatabaseQueryHolder const& holder)
         {
             charEnum.Characters.emplace_back(result->Fetch());
 
-            WorldPackets::Character::EnumCharactersResult::CharacterInfoBasic& charInfo = charEnum.Characters.back().Basic;
+            WorldPackets::Character::EnumCharactersResult::CharacterInfo& characterInfo = charEnum.Characters.back();
+            WorldPackets::Character::EnumCharactersResult::CharacterInfoBasic& charInfo = characterInfo.Basic;
 
             if (std::vector<UF::ChrCustomizationChoice>* customizationsForChar = Trinity::Containers::MapGetValuePtr(customizations, charInfo.Guid.GetCounter()))
                 charInfo.Customizations = std::move(*customizationsForChar);
+
+            if (!charEnum.IsDeletedCharacters)
+                ApplyArathiRpeEnumEligibility(characterInfo);
 
             TC_LOG_INFO("network", "Loading char guid {} from account {}.", charInfo.Guid.ToString(), GetAccountId());
 
@@ -1190,12 +1242,14 @@ void WorldSession::HandlePlayerLoginOpcode(WorldPackets::Character::PlayerLogin&
     }
 
     m_playerLoading = playerLogin.Guid;
+    m_playerLoginRPE = playerLogin.RPE;
 
-    TC_LOG_DEBUG("network", "Character {} logging in", playerLogin.Guid.ToString());
+    TC_LOG_DEBUG("network", "Character {} logging in (RPE={})", playerLogin.Guid.ToString(), playerLogin.RPE);
 
     if (!IsLegitCharacterForAccount(playerLogin.Guid))
     {
         TC_LOG_ERROR("network", "Account ({}) can't login with that character ({}).", GetAccountId(), playerLogin.Guid.ToString());
+        m_playerLoginRPE = false;
         KickPlayer("WorldSession::HandlePlayerLoginOpcode Trying to login with a character of another account");
         return;
     }
@@ -1215,6 +1269,7 @@ void WorldSession::HandleContinuePlayerLogin()
     if (!holder->Initialize())
     {
         m_playerLoading.Clear();
+        m_playerLoginRPE = false;
         return;
     }
 
@@ -1238,6 +1293,7 @@ void WorldSession::AbortLogin(WorldPackets::Character::LoginFailureReason reason
     }
 
     m_playerLoading.Clear();
+    m_playerLoginRPE = false;
     SendPacket(WorldPackets::Character::CharacterLoginFailed(reason).Write());
 }
 
@@ -1261,7 +1317,53 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
         KickPlayer("WorldSession::HandlePlayerLogin Player::LoadFromDB failed"); // disconnect client, player no set to session and it will not deleted or saved at kick
         delete pCurrChar;                                   // delete it manually
         m_playerLoading.Clear();
+        m_playerLoginRPE = false;
         return;
+    }
+
+    // Arathi Returning Player Experience: honor CMSG_PLAYER_LOGIN.RPE.
+    // Player::LoadFromDB has already done CreateMap + SetMap + UpdatePositionData for the saved
+    // position, so a bare WorldRelocate would only move the WorldLocation and leave GetMap()
+    // pointing at the old map. Rebind exactly like MovementHandler::HandleMoveWorldportAck
+    // (relocate, ResetMap, SetMap, UpdatePositionData) so that GetMap()->GetId() really is the RPE
+    // map before AddPlayerToMap runs and grid/spawn/AI loading happens on the right map.
+    bool enterArathiRpe = m_playerLoginRPE;
+    m_playerLoginRPE = false;
+    if (enterArathiRpe && !IsArathiRpeEligible(time_t(pCurrChar->m_playerData->LogoutTime)))
+    {
+        // EnumCharacters only advertises RpeAvailable - the login bit itself is client controlled,
+        // so re-check here or a modified client could relocate any character to the RPE map.
+        TC_LOG_ERROR("network", "Player {} requested Arathi RPE login but is not eligible (LogoutTime={})",
+            pCurrChar->GetGUID().ToString(), int64(pCurrChar->m_playerData->LogoutTime));
+        enterArathiRpe = false;
+    }
+
+    if (enterArathiRpe)
+    {
+        if (!sMapStore.LookupEntry(ARATHI_RPE_MAP_ID))
+            TC_LOG_ERROR("network", "Player {} requested Arathi RPE login but map {} is missing from Map.db2",
+                pCurrChar->GetGUID().ToString(), ARATHI_RPE_MAP_ID);
+        else if (Map* rpeMap = sMapMgr->CreateMap(ARATHI_RPE_MAP_ID, pCurrChar))
+        {
+            if (TransferAbortParams denyReason = rpeMap->CannotEnter(pCurrChar))
+                TC_LOG_ERROR("network", "Player {} requested Arathi RPE login but cannot enter map {} (reason {})",
+                    pCurrChar->GetGUID().ToString(), ARATHI_RPE_MAP_ID, uint32(denyReason.Reason));
+            else
+            {
+                pCurrChar->WorldRelocate(ARATHI_RPE_MAP_ID, ARATHI_RPE_POSITION_X, ARATHI_RPE_POSITION_Y,
+                    ARATHI_RPE_POSITION_Z, ARATHI_RPE_ORIENTATION);
+                pCurrChar->SetFallInformation(0, pCurrChar->GetPositionZ());
+                pCurrChar->ResetMap();
+                pCurrChar->SetMap(rpeMap);
+                pCurrChar->UpdatePositionData();
+
+                TC_LOG_DEBUG("network", "Player {} entering Arathi RPE map {} (GetMap={})",
+                    pCurrChar->GetGUID().ToString(), ARATHI_RPE_MAP_ID, pCurrChar->GetMap()->GetId());
+            }
+        }
+        else
+            TC_LOG_ERROR("network", "Player {} requested Arathi RPE login but CreateMap({}) failed",
+                pCurrChar->GetGUID().ToString(), ARATHI_RPE_MAP_ID);
     }
 
     if (!_timeSyncClockDeltaQueue->empty())
@@ -1651,6 +1753,81 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     sScriptMgr->OnPlayerLogin(pCurrChar, firstLogin);
 
     TC_METRIC_EVENT("player_events", "Login", pCurrChar->GetName());
+}
+
+// C_PlayerInfo.IsPlayerInRPE() (client Lua/UI) has no corresponding server-set field in this fork,
+// and Phase-K investigation (2026-08-21) confirmed there is none to add: three independent wire/RE
+// passes on the Alliance+Horde captures disproved PlayerFlags/PlayerFlagsEx as the backing (both
+// byte-identical between RPE and non-RPE snapshots), and this build's protocol-GENERATED
+// ActivePlayerData/PlayerData carry no RPE-named field at all - so a real retail RPE UpdateField
+// would have appeared in the generated struct and did not. IsPlayerInRPE() is therefore client-local
+// (the client latches it off its own RPE entry via CMSG_PLAYER_LOGIN.RPE / the Adventure-Guide
+// opcode), and there is nothing to set here or on exit. The client tutorial coaches are driven
+// client-side. If a live test ever shows a coach that genuinely fails to appear, the one remaining
+// probe is a targeted capture of an in-place RPE enter->leave toggle (no world change): its
+// SMSG_UPDATE_OBJECT changesMask would name the field, or name none (confirming client-local).
+// See I:/TrinityCore/content/.superpowers/sdd/CATCHUP_BLIZZLIKE_IMPLEMENTATION_PLAN/phk-rpe-*.md.
+//
+// Arathi Returning Player Experience: in-game entry point for the Adventure Guide's "Catch Up"
+// tile (CMSG_ENCOUNTER_JOURNAL_START_ARATHI_RPE, handled below), reusing the same eligibility
+// gate, map id and landing spot as the CMSG_PLAYER_LOGIN.RPE path in HandlePlayerLogin() above.
+//
+// The player is already fully in the world for this entry point (unlike HandlePlayerLogin, which
+// runs before AddPlayerToMap and does a manual WorldRelocate rebind). Retail does NOT hard-teleport
+// here - the tile makes the player CAST the launch spell 1260320 ("Teleport to Arathi Highlands"),
+// a ~10s cast whose SPELL_EFFECT_TELEPORT_UNITS effect performs the map transfer on completion
+// (destination from spell_target_position, content branch). Casting it (rather than TeleportTo)
+// reproduces the cast bar the player sees and lets the launch be interrupted/cancelled like retail.
+bool WorldSession::EnterArathiRpe(Player* player)
+{
+    if (!player)
+        return false;
+
+    if (player->GetMapId() == ARATHI_RPE_MAP_ID)
+        return true; // already there (e.g. tile clicked twice)
+
+    if (!IsArathiRpeEligible(time_t(player->m_playerData->LogoutTime)))
+    {
+        TC_LOG_ERROR("network", "Player {} requested Arathi RPE via encounter journal but is not eligible (LogoutTime={})",
+            player->GetGUID().ToString(), int64(player->m_playerData->LogoutTime));
+        return false;
+    }
+
+    if (!sMapStore.LookupEntry(ARATHI_RPE_MAP_ID))
+    {
+        TC_LOG_ERROR("network", "Player {} requested Arathi RPE via encounter journal but map {} is missing from Map.db2",
+            player->GetGUID().ToString(), ARATHI_RPE_MAP_ID);
+        return false;
+    }
+
+    // Untriggered self-cast: shows the cast bar and honours the spell's cast time; the teleport is
+    // the spell's own effect on successful completion.
+    SpellCastResult launchResult = player->CastSpell(player, ARATHI_RPE_LAUNCH_SPELL);
+    if (launchResult == SPELL_CAST_OK)
+        return true;
+
+    // Fallback: the launch spell could not start (e.g. spell 1260320 not present in the server's
+    // spell store because the DB2 was not imported). Hard-teleport so the player still reaches the
+    // experience rather than being stuck at the tile - they just miss the cast-bar flavour.
+    TC_LOG_ERROR("network", "Player {} Arathi RPE launch spell {} failed to cast ({}); falling back to direct teleport",
+        player->GetGUID().ToString(), ARATHI_RPE_LAUNCH_SPELL, uint32(launchResult));
+    return player->TeleportTo(ARATHI_RPE_MAP_ID, ARATHI_RPE_POSITION_X, ARATHI_RPE_POSITION_Y,
+        ARATHI_RPE_POSITION_Z, ARATHI_RPE_ORIENTATION);
+}
+
+void WorldSession::HandleEncounterJournalStartArathiRpe(WorldPackets::Character::EncounterJournalStartArathiRpe& /*encounterJournalStartArathiRpe*/)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    if (!EnterArathiRpe(player))
+        return;
+
+    // Quest 90882 is authored on the landing-pad questgivers on the content branch and is expected
+    // to auto-offer once the player is standing at the pad; nothing is force-granted here on
+    // purpose so that a questgiver-driven offer (gossip/greeting) is not double-added. If
+    // play-testing shows retail force-grants it instead, add player->AddQuest(...) here.
 }
 
 void WorldSession::SendFeatureSystemStatus()

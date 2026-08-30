@@ -186,6 +186,7 @@ void AddSC_zulgurub();
 void AddSC_eastern_kingdoms();
 //void AddSC_alterac_mountains();
 //void AddSC_arathi_highlands();
+void AddSC_arathi_highlands_rpe();
 void AddSC_blasted_lands();
 void AddSC_burning_steppes();
 void AddSC_dun_morogh();
@@ -393,6 +394,7 @@ void AddEasternKingdomsScripts()
     AddSC_eastern_kingdoms();
     //AddSC_alterac_mountains();
     //AddSC_arathi_highlands();
+    AddSC_arathi_highlands_rpe();
     AddSC_blasted_lands();
     AddSC_burning_steppes();
     AddSC_dun_morogh();

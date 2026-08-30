@@ -1,0 +1,33 @@
+-- ============================================================================
+-- CONTENT SLICE -- Arathi Catch-Up Experience :: Phase C creature/GO templates :: gameobject_template
+-- ============================================================================
+-- Branch: content   Path: sql/content/EasternKingdoms/ArathiHighlands/CatchUpExperience/
+-- Server mapID: 2927 (CORRECTED from 2796 -- real server map, verified from wire; uiMap 2451 display-only)
+-- Source bundle: C:/dumps/tcharvest/out/catchup_zone/zone_2796/ (TCHarvest self-serve capture)
+-- Sources used: addon_creature_template.sql, wdb_creature_template.sql,
+--   addon_creature_observed.txt (per-entry reaction), db2_creaturediff.sql
+--   (checked -- zero rows for any in-scope entry, no divergence to resolve),
+--   creature_template_gossip.sql (authoritative gossip MenuID), combatlog_creature_template_ainame.sql.
+-- CANDIDATE ONLY -- review before applying to any branch. Never applied to a live DB/realm.
+-- Idempotent (INSERT ... ON DUPLICATE KEY UPDATE -> re-apply safe).
+-- ============================================================================
+
+-- SECTION 5 -- gameobject_template : INTENTIONALLY EMPTY.
+--
+-- The TCHarvest capture for zone 2796 recovered NO Arathi-zone GameObjects in scope for
+-- this task. The two props named in the brief as candidate GOs -- the catapult and the
+-- pumpkin -- are NOT GameObjects at all in this capture: they are CREATURES
+-- (244956 Prized Pumpkin, 249269 Worn Catapult; both type=7, subname='questinteract'),
+-- authored in 10_creature_template.sql instead. db2_gameobjects.sql (995KB / large row
+-- count) exists in the bundle but produced no candidate rows filtered to zone 2796 for
+-- this quest content -- no in-scope GO rows were found to author here.
+--
+-- Per Requirement 6: do NOT invent GameObject rows. This file is deliberately left with
+-- no INSERT statements.
+--
+-- PHASE K RE-CAPTURE NOTE: if a future in-game pass identifies actual GameObject-type
+-- props in the Arathi Catch-Up Experience (breakable crates, harvest nodes, siege props,
+-- etc. distinct from the two questinteract creatures above), re-run TCHarvest against
+-- zone 2796 with GO capture enabled and add a follow-up slice here -- this file's name is
+-- reserved for that purpose.
+-- ============================================================================
