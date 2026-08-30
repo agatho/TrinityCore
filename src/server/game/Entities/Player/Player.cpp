@@ -269,6 +269,7 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
     m_drunkTimer = 0;
     m_deathTimer = 0;
     m_deathExpireTime = 0;
+    m_preferredGraveyardId = 0;
 
     for (uint8 j = 0; j < PLAYER_MAX_BATTLEGROUND_QUEUES; ++j)
     {
@@ -4942,7 +4943,16 @@ void Player::RepopAtGraveyard()
         closestGrave = sObjectMgr->GetWorldSafeLoc(instance->GetEntranceLocation());
 
     if (!closestGrave)
-        closestGrave = sObjectMgr->GetClosestGraveyard(*this, GetTeam(), this);
+    {
+        // Honor a player-chosen preferred graveyard, but only when it is actually a graveyard linked to the
+        // player's current zone (guards against a spoofed id); otherwise fall back to the nearest one.
+        if (m_preferredGraveyardId)
+            if (sObjectMgr->FindGraveyardData(m_preferredGraveyardId, GetZoneId()))
+                closestGrave = sObjectMgr->GetWorldSafeLoc(m_preferredGraveyardId);
+
+        if (!closestGrave)
+            closestGrave = sObjectMgr->GetClosestGraveyard(*this, GetTeam(), this);
+    }
 
     // stop countdown until repop
     m_deathTimer = 0;
@@ -28019,6 +28029,7 @@ void Player::SendInitialVisiblePackets(WorldObject* target) const
     if (Unit* targetUnit = target->ToUnit())
     {
         SendAurasForTarget(targetUnit);
+        targetUnit->SendResumeCastTo(this);
         if (targetUnit->IsAlive())
         {
             if (targetUnit->HasUnitState(UNIT_STATE_MELEE_ATTACKING) && targetUnit->GetVictim())
@@ -28217,7 +28228,24 @@ void Player::SetGroup(Group* group, int8 subgroup)
         m_group.setSubGroup((uint8)subgroup);
     }
 
+    // the incremental party state baseline only means anything to the group it was broadcast in
+    ResetPartyMemberState();
+
     UpdateObjectVisibility(false);
+}
+
+WorldPackets::Party::PartyMemberStatsSnapshot& Player::GetPartyMemberStateSnapshot()
+{
+    if (!m_partyMemberState)
+        m_partyMemberState = std::make_unique<WorldPackets::Party::PartyMemberStatsSnapshot>();
+
+    return *m_partyMemberState;
+}
+
+void Player::ResetPartyMemberState()
+{
+    m_partyMemberState.reset();
+    m_partyMemberStateRecipients.clear();
 }
 
 void Player::SendInitialPacketsBeforeAddToMap()
@@ -28319,6 +28347,8 @@ void Player::SendInitialPacketsBeforeAddToMap()
     m_reputationMgr->SendInitialReputations();
     /// SMSG_SETUP_CURRENCY
     SendCurrencies();
+    /// SMSG_REATTACH_RESURRECT - 12.x login sequence reattaches (or zeroes) pending resurrect state here
+    SendDirectMessage(WorldPackets::Misc::ReattachResurrect().Write());
     /// SMSG_EQUIPMENT_SET_LIST
     SendEquipmentSetList();
 
@@ -33777,6 +33807,69 @@ void Player::ApplyTraitEntryChanges(int32 editedConfigId, WorldPackets::Traits::
     }
 
     m_traitConfigStates[editedConfigId] = PLAYERSPELL_CHANGED;
+}
+
+void Player::ResetProfessionSpecialization(int32 identifier)
+{
+    // The client's identifier may be either the TraitConfig ID or the profession SkillLineID; match a Profession
+    // config on either so we never act on the wrong (or a combat) config.
+    UF::TraitConfig const* config = m_activePlayerData->TraitConfigs.FindIf([identifier](UF::TraitConfig const& c)
+    {
+        return static_cast<TraitConfigType>(*c.Type) == TraitConfigType::Profession
+            && (*c.ID == identifier || *c.SkillLineID == identifier);
+    }).second;
+    if (!config)
+        return;
+
+    int32 const configId = *config->ID;
+
+    // Refund the currency the player actually spent to fill this tree. Cost is linear in rank and granted (free)
+    // ranks were never paid for, so the refundable amount is the cost of (Rank - GrantedRanks) per entry.
+    std::vector<WorldPackets::Traits::TraitEntry> spentEntries;
+    for (int32 i = 0; i < std::ssize(config->Entries); ++i)
+    {
+        UF::TraitEntry const& entry = config->Entries[i];
+        int32 const paidRank = int32(entry.Rank) - int32(entry.GrantedRanks);
+        if (paidRank <= 0)
+            continue;
+
+        WorldPackets::Traits::TraitEntry& refundEntry = spentEntries.emplace_back();
+        refundEntry.TraitNodeID = entry.TraitNodeID;
+        refundEntry.TraitNodeEntryID = entry.TraitNodeEntryID;
+        refundEntry.Rank = paidRank;
+        refundEntry.GrantedRanks = 0;
+    }
+
+    std::map<int32, TraitMgr::SpentCurrency> refund;
+    TraitMgr::FillSpentCurrenciesMap(spentEntries, refund);
+    for (auto const& [traitCurrencyId, amount] : refund)
+    {
+        TraitCurrencyEntry const* traitCurrency = sTraitCurrencyStore.LookupEntry(traitCurrencyId);
+        if (!traitCurrency || amount.Total <= 0)
+            continue;
+
+        switch (traitCurrency->GetType())
+        {
+            case TraitCurrencyType::Gold:
+                ModifyMoney(amount.Total);
+                break;
+            case TraitCurrencyType::CurrencyTypesBased:
+                AddCurrency(traitCurrency->CurrencyTypesID, uint32(amount.Total), CurrencyGainSource::AzeriteRespec);
+                break;
+            default:
+                break;
+        }
+    }
+
+    // Reset the specialization tree: apply an empty copy of the config. UpdateTraitConfig removes every entry
+    // (unapplying the profession bonuses) and replicates the cleared config to the client. No gold cost is charged
+    // for the respec itself (the retail escalating cost is a follow-up); the knowledge refund above is exact.
+    WorldPackets::Traits::TraitConfig emptyConfig(*config);
+    emptyConfig.Entries.clear();
+    emptyConfig.SubTrees.clear();
+    UpdateTraitConfig(std::move(emptyConfig), 0, false);
+
+    m_traitConfigStates[configId] = PLAYERSPELL_CHANGED;
 }
 
 void Player::RenameTraitConfig(int32 editedConfigId, std::string&& newName)

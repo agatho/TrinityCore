@@ -299,4 +299,9 @@ void WorldSession::HandleTraitsTalentTestUnlearnSpells(WorldPackets::Traits::Tra
 {
     TC_LOG_DEBUG("network.opcode", "CMSG_TRAITS_TALENT_TEST_UNLEARN_SPELLS: Player '{}' ({}) - talent test mode is not implemented",
         _player->GetName(), _player->GetGUID().ToString());
+void WorldSession::HandleConfirmProfessionRespec(WorldPackets::Traits::ConfirmProfessionRespec const& confirmProfessionRespec)
+{
+    // Reset the profession's specialization tree and refund the knowledge the player spent on it. The identifier is
+    // matched against the player's own Profession trait configs, so an unknown/foreign value is a harmless no-op.
+    _player->ResetProfessionSpecialization(confirmProfessionRespec.SkillLineID);
 }

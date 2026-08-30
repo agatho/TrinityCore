@@ -312,7 +312,14 @@ void WorldSession::HandleMoveWorldportAck()
     }
 
     if (!seamlessTeleport)
+    {
         player->SendInitialPacketsAfterAddToMap();
+
+        // Any pending resurrect offer is void once the world port completes; 68275 sends the clear
+        // right after MOVE_UPDATE_TELEPORT on (non-seamless) map entry regardless of pending state.
+        player->ClearResurrectRequestData();
+        player->SendDirectMessage(WorldPackets::Misc::ClearResurrect().Write());
+    }
     else
     {
         player->UpdateVisibilityForPlayer();
@@ -1383,6 +1390,16 @@ void WorldSession::HandleTimeAdjustmentResponse(WorldPackets::Misc::TimeAdjustme
     // Layout-identical to CMSG_TIME_SYNC_RESPONSE and drawn from the same clock, so it feeds the
     // clock delta computation the same way. The scale factor is not echoed back.
     HandleTimeSync(timeAdjustmentResponse.SequenceIndex, timeAdjustmentResponse.ClientTime, timeAdjustmentResponse.GetReceivedTime());
+void WorldSession::HandleDiscardedTimeSyncAcks(WorldPackets::Misc::DiscardedTimeSyncAcks const& discardedTimeSyncAcks)
+{
+    // The client is telling us that it dropped the time sync work it still had queued, so nothing at
+    // or below this sequence index will ever be answered. Without this, those requests sit in
+    // _pendingTimeSyncRequests for the rest of the session - the map is only ever shrunk by a
+    // matching response or by ResetTimeSync - and every one of them is a sample we keep waiting for.
+    // The two special counters live at the top of the range and are deliberately out of reach of
+    // this sweep, which only ever walks up to a real sequence index.
+    _pendingTimeSyncRequests.erase(_pendingTimeSyncRequests.begin(),
+        _pendingTimeSyncRequests.upper_bound(discardedTimeSyncAcks.MaxSequenceIndex));
 }
 
 void WorldSession::HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd const& queuedMessagesEnd)
@@ -1462,6 +1479,11 @@ void WorldSession::HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck con
     _suspendCommsPendingSerial.reset();
 
     HandleTimeSync(SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER, suspendCommsAck.ClientTick, suspendCommsAck.GetRawPacket()->GetReceivedTime());
+void WorldSession::HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck const& suspendCommsAck)
+{
+    // Same shape and same clock as CMSG_TIME_SYNC_RESPONSE, so it is one more clock delta sample,
+    // taken at the earliest possible moment on the instance connection.
+    HandleTimeSync(suspendCommsAck.SerialNumber, suspendCommsAck.Timestamp, suspendCommsAck.GetRawPacket()->GetReceivedTime());
 }
 
 void WorldSession::HandleMoveInitActiveMoverComplete(WorldPackets::Movement::MoveInitActiveMoverComplete const& moveInitActiveMoverComplete)

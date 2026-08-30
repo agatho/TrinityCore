@@ -146,6 +146,7 @@ namespace WorldPackets
     namespace Party
     {
         enum class SummonRaidMemberValidateReason : uint8;
+        struct PartyMemberStatsSnapshot;
     }
 
     namespace Traits
@@ -1667,6 +1668,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         }
         bool IsBackpackAutoSortDisabled() const { return m_activePlayerData->BackpackAutoSortDisabled; }
         void SetBackpackAutoSortDisabled(bool disabled) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::BackpackAutoSortDisabled), disabled); }
+        void SetSortBagsRightToLeft(bool enable) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::SortBagsRightToLeft), enable); }
+        void SetInsertItemsLeftToRight(bool enable) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::InsertItemsLeftToRight), enable); }
         bool IsBackpackSellJunkDisabled() const { return m_activePlayerData->BackpackSellJunkDisabled; }
         void SetBackpackSellJunkDisabled(bool disabled) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::BackpackSellJunkDisabled), disabled); }
         bool IsBankAutoSortDisabled() const { return m_activePlayerData->BankAutoSortDisabled; }
@@ -2212,6 +2215,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void RenameTraitConfig(int32 editedConfigId, std::string&& newName);
         void DeleteTraitConfig(int32 deletedConfigId);
         void SetFrozenPerksProgramVendorItem(WorldPackets::PerksProgram::PerksVendorItem const* item);   // nullptr clears the Trading Post freeze
+        void ResetProfessionSpecialization(int32 identifier);   // profession respec: refund spent knowledge + clear the tree
         void ApplyTraitConfig(int32 configId, bool apply);
         void ApplyTraitEntry(int32 traitNodeEntryId, int32 rank, int32 grantedRanks, bool apply);
         void SyncGrantedTraitEntries(int32 configId);   // retro-grant: pull new TraitCond::Granted entries/ranks into an existing config
@@ -2502,6 +2506,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void ResurrectPlayer(float restore_percent, bool applySickness = false);
         void BuildPlayerRepop();
         void RepopAtGraveyard();
+        void SetPreferredGraveyard(uint32 graveyardId) { m_preferredGraveyardId = graveyardId; }
 
         void DurabilityLossAll(double percent, bool inventory);
         void DurabilityLoss(Item* item, double percent);
@@ -3052,6 +3057,10 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint32 GetGroupUpdateFlag() const { return m_groupUpdateMask; }
         void SetGroupUpdateFlag(uint32 flag) { m_groupUpdateMask |= flag; }
         void RemoveGroupUpdateFlag(uint32 flag) { m_groupUpdateMask &= ~flag; }
+        // state last broadcast to out of range party members, and who already holds it
+        WorldPackets::Party::PartyMemberStatsSnapshot& GetPartyMemberStateSnapshot();
+        GuidSet& GetPartyMemberStateRecipients() { return m_partyMemberStateRecipients; }
+        void ResetPartyMemberState();
         void SetPartyType(GroupCategory category, uint8 type);
         void ResetGroupUpdateSequenceIfNeeded(Group const* group);
         int32 NextGroupUpdateSequenceNumber(GroupCategory category);
@@ -3798,6 +3807,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         uint32 m_deathTimer;
         time_t m_deathExpireTime;
+        uint32 m_preferredGraveyardId;
 
         uint32 m_WeaponProficiency;
         uint32 m_ArmorProficiency;
@@ -3818,6 +3828,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         GroupReference m_originalGroup;
         Group* m_groupInvite;
         uint32 m_groupUpdateMask;
+        std::unique_ptr<WorldPackets::Party::PartyMemberStatsSnapshot> m_partyMemberState;
+        GuidSet m_partyMemberStateRecipients;
         bool m_bPassOnGroupLoot;
         std::array<GroupUpdateCounter, 2> m_groupUpdateSequences;
 

@@ -19,6 +19,7 @@
 #define TRINITYCORE_TRAIT_PACKETS_H
 
 #include "Packet.h"
+#include "ObjectGuid.h"
 #include "TraitPacketsCommon.h"
 
 namespace WorldPackets::Traits
@@ -169,6 +170,20 @@ public:
     int32 ConfigID = 0;
     bool UsesShared = false;
     bool IsLastSelectedSavedConfig = false;
+};
+
+// CMSG_CONFIRM_PROFESSION_RESPEC (0x3A00CA). Serializer sub_7FF729146FF0 writes { uint32; PackedGuid }. The uint32
+// identifies the profession specialization to reset -- resolved against the player's own Profession trait configs
+// (it may be either the TraitConfig ID or the SkillLineID, so both are matched). NpcGUID is the crafting trainer.
+class ConfirmProfessionRespec final : public ClientPacket
+{
+public:
+    explicit ConfirmProfessionRespec(WorldPacket&& packet) : ClientPacket(CMSG_CONFIRM_PROFESSION_RESPEC, std::move(packet)) { }
+
+    void Read() override;
+
+    int32 SkillLineID = 0;
+    ObjectGuid NpcGUID;
 };
 }
 

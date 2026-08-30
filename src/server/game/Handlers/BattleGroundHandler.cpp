@@ -1522,6 +1522,11 @@ void WorldSession::HandleRequestScheduledPvpInfo(WorldPackets::Battleground::Req
         info.SecondsUntilNextChange = nextChange > now ? uint32(nextChange - now) : uint32(WEEK);
     }
 
+void WorldSession::HandleRequestScheduledPvpInfo(WorldPackets::Battleground::RequestScheduledPvpInfo& /*packet*/)
+{
+    // No PvP-event scheduler in core: answer with an all-inactive response (no scheduled PvP event), mirroring the
+    // default-response pattern of HandleRequestRatedPvpInfo. Clears the client's scheduled-PvP query state.
+    WorldPackets::Battleground::RequestScheduledPvpInfoResponse response;
     SendPacket(response.Write());
 }
 

@@ -173,6 +173,106 @@ namespace WorldPackets
             std::vector<Record> Data;
         };
 
+        // CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG (0x29001F): the client opens the account/warband currency
+        // "transfer history" panel. SNIFF-CONFIRMED empty body (size 4 = bare opcode). Answered with
+        // SMSG_CURRENCY_TRANSFER_LOG.
+        class GetCharacterCurrencyTransferLog final : public ClientPacket
+        {
+        public:
+            explicit GetCharacterCurrencyTransferLog(WorldPacket&& packet) : ClientPacket(CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // SMSG_CURRENCY_TRANSFER_LOG (0x420355): the history of account/warband currency transfers involving this
+        // character. Wire recovered byte-exact from a live 12.0.7 sniff (C:\sniff\b_pets12.0.7.pkt, a 3-entry
+        // capture parses to the byte, 0 leftover): { u32 count; count x entry }, entry =
+        // { PackedGuid Source; PackedGuid Dest; u32 CurrencyID; u32 Quantity; u32 Field3; u64 TransferTime }.
+        // (CurrencyID was a constant 1792 across the capture; Quantity/Field3 are the two per-transfer amounts —
+        // exact roles not offline-confirmable but they are only written when real entries exist.) TrinityCore does
+        // not implement account currency transfer, so there is no transfer history to report and the reply is a bare
+        // header (count 0) — the truthful "no transfers" answer, which clears the client's transfer-history panel.
+        class CurrencyTransferLog final : public ServerPacket
+        {
+        public:
+            struct Entry
+            {
+                ObjectGuid Source;
+                ObjectGuid Dest;
+                int32 CurrencyID = 0;
+                int32 Quantity = 0;
+                int32 Field3 = 0;
+                uint64 TransferTime = 0;
+            };
+
+            explicit CurrencyTransferLog() : ServerPacket(SMSG_CURRENCY_TRANSFER_LOG, 4) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<Entry> Entries;
+        };
+
+        // CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS (0x29001F... 0x29001E): empty body; the client asks for
+        // every account character's currency totals (the warband currency view). Answered with
+        // SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS.
+        class RequestCurrencyDataForAccountCharacters final : public ClientPacket
+        {
+        public:
+            explicit RequestCurrencyDataForAccountCharacters(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS (0x420353): the per-account-character currency totals. Wire from the
+        // client reader (sub_7FF7290BB150): { uint32 count; count x { uint32 CurrencyID; PackedGuid Character;
+        // uint32 Quantity; uint32 WeeklyQuantity; uint32 MaxQuantity; bit }; bit trailing }. TrinityCore does not
+        // aggregate other characters' currencies for this view, so the reply is empty (count 0) -- the truthful "no
+        // account-character currency data", which clears the client's warband-currency panel.
+        class AccountCharacterCurrencyLists final : public ServerPacket
+        {
+        public:
+            struct CharacterCurrency
+            {
+                int32 CurrencyID = 0;
+                ObjectGuid Character;
+                uint32 Quantity = 0;
+                uint32 WeeklyQuantity = 0;
+                uint32 MaxQuantity = 0;
+                bool Flag = false;
+            };
+
+            explicit AccountCharacterCurrencyLists() : ServerPacket(SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS, 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<CharacterCurrency> Currencies;
+            bool TrailingFlag = false;
+        };
+
+        // SMSG_REATTACH_RESURRECT (0x4201F3): login-sequence resurrect-state reattach (sniff 68275:
+        // sent between SETUP_CURRENCY and ALL_ACHIEVEMENT_DATA; body is two zero bytes when no
+        // resurrect offer is pending, the only state captured).
+        class ReattachResurrect final : public ServerPacket
+        {
+        public:
+            explicit ReattachResurrect() : ServerPacket(SMSG_REATTACH_RESURRECT, 2) { }
+
+            WorldPacket const* Write() override;
+
+            uint8 Unknown1 = 0;
+            uint8 Unknown2 = 0;
+        };
+
+        // SMSG_CLEAR_RESURRECT (0x420013): empty body; sniff 68275 sends it right after the
+        // MOVE_UPDATE_TELEPORT on instance entry - any pending resurrect offer is void on map change.
+        class ClearResurrect final : public ServerPacket
+        {
+        public:
+            explicit ClearResurrect() : ServerPacket(SMSG_CLEAR_RESURRECT, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
         class ViolenceLevel final : public ClientPacket
         {
         public:
@@ -239,6 +339,8 @@ namespace WorldPackets
         // Client -> server. "Everything up to and including MaxSequenceIndex is settled." Always
         // follows a CMSG_TIME_SYNC_RESPONSE_DROPPED (0x1896BA9), and in the recordings it always sits
         // immediately before the client restarts its counter at 0. Writer 0x69ADA0.
+        // Sent when the client throws away time sync work it had queued, typically around a map
+        // transfer. Everything up to and including MaxSequenceIndex will never be answered.
         class DiscardedTimeSyncAcks final : public ClientPacket
         {
         public:
@@ -383,6 +485,48 @@ namespace WorldPackets
             int16 DifficultyID = 0;
         };
 
+        // Values recovered from the 12.0.7 client's own game-error table (the handler indexes it
+        // with these ids and each entry names one ERR_DIFFICULTY_* string), so the names below are
+        // the client's, not invented. Which trailing fields are present depends on the value -
+        // see ChangePlayerDifficultyResult::Write.
+        enum class ChangePlayerDifficultyResultCode : uint8
+        {
+            Cooldown                        = 0,    // ERR_DIFFICULTY_CHANGE_COOLDOWN_S, or
+                                                    // ERR_DIFFICULTY_CHANGE_COMBAT_COOLDOWN_S when InCombat is set
+            WorldState                      = 1,    // ERR_DIFFICULTY_CHANGE_WORLDSTATE
+            Encounter                       = 2,    // ERR_DIFFICULTY_CHANGE_ENCOUNTER
+            Combat                          = 3,    // ERR_DIFFICULTY_CHANGE_COMBAT
+            PlayerBusy                      = 4,    // ERR_DIFFICULTY_CHANGE_PLAYER_BUSY
+            PlayerOnVehicle                 = 5,    // ERR_DIFFICULTY_CHANGE_PLAYER_ON_VEHICLE
+            Pending                         = 6,    // no error text; client arms a deadline at now + Cooldown
+            AlreadyStarted                  = 7,    // ERR_DIFFICULTY_CHANGE_ALREADY_STARTED
+            MapDifficultyMessage            = 8,    // client displays MapDifficulty.db2 Message_lang of MapDifficultyID
+            OtherHeroic                     = 9,    // ERR_DIFFICULTY_CHANGE_OTHER_HEROIC_S, %s = name of PlayerGUID
+            HeroicInstanceAlreadyRunning    = 10,   // ERR_DIFFICULTY_CHANGE_HEROIC_INSTANCE_ALREADY_RUNNING
+            DisabledInLFG                   = 11,   // ERR_DIFFICULTY_DISABLED_IN_LFG
+            Success                         = 12    // client stores DifficultyID if MapID is the map it is on
+        };
+
+        // Layout taken from the client's deserializer, which switches on Result to decide what else
+        // to read; both captured 12.0.7 bodies re-encode byte for byte through it (Result 12 with
+        // MapID 2526 + DifficultyID 8, and Result 6 with a negative Cooldown).
+        class ChangePlayerDifficultyResult final : public ServerPacket
+        {
+        public:
+            explicit ChangePlayerDifficultyResult(ChangePlayerDifficultyResultCode result)
+                : ServerPacket(SMSG_CHANGE_PLAYER_DIFFICULTY_RESULT, 1 + 8), Result(result) { }
+
+            WorldPacket const* Write() override;
+
+            ChangePlayerDifficultyResultCode Result;
+            bool InCombat = false;                  // only read for Cooldown and Pending
+            int64 Cooldown = 0;                     // seconds; only for Cooldown and Pending
+            int32 MapID = 0;                        // only for Success
+            uint16 DifficultyID = 0;                // only for Success
+            int32 MapDifficultyID = 0;              // only for MapDifficultyMessage
+            ObjectGuid PlayerGUID;                  // only for OtherHeroic
+        };
+
         class DungeonDifficultySet final : public ServerPacket
         {
         public:
@@ -461,6 +605,26 @@ namespace WorldPackets
             void Read() override;
 
             bool CheckInstance = false;
+        };
+
+        // Empty client request sent when the client believes the player is wrongly stuck in combat.
+        class ReportStuckInCombat final : public ClientPacket
+        {
+        public:
+            explicit ReportStuckInCombat(WorldPacket&& packet) : ClientPacket(CMSG_REPORT_STUCK_IN_COMBAT, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // Player chooses which graveyard (WorldSafeLocs id) they prefer to resurrect at in the current zone.
+        class SetPreferredCemetery final : public ClientPacket
+        {
+        public:
+            explicit SetPreferredCemetery(WorldPacket&& packet) : ClientPacket(CMSG_SET_PREFERRED_CEMETERY, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 CemeteryID = 0;
         };
 
         class RequestCemeteryList final : public ClientPacket
@@ -1198,6 +1362,48 @@ namespace WorldPackets
             void Read() override;
 
             CountdownTimerType TimerType = {};
+        };
+
+        class DoCountdown final : public ClientPacket
+        {
+        public:
+            explicit DoCountdown(WorldPacket&& packet) : ClientPacket(CMSG_DO_COUNTDOWN, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 TotalTime = 0;       // countdown duration in seconds
+            Optional<uint8> Type;       // present only when the client sends a timer type
+            bool Flag = false;
+        };
+
+        class GetRemainingGameTime final : public ClientPacket
+        {
+        public:
+            explicit GetRemainingGameTime(WorldPacket&& packet) : ClientPacket(CMSG_GET_REMAINING_GAME_TIME, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class GetRemainingGameTimeResponse final : public ServerPacket
+        {
+        public:
+            explicit GetRemainingGameTimeResponse() : ServerPacket(SMSG_GET_REMAINING_GAME_TIME_RESPONSE, 4 + 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 SecondsRemaining = 0;
+            uint32 GameTimeParam = 0;
+            bool Unlimited = false;
+        };
+
+        class SetStopConversation final : public ClientPacket
+        {
+        public:
+            explicit SetStopConversation(WorldPacket&& packet) : ClientPacket(CMSG_SET_STOP_CONVERSATION, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid ConversationGUID;
         };
 
         class ConversationLineStarted final : public ClientPacket

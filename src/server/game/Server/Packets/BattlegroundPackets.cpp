@@ -468,6 +468,15 @@ WorldPacket const* RequestScheduledPvpInfoResponse::Write()
         _worldPacket << Bits<1>(SpecialEventBrawl->CanQueue);
         _worldPacket.FlushBits();
     }
+    _worldPacket << uint8(Field1);
+    _worldPacket << uint32(Field2);
+    _worldPacket << uint32(Field3);
+    _worldPacket << Bits<1>(Flag1);
+    _worldPacket.FlushBits();
+    _worldPacket << uint32(Field4);
+    _worldPacket << uint32(Field5);
+    _worldPacket << Bits<1>(Flag2);
+    _worldPacket.FlushBits();
 
     return &_worldPacket;
 }

@@ -24,6 +24,7 @@
 #include "MythicPlusPacketsCommon.h"
 #include "Optional.h"
 #include "Position.h"
+#include <array>
 
 class Player;
 struct RaidMarker;
@@ -246,6 +247,8 @@ namespace WorldPackets
         {
             uint32 Flags = 0u;
             uint16 Id = 0u;
+
+            friend bool operator==(PartyMemberPhase const& left, PartyMemberPhase const& right) = default;
         };
 
         struct PartyMemberPhaseStates
@@ -253,6 +256,8 @@ namespace WorldPackets
             uint32 PhaseShiftFlags = 0;
             ObjectGuid PersonalGUID;
             std::vector<PartyMemberPhase> List;
+
+            friend bool operator==(PartyMemberPhaseStates const& left, PartyMemberPhaseStates const& right) = default;
         };
 
         struct PartyMemberAuraStates
@@ -261,13 +266,17 @@ namespace WorldPackets
             uint16 Flags = 0;
             uint32 ActiveFlags = 0u;
             std::vector<float> Points;
+
+            friend bool operator==(PartyMemberAuraStates const& left, PartyMemberAuraStates const& right) = default;
         };
 
         struct PartyMemberPetStats
         {
             ObjectGuid GUID;
             std::string Name;
-            int16 ModelId = 0;
+            // display ids have long outgrown 16 bits (a hunter pet in our 12.0.7 captures carries
+            // 113609) and the wire field is 32 bits wide in both the full and the partial state
+            int32 ModelId = 0;
 
             int32 CurrentHealth = 0;
             int32 MaxHealth = 0;
@@ -327,6 +336,109 @@ namespace WorldPackets
             bool ForEnemy = false;
             ObjectGuid MemberGuid;
             PartyMemberStats MemberStats;
+        };
+
+        struct PartyMemberPosition
+        {
+            int16 X = 0;
+            int16 Y = 0;
+            int16 Z = 0;
+        };
+
+        // CTROptions with owning storage - CTROptions itself only borrows the player's update field data.
+        struct PartyMemberCTRState
+        {
+            std::vector<uint32> ConditionalFlags;
+            int8 FactionGroup = 0;
+            uint32 ChromieTimeExpansionMask = 0;
+        };
+
+        struct PartyMemberPetPartialStats
+        {
+            Optional<std::string> Name;
+            Optional<ObjectGuid> GUID;
+            Optional<int32> ModelId;
+            Optional<int32> CurrentHealth;
+            Optional<int32> MaxHealth;
+            Optional<std::vector<PartyMemberAuraStates>> Auras;
+
+            bool HasData() const { return Name || GUID || ModelId || CurrentHealth || MaxHealth || Auras; }
+        };
+
+        // Owning copy of the last PartyMemberStats broadcast to out of range party members.
+        // PartyMemberStats cannot be stored as-is because CTROptions::ConditionalFlags is a span into
+        // the player's update fields, which would dangle as soon as those are reallocated.
+        struct PartyMemberStatsSnapshot
+        {
+            bool Valid = false;
+
+            int8 PartyType[2] = { };
+            uint32 Status = 0;
+            uint8 PowerType = 0;
+            uint16 PowerDisplayID = 0;
+            int32 CurrentHealth = 0;
+            int32 MaxHealth = 0;
+            uint16 CurrentPower = 0;
+            uint16 MaxPower = 0;
+            uint16 Level = 0;
+            uint16 SpecID = 0;
+            uint16 ZoneID = 0;
+            uint16 WmoGroupID = 0;
+            uint32 WmoDoodadPlacementID = 0;
+            int16 PositionX = 0;
+            int16 PositionY = 0;
+            int16 PositionZ = 0;
+            int32 VehicleSeat = 0;
+
+            std::vector<PartyMemberAuraStates> Auras;
+            PartyMemberPhaseStates Phases;
+            Optional<PartyMemberPetStats> PetStats;
+            PartyMemberCTRState ChromieTime;
+
+            void Assign(PartyMemberStats const& stats);
+        };
+
+        enum class PartyMemberStateDelta : uint8
+        {
+            Unchanged,          // nothing worth sending
+            Partial,            // the difference fits in SMSG_PARTY_MEMBER_PARTIAL_STATE
+            RequiresFullState   // the difference cannot be expressed incrementally
+        };
+
+        // Incremental sibling of PartyMemberFullState. Opens with a three byte presence mask; only the
+        // fields whose bit is set follow, in mask order. The pet block is written before the member guid.
+        class PartyMemberPartialState final : public ServerPacket
+        {
+        public:
+            explicit PartyMemberPartialState() : ServerPacket(SMSG_PARTY_MEMBER_PARTIAL_STATE, 32) { }
+
+            WorldPacket const* Write() override;
+
+            // Fills in every field that differs from the previously broadcast state.
+            PartyMemberStateDelta InitializeChanged(PartyMemberStats const& current, PartyMemberStatsSnapshot const& previous);
+
+            bool ForEnemy = false;
+            ObjectGuid MemberGuid;
+
+            Optional<std::array<int8, 2>> PartyType;
+            Optional<uint32> Status;
+            Optional<uint8> PowerType;
+            Optional<uint16> PowerDisplayID;
+            Optional<int32> CurrentHealth;
+            Optional<int32> MaxHealth;
+            Optional<uint16> CurrentPower;
+            Optional<uint16> MaxPower;
+            Optional<uint16> Level;
+            Optional<uint16> SpecID;
+            Optional<uint16> ZoneID;
+            Optional<uint16> WmoGroupID;
+            Optional<uint32> WmoDoodadPlacementID;
+            Optional<PartyMemberPosition> Position;
+            Optional<int32> VehicleSeat;
+            Optional<std::vector<PartyMemberAuraStates>> Auras;
+            Optional<PartyMemberPetPartialStats> PetStats;
+            Optional<PartyMemberPhaseStates> Phases;
+            Optional<PartyMemberCTRState> ChromieTime;
         };
 
         class SetPartyLeader final : public ClientPacket

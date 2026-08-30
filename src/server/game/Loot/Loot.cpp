@@ -791,6 +791,47 @@ void Loot::NotifyMoneyRemoved(Map const* map)
     }
 }
 
+bool Loot::StartRoll(Map* map, uint32 lootListId)
+{
+    if (lootListId >= items.size())
+        return false;
+
+    // Already rolling on this item.
+    if (_rolls.find(lootListId) != _rolls.end())
+        return false;
+
+    uint16 maxEnchantingSkill = 0;
+    for (ObjectGuid allowedLooterGuid : _allowedLooters)
+        if (Player* allowedLooter = ObjectAccessor::GetPlayer(map, allowedLooterGuid))
+            maxEnchantingSkill = std::max(maxEnchantingSkill, allowedLooter->GetSkillValue(SKILL_ENCHANTING));
+
+    auto&& [itr, inserted] = _rolls.try_emplace(lootListId);
+    if (!itr->second.TryToStart(map, *this, lootListId, maxEnchantingSkill))
+    {
+        _rolls.erase(itr);
+        return false;
+    }
+
+    _changed = true;
+    return true;
+}
+
+bool Loot::CancelRoll(uint32 lootListId)
+{
+    auto itr = _rolls.find(lootListId);
+    if (itr == _rolls.end())
+        return false;
+
+    // Unblock the item so it returns to the master-loot pool (the normal end paths clear this, but tearing the
+    // roll down early does not). Erasing the roll runs ~LootRoll, which sends LootAllPassed to notify clients.
+    if (lootListId < items.size())
+        items[lootListId].is_blocked = false;
+
+    _rolls.erase(itr);
+    _changed = true;
+    return true;
+}
+
 void Loot::OnLootOpened(Map* map, Player* looter)
 {
     AddLooter(looter->GetGUID());

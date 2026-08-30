@@ -444,5 +444,6 @@ void LogStreamingError::Read()
     // of this field has to do the same, because this Read deliberately does not.
     _worldPacket >> SizedString::BitsSize<LogStreamingError::MessageLengthBits>(Message);
     _worldPacket >> SizedString::Data<Strings::DontValidateUtf8>(Message);
+    _worldPacket >> Timestamp;
 }
 }

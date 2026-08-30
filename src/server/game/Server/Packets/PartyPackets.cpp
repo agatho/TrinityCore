@@ -25,6 +25,7 @@
 #include "SpellAuraEffects.h"
 #include "SpellAuras.h"
 #include "Vehicle.h"
+#include <algorithm>
 
 namespace WorldPackets::Party
 {
@@ -347,6 +348,296 @@ WorldPacket const* PartyMemberFullState::Write()
 
     _worldPacket << MemberGuid;
     _worldPacket << MemberStats;
+
+    return &_worldPacket;
+}
+
+void PartyMemberStatsSnapshot::Assign(PartyMemberStats const& stats)
+{
+    Valid = true;
+
+    PartyType[0] = stats.PartyType[0];
+    PartyType[1] = stats.PartyType[1];
+    Status = stats.Status;
+    PowerType = stats.PowerType;
+    PowerDisplayID = stats.PowerDisplayID;
+    CurrentHealth = stats.CurrentHealth;
+    MaxHealth = stats.MaxHealth;
+    CurrentPower = stats.CurrentPower;
+    MaxPower = stats.MaxPower;
+    Level = stats.Level;
+    SpecID = stats.SpecID;
+    ZoneID = stats.ZoneID;
+    WmoGroupID = stats.WmoGroupID;
+    WmoDoodadPlacementID = stats.WmoDoodadPlacementID;
+    PositionX = stats.PositionX;
+    PositionY = stats.PositionY;
+    PositionZ = stats.PositionZ;
+    VehicleSeat = stats.VehicleSeat;
+
+    Auras = stats.Auras;
+    Phases = stats.Phases;
+    PetStats = stats.PetStats;
+
+    ChromieTime.ConditionalFlags.assign(stats.ChromieTime.ConditionalFlags.begin(), stats.ChromieTime.ConditionalFlags.end());
+    ChromieTime.FactionGroup = stats.ChromieTime.FactionGroup;
+    ChromieTime.ChromieTimeExpansionMask = stats.ChromieTime.ChromieTimeExpansionMask;
+}
+
+PartyMemberStateDelta PartyMemberPartialState::InitializeChanged(PartyMemberStats const& current, PartyMemberStatsSnapshot const& previous)
+{
+    // no baseline to diff against - the recipient needs the whole state
+    if (!previous.Valid)
+        return PartyMemberStateDelta::RequiresFullState;
+
+    // a pet that went away cannot be expressed here: the pet bit means "pet data included", not
+    // "pet exists", so there is no way to tell the client to drop the pet it already has
+    if (previous.PetStats && !current.PetStats)
+        return PartyMemberStateDelta::RequiresFullState;
+
+    if (current.PartyType[0] != previous.PartyType[0] || current.PartyType[1] != previous.PartyType[1])
+        PartyType = std::array<int8, 2>{ { current.PartyType[0], current.PartyType[1] } };
+
+    if (current.Status != previous.Status)
+        Status = current.Status;
+
+    if (current.PowerType != previous.PowerType)
+        PowerType = current.PowerType;
+
+    if (current.PowerDisplayID != previous.PowerDisplayID)
+        PowerDisplayID = current.PowerDisplayID;
+
+    if (current.CurrentHealth != previous.CurrentHealth)
+        CurrentHealth = current.CurrentHealth;
+
+    if (current.MaxHealth != previous.MaxHealth)
+        MaxHealth = current.MaxHealth;
+
+    if (current.CurrentPower != previous.CurrentPower)
+        CurrentPower = current.CurrentPower;
+
+    if (current.MaxPower != previous.MaxPower)
+        MaxPower = current.MaxPower;
+
+    if (current.Level != previous.Level)
+        Level = current.Level;
+
+    if (current.SpecID != previous.SpecID)
+        SpecID = current.SpecID;
+
+    if (current.ZoneID != previous.ZoneID)
+        ZoneID = current.ZoneID;
+
+    if (current.WmoGroupID != previous.WmoGroupID)
+        WmoGroupID = current.WmoGroupID;
+
+    if (current.WmoDoodadPlacementID != previous.WmoDoodadPlacementID)
+        WmoDoodadPlacementID = current.WmoDoodadPlacementID;
+
+    // the three coordinates share a single presence bit
+    if (current.PositionX != previous.PositionX || current.PositionY != previous.PositionY || current.PositionZ != previous.PositionZ)
+        Position = PartyMemberPosition{ current.PositionX, current.PositionY, current.PositionZ };
+
+    if (current.VehicleSeat != previous.VehicleSeat)
+        VehicleSeat = current.VehicleSeat;
+
+    // lists are all or nothing - there is no per element delta on the wire
+    if (current.Auras != previous.Auras)
+        Auras = current.Auras;
+
+    if (current.Phases != previous.Phases)
+        Phases = current.Phases;
+
+    if (current.PetStats)
+    {
+        PartyMemberPetStats const& pet = *current.PetStats;
+        PartyMemberPetStats const* oldPet = previous.PetStats ? &*previous.PetStats : nullptr;
+        PartyMemberPetPartialStats partialPet;
+
+        if (!oldPet || pet.Name != oldPet->Name)
+            partialPet.Name = pet.Name;
+
+        if (!oldPet || pet.GUID != oldPet->GUID)
+            partialPet.GUID = pet.GUID;
+
+        if (!oldPet || pet.ModelId != oldPet->ModelId)
+            partialPet.ModelId = pet.ModelId;
+
+        if (!oldPet || pet.CurrentHealth != oldPet->CurrentHealth)
+            partialPet.CurrentHealth = pet.CurrentHealth;
+
+        if (!oldPet || pet.MaxHealth != oldPet->MaxHealth)
+            partialPet.MaxHealth = pet.MaxHealth;
+
+        if (!oldPet || pet.Auras != oldPet->Auras)
+            partialPet.Auras = pet.Auras;
+
+        if (partialPet.HasData())
+            PetStats = std::move(partialPet);
+    }
+
+    if (current.ChromieTime.FactionGroup != previous.ChromieTime.FactionGroup
+        || current.ChromieTime.ChromieTimeExpansionMask != previous.ChromieTime.ChromieTimeExpansionMask
+        || !std::equal(current.ChromieTime.ConditionalFlags.begin(), current.ChromieTime.ConditionalFlags.end(),
+            previous.ChromieTime.ConditionalFlags.begin(), previous.ChromieTime.ConditionalFlags.end()))
+    {
+        PartyMemberCTRState& ctrOptions = ChromieTime.emplace();
+        ctrOptions.ConditionalFlags.assign(current.ChromieTime.ConditionalFlags.begin(), current.ChromieTime.ConditionalFlags.end());
+        ctrOptions.FactionGroup = current.ChromieTime.FactionGroup;
+        ctrOptions.ChromieTimeExpansionMask = current.ChromieTime.ChromieTimeExpansionMask;
+    }
+
+    bool const anything = PartyType || Status || PowerType || PowerDisplayID || CurrentHealth || MaxHealth
+        || CurrentPower || MaxPower || Level || SpecID || ZoneID || WmoGroupID || WmoDoodadPlacementID
+        || Position || VehicleSeat || Auras || PetStats || Phases || ChromieTime;
+
+    return anything ? PartyMemberStateDelta::Partial : PartyMemberStateDelta::Unchanged;
+}
+
+WorldPacket const* PartyMemberPartialState::Write()
+{
+    uint8 mask[3] = { };
+
+    if (ForEnemy)                   mask[0] |= 0x80;
+    if (PartyType)                  mask[0] |= 0x10;
+    if (Status)                     mask[0] |= 0x08;
+    if (PowerType)                  mask[0] |= 0x04;
+    if (PowerDisplayID)             mask[0] |= 0x02;
+    if (CurrentHealth)              mask[0] |= 0x01;
+
+    if (MaxHealth)                  mask[1] |= 0x80;
+    if (CurrentPower)               mask[1] |= 0x40;
+    if (MaxPower)                   mask[1] |= 0x20;
+    if (Level)                      mask[1] |= 0x10;
+    if (SpecID)                     mask[1] |= 0x08;
+    if (ZoneID)                     mask[1] |= 0x04;
+    if (WmoGroupID)                 mask[1] |= 0x02;
+    if (WmoDoodadPlacementID)       mask[1] |= 0x01;
+
+    if (Position)                   mask[2] |= 0x80;
+    if (VehicleSeat)                mask[2] |= 0x40;
+    if (Auras)                      mask[2] |= 0x20;
+    if (PetStats)                   mask[2] |= 0x10;
+    if (Phases)                     mask[2] |= 0x08;
+    if (ChromieTime)                mask[2] |= 0x04;
+
+    _worldPacket << uint8(mask[0]);
+    _worldPacket << uint8(mask[1]);
+    _worldPacket << uint8(mask[2]);
+
+    // the pet block is read before the member guid
+    if (PetStats)
+    {
+        uint8 petMask = 0;
+        if (PetStats->GUID)             petMask |= 0x80;
+        if (PetStats->Name)             petMask |= 0x40;
+        if (PetStats->ModelId)          petMask |= 0x20;
+        if (PetStats->CurrentHealth)    petMask |= 0x10;
+        if (PetStats->MaxHealth)        petMask |= 0x08;
+        if (PetStats->Auras)            petMask |= 0x04;
+
+        _worldPacket << uint8(petMask);
+
+        // name is a plain length byte followed by that many characters, no terminator
+        if (PetStats->Name)
+        {
+            uint8 const nameLength = uint8(std::min<std::size_t>(PetStats->Name->length(), 0xFF));
+            _worldPacket << uint8(nameLength);
+            _worldPacket.append(PetStats->Name->c_str(), nameLength);
+        }
+
+        if (PetStats->GUID)
+            _worldPacket << *PetStats->GUID;
+
+        if (PetStats->ModelId)
+            _worldPacket << int32(*PetStats->ModelId);
+
+        if (PetStats->CurrentHealth)
+            _worldPacket << int32(*PetStats->CurrentHealth);
+
+        if (PetStats->MaxHealth)
+            _worldPacket << int32(*PetStats->MaxHealth);
+
+        if (PetStats->Auras)
+        {
+            _worldPacket << Size<uint32>(*PetStats->Auras);
+            for (PartyMemberAuraStates const& aura : *PetStats->Auras)
+                _worldPacket << aura;
+        }
+    }
+
+    _worldPacket << MemberGuid;
+
+    if (PartyType)
+    {
+        _worldPacket << uint8((*PartyType)[0]);
+        _worldPacket << uint8((*PartyType)[1]);
+    }
+
+    if (Status)
+        _worldPacket << uint32(*Status);
+
+    if (PowerType)
+        _worldPacket << uint8(*PowerType);
+
+    if (PowerDisplayID)
+        _worldPacket << uint16(*PowerDisplayID);
+
+    if (CurrentHealth)
+        _worldPacket << int32(*CurrentHealth);
+
+    if (MaxHealth)
+        _worldPacket << int32(*MaxHealth);
+
+    if (CurrentPower)
+        _worldPacket << uint16(*CurrentPower);
+
+    if (MaxPower)
+        _worldPacket << uint16(*MaxPower);
+
+    if (Level)
+        _worldPacket << uint16(*Level);
+
+    if (SpecID)
+        _worldPacket << uint16(*SpecID);
+
+    if (ZoneID)
+        _worldPacket << uint16(*ZoneID);
+
+    if (WmoGroupID)
+        _worldPacket << uint16(*WmoGroupID);
+
+    if (WmoDoodadPlacementID)
+        _worldPacket << uint32(*WmoDoodadPlacementID);
+
+    if (Position)
+    {
+        _worldPacket << int16(Position->X);
+        _worldPacket << int16(Position->Y);
+        _worldPacket << int16(Position->Z);
+    }
+
+    if (VehicleSeat)
+        _worldPacket << int32(*VehicleSeat);
+
+    if (Auras)
+    {
+        _worldPacket << Size<uint32>(*Auras);
+        for (PartyMemberAuraStates const& aura : *Auras)
+            _worldPacket << aura;
+    }
+
+    if (Phases)
+        _worldPacket << *Phases;
+
+    if (ChromieTime)
+    {
+        CTROptions ctrOptions;
+        ctrOptions.ConditionalFlags = ChromieTime->ConditionalFlags;
+        ctrOptions.FactionGroup = ChromieTime->FactionGroup;
+        ctrOptions.ChromieTimeExpansionMask = ChromieTime->ChromieTimeExpansionMask;
+        _worldPacket << ctrOptions;
+    }
 
     return &_worldPacket;
 }

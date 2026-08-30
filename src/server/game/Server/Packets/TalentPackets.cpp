@@ -112,6 +112,11 @@ void LearnTalents::Read()
         _worldPacket >> talent;
 }
 
+void UnlearnSpecialization::Read()
+{
+    _worldPacket >> SpecGroupIndex;
+}
+
 WorldPacket const* RespecWipeConfirm::Write()
 {
     _worldPacket << int8(RespecType);

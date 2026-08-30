@@ -311,6 +311,29 @@ namespace WorldPackets
             WorldPacket const* Write() override { return &_worldPacket; }
         };
 
+        // Opens the window that SMSG_RESUME_COMMS closes. The serial is opaque to the client - it is
+        // written straight back in the ack - and exists only to pair the two.
+        class SuspendComms final : public ServerPacket
+        {
+        public:
+            explicit SuspendComms(ConnectionType connection) : ServerPacket(SMSG_SUSPEND_COMMS, 4, connection) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 SerialNumber = 0;
+        };
+
+        class SuspendCommsAck final : public ClientPacket
+        {
+        public:
+            explicit SuspendCommsAck(WorldPacket&& packet) : ClientPacket(CMSG_SUSPEND_COMMS_ACK, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 SerialNumber = 0;    ///< echoed back from SMSG_SUSPEND_COMMS
+            uint32 Timestamp = 0;       ///< client ticks in ms, same clock as CMSG_TIME_SYNC_RESPONSE
+        };
+
         class ConnectToFailed final : public EarlyProcessClientPacket<ConnectToFailed>
         {
         public:

@@ -143,6 +143,15 @@ void WorldSession::HandleChatMessageEmoteOpcode(WorldPackets::Chat::ChatMessageE
     HandleChatMessage(CHAT_MSG_EMOTE, LANG_UNIVERSAL, chatMessageEmote.Text);
 }
 
+// Tells the client that the group channel it addressed does not exist for it right now. The single
+// retail sample carries the requested chat type verbatim (CHAT_MSG_PARTY), which is what the client
+// needs to know which chat frame to complain about.
+void WorldSession::SendChatNotInParty(ChatMsg type)
+{
+    WorldPackets::Chat::ChatNotInParty chatNotInParty(type);
+    SendPacket(chatNotInParty.Write());
+}
+
 ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string msg, std::string target /*= ""*/, Optional<ObjectGuid> targetGuid /*= {}*/)
 {
     Player* sender = GetPlayer();
@@ -461,6 +470,7 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
                 if (!group || group->isBGGroup())
                 {
                     SendChatNotInParty(type);   // CHAT_MSG_PARTY -> GameError 105 ERR_NOT_IN_GROUP
+                    SendChatNotInParty(type);
                     return ChatMessageResult::NotInGroup;
                 }
             }
@@ -507,6 +517,7 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
             if (!group || !group->isRaidGroup() || group->isBGGroup())
             {
                 SendChatNotInParty(type);   // CHAT_MSG_RAID -> GameError 552 ERR_NOT_IN_RAID
+                SendChatNotInParty(type);
                 return ChatMessageResult::NotInGroup;
             }
 
@@ -526,6 +537,7 @@ ChatMessageResult WorldSession::HandleChatMessage(ChatMsg type, Language lang, s
             if (!group)
             {
                 SendChatNotInParty(type);   // CHAT_MSG_RAID_WARNING -> GameError 552 ERR_NOT_IN_RAID
+                SendChatNotInParty(type);
                 return ChatMessageResult::NotInGroup;
             }
 
@@ -738,6 +750,9 @@ void WorldSession::HandleChatAddonMessage(ChatMsg type, std::string prefix, std:
                     // client side, as the synchronous return value
                     // Enum.SendAddonMessageResult.NotInGroup of C_ChatInfo.SendAddonMessage
                     // (ChatConstantsDocumentation.lua:144).
+                    // this is the case retail was observed answering: an addon kept talking to PARTY
+                    // after the group broke up, and got told the channel is not available
+                    SendChatNotInParty(type);
                     break;
                 }
 

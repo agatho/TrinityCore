@@ -397,7 +397,7 @@ class TC_GAME_API Group
         void SendUpdate() const;
         void SendUpdateToPlayer(Player* player, MemberSlot const* slot = nullptr) const;
         void SendUpdateDestroyGroupToPlayer(Player* player) const;
-        void UpdatePlayerOutOfRange(Player const* player) const;
+        void UpdatePlayerOutOfRange(Player* player) const;
 
         template<class Worker>
         void BroadcastWorker(Worker const& worker) const
