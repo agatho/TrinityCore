@@ -26,6 +26,12 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_REP_CLUB_FINDER_APPLICATION, "REPLACE INTO club_finder_application (postingId, playerGuid, comment, specs, status, lastUpdatedTime) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_CLUB_FINDER_APPLICATION, "DELETE FROM club_finder_application WHERE postingId = ? AND playerGuid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_CLUB_FINDER_POSTING_FLAGS, "UPDATE club_finder_posting SET displayFlags = ? WHERE postingId = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_SHOP_BOOST_TARGET, "SELECT account, class, race, level, inventorySlots FROM characters WHERE guid = ? AND deleteInfos_Name IS NULL", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_SHOP_BOOST_INVENTORY, "SELECT ci.slot, ci.item, ii.itemEntry FROM character_inventory ci INNER JOIN item_instance ii ON ii.guid = ci.item WHERE ci.guid = ? AND ci.bag = 0", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_UPD_SHOP_BOOST_CHARACTER, "UPDATE characters SET level = ?, xp = 0, primarySpecialization = ? WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_REP_SHOP_BOOST, "REPLACE INTO character_shop_boost (guid, productId, distributionId, specializationId, trial, boostedAt) VALUES (?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_SHOP_BOOST, "DELETE FROM character_shop_boost WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_SHOP_BOOST_ACCOUNT, "SELECT b.guid, b.trial FROM character_shop_boost b INNER JOIN characters c ON c.guid = b.guid WHERE c.account = ?", CONNECTION_ASYNC);
     if (!m_reconnecting)
         m_stmts.resize(MAX_CHARACTERDATABASE_STATEMENTS);
 
