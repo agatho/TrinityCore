@@ -396,13 +396,6 @@ WorldPacket const* ExpectedSpamRecords::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* ChatNotInParty::Write()
-{
-    _worldPacket << int32(ChatType);
-
-    return &_worldPacket;
-}
-
 WorldPacket const* CautionaryChatMessage::Write()
 {
     _worldPacket << SizedCString::BitsSize<9>(TargetName);

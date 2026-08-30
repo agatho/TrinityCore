@@ -199,17 +199,6 @@ void ChallengeModeMgr::ResolveActiveSeason()
     _activeSeasonId = uint32(sConfigMgr->GetIntDefault("ChallengeMode.SeasonId", 0));
     if (!_activeSeasonId)
     {
-        int32 bestExpansion = -1;
-        int32 bestStart = -1;
-        for (MythicPlusSeasonEntry const* season : sMythicPlusSeasonStore)
-        {
-            if (season->ExpansionLevel > bestExpansion
-                || (season->ExpansionLevel == bestExpansion && season->StartTimeEvent > bestStart))
-            {
-                bestExpansion = season->ExpansionLevel;
-                bestStart = season->StartTimeEvent;
-                _activeSeasonId = season->ID;
-            }
         // Auto-detect the latest-started season of the highest expansion. A live vault-granting season always has
         // MythicPlusSeasonRewardLevels rows; MythicPlusSeason also carries placeholder/event rows with no reward
         // data (e.g. Midnight has season 122 with the highest StartTimeEvent but zero reward levels, while the

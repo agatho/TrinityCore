@@ -955,13 +955,6 @@ WorldPacket const* StopElapsedTimer::Write()
 }
 
 
-WorldPacket const* StopTimer::Write()
-{
-    _worldPacket << int32(Type);
-
-    return &_worldPacket;
-}
-
 // Duration first, then the id - see the ElapsedTimer comment in MiscPackets.h.
 ByteBuffer& operator<<(ByteBuffer& data, ElapsedTimer const& timer)
 {
@@ -969,31 +962,6 @@ ByteBuffer& operator<<(ByteBuffer& data, ElapsedTimer const& timer)
     data << uint32(timer.TimerID);
 
     return data;
-}
-
-WorldPacket const* StartElapsedTimer::Write()
-{
-    _worldPacket << Timer;
-
-    return &_worldPacket;
-}
-
-WorldPacket const* StartElapsedTimers::Write()
-{
-    _worldPacket << uint32(Timers.size());
-    for (ElapsedTimer const& timer : Timers)
-        _worldPacket << timer;
-
-    return &_worldPacket;
-}
-
-WorldPacket const* StopElapsedTimer::Write()
-{
-    _worldPacket << uint32(TimerID);
-    _worldPacket.WriteBit(KeepTimer);
-    _worldPacket.FlushBits();
-
-    return &_worldPacket;
 }
 
 void QueryCountdownTimer::Read()
