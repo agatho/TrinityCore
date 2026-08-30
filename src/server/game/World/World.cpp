@@ -1599,6 +1599,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Reputation Spillover Data...");
     sObjectMgr->LoadReputationSpilloverTemplate();
 
+    TC_LOG_INFO("server.loading", "Loading Warband Reputation Factions...");
+    sObjectMgr->LoadWarbandReputationFactions();
+
     TC_LOG_INFO("server.loading", "Loading Points Of Interest Data...");
     sObjectMgr->LoadPointsOfInterest();
 
@@ -3560,6 +3563,46 @@ bool World::IsBattlePetJournalLockAcquired(ObjectGuid battlenetAccountGuid)
             return true;
 
     return false;
+}
+
+bool World::TryAcquireAccountInventoryLock(ObjectGuid battlenetAccountGuid, WorldSession* session)
+{
+    // Never reserve for an unlinked account (bnetId == 0): those collapse into one shared
+    // namespace, so a lock there would be meaningless and would let a bnet-0 session mutate.
+    if (battlenetAccountGuid.IsEmpty())
+        return false;
+
+    std::lock_guard<std::mutex> guard(m_accountInventoryLockMutex);
+    auto [it, inserted] = m_accountInventoryLockOwners.try_emplace(battlenetAccountGuid, session);
+    // Granted iff we just created the entry, or this session already owns it (idempotent).
+    return inserted || it->second == session;
+}
+
+void World::ReleaseAccountInventoryLock(ObjectGuid battlenetAccountGuid, WorldSession const* session)
+{
+    if (battlenetAccountGuid.IsEmpty())
+        return;
+
+    std::lock_guard<std::mutex> guard(m_accountInventoryLockMutex);
+    auto it = m_accountInventoryLockOwners.find(battlenetAccountGuid);
+    if (it != m_accountInventoryLockOwners.end() && it->second == session)
+        m_accountInventoryLockOwners.erase(it);
+}
+
+bool World::BeginCurrencyTransfer(ObjectGuid sourceCharacterGuid)
+{
+    if (sourceCharacterGuid.IsEmpty())
+        return false;
+
+    std::lock_guard<std::mutex> guard(m_currencyTransferMutex);
+    // Atomic test-and-set: succeeds only if no transfer from this source is already in flight.
+    return m_currencyTransfersInProgress.insert(sourceCharacterGuid).second;
+}
+
+void World::EndCurrencyTransfer(ObjectGuid sourceCharacterGuid)
+{
+    std::lock_guard<std::mutex> guard(m_currencyTransferMutex);
+    m_currencyTransfersInProgress.erase(sourceCharacterGuid);
 }
 
 bool World::IsPvPRealm() const

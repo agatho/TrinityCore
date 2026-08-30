@@ -450,6 +450,14 @@ TC_GAME_API extern DB2Storage<DecorXDecorSubcategoryEntry>          sDecorXDecor
 TC_GAME_API extern DB2Storage<DecorSubcategoryEntry>                sDecorSubcategoryStore;
 TC_GAME_API extern DB2Storage<DecorDyeSlotEntry>                    sDecorDyeSlotStore;
 TC_GAME_API extern DB2Storage<DecorCategoryEntry>                   sDecorCategoryStore;
+TC_GAME_API extern DB2Storage<WarbandScenePlacementEntry>           sWarbandScenePlacementStore;
+TC_GAME_API extern DB2Storage<WarbandSceneAnimationEntry>           sWarbandSceneAnimationStore;
+TC_GAME_API extern DB2Storage<WarbandSceneAnimChrSpecEntry>         sWarbandSceneAnimChrSpecStore;
+TC_GAME_API extern DB2Storage<WarbandScenePlacementFilterReqEntry>  sWarbandScenePlacementFilterReqStore;
+TC_GAME_API extern DB2Storage<WarbandScenePlacementOptionEntry>     sWarbandScenePlacementOptionStore;
+TC_GAME_API extern DB2Storage<WarbandScenePlcmntAnimOverrideEntry>  sWarbandScenePlcmntAnimOverrideStore;
+TC_GAME_API extern DB2Storage<WarbandPlacementDisplayInfoEntry>     sWarbandPlacementDisplayInfoStore;
+TC_GAME_API extern DB2Storage<WarbandSceneSourceInfoEntry>          sWarbandSceneSourceInfoStore;
 
 struct ClassPowerTypes
 {

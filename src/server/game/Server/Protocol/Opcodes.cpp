@@ -149,8 +149,8 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_ACCEPT_SOCIAL_CONTRACT,                             STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_ACCEPT_TRADE,                                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleAcceptTradeOpcode);
     DEFINE_HANDLER(CMSG_ACCEPT_WARGAME_INVITE,                              STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_ACCOUNT_BANK_DEPOSIT_MONEY,                         STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_ACCOUNT_BANK_WITHDRAW_MONEY,                        STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_ACCOUNT_BANK_DEPOSIT_MONEY,                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleAccountBankDepositMoney);
+    DEFINE_HANDLER(CMSG_ACCOUNT_BANK_WITHDRAW_MONEY,                        STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleAccountBankWithdrawMoney);
     DEFINE_HANDLER(CMSG_ACCOUNT_NOTIFICATION_ACKNOWLEDGED,                  STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_ACCOUNT_STORE_BEGIN_PURCHASE_OR_REFUND,             STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_ACTIVATE_SOULBIND,                                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleActivateSoulbind);
@@ -195,7 +195,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_AUTH_SESSION,                                       STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_EarlyProccess);
     DEFINE_HANDLER(CMSG_AUTOBANK_ITEM,                                      STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleAutoBankItemOpcode);
     DEFINE_HANDLER(CMSG_AUTOSTORE_BANK_ITEM,                                STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleAutoStoreBankItemOpcode);
-    DEFINE_HANDLER(CMSG_AUTO_DEPOSIT_ACCOUNT_BANK,                          STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_AUTO_DEPOSIT_ACCOUNT_BANK,                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleAutoDepositAccountBank);
     DEFINE_HANDLER(CMSG_AUTO_DEPOSIT_CHARACTER_BANK,                        STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleAutoDepositCharacterBank);
     DEFINE_HANDLER(CMSG_AUTO_EQUIP_ITEM,                                    STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleAutoEquipItemOpcode);
     DEFINE_HANDLER(CMSG_AUTO_EQUIP_ITEM_SLOT,                               STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleAutoEquipItemSlotOpcode);
@@ -496,7 +496,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_GET_ACCOUNT_NOTIFICATIONS,                          STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_GET_ALL_LICENSED_DECOR_QUANTITIES,                  STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_GET_AVAILABLE_INITIATIVE_REQUEST,                   STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG,                STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG,                STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGetCharacterCurrencyTransferLog);
     DEFINE_HANDLER(CMSG_GET_CLIENT_CHECKOUT_LICENSES,                       STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_GET_DECOR_REFUND_LIST,                              STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_GET_GARRISON_INFO,                                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGetGarrisonInfo);
@@ -987,7 +987,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_REQUEST_CHAT_LOGIN,                                 STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleRequestChatLogin);
     DEFINE_HANDLER(CMSG_REQUEST_COVENANT_CALLINGS,                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestCovenantCallings);
     DEFINE_HANDLER(CMSG_REQUEST_CROWD_CONTROL_SPELL,                        STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS,       STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS,       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestCurrencyDataForAccountCharacters);
     DEFINE_HANDLER(CMSG_REQUEST_GARRISON_TALENT_WORLD_QUEST_UNLOCKS,        STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestGarrisonTalentWorldQuestUnlocks);
     DEFINE_HANDLER(CMSG_REQUEST_GUILD_PARTY_STATE,                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGuildRequestPartyState);
     DEFINE_HANDLER(CMSG_REQUEST_GUILD_REWARDS_LIST,                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestGuildRewardsList);
@@ -1046,7 +1046,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_SEND_TEXT_EMOTE,                                    STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleTextEmoteOpcode);
     DEFINE_HANDLER(CMSG_SERVER_TIME_OFFSET_REQUEST,                         STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleServerTimeOffsetRequest);
     DEFINE_HANDLER(CMSG_SERVER_VALIDATION_SIGNATURE_REQUEST,                STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleServerValidationSignatureRequest);
-    DEFINE_HANDLER(CMSG_SETUP_WARBAND_GROUPS,                               STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_SETUP_WARBAND_GROUPS,                               STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleSetupWarbandGroups);
     DEFINE_HANDLER(CMSG_SET_ACTION_BAR_TOGGLES,                             STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleSetActionBarToggles);
     DEFINE_HANDLER(CMSG_SET_ACTION_BUTTON,                                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleSetActionButtonOpcode);
     DEFINE_HANDLER(CMSG_SET_ACTIVE_MOVER,                                   STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleSetActiveMoverOpcode);
@@ -1152,7 +1152,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_TRAINING_GROUNDS_JOIN,                              STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_TRAITS_COMMIT_CONFIG,                               STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleTraitsCommitConfig);
     DEFINE_HANDLER(CMSG_TRAITS_TALENT_TEST_UNLEARN_SPELLS,                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleTraitsTalentTestUnlearnSpells);
-    DEFINE_HANDLER(CMSG_TRANSFER_CURRENCY_FROM_ACCOUNT_CHARACTER,           STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_TRANSFER_CURRENCY_FROM_ACCOUNT_CHARACTER,           STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleTransferCurrencyFromAccountCharacter);
     DEFINE_HANDLER(CMSG_TRANSMOGRIFY_ITEMS,                                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleTransmogrifyItems);
     DEFINE_HANDLER(CMSG_TRANSMOG_OUTFIT_NEW,                                STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleTransmogOutfitNew);
     DEFINE_HANDLER(CMSG_TRANSMOG_OUTFIT_UPDATE_INFO,                        STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleTransmogOutfitUpdateInfo);
@@ -1206,7 +1206,7 @@ void OpcodeTable::InitializeServerOpcodes()
     ValidateAndSetServerOpcode(opcode, #opcode, status, con)
 
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_ABORT_NEW_WORLD,                                              STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS,                             STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS,                             STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_ACCOUNT_CONVERSION_STATE_UPDATE,                              STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_ACCOUNT_COSMETIC_ADDED,                                       STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_ACCOUNT_CRITERIA_UPDATE,                                      STATUS_NEVER,       CONNECTION_TYPE_REALM);
@@ -1526,8 +1526,8 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_CRITERIA_DELETED,                                             STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_CRITERIA_UPDATE,                                              STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_CROSSED_INEBRIATION_THRESHOLD,                                STATUS_NEVER,       CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_CURRENCY_TRANSFER_LOG,                                        STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_CURRENCY_TRANSFER_RESULT,                                     STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_CURRENCY_TRANSFER_LOG,                                        STATUS_NEVER,       CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_CURRENCY_TRANSFER_RESULT,                                     STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_CUSTOM_LOAD_SCREEN,                                           STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_DAILY_QUESTS_RESET,                                           STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_DAMAGE_CALC_LOG,                                              STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);

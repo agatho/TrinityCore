@@ -1650,22 +1650,22 @@ struct DurabilityCostsEntry
 struct DriveCapabilityEntry
 {
     uint32 ID;
-    float ForwardAcceleration;              // DB2 field 1 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[0]
-    float BackwardMaxSpeed;                 // DB2 field 2 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[10], used at offset 312 (backward max speed)
-    float IdleFriction;                     // DB2 field 3 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[12], used at offset 320 (friction when not driving)
-    float BackwardAcceleration;             // DB2 field 4 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[11], used at offset 316 (backward accel)
-    float Field_5;                          // DB2 field 5 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[13]
-    float Field_6;                          // DB2 field 6 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[16]
-    float Field_7;                          // DB2 field 7 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[14]
-    float Field_8;                          // DB2 field 8 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[17]
-    float Field_9;                          // DB2 field 9 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[18]
-    float Field_10;                         // DB2 field 10 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[19]
-    float Field_11;                         // DB2 field 11 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[1]
-    float Field_12;                         // DB2 field 12 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[2]
-    float Field_13;                         // DB2 field 13 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[3]
-    float Field_14;                         // DB2 field 14 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[4]
-    float Field_15;                         // DB2 field 15 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[5]
-    float Field_16;                         // DB2 field 16 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ v28[6]
+    float ForwardAcceleration;              // DB2 field 1 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[0]
+    float BackwardMaxSpeed;                 // DB2 field 2 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[10], used at offset 312 (backward max speed)
+    float IdleFriction;                     // DB2 field 3 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[12], used at offset 320 (friction when not driving)
+    float BackwardAcceleration;             // DB2 field 4 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[11], used at offset 316 (backward accel)
+    float Field_5;                          // DB2 field 5 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[13]
+    float Field_6;                          // DB2 field 6 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[16]
+    float Field_7;                          // DB2 field 7 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[14]
+    float Field_8;                          // DB2 field 8 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[17]
+    float Field_9;                          // DB2 field 9 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[18]
+    float Field_10;                         // DB2 field 10 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[19]
+    float Field_11;                         // DB2 field 11 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[1]
+    float Field_12;                         // DB2 field 12 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[2]
+    float Field_13;                         // DB2 field 13 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[3]
+    float Field_14;                         // DB2 field 14 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[4]
+    float Field_15;                         // DB2 field 15 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[5]
+    float Field_16;                         // DB2 field 16 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ v28[6]
 };
 
 struct DriveCapabilityTierEntry
@@ -5666,7 +5666,7 @@ struct GarrFollowerLevelXPEntry
     uint32 ID;
     // 68275 db2 layout (WoWDBDefs LAYOUT 83953EF8): GarrFollowerTypeID comes BEFORE FollowerLevel.
     // These were previously declared in the reverse order, so every row loaded with the two bytes
-    // swapped (FollowerLevel held the type value, GarrFollowerTypeID held the level) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã¯Â¿Â½ GetFollowerLevelXP
+    // swapped (FollowerLevel held the type value, GarrFollowerTypeID held the level) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¯Ã‚Â¿Ã‚Â½ GetFollowerLevelXP
     // then missed for every real (type, level) pair and follower mission XP was silently discarded.
     int8 GarrFollowerTypeID;
     uint8 FollowerLevel;
@@ -6375,7 +6375,7 @@ struct ExteriorComponentEntry
     int32 Field_9;                          // Meta[9] INT: unknown
     int32 GameObjectID;                     // Meta[10] INT: references GameObjects
     int32 Field_11;                         // Meta[11] INT: unknown (WoWDBDefs name: Field_11_2_7_64044_011)
-    int32 ItemID;                           // Meta[12] INT: NEW in 12.0.5 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ references Item.ID (allows the exterior component to be sold/earned as an item, like HouseDecor.ItemID)
+    int32 ItemID;                           // Meta[12] INT: NEW in 12.0.5 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã¯Â¿Â½ references Item.ID (allows the exterior component to be sold/earned as an item, like HouseDecor.ItemID)
     uint32 HouseExteriorWmoDataID;          // ParentIndexField - must be unsigned
 };
 
@@ -6454,6 +6454,86 @@ struct DecorCategoryEntry
     uint32 ID;
     int32 UiTextureAtlasElementID;           // Meta[2] INT: WoWDBDefs FK->UiTextureAtlasElement
     int32 OrderIndex;                        // Meta[3] INT: WoWDBDefs "OrderIndex"
+};
+
+struct WarbandScenePlacementEntry
+{
+    DBCPosition3D Position;
+    uint32 ID;
+    uint32 WarbandSceneID;
+    int32 SlotType;
+    float Rotation;
+    float Scale;
+    uint32 Field_11_0_0_54210_004;
+    uint32 Field_11_0_0_54210_005;
+    int32 SlotID;
+    int32 Field_11_1_0_58221_009;
+    int32 Field_12_0_0_63534_008;
+};
+
+struct WarbandSceneAnimationEntry
+{
+    uint32 ID;
+    int32 SpellVisualKitID;
+    int32 Event;
+    int32 AnimKitID;
+    int32 Field_11_0_0_54210_003;
+    float TimeIsh;
+    uint8 StandState;
+    uint8 SheatheState;
+    int8 Field_11_1_0_58221_008;
+    std::array<int32, 2> Field_11_0_0_54210_005;
+};
+
+struct WarbandSceneAnimChrSpecEntry
+{
+    uint32 ID;
+    int32 WarbandSceneAnimationID;
+    int32 ChrSpecializationID;
+};
+
+struct WarbandScenePlacementFilterReqEntry
+{
+    uint32 ID;
+    uint16 Field_11_1_0_58221_002;
+    int8 Field_11_1_0_58221_005;
+    std::array<int32, 2> Field_11_1_0_58221_003;
+};
+
+struct WarbandScenePlacementOptionEntry
+{
+    DBCPosition3D Position;
+    uint32 ID;
+    uint32 WarbandScenePlacementID;
+    float Orientation;
+    float Scale;
+    int32 Field_11_1_0_58221_005;
+    int32 Field_11_1_0_58221_006;
+};
+
+struct WarbandScenePlcmntAnimOverrideEntry
+{
+    uint32 ID;
+    int32 Field_11_0_0_54210_000;
+    int32 WarbandSceneAnimationID;
+};
+
+struct WarbandPlacementDisplayInfoEntry
+{
+    uint32 ID;
+    uint32 WarbandScenePlacementID;
+    int32 Field_11_2_0_61476_001;
+    int32 Field_11_2_0_61476_002;
+    int32 Field_11_2_0_61476_003;
+    int32 Field_11_2_0_61476_004;
+};
+
+struct WarbandSceneSourceInfoEntry
+{
+    LocalizedString SourceDescription;
+    uint32 ID;
+    uint32 WarbandSceneID;
+    int8 SourceType;
 };
 
 #endif

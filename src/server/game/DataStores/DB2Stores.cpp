@@ -528,6 +528,14 @@ DB2Storage<DecorXDecorSubcategoryEntry>         sDecorXDecorSubcategoryStore("De
 DB2Storage<DecorSubcategoryEntry>               sDecorSubcategoryStore("DecorSubcategory.db2", &DecorSubcategoryLoadInfo::Instance);
 DB2Storage<DecorDyeSlotEntry>                   sDecorDyeSlotStore("DecorDyeSlot.db2", &DecorDyeSlotLoadInfo::Instance);
 DB2Storage<DecorCategoryEntry>                  sDecorCategoryStore("DecorCategory.db2", &DecorCategoryLoadInfo::Instance);
+DB2Storage<WarbandScenePlacementEntry>          sWarbandScenePlacementStore("WarbandScenePlacement.db2", &WarbandScenePlacementLoadInfo::Instance);
+DB2Storage<WarbandSceneAnimationEntry>          sWarbandSceneAnimationStore("WarbandSceneAnimation.db2", &WarbandSceneAnimationLoadInfo::Instance);
+DB2Storage<WarbandSceneAnimChrSpecEntry>        sWarbandSceneAnimChrSpecStore("WarbandSceneAnimChrSpec.db2", &WarbandSceneAnimChrSpecLoadInfo::Instance);
+DB2Storage<WarbandScenePlacementFilterReqEntry> sWarbandScenePlacementFilterReqStore("WarbandScenePlacementFilterReq.db2", &WarbandScenePlacementFilterReqLoadInfo::Instance);
+DB2Storage<WarbandScenePlacementOptionEntry>    sWarbandScenePlacementOptionStore("WarbandScenePlacementOption.db2", &WarbandScenePlacementOptionLoadInfo::Instance);
+DB2Storage<WarbandScenePlcmntAnimOverrideEntry> sWarbandScenePlcmntAnimOverrideStore("WarbandScenePlcmntAnimOverride.db2", &WarbandScenePlcmntAnimOverrideLoadInfo::Instance);
+DB2Storage<WarbandPlacementDisplayInfoEntry>    sWarbandPlacementDisplayInfoStore("WarbandPlacementDisplayInfo.db2", &WarbandPlacementDisplayInfoLoadInfo::Instance);
+DB2Storage<WarbandSceneSourceInfoEntry>         sWarbandSceneSourceInfoStore("WarbandSceneSourceInfo.db2", &WarbandSceneSourceInfoLoadInfo::Instance);
 
 TaxiMask                                        sTaxiNodesMask;
 TaxiMask                                        sOldContinentsNodesMask;
@@ -1308,6 +1316,14 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sDecorSubcategoryStore);
     LOAD_DB2(sDecorDyeSlotStore);
     LOAD_DB2(sDecorCategoryStore);
+    LOAD_DB2(sWarbandScenePlacementStore);
+    LOAD_DB2(sWarbandSceneAnimationStore);
+    LOAD_DB2(sWarbandSceneAnimChrSpecStore);
+    LOAD_DB2(sWarbandScenePlacementFilterReqStore);
+    LOAD_DB2(sWarbandScenePlacementOptionStore);
+    LOAD_DB2(sWarbandScenePlcmntAnimOverrideStore);
+    LOAD_DB2(sWarbandPlacementDisplayInfoStore);
+    LOAD_DB2(sWarbandSceneSourceInfoStore);
 
     // error checks
 

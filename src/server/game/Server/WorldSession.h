@@ -186,6 +186,9 @@ namespace WorldPackets
         class BuyBankTab;
         class UpdateBankTabSettings;
         class AutoDepositCharacterBank;
+        class AutoDepositAccountBank;
+        class AccountBankDepositMoney;
+        class AccountBankWithdrawMoney;
         class BankerActivate;
     }
 
@@ -357,6 +360,7 @@ namespace WorldPackets
         class UndeleteCharacter;
         class PlayerLogin;
         class EncounterJournalStartArathiRpe;
+        class SetupWarbandGroups;
         class LogoutRequest;
         class LogoutCancel;
         class LoadingScreenNotify;
@@ -768,6 +772,9 @@ namespace WorldPackets
         class BonusRoll;
         class KioskEnableGodMode;
         class SetGameEventDebugViewState;
+        class RequestCurrencyDataForAccountCharacters;
+        class TransferCurrencyFromAccountCharacter;
+        class GetCharacterCurrencyTransferLog;
     }
 
     namespace MajorFactions
@@ -1798,6 +1805,7 @@ class TC_GAME_API WorldSession
         void HandleCharEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/);
         void HandleCharUndeleteEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/);
         void HandleCharDeleteOpcode(WorldPackets::Character::CharDelete& charDelete);
+        void HandleSetupWarbandGroups(WorldPackets::Character::SetupWarbandGroups& setupWarbandGroups);
         void HandleCharCreateOpcode(WorldPackets::Character::CreateCharacter& charCreate);
         void HandlePlayerLoginOpcode(WorldPackets::Character::PlayerLogin& playerLogin);
 
@@ -2269,6 +2277,9 @@ class TC_GAME_API WorldSession
         void HandleBuyBankTab(WorldPackets::Bank::BuyBankTab const& buyBankTab);
         void HandleUpdateBankTabSettings(WorldPackets::Bank::UpdateBankTabSettings const& updateBankTabSettings);
         void HandleAutoDepositCharacterBank(WorldPackets::Bank::AutoDepositCharacterBank const& autoDepositCharacterBank);
+        void HandleAutoDepositAccountBank(WorldPackets::Bank::AutoDepositAccountBank const& autoDepositAccountBank);
+        void HandleAccountBankDepositMoney(WorldPackets::Bank::AccountBankDepositMoney const& accountBankDepositMoney);
+        void HandleAccountBankWithdrawMoney(WorldPackets::Bank::AccountBankWithdrawMoney const& accountBankWithdrawMoney);
 
         // Black Market
         void HandleBlackMarketOpen(WorldPackets::BlackMarket::BlackMarketOpen& blackMarketOpen);
@@ -2909,6 +2920,9 @@ class TC_GAME_API WorldSession
         void HandleQuerySelectedWowLabsArea(WorldPackets::WowLabs::QuerySelectedWowLabsArea& querySelectedWowLabsArea);
         void HandleQueryWowLabsAreaInfo(WorldPackets::WowLabs::QueryWowLabsAreaInfo& queryWowLabsAreaInfo);
         void HandleSelectWowLabsArea(WorldPackets::WowLabs::SelectWowLabsArea& selectWowLabsArea);
+        void HandleRequestCurrencyDataForAccountCharacters(WorldPackets::Misc::RequestCurrencyDataForAccountCharacters& packet);
+        void HandleTransferCurrencyFromAccountCharacter(WorldPackets::Misc::TransferCurrencyFromAccountCharacter& packet);
+        void HandleGetCharacterCurrencyTransferLog(WorldPackets::Misc::GetCharacterCurrencyTransferLog& packet);
 
         union ConnectToKey
         {
@@ -2972,6 +2986,11 @@ class TC_GAME_API WorldSession
         void moveItems(Item* myItems[], Item* hisItems[]);
 
         bool CanUseBank(ObjectGuid bankerGUID = ObjectGuid::Empty) const;
+        // True only if this session is allowed to MUTATE the account-wide (warband) bank right
+        // now: it must have a valid Bnet linkage (bnetId != 0) and hold the single-holder
+        // account inventory lock. Every account bank mutation opcode gates on this so a second
+        // same-bnet session (or an injected packet from one) can never mutate concurrently.
+        bool CanMutateAccountBank() const;
 
         // logging helper
         void LogUnexpectedOpcode(WorldPacket* packet, char const* status, const char *reason);
