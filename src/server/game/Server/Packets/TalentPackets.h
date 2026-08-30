@@ -124,6 +124,45 @@ namespace WorldPackets
             bool IsPetTalents = false;
         };
 
+        // SMSG_SPEC_INVOLUNTARILY_CHANGED (0x4501C4)
+        // Reader 0x5F72F0 reads one uint8 and takes ">> 7" from it: that is a one-bit section, not a
+        // uint8 field. Consumer 0x207F770 fires the Lua event SPEC_INVOLUNTARILY_CHANGED
+        // (murmur3_x64_128 low 64 = 0xF9C8D4DC09EFDBC4), documented as { isPet : bool } in
+        // Blizzard_APIDocumentationGenerated/SpecializationInfoDocumentation.lua:448.
+        class SpecInvoluntarilyChanged final : public ServerPacket
+        {
+        public:
+            explicit SpecInvoluntarilyChanged(bool isPet = false) : ServerPacket(SMSG_SPEC_INVOLUNTARILY_CHANGED, 1), IsPet(isPet) { }
+
+            WorldPacket const* Write() override;
+
+            bool IsPet;
+        };
+
+        // SMSG_UPDATE_PRIMARY_SPEC (0x45007B)
+        // The client reader (0x5E2330) does not decompose the payload at all - it stores a raw pointer
+        // to the remaining span. The field list therefore comes from the consumer (0x23A2290), which is
+        // four instructions long:
+        //     48 8b 41 20                mov   rax, [rcx+0x20]      ; raw span pointer
+        //     0f b7 08                   movzx ecx, word ptr [rax]  ; uint16
+        //     89 0d 1f f8 46 04          mov   [rip+0x0446F81F], ecx ; -> dword_7FF7877E1ABC
+        // dword_7FF7877E1ABC is the client's primary specialization cache. Its other writer is the
+        // consumer of SMSG_UPDATE_TALENT_DATA (0x45007A, consumer 0x23A18D0), which stores
+        // *(uint32*)(event+36) there; by that message's sub reader (0x5E2080) offset +36 is field 2 of
+        // TalentInfoUpdate, i.e. UpdateTalentData::Info.PrimarySpecialization - and TrinityCore fills
+        // that from Player::GetPrimarySpecialization(), a ChrSpecialization::ID.
+        // Both writers therefore feed the same cache with the same quantity: SpecID is a
+        // ChrSpecialization::ID, not a 1-based specialization index.
+        class UpdatePrimarySpec final : public ServerPacket
+        {
+        public:
+            explicit UpdatePrimarySpec(uint16 specId = 0) : ServerPacket(SMSG_UPDATE_PRIMARY_SPEC, 2), SpecID(specId) { }
+
+            WorldPacket const* Write() override;
+
+            uint16 SpecID;
+        };
+
         class LearnTalentFailed final : public ServerPacket
         {
         public:

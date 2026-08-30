@@ -130,6 +130,33 @@ void ConfirmRespecWipe::Read()
 WorldPacket const* TalentsInvoluntarilyReset::Write()
 {
     _worldPacket << Bits<1>(IsPetTalents);
+    // FlushBits is required: nothing byte aligned follows, and ByteBuffer only commits the bit
+    // accumulator to storage on append() or FlushBits(). Without it this message goes out with a
+    // zero byte payload while the client reader (0x5F7280) reads one byte - 4 captured packets in
+    // C:\sniff are 1 byte each, value 00.
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+// Payload: bits<1>, 1 byte. Length calibrated against the twin SMSG_TALENTS_INVOLUNTARILY_RESET
+// (0x4501C3, identical reader shape, 4 captured packets, constant 1 byte).
+// UNVERIFIED: no capture of SMSG_SPEC_INVOLUNTARILY_CHANGED itself exists (0 packets in 72 sniffs).
+WorldPacket const* SpecInvoluntarilyChanged::Write()
+{
+    _worldPacket << Bits<1>(IsPet);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+// Payload: uint16, 2 bytes.
+// UNVERIFIED: no capture exists (0 packets in 72 sniffs). The width is read off the consumer's
+// `movzx ecx, word ptr [rax]`; the total length follows because the consumer takes the whole
+// remaining span and reads exactly those two bytes.
+WorldPacket const* UpdatePrimarySpec::Write()
+{
+    _worldPacket << uint16(SpecID);
 
     return &_worldPacket;
 }

@@ -806,6 +806,24 @@ namespace WorldPackets
             float GroupBonus = 0.0f;
         };
 
+        // SMSG_XP_GAIN_ENABLED (0x450258), reader 0x5FFE80: Read<uint8> followed by ">> 7", i.e. a
+        // one bit section, not a uint8 - 1 byte on the wire, 0x80 for true.
+        // The consumer (0x1E1DCA0) does NOT fire a Lua event. It picks one of two English strings
+        // ("XP Gain Enabled" / "XP Gain Disabled") and broadcasts it to the console sink list; the
+        // visible XP bar is driven by the PLAYER_FLAGS_NO_XP_GAIN update field via
+        // IsXPUserDisabled() / GameRulesUtil.CanShowExperienceBar(), not by this message.
+        // The message is therefore a confirmation, not the state carrier: whoever sends it must also
+        // set or clear PLAYER_FLAGS_NO_XP_GAIN. Enabled is the negation of that flag.
+        class XPGainEnabled final : public ServerPacket
+        {
+        public:
+            explicit XPGainEnabled(bool enabled = false) : ServerPacket(SMSG_XP_GAIN_ENABLED, 1), Enabled(enabled) { }
+
+            WorldPacket const* Write() override;
+
+            bool Enabled;
+        };
+
         class TitleEarned final : public ServerPacket
         {
         public:

@@ -65,6 +65,28 @@ WorldPacket const* ArtifactRespecPrompt::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* CloseArtifactForge::Write()
+{
+    return &_worldPacket;
+}
+
+WorldPacket const* ArtifactForgeError::Write()
+{
+    return &_worldPacket;
+}
+
+// Length 2..18 + 1 + 4 = 7..23 bytes.
+// UNVERIFIED: no capture exists (0 packets in 72 sniffs). The PackedGuid leg is calibrated against
+// SMSG_XP_GAIN_ABORTED (0x45006D, 284 captured packets, 14..29 bytes for pguid + 3 x uint32).
+WorldPacket const* ArtifactEndgamePowersRefunded::Write()
+{
+    _worldPacket << ArtifactGUID;
+    _worldPacket << uint8(RefundedTier);
+    _worldPacket << uint32(NumRefundedPowers);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* ArtifactXpGain::Write()
 {
     _worldPacket << ArtifactGUID;

@@ -89,6 +89,105 @@ namespace WorldPackets
             ObjectGuid NpcGUID;
         };
 
+        // SMSG_CLOSE_ARTIFACT_FORGE (0x45024F) and SMSG_ARTIFACT_FORGE_ERROR (0x450250) share one
+        // consumer (0x2329870). Both readers (0x5FF780 / 0x5FF800) only take a raw pointer to the
+        // remaining span, and the consumer never touches its argument:
+        //     mov  byte ptr [rip+0x2971b6d], 0   ; forge state flag byte_7FF785C6B3E8 = 0
+        //     call 0x7FF781274DC0                ; PlayerInteractionManager singleton
+        //     mov  dword ptr [rsp+0x38], 0x26    ; 38 == PlayerInteractionType::ArtifactForge
+        //     mov  byte  ptr [rsp+0x3c], 1       ; only clear if that type is the active one
+        //     call 0x7FF78323A4D0                ; ClearInteraction(type, checkType)
+        // Both messages therefore carry no payload the client can use, and both are idempotent: the
+        // checkType byte makes the client ignore them unless the artifact forge is the open frame.
+        //
+        // Which sends make the forge the open frame - the point that decides whether a send site can
+        // work at all. There are two, and only the first one is server bookkeeping:
+        //   1. PlayerInteractionType::ArtifactForge in the core's own _interactionData, set from the
+        //      GossipOptionNpc::ArtifactRespec block in Player::OnGossipSelect and announced to the
+        //      client through SMSG_GOSSIP_OPTION_NPC_INTERACTION / SMSG_NPC_INTERACTION_OPEN_RESULT.
+        //   2. SMSG_OPEN_ARTIFACT_FORGE (0x45024E) itself. Its consumer sub_7FF7832F9780 (RVA
+        //      0x2329780, reached over hook slot qword_7FF7855FC8C8, whose dispatch stub 0x5FF6D0
+        //      sits next to the opcode getter 0x5FF6E0 that returns 4522574 = 0x45024E) ends with
+        //          v3 = sub_7FF781274DC0();                       // PlayerInteractionManager
+        //          return sub_7FF78323C490(v3, &guids, 0x26u, ...) // 0x26 == 38 == ArtifactForge
+        //      sub_7FF78323C490 is the setter counterpart of the ClearInteraction above: it forwards
+        //      the type to sub_7FF78323A240, which writes *(_DWORD *)(mgr + 48) = type - the very
+        //      field ClearInteraction compares against (`*(_DWORD *)(a1 + 48) == (_DWORD)a2`). Its
+        //      other 20 call sites pass 3, 5, 6, 10, 11, 31, 32, 33, 57, 60, 79, i.e. the same
+        //      PlayerInteractionType enum (ArtifactForge = 38,
+        //      PlayerInteractionManagerConstantsDocumentation.lua:51).
+        // So the client opens the interaction on its own the moment the forge GameObject sends
+        // SMSG_OPEN_ARTIFACT_FORGE - the core does not have to, and does not, set type 38 for that
+        // path. Every CloseArtifactForge that follows an opened forge therefore lands; see the send
+        // sites in WorldSession::HandleArtifactAddPower and WorldSession::HandleArtifactSetAppearance.
+        class CloseArtifactForge final : public ServerPacket
+        {
+        public:
+            explicit CloseArtifactForge() : ServerPacket(SMSG_CLOSE_ARTIFACT_FORGE, 0) { }
+
+            WorldPacket const* Write() override;
+        };
+
+        // See CloseArtifactForge. The client has no reader, no enum and no Lua event for an error code
+        // here - a code on the wire would not reach the UI. The only matching string,
+        // ARTIFACT_TRAITS_NO_FORGE_ERROR (GlobalStrings 35246), is set client side in
+        // Blizzard_ArtifactPowerButton.lua:66.
+        // The send site is the failure branch of GameObject::Use, which returns before
+        // SMSG_OPEN_ARTIFACT_FORGE goes out. That does not make the message inert: the interaction it
+        // clears is not opened by this use of the forge but survives from an earlier one, and the
+        // client keeps it until something closes it. The reachable sequence is
+        //   use forge with the artifact equipped -> SMSG_OPEN_ARTIFACT_FORGE -> interaction 38 active
+        //   -> unequip the artifact (the ARTIFACTS_ALL_WEAPONS_..._EQUIPPED_PASSIVE aura goes away)
+        //   -> use the forge again -> this branch -> the stale frame is torn down.
+        // The unconditional half of the consumer, byte_7FF785C6B3E8 = 0, runs either way.
+        // UNVERIFIED: whether retail nevertheless puts bytes on the wire cannot be decided offline
+        // (0 captured packets). Sent empty; a later capture can add fields without changing the effect.
+        class ArtifactForgeError final : public ServerPacket
+        {
+        public:
+            explicit ArtifactForgeError() : ServerPacket(SMSG_ARTIFACT_FORGE_ERROR, 0) { }
+
+            WorldPacket const* Write() override;
+        };
+
+        // SMSG_ARTIFACT_ENDGAME_POWERS_REFUNDED (0x450252), reader 0x5FF910:
+        //     ReadPackedGuid, Read<uint8> (no shift - a real byte aligned uint8), Read<uint32>
+        // Consumer 0x23299E0 resolves ArtifactGUID with type mask 2 (TYPEMASK_ITEM), derives bag and
+        // slot index from that item and fires Lua ARTIFACT_ENDGAME_REFUND (0x21B4401823260C60,
+        // ArtifactUIDocumentation.lua:832-844) - the event name does not match the opcode name.
+        // NO SENDER. This is not the ordinary paid artifact respec. The effect the message actually
+        // produces is the tier 2 upgrade sequence: ArtifactPerksMixin:OnTraitsRefunded stores
+        // numArtifactTraitsRefunded and sets perksDirty (Blizzard_ArtifactPerks.lua:893-895), and the
+        // next Refresh dispatches to AnimateTraitRefund (:415-417). That function plays
+        // Tier2ForgingScene.ForgingEffectAnimIn (:923) and Model.ForgingEffectAnimIn (:928), and for
+        // NumRefundedPowers == 0 it does nothing but PrepTierTwoReveal (:931-933); the same Refresh
+        // also suppresses the normal tier display while numArtifactTraitsRefunded is set (:392).
+        // Together with the opcode name and RefundedTier (an ArtifactTiers value,
+        // ArtifactUIDocumentation.lua:840) that places the message at the endgame tier upgrade - the
+        // point at which the previously purchased endgame powers are given back so they can be
+        // re-spent in the new tier. TrinityCore has no such upgrade: MAX_ARTIFACT_TIER is 1
+        // (DBCEnums.h:225), so tier 2 is never reached, and nothing in the tree refunds powers on a
+        // tier change. A sender was therefore deliberately not built - hanging it off
+        // CMSG_CONFIRM_ARTIFACT_RESPEC (the paid respec) would make every tier 0/1 respec play the
+        // tier 2 reveal on the next opening of the artifact frame. See HandleConfirmArtifactRespec.
+        // NumRefundedPowers drives the tick count of the PointsRemainingLabel animation
+        // (Blizzard_ArtifactPerks.lua:943), so it counts refunded artifact *points*, i.e. purchased
+        // ranks - not distinct powers.
+        // UNVERIFIED: the exact trigger. 0 captured packets; the tier upgrade reading is derived from
+        // the consumer and the opcode name, no source names the sending event.
+        // UNVERIFIED: whether RefundedTier carries the tier that was refunded or the tier now reached.
+        class ArtifactEndgamePowersRefunded final : public ServerPacket
+        {
+        public:
+            explicit ArtifactEndgamePowersRefunded() : ServerPacket(SMSG_ARTIFACT_ENDGAME_POWERS_REFUNDED, 16 + 1 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid ArtifactGUID;
+            uint8 RefundedTier = 0;             ///< ArtifactTier::ArtifactTier of the refunded tier
+            uint32 NumRefundedPowers = 0;       ///< purchased ranks given back
+        };
+
         class ArtifactXpGain final : public ServerPacket
         {
         public:

@@ -930,6 +930,9 @@ namespace WorldPackets
         class ClassTalentsDeleteConfig;
         class ClassTalentsSetStarterBuildActive;
         class ClassTalentsSetUsesSharedActionBars;
+        class ClassTalentsNotifyEmptyConfig;
+        class ClassTalentsNotifyValidationFailed;
+        class TraitsTalentTestUnlearnSpells;
     }
 
     namespace Transmogrification
@@ -1788,6 +1791,9 @@ class TC_GAME_API WorldSession
         void HandleClassTalentsDeleteConfig(WorldPackets::Traits::ClassTalentsDeleteConfig const& classTalentsDeleteConfig);
         void HandleClassTalentsSetStarterBuildActive(WorldPackets::Traits::ClassTalentsSetStarterBuildActive const& classTalentsSetStarterBuildActive);
         void HandleClassTalentsSetUsesSharedActionBars(WorldPackets::Traits::ClassTalentsSetUsesSharedActionBars const& classTalentsSetUsesSharedActionBars);
+        void HandleClassTalentsNotifyEmptyConfig(WorldPackets::Traits::ClassTalentsNotifyEmptyConfig const& classTalentsNotifyEmptyConfig);
+        void HandleClassTalentsNotifyValidationFailed(WorldPackets::Traits::ClassTalentsNotifyValidationFailed const& classTalentsNotifyValidationFailed);
+        void HandleTraitsTalentTestUnlearnSpells(WorldPackets::Traits::TraitsTalentTestUnlearnSpells const& traitsTalentTestUnlearnSpells);
 
         void HandleQuestgiverStatusQueryOpcode(WorldPackets::Quest::QuestGiverStatusQuery& packet);
         void HandleQuestgiverStatusMultipleQuery(WorldPackets::Quest::QuestGiverStatusMultipleQuery& packet);

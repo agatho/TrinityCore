@@ -57,7 +57,7 @@ enum class GossipOptionNpc : uint8
     Mailbox                         = 18,   // White chat bubble
     WorldPvPQueue                   = 19,   /*NYI*/ // White chat bubble
     LFGDungeon                      = 20,   /*NYI*/ // White chat bubble
-    ArtifactRespec                  = 21,   /*NYI*/ // White chat bubble
+    ArtifactRespec                  = 21,   // White chat bubble
     CemeterySelect                  = 22,   /*DEPRECATED*/ // White chat bubble
     SpecializationMaster            = 23,   /*DEPRECATED*/ // White chat bubble
     GlyphMaster                     = 24,   /*DEPRECATED*/ // White chat bubble

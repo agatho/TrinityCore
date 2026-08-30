@@ -61,6 +61,21 @@ void ClassTalentsSetStarterBuildActive::Read()
     _worldPacket >> Bits<1>(Active);
 }
 
+WorldPacket const* StarterBuildActivateFailed::Write()
+{
+    return &_worldPacket;
+}
+
+void ClassTalentsNotifyEmptyConfig::Read()
+{
+    _worldPacket >> ConfigID;
+}
+
+void ClassTalentsNotifyValidationFailed::Read()
+{
+    _worldPacket >> ConfigID;
+}
+
 void ClassTalentsSetUsesSharedActionBars::Read()
 {
     _worldPacket >> ConfigID;

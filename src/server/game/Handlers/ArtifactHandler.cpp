@@ -21,6 +21,7 @@
 #include "DB2Stores.h"
 #include "GameTables.h"
 #include "Item.h"
+#include "MiscPackets.h"
 #include "Player.h"
 #include "SpellAuraEffects.h"
 #include "SpellInfo.h"
@@ -29,7 +30,18 @@
 void WorldSession::HandleArtifactAddPower(WorldPackets::Artifact::ArtifactAddPower& artifactAddPower)
 {
     if (!_player->GetGameObjectIfCanInteractWith(artifactAddPower.ForgeGUID, GAMEOBJECT_TYPE_ITEM_FORGE))
+    {
+        // The client believes it is at the forge and the server disagrees - tell it to close the frame
+        // instead of leaving it open on a forge that is gone or out of range. The message is safe to
+        // send unconditionally: its consumer clears the interaction only if ArtifactForge (38) is the
+        // active one (checkType byte, see ArtifactPackets.h).
+        // And it does land here rather than being a no-op. ForgeGUID reaches the client only through
+        // SMSG_OPEN_ARTIFACT_FORGE, so reaching this handler means that message was consumed - and its
+        // consumer sets interaction 38 itself, sub_7FF7832F9780 -> sub_7FF78323C490(mgr, guids, 0x26).
+        // The core never sets type 38 for the GameObject forge; the client does. See ArtifactPackets.h.
+        SendPacket(WorldPackets::Artifact::CloseArtifactForge().Write());
         return;
+    }
 
     Item* artifact = _player->GetItemByGuid(artifactAddPower.ArtifactGUID);
     if (!artifact || artifact->IsArtifactDisabled())
@@ -158,7 +170,11 @@ void WorldSession::HandleArtifactAddPower(WorldPackets::Artifact::ArtifactAddPow
 void WorldSession::HandleArtifactSetAppearance(WorldPackets::Artifact::ArtifactSetAppearance& artifactSetAppearance)
 {
     if (!_player->GetGameObjectIfCanInteractWith(artifactSetAppearance.ForgeGUID, GAMEOBJECT_TYPE_ITEM_FORGE))
+    {
+        // Same case and same reasoning as in HandleArtifactAddPower above.
+        SendPacket(WorldPackets::Artifact::CloseArtifactForge().Write());
         return;
+    }
 
     ArtifactAppearanceEntry const* artifactAppearance = sArtifactAppearanceStore.LookupEntry(artifactSetAppearance.ArtifactAppearanceID);
     if (!artifactAppearance)
@@ -198,21 +214,64 @@ void WorldSession::HandleArtifactSetAppearance(WorldPackets::Artifact::ArtifactS
     }
 }
 
+// The three rejections below used to return without a word. That is the worst outcome the client
+// can be given here: StaticPopupDialogs["CONFIRM_ARTIFACT_RESPEC"].OnAccept already ran
+// HideUIPanel(ArtifactFrame) (Blizzard_ArtifactUI.lua:7), so the player has confirmed, the frame is
+// gone and nothing follows - no refund, no message, no way to tell that the server refused.
+// Each rejection now answers with two messages:
+//   - DisplayGameError, the only channel that puts a line in UIErrorsFrame from the server side, and
+//   - CloseArtifactForge, whose consumer (0x2329870) clears PlayerInteractionType::ArtifactForge (38)
+//     with the checkType byte set, i.e. it is a no-op unless the artifact frame really is the active
+//     interaction. That ends the interaction the respec prompt opened - the prompt's consumer
+//     (0x23298B0, verified in wow_dump.bin.i64) stores the npc guid in xmmword_7FF7877E0360, which is
+//     what C_ArtifactUI.CheckRespecNPC() answers from while the popup is polled
+//     (Blizzard_ArtifactUI.lua:11,29).
+// UNVERIFIED: which GameError code retail uses for each of the three cases is not derivable from the
+// client - the codes are pure server input and no capture of a rejected respec exists. Chosen here:
+// ERR_MUST_EQUIP_ARTIFACT for the missing artifact, because GameObject::Use already answers the very
+// same condition with it at the forge, and ERR_CANT_DO_THAT_RIGHT_NOW (used by the client itself in
+// Blizzard_AzeriteEssenceUI.lua:1232 and Blizzard_OrderHallTalents.lua:1193) for the two cases that
+// have no artifact specific string. The wire structure is unaffected by the choice.
 void WorldSession::HandleConfirmArtifactRespec(WorldPackets::Artifact::ConfirmArtifactRespec& confirmArtifactRespec)
 {
     if (!_player->GetNPCIfCanInteractWith(confirmArtifactRespec.NpcGUID, UNIT_NPC_FLAG_ARTIFACT_POWER_RESPEC, UNIT_NPC_FLAG_2_NONE))
+    {
+        // The npc walked away, died, went out of range - or never carried
+        // UNIT_NPC_FLAG_ARTIFACT_POWER_RESPEC in the first place. The latter is a database fault and
+        // is reported at the gossip option instead, see Player::OnGossipSelect.
+        TC_LOG_DEBUG("network.opcode", "CMSG_CONFIRM_ARTIFACT_RESPEC: Player '{}' ({}) cannot interact with {}",
+            _player->GetName(), _player->GetGUID().ToString(), confirmArtifactRespec.NpcGUID.ToString());
+        SendPacket(WorldPackets::Misc::DisplayGameError(GameError::ERR_CANT_DO_THAT_RIGHT_NOW).Write());
+        SendPacket(WorldPackets::Artifact::CloseArtifactForge().Write());
         return;
+    }
 
     Item* artifact = _player->GetItemByGuid(confirmArtifactRespec.ArtifactGUID);
     if (!artifact || artifact->IsArtifactDisabled())
+    {
+        SendPacket(WorldPackets::Misc::DisplayGameError(GameError::ERR_MUST_EQUIP_ARTIFACT).Write());
+        SendPacket(WorldPackets::Artifact::CloseArtifactForge().Write());
         return;
+    }
 
     uint64 xpCost = 0;
     if (GtArtifactLevelXPEntry const* cost = sArtifactLevelXPGameTable.GetRow(artifact->GetTotalPurchasedArtifactPowers() + 1))
         xpCost = uint64(artifact->GetModifier(ITEM_MODIFIER_ARTIFACT_TIER) == 1 ? cost->XP2 : cost->XP);
 
     if (xpCost > artifact->m_itemData->ArtifactXP)
+    {
+        // The client picks CONFIRM_ARTIFACT_RESPEC over NOT_ENOUGH_POWER_ARTIFACT_RESPEC itself, from
+        // C_ArtifactUI.GetPointsRemaining() against GetRespecCost() (EventImplementation.lua:526-534).
+        // Reaching this point therefore means the two sides disagree about the artifact's power, so
+        // re-sending the prompt to make the client show its own "not enough power" popup would only
+        // repeat the disagreement. The refusal is stated directly instead.
+        TC_LOG_DEBUG("network.opcode", "CMSG_CONFIRM_ARTIFACT_RESPEC: Player '{}' ({}) cannot afford the respec of {} ({} of {} required)",
+            _player->GetName(), _player->GetGUID().ToString(), confirmArtifactRespec.ArtifactGUID.ToString(),
+            uint64(artifact->m_itemData->ArtifactXP), xpCost);
+        SendPacket(WorldPackets::Misc::DisplayGameError(GameError::ERR_CANT_DO_THAT_RIGHT_NOW).Write());
+        SendPacket(WorldPackets::Artifact::CloseArtifactForge().Write());
         return;
+    }
 
     uint64 newAmount = artifact->m_itemData->ArtifactXP - xpCost;
     for (uint32 i = 0; i <= artifact->GetTotalPurchasedArtifactPowers(); ++i)
@@ -249,4 +308,16 @@ void WorldSession::HandleConfirmArtifactRespec(WorldPackets::Artifact::ConfirmAr
 
     artifact->SetArtifactXP(newAmount);
     artifact->SetState(ITEM_CHANGED, _player);
+
+    // No message is sent here on purpose. The refunded traits reach the client through the item
+    // update fields written above (UF::ArtifactPower + SetState(ITEM_CHANGED)), and the artifact
+    // frame is already closed by then - CONFIRM_ARTIFACT_RESPEC.OnAccept calls C_ArtifactUI.ConfirmRespec()
+    // and HideUIPanel(ArtifactFrame) in the same statement (Blizzard_ArtifactUI.lua:7).
+    // SMSG_ARTIFACT_ENDGAME_POWERS_REFUNDED must NOT be sent from the ordinary paid respec: its
+    // consumer sets numArtifactTraitsRefunded/perksDirty (Blizzard_ArtifactPerks.lua:893-895) and the
+    // next Refresh runs AnimateTraitRefund (:415-417), which is the tier 2 forging and reveal sequence
+    // (Tier2ForgingScene.ForgingEffectAnimIn :923, Model.ForgingEffectAnimIn :928, PrepTierTwoReveal
+    // at :931-933, and nothing else when NumRefundedPowers is 0). It also suppresses the normal tier
+    // display on that same Refresh (:392). Sending it after a tier 0/1 respec would play the tier 2
+    // reveal on the next opening of the artifact frame. See ArtifactPackets.h for the missing sender.
 }

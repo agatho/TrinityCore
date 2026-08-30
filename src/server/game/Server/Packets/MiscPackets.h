@@ -1006,6 +1006,45 @@ namespace WorldPackets
             Optional<int32> Arg2;
         };
 
+        // The result codes of SMSG_LEVEL_LINKING_RESULT. There is no Lua enum for this - the client
+        // has no LEVEL_LINK event at all (LevelLinkDocumentation.lua:42-44 has an empty Events block).
+        // The values come from the consumer's compare chain (0x1DE03D0):
+        //     0f b6 51 20   movzx edx, byte ptr [rcx+0x20]   ; Result
+        //     85 d2 / 74 0f je   .linked                     ; Result == 0
+        //     83 fa 01 / 75 17   jne  .ret                   ; Result >= 2 -> nothing at all
+        //     b9 68 04 00 00     mov  ecx, 0x468              ; 1128, ERR_LEVEL_LINKING_RESULT_UNLINKED
+        //   .linked:
+        //     8b 51 38           mov  edx, [rcx+0x38]         ; the uint32 as format argument
+        //     b9 67 04 00 00     mov  ecx, 0x467              ; 1127, ERR_LEVEL_LINKING_RESULT_LINKED
+        // Both are shown in the UIErrorsFrame. NoResult is also the value the reader pre-seeds the
+        // field with before reading, i.e. the client's neutral "say nothing" value.
+        enum class LevelLinkingResultType : uint8
+        {
+            Linked      = 0,    ///< ERR_LEVEL_LINKING_RESULT_LINKED, "Your level is now restricted to %d."
+            Unlinked    = 1,    ///< ERR_LEVEL_LINKING_RESULT_UNLINKED, "Your level is no longer restricted."
+            NoResult    = 2     ///< client shows nothing
+        };
+
+        // SMSG_LEVEL_LINKING_RESULT (0x4502EA), reader 0x6091E0:
+        //     Read<uint8> (no shift - a real byte aligned uint8), ReadPackedGuid, Read<uint32>
+        // RestrictedLevel is the single %d of ERR_LEVEL_LINKING_RESULT_LINKED (GlobalStrings 41311)
+        // and is only read on the Linked branch.
+        class LevelLinkingResult final : public ServerPacket
+        {
+        public:
+            explicit LevelLinkingResult() : ServerPacket(SMSG_LEVEL_LINKING_RESULT, 1 + 16 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            LevelLinkingResultType Result = LevelLinkingResultType::NoResult;
+            /// UNVERIFIED: the client reads this GUID and then never uses it. Per
+            /// DEFINITION_OF_DONE §4.1 an unread field is a filler, but the server still has to put
+            /// something there; the party sync partner is the likely meaning (see
+            /// REQUEST_INVITE_CONFIRMATION.partyLevelLink, PartyInfoDocumentation.lua:871-885).
+            ObjectGuid PlayerGUID;
+            uint32 RestrictedLevel = 0;
+        };
+
         class AccountMountUpdate final : public ServerPacket
         {
         public:

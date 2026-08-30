@@ -832,6 +832,18 @@ WorldPacket const* LogXPGain::Write()
     return &_worldPacket;
 }
 
+// Payload: bits<1>, 1 byte. Length calibrated against SMSG_TALENTS_INVOLUNTARILY_RESET (0x4501C3,
+// identical reader shape, 4 captured packets, constant 1 byte) and SMSG_ACTIVE_GLYPHS (0x670047,
+// 2 captured packets whose trailing bit byte is 0x80).
+// UNVERIFIED: no capture of SMSG_XP_GAIN_ENABLED itself exists (0 packets in 72 sniffs).
+WorldPacket const* XPGainEnabled::Write()
+{
+    _worldPacket << Bits<1>(Enabled);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
 WorldPacket const* TitleEarned::Write()
 {
     _worldPacket << uint32(Index);
