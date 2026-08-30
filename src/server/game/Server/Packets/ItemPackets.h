@@ -651,6 +651,10 @@ namespace WorldPackets
         // Item Interaction UI confirm (Matrix Catalyst conversion, Runecarver scrapping, ...). The client sends
         // its held state: the pending item, the interaction agent it has open, the frame's interaction type
         // (UIItemInteractionType: 4 = ItemConversion) and the conversion source item id.
+        // ============================================================
+        // Item Interaction / Upgrades
+        // ============================================================
+
         class PerformItemInteraction final : public ClientPacket
         {
         public:
@@ -662,6 +666,9 @@ namespace WorldPackets
             ObjectGuid AgentGuid;
             int32 InteractionType = 0;
             int32 BaseItemId = 0;
+            ObjectGuid Banker;
+            ObjectGuid ItemGuid;
+            int32 InteractionID = 0;
         };
 
         class ItemInteractionComplete final : public ServerPacket
@@ -672,6 +679,81 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             bool Error = false;     // single flushed bit; false closes the UI as a successful interaction
+            explicit ItemInteractionComplete() : ServerPacket(SMSG_ITEM_INTERACTION_COMPLETE, 4) { }
+
+            WorldPacket const* Write() override;
+
+            int32 InteractionID = 0;
+        };
+
+        class ConvertItemToBindToAccount final : public ClientPacket
+        {
+        public:
+            explicit ConvertItemToBindToAccount(WorldPacket&& packet) : ClientPacket(CMSG_CONVERT_ITEM_TO_BIND_TO_ACCOUNT, std::move(packet)) { }
+
+            void Read() override;
+
+            // NOT an ObjectGuid. The client serializer (RVA 0x6AC670) writes write_uint32(payload[0]) then
+            // write_uint8(payload[4]) - five bytes, no PackedGuid call anywhere in the function. The sender
+            // (RVA 0x1C4D53A) builds that payload by linear-searching a client-side list of 16-byte guids for
+            // the item and storing the *index* it found, writing 0xFF when the item is not in the list; the
+            // uint8 is a flag computed by a helper at RVA 0x1C4CD80. So the server is handed a client-local
+            // list index, not an identifier it can resolve on its own - see ItemHandler.cpp.
+            //
+            // Reading a PackedGuid off this threw whenever the low mask byte had enough bits set (index 0xFF
+            // asks for 8 data bytes out of a 5-byte packet) and otherwise produced an empty guid.
+            uint32 ItemIndex = 0;   ///< index into the client's own pending-conversion list; 0xFF = not found
+            uint8 Flag = 0;         ///< unnamed offline
+        };
+
+        class ItemChanged final : public ServerPacket
+        {
+        public:
+            explicit ItemChanged() : ServerPacket(SMSG_ITEM_CHANGED, 16 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid ItemGuid;
+            int32 ChangeType = 0;
+        };
+
+        class SocketGemsFailure final : public ServerPacket
+        {
+        public:
+            explicit SocketGemsFailure() : ServerPacket(SMSG_SOCKET_GEMS_FAILURE, 16) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Item;
+        };
+
+        class BackpackDefaultSizeChanged final : public ServerPacket
+        {
+        public:
+            explicit BackpackDefaultSizeChanged() : ServerPacket(SMSG_BACKPACK_DEFAULT_SIZE_CHANGED, 4) { }
+
+            WorldPacket const* Write() override;
+
+            int32 Size = 0;
+        };
+
+        class InventoryFixupComplete final : public ServerPacket
+        {
+        public:
+            explicit InventoryFixupComplete() : ServerPacket(SMSG_INVENTORY_FIXUP_COMPLETE, 0) { }
+
+            WorldPacket const* Write() override;
+        };
+
+        class ConvertItemsToCurrencyValue final : public ServerPacket
+        {
+        public:
+            explicit ConvertItemsToCurrencyValue() : ServerPacket(SMSG_CONVERT_ITEMS_TO_CURRENCY_VALUE, 4 + 8) { }
+
+            WorldPacket const* Write() override;
+
+            int32 CurrencyType = 0;
+            uint64 Quantity = 0;
         };
     }
 }

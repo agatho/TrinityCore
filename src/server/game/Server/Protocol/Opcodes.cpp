@@ -403,7 +403,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_CONTRIBUTION_LAST_UPDATE_REQUEST,                   STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleContributionLastUpdateRequest);
     DEFINE_HANDLER(CMSG_CONVERSATION_CINEMATIC_READY,                       STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_CONVERSATION_LINE_STARTED,                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleConversationLineStarted);
-    DEFINE_HANDLER(CMSG_CONVERT_ITEM_TO_BIND_TO_ACCOUNT,                    STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_CONVERT_ITEM_TO_BIND_TO_ACCOUNT,                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleConvertItemToBindToAccount);
     DEFINE_HANDLER(CMSG_CONVERT_RAID,                                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleConvertRaidOpcode);
     DEFINE_HANDLER(CMSG_CONVERT_TIMERUNNING_CHARACTER,                      STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_COVENANT_RENOWN_REQUEST_CATCHUP_STATE,              STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleCovenantRenownRequestCatchupState);
@@ -926,7 +926,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID,                  STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleQueryPlayerNameByCommunityId);
     DEFINE_HANDLER(CMSG_QUERY_QUEST_COMPLETION_NPCS,                        STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleQueryQuestCompletionNPCs);
     DEFINE_HANDLER(CMSG_QUERY_QUEST_INFO,                                   STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleQuestQueryOpcode);
-    DEFINE_HANDLER(CMSG_QUERY_QUEST_ITEM_USABILITY,                         STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_QUERY_QUEST_ITEM_USABILITY,                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleQueryQuestItemUsability);
     DEFINE_HANDLER(CMSG_QUERY_REALM_NAME,                                   STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleQueryRealmName);
     DEFINE_HANDLER(CMSG_QUERY_SCENARIO_POI,                                 STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleQueryScenarioPOI);
     DEFINE_HANDLER(CMSG_QUERY_SELECTED_WOW_LABS_AREA,                       STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleQuerySelectedWowLabsArea);

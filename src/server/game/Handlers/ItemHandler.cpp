@@ -1338,4 +1338,34 @@ void WorldSession::HandlePerformItemInteraction(WorldPackets::Item::PerformItemI
                 response.Error = false;
 
     SendPacket(response.Write());
+void WorldSession::HandlePerformItemInteraction(WorldPackets::Item::PerformItemInteraction& performItemInteraction)
+{
+    if (!_player->GetNPCIfCanInteractWith(performItemInteraction.Banker, UNIT_NPC_FLAG_NONE, UNIT_NPC_FLAG_2_NONE))
+        return;
+
+    Item* item = _player->GetItemByGuid(performItemInteraction.ItemGuid);
+    if (!item)
+        return;
+
+    // TODO: Implement specific item interaction logic based on InteractionID
+    // For now, acknowledge the interaction
+    WorldPackets::Item::ItemInteractionComplete result;
+    result.InteractionID = performItemInteraction.InteractionID;
+    SendPacket(result.Write());
+}
+
+void WorldSession::HandleConvertItemToBindToAccount(WorldPackets::Item::ConvertItemToBindToAccount& /*convertItemToBindToAccount*/)
+{
+    // Deliberately inert, and this is not a stub standing in for a reader we could write.
+    //
+    // This used to read an ObjectGuid and look the item up with GetItemByGuid. The 68275 client never sends
+    // one: its serializer (RVA 0x6AC670) writes { uint32, uint8 } and the sender (RVA 0x1C4D53A) fills the
+    // uint32 with the *index* the item was found at while linear-scanning a client-side guid list, or 0xFF if
+    // it was not found. That index is meaningful only inside the client's own list, which this server never
+    // built or sent, so there is nothing here to resolve an item from - the guid lookup could only ever miss,
+    // which is exactly what it did (the ItemChanged reply below it was unreachable in practice).
+    //
+    // Answering anyway would mean picking an item on the player's behalf, so we do not. Closing this properly
+    // needs the list the index refers to identified first; the reader in ItemPackets.cpp now at least matches
+    // the wire, so the five bytes are consumed cleanly instead of throwing out of a PackedGuid read.
 }
