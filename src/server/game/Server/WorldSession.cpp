@@ -41,6 +41,7 @@
 #include "MiscPackets.h"
 #include "ObjectMgr.h"
 #include "OutdoorPvPMgr.h"
+#include "PetBattleMgr.h"
 #include "PacketUtilities.h"
 #include "Player.h"
 #include "QueryHolder.h"
@@ -618,9 +619,29 @@ void WorldSession::LogoutPlayer(bool save)
         ///- Remove pet
         _player->RemovePet(nullptr, PET_SAVE_AS_CURRENT);
 
-        ///- Release battle pet journal lock
+        ///- Clean up any active pet battle (before releasing journal lock so XP award works)
+        if (PetBattles::PetBattle* battle = sPetBattleMgr->GetBattleByPlayer(_player->GetGUID()))
+        {
+            if (!battle->IsFinished())
+            {
+                // If battle hasn't reached FINAL_ROUND yet, resolve it (awards XP, achievements)
+                if (!battle->IsFinalRound())
+                    battle->FinishBattle(PetBattles::PET_BATTLE_RESULT_DRAW);
+                battle->CompleteBattle();
+            }
+            sPetBattleMgr->RemoveBattle(battle->GetBattleID());
+        }
+
+        ///- Release battle pet journal lock (after battle cleanup so XP award has journal access)
         if (_battlePetMgr->HasJournalLock())
             _battlePetMgr->ToggleJournalLock(false);
+
+        ///- Release account-wide bank inventory lock (both the client-facing flag and the
+        ///  authoritative server-side reservation) so another same-bnet session can acquire it.
+        if (_player->HasPlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK))
+        {
+            _player->RemovePlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK);
+        }
 
         ///- Clear whisper whitelist
         _player->ClearWhisperWhiteList();

@@ -48,6 +48,52 @@ struct AchievementEntry
     int32 LegacyAfterTimeEvent;                                     // category changes clientside to Legacy after this TimeEvent is passed
 };
 
+struct BattlePetSpeciesXAbilityEntry
+{
+    uint32 ID;
+    uint16 BattlePetAbilityID;
+    uint8 RequiredLevel;
+    int8 SlotEnum;
+    uint32 BattlePetSpeciesID;
+};
+
+struct BattlePetEffectPropertiesEntry
+{
+    uint32 ID;
+    std::array<char const*, 6> ParamLabel;
+    uint16 BattlePetVisualID;
+    std::array<uint8, 6> ParamTypeEnum;
+};
+
+struct BattlePetAbilityTurnEntry
+{
+    uint32 ID;
+    uint16 BattlePetAbilityID;
+    uint8 OrderIndex;
+    uint8 TurnTypeEnum;
+    uint8 EventTypeEnum;
+    uint16 BattlePetVisualID;
+};
+
+struct BattlePetAbilityStateEntry
+{
+    int32 ID;
+    uint32 BattlePetStateID;
+    int32 Value;
+    uint32 BattlePetAbilityID;
+};
+
+struct BattlePetAbilityEffectEntry
+{
+    uint32 ID;
+    uint16 BattlePetAbilityTurnID;
+    uint8 OrderIndex;
+    uint16 BattlePetEffectPropertiesID;     // WoWDBDefs field 3
+    uint16 AuraBattlePetAbilityID;          // WoWDBDefs field 4 (was incorrectly named "BattlePetEffectPropertiesID")
+    uint16 BattlePetVisualID;
+    std::array<int16, 6> Param;
+};
+
 struct Achievement_CategoryEntry
 {
     LocalizedString Name;
