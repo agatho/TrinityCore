@@ -31,11 +31,11 @@ namespace WorldPackets::Housing
     // Shared Structs
     // ============================================================
 
-    // HouseInfo Ã¢â‚¬â€� IDA: PackedGUID + PackedGUID + PackedGUID + uint8 + uint32
+    // HouseInfo — IDA: PackedGUID + PackedGUID + PackedGUID + uint8 + uint32
     //   + uint8(flag bitfield) [+ optional payloads in flag-bit order]
     //
     // Lua C_Housing.GetCurrentHouseInfo surfaces a 9-field table:
-    //   plotID, houseName, ownerName (via OwnerGuidÃ¢â€ â€™NameCache),
+    //   plotID, houseName, ownerName (via OwnerGuid→NameCache),
     //   plotCost (from cornerstone UI, not HouseInfo), neighborhoodName,
     //   moveOutTime, plotReserved, neighborhoodGUID, houseGUID.
     //
@@ -50,14 +50,14 @@ namespace WorldPackets::Housing
     //   bit 5 = HasNeighborhoodName (new, speculative placement)
     //   bit 4 = PlotReserved        (new, single-bit bool, no payload)
     //
-    // Payloads, written only when the gating bit is set, in bit-7Ã¢â€ â€™bit-4 order:
+    // Payloads, written only when the gating bit is set, in bit-7→bit-4 order:
     //   uint64 MoveOutTime
     //   CString HouseName          (uint8 NameLen incl. NUL + bytes)
     //   CString NeighborhoodName   (uint8 NameLen incl. NUL + bytes)
     //
     // Until IDA-verified, callers that don't set these fields produce the
     // exact pre-existing wire. Emitters that do set them should match retail
-    // bit positions Ã¢â‚¬â€� adjust here if sniff diffs show a different layout.
+    // bit positions — adjust here if sniff diffs show a different layout.
     struct HouseInfo
     {
         ObjectGuid HouseGuid;
@@ -72,18 +72,18 @@ namespace WorldPackets::Housing
         bool PlotReserved = false;
     };
 
-    // InviteEntry Ã¢â‚¬â€� Housing_ParseInviteEntry (sub_7FF75C1ACB90), 48 bytes total.
+    // InviteEntry — Housing_ParseInviteEntry (sub_7FF75C1ACB90), 48 bytes total.
     // Used by 0x5C000B PlayerGetInviteResponse (single) and 0x5C000C GetInvitesResponse (vector).
     // IDA-verified wire order:
-    //   uint64 Timestamp           (ai_Process_HousingDataPacket Ã¢â‚¬â€� 8 bytes)
+    //   uint64 Timestamp           (ai_Process_HousingDataPacket — 8 bytes)
     //   PackedGUID PlayerGuid      (helper_31E0120)
     //   PackedGUID HouseGuid       (helper_31E0120)
-    //   uint64 ExtraData           (ai_Process_HousingDataPacket Ã¢â‚¬â€� 8 bytes)
+    //   uint64 ExtraData           (ai_Process_HousingDataPacket — 8 bytes)
     //
     // Distinct from the 18-byte RosterEntry parsed by Housing_ParseRosterEntry
     // (sub_7FF75C1ACC50, used by 0x5C0010 NeighborhoodRosterResidentUpdate).
     // Earlier TC versions named this `JamNeighborhoodRosterEntry` and reused it
-    // for both the invite-list and roster paths Ã¢â‚¬â€� that was a mismap; only the
+    // for both the invite-list and roster paths — that was a mismap; only the
     // invite path has this layout.
     struct InviteEntry
     {
@@ -93,7 +93,7 @@ namespace WorldPackets::Housing
         uint64 ExtraData = 0;
     };
 
-    // RosterEntry Ã¢â‚¬â€� Housing_ParseRosterEntry (sub_7FF75C1ACC50), 18 bytes wire.
+    // RosterEntry — Housing_ParseRosterEntry (sub_7FF75C1ACC50), 18 bytes wire.
     // Used by 0x5C0010 NeighborhoodRosterResidentUpdate.
     // IDA-verified wire order:
     //   PackedGUID PlayerGuid
@@ -192,11 +192,11 @@ namespace WorldPackets::Housing
     // ============================================================
 
     // Removed 2026-04-24 after IDA 12.0.5 verification:
-    //   HouseInteriorEnterHouse / HouseInteriorLeaveHouseResponse Ã¢â‚¬â€� both SMSGs no
+    //   HouseInteriorEnterHouse / HouseInteriorLeaveHouseResponse — both SMSGs no
     //   longer exist in 12.0.5. House entry/leave is communicated via the
     //   PlayerHouseInfoComponentData.CurrentHouse UpdateField change; client fires
     //   HOUSE_PLOT_ENTERED via field-change callback (verified via IDA xref trace).
-    //   HouseInteriorLeaveHouse CMSG (0x2F0001) still exists Ã¢â‚¬â€� keep it.
+    //   HouseInteriorLeaveHouse CMSG (0x2F0001) still exists — keep it.
 
     class HouseInteriorLeaveHouse final : public ClientPacket
     {
@@ -245,7 +245,7 @@ namespace WorldPackets::Housing
         // Sample 1 (68B) anchor is a real MeshObject (HighGuid 56), AttachPoint=-1.
         // Samples 2/3 (53/54B) anchor is empty PackedGUID, AttachPoint a small int.
         // Previous Read() misparsed the anchor PackedGUID as 3 separate fields
-        // (Field_61 u8 + Field_62 u8 + Field_63 s32 + speculative tail) Ã¢â‚¬â€� bytes
+        // (Field_61 u8 + Field_62 u8 + Field_63 s32 + speculative tail) — bytes
         // happened to total correctly only for the empty-anchor case.
         ObjectGuid DecorGuid;
         TaggedPosition<::Position::XYZ> Position;
@@ -322,7 +322,7 @@ namespace WorldPackets::Housing
         std::vector<ObjectGuid> DecorGuids;
     };
 
-    // Retired 2026-05-12: HousingDecorDeleteFromStorageById (TC-CUSTOM CMSG 0x30000A) Ã¢â‚¬â€� no client sender.
+    // Retired 2026-05-12: HousingDecorDeleteFromStorageById (TC-CUSTOM CMSG 0x30000A) — no client sender.
 
     class HousingDecorRequestStorage final : public ClientPacket
     {
@@ -372,11 +372,11 @@ namespace WorldPackets::Housing
         uint64 Timestamp = 0;
     };
 
-    // Retired 2026-05-12: HousingDecorUpdateDyeSlot (TC-CUSTOM CMSG 0x300008) Ã¢â‚¬â€� duplicate of SET_DYE_SLOTS.
+    // Retired 2026-05-12: HousingDecorUpdateDyeSlot (TC-CUSTOM CMSG 0x300008) — duplicate of SET_DYE_SLOTS.
     // Retired 2026-05-11: HousingDecorStartPlacingFromSource (TC-CUSTOM CMSG 0x30000B).
     // Same fire-and-forget pattern as StartPlacingNewDecor; no retail counterpart.
 
-    // Retired 2026-05-12: HousingDecorCleanupModeToggle (TC-CUSTOM CMSG 0x30000C) Ã¢â‚¬â€� no client sender.
+    // Retired 2026-05-12: HousingDecorCleanupModeToggle (TC-CUSTOM CMSG 0x30000C) — no client sender.
 
     // Retired 2026-05-11: HousingDecorBatchOperation + HousingDecorPlacementPreview (TC-CUSTOM
     // CMSGs 0x30000D, 0x30000F). No C_HousingDecor.BatchOperation or PlacementPreview Lua API
@@ -477,9 +477,9 @@ namespace WorldPackets::Housing
         uint8 Flags = 0;
     };
 
-    // Retired 2026-05-12: HousingFixtureCreateBasicHouse (TC-CUSTOM CMSG 0x310001) Ã¢â‚¬â€� house creation
+    // Retired 2026-05-12: HousingFixtureCreateBasicHouse (TC-CUSTOM CMSG 0x310001) — house creation
     // is via CMSG_NEIGHBORHOOD_BUY_HOUSE; no client sender for this opcode.
-    // Retired 2026-05-12: HousingFixtureDeleteHouse (TC-CUSTOM CMSG 0x310002) Ã¢â‚¬â€� duplicate of
+    // Retired 2026-05-12: HousingFixtureDeleteHouse (TC-CUSTOM CMSG 0x310002) — duplicate of
     // real CMSG_HOUSING_SVCS_RELINQUISH_HOUSE (0x33000A).
 
     // ============================================================
@@ -503,7 +503,7 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
-        // Sniff-verified (build 66838): this is a Housing subType=2 room GUID Ã¢â‚¬â€� the existing
+        // Sniff-verified (build 66838): this is a Housing subType=2 room GUID — the existing
         // room whose door is being connected to, not a house GUID
         ObjectGuid SourceRoomGuid;
         uint32 TargetDoorComponentID = 0;   // RoomComponent.ID of the door being connected to
@@ -576,7 +576,7 @@ namespace WorldPackets::Housing
         //   uint8      ComponentSlot (struct +80) - which wall/face the materials apply to
         //   uint32[]   OptionIDs (from struct +48 dynamic array)
         // Previous Read() reordered to (count, ColorOverride, TextureID, OptionIDs[],
-        // Bits<1>) Ã¢â‚¬â€� the trailing bit was actually the ComponentSlot byte that
+        // Bits<1>) — the trailing bit was actually the ComponentSlot byte that
         // sits BEFORE the OptionIDs array, so OptionIDs[0] was misaligned.
         ObjectGuid RoomGuid;
         int32 ColorOverride = -1;
@@ -622,7 +622,7 @@ namespace WorldPackets::Housing
 
         // Wire (verified vs binary serializer 0x7FF75C1AC390 in 67186):
         //   uint32 NeighborhoodTypeID
-        //   uint32 SecondaryID (purpose unconfirmed; likely HouseStyle/Theme ID Ã¢â‚¬â€� read from struct offset 80)
+        //   uint32 SecondaryID (purpose unconfirmed; likely HouseStyle/Theme ID — read from struct offset 80)
         //   uint8(strlen) + string Name (length-prefixed, no bit accumulator)
         uint32 NeighborhoodTypeID = 0;
         uint32 SecondaryID = 0;
@@ -713,10 +713,10 @@ namespace WorldPackets::Housing
     };
 
     // Removed 2026-04-24: tutorial CMSGs (SetTutorialState, CompleteTutorialStep,
-    // SkipTutorial) and QueryPendingInvites Ã¢â‚¬â€� no matching C_Housing Lua API exists
+    // SkipTutorial) and QueryPendingInvites — no matching C_Housing Lua API exists
     // in 12.0.5. Only StartTutorial (0x33001A) is real.
 
-    // Retired 2026-05-12: HousingDecorConfirmPreviewPlacement (TC-CUSTOM CMSG 0x300011) Ã¢â‚¬â€� no client sender.
+    // Retired 2026-05-12: HousingDecorConfirmPreviewPlacement (TC-CUSTOM CMSG 0x300011) — no client sender.
 
     class HousingSvcsAcceptNeighborhoodOwnership final : public ClientPacket
     {
@@ -785,7 +785,7 @@ namespace WorldPackets::Housing
     };
 
     // Retired 2026-05-12 (batch 2): 8 TC-CUSTOM SVCS CMSGs verified fake via dual
-    // IDA + sniff cross-check (build 67186, 21 sessions, ~207k packets Ã¢â‚¬â€� 0 hits each).
+    // IDA + sniff cross-check (build 67186, 21 sessions, ~207k packets — 0 hits each).
     //   0x330000 REQUEST_PERMISSIONS_CHECK
     //   0x330005 CLEAR_PLOT_RESERVATION
     //   0x33000C GET_ROSTER_DATA
@@ -824,7 +824,7 @@ namespace WorldPackets::Housing
     };
 
     // Retired 2026-05-11: HousingRequestEditorAvailability (TC-CUSTOM CMSG 0x350009).
-    // C_HouseEditor.GetHouseEditorAvailability returns synchronously Ã¢â‚¬â€� no server roundtrip.
+    // C_HouseEditor.GetHouseEditorAvailability returns synchronously — no server roundtrip.
 
     class HousingGetPlayerPermissions final : public ClientPacket
     {
@@ -839,7 +839,7 @@ namespace WorldPackets::Housing
     // Retired 2026-05-12: HousingSystemHouseStatusQuery (0x350000), HousingSystemGetHouseInfoAlt (0x350001),
     // HousingSystemHouseSnapshot (0x350002), HousingSystemExportHouse (0x350003), HousingSystemUpdateHouseInfo (0x350004).
     // IDA verification (build 67186): no senders in client binary; entire group 0x35 dispatcher has no wire path.
-    // SMSG_HOUSING_UPDATE_HOUSE_INFO (0x550004) also orphaned Ã¢â‚¬â€� handler that emitted it never executed.
+    // SMSG_HOUSING_UPDATE_HOUSE_INFO (0x550004) also orphaned — handler that emitted it never executed.
 
     // ============================================================
     // Photo Sharing Authorization (0x40019x)
@@ -881,7 +881,7 @@ namespace WorldPackets::Housing
         void Read() override { }
     };
 
-    // CMSG_BULK_REFUND (0x290033) Ã¢â‚¬â€� bulk-refund placed decor within the refund window
+    // CMSG_BULK_REFUND (0x290033) — bulk-refund placed decor within the refund window
     class BulkRefund final : public ClientPacket
     {
     public:
@@ -1137,15 +1137,15 @@ namespace WorldPackets::Housing
     public:
         HousingRedeemDeferredDecorResponse() : ServerPacket(SMSG_HOUSING_REDEEM_DEFERRED_DECOR_RESPONSE) { }
         WorldPacket const* Write() override;
-        ObjectGuid DecorGuid;       // Sniff: PackedGUID Ã¢â‚¬â€� the new decor item's GUID (client uses for placement)
+        ObjectGuid DecorGuid;       // Sniff: PackedGUID — the new decor item's GUID (client uses for placement)
         uint8 Result = 0;           // Sniff: uint8 Status (0 = success)
-        uint32 SequenceIndex = 0;   // Sniff: uint32 Ã¢â‚¬â€� echoes CMSG RedemptionToken
+        uint32 SequenceIndex = 0;   // Sniff: uint32 — echoes CMSG RedemptionToken
     };
 
     // Retired 2026-05-11: 4 speculative Decor* response classes deleted (fake opcodes
     // 0xF1000003..0xF1000006). Lua API verification (HousingDecorUIDocumentation.lua,
     // HousingCatalogSearcherAPIDocumentation.lua, HousingBasicModeUIDocumentation.lua) showed
-    // these features have NO retail Lua bindings Ã¢â‚¬â€� entirely server-side scaffolding for
+    // these features have NO retail Lua bindings — entirely server-side scaffolding for
     // CMSGs (0x300005/7/D/F) that never appear in retail sniffs.
 
     class HousingFirstTimeDecorAcquisition final : public ServerPacket
@@ -1166,7 +1166,7 @@ namespace WorldPackets::Housing
         HousingFixtureSetEditModeResponse() : ServerPacket(SMSG_HOUSING_FIXTURE_SET_EDIT_MODE_RESPONSE) { }
         WorldPacket const* Write() override;
         // Sniff-verified (build 66337): PackedGUID(HouseGuid, always empty) + PackedGUID(EditorPlayerGuid) + uint8(Result)
-        // Client compares EditorPlayerGuid against stored reference: match Ã¢â€ â€™ enter, mismatch/empty Ã¢â€ â€™ exit
+        // Client compares EditorPlayerGuid against stored reference: match → enter, mismatch/empty → exit
         ObjectGuid HouseGuid;           // Always empty in sniff
         ObjectGuid EditorPlayerGuid;    // Player GUID on enter, empty on exit
         uint8 Result = 0;
@@ -1177,11 +1177,11 @@ namespace WorldPackets::Housing
     public:
         HousingFixtureCreateBasicHouseResponse() : ServerPacket(SMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE_RESPONSE) { }
         WorldPacket const* Write() override;
-        // IDA case 5373953: uint8(Result) only Ã¢â‚¬â€� client ignores any trailing data
+        // IDA case 5373953: uint8(Result) only — client ignores any trailing data
         uint8 Result = 0;
     };
 
-    // Retired 2026-05-12: HousingFixtureDeleteHouseResponse Ã¢â‚¬â€� orphaned after FIXTURE_DELETE_HOUSE CMSG retirement.
+    // Retired 2026-05-12: HousingFixtureDeleteHouseResponse — orphaned after FIXTURE_DELETE_HOUSE CMSG retirement.
 
     class HousingFixtureSetHouseSizeResponse final : public ServerPacket
     {
@@ -1293,7 +1293,7 @@ namespace WorldPackets::Housing
         HousingRoomApplyComponentMaterialsResponse() : ServerPacket(SMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS_RESPONSE) { }
         WorldPacket const* Write() override;
         // Sniff-verified: PackedGUID + uint32(arrayCount) + uint32(TextureID) + uint8(Result) + uint32[arrayCount]
-        // NOTE: ColorOverride is NOT echoed in response Ã¢â‚¬â€� only TextureID
+        // NOTE: ColorOverride is NOT echoed in response — only TextureID
         ObjectGuid RoomGuid;
         uint32 RoomComponentTextureID = 0;
         uint8 Result = 0;
@@ -1371,7 +1371,7 @@ namespace WorldPackets::Housing
         uint8 Result = 0;
     };
 
-    // Retired 2026-05-12 (batch 2): HousingSvcsClearPlotReservationResponse Ã¢â‚¬â€� orphaned after
+    // Retired 2026-05-12 (batch 2): HousingSvcsClearPlotReservationResponse — orphaned after
     // CLEAR_PLOT_RESERVATION CMSG retirement (no other emit-site).
 
     // Retired 2026-05-11: HousingSvcsHouseExpirationNotification deleted (fake opcode 0xF100000C,
@@ -1408,7 +1408,7 @@ namespace WorldPackets::Housing
         ObjectGuid Guid;             // +0  reflection: guid
         uint64 OccupiedPlots = 0;    // +16 reflection: occupiedPlots
         uint64 ReservationMask = 0;  // +24 reflection: reservationMask
-        uint32 Flags = 0;            // +32 reflection: flags (uint32; was uint8 StatusType Ã¢â‚¬â€� widened per reflection, struct is unused scaffolding)
+        uint32 Flags = 0;            // +32 reflection: flags (uint32; was uint8 StatusType — widened per reflection, struct is unused scaffolding)
         ObjectGuid OwnerGUID;        // +40 reflection: ownerGUID
         std::string NeighborhoodName; // +56 reflection: neighborhoodName (len at +64)
     };
@@ -1417,7 +1417,7 @@ namespace WorldPackets::Housing
     // deleted (fake opcodes 0xF100000E + 0xF100000A, 0 emit-sites). IDA-derived real opcodes:
     //   Search   = 0x540009 (case 5505033)  uint32(count) + uint8(flags) + JamHousingSearchResult[count]
     //   Details  = 0x54000A (case 5505034)  uint32 + uint32 + PackedGUID + uint64 + uint32 + uint32[] + JamCliHouse[] + JamCliHouse[]
-    // (JamHousingSearchResult struct above retained Ã¢â‚¬â€� kept as future scaffolding.)
+    // (JamHousingSearchResult struct above retained — kept as future scaffolding.)
 
     class HousingSvcsGetPlayerHousesInfoResponse final : public ServerPacket
     {
@@ -1507,7 +1507,7 @@ namespace WorldPackets::Housing
         JamCliHouse House;
     };
 
-    // Retired 2026-05-12 (batch 2): HousingSvcsGuildAppendNeighborhoodNotification Ã¢â‚¬â€� orphaned after
+    // Retired 2026-05-12 (batch 2): HousingSvcsGuildAppendNeighborhoodNotification — orphaned after
     // GUILD_APPEND_NEIGHBORHOOD CMSG retirement (no other emit-site).
 
     class HousingSvcsGuildRenameNeighborhoodNotification final : public ServerPacket
@@ -1515,7 +1515,7 @@ namespace WorldPackets::Housing
     public:
         HousingSvcsGuildRenameNeighborhoodNotification() : ServerPacket(SMSG_HOUSING_SVCS_GUILD_RENAME_NEIGHBORHOOD_NOTIFICATION) { }
         WorldPacket const* Write() override;
-        // IDA case 5505045: uint8(nameLen) + String(nameLen) Ã¢â‚¬â€� NO GUID
+        // IDA case 5505045: uint8(nameLen) + String(nameLen) — NO GUID
         std::string NewName;
     };
 
@@ -1554,7 +1554,7 @@ namespace WorldPackets::Housing
         // IDA case 5505049: bit-packed blob encoding via ai_Decode_ClientOpcodeData
         // First byte: top 6 bits = blobSize (49 on success, 0 on failure)
         //             bottom 2 bits = result code (0=success, 1-3=error)
-        // Blob: 3Ãƒâ€”16-byte raw ObjectGuids + 1 byte = 49 bytes total
+        // Blob: 3×16-byte raw ObjectGuids + 1 byte = 49 bytes total
         uint8 Result = 0;
         ObjectGuid OwnerGUID;
         ObjectGuid HouseGUID;
@@ -1569,7 +1569,7 @@ namespace WorldPackets::Housing
         WorldPacket const* Write() override;
 
         // IDA case 5505050 (sub_7FF724C7DA70): NO Result byte
-        // uint32(count) + Entry[count]{PackedGUID + uint32 + uint8 + uint8 + uint8(bit7Ã¢â€ â€™nameLen) + String(nameLen)}
+        // uint32(count) + Entry[count]{PackedGUID + uint32 + uint8 + uint8 + uint8(bit7→nameLen) + String(nameLen)}
         // Field names from 12.0.7 (68275) reflection: JamPotentialCosmeticHouseOwner (HOUSING_REFLECTION_NAMES_68275.md).
         struct PotentialOwnerData
         {
@@ -1595,7 +1595,7 @@ namespace WorldPackets::Housing
         //   PackedGUID   House.OwnerGUID
         //   PackedGUID   House.NeighborhoodGUID
         //   uint8        House.HouseLevel
-        //   uint8        PlotIndex8     (PlotIndex truncated to uint8 Ã¢â‚¬â€� sniff shows 0x20=32)
+        //   uint8        PlotIndex8     (PlotIndex truncated to uint8 — sniff shows 0x20=32)
         //   uint32       SettingsFlags  (HOUSE_SETTING_* mask; sniff shows 0)
         //
         // Earlier IDA case 5505051 read suggested `uint8 + uint32 + uint8 + optional uint64`
@@ -1699,11 +1699,11 @@ namespace WorldPackets::Housing
         uint8 Result = 0;
     };
 
-    // SMSG_HOUSING_EXPORT_HOUSE_RESPONSE (0x550003) Ã¢â‚¬â€� live 68275 handler (parser sub_7FF7291D7160).
+    // SMSG_HOUSING_EXPORT_HOUSE_RESPONSE (0x550003) — live 68275 handler (parser sub_7FF7291D7160).
     // Wire: PackedGUID HouseGuid + u8 Status + optional name string (presence byte, bit7 gates) +
     //       uint32 BlobLen + bytes[BlobLen]. RE feedback 0x550003.
     // NOTE: the optional-string presence/length bit encoding (ai_Process_GarrisonDataPacket) was not
-    // fully pinned by RE Ã¢â‚¬â€� the empty-name path is exact; confirm the string path vs a live capture.
+    // fully pinned by RE — the empty-name path is exact; confirm the string path vs a live capture.
     class HousingExportHouseResponse final : public ServerPacket
     {
     public:
@@ -1754,7 +1754,7 @@ namespace WorldPackets::Housing
     // `C_HouseEditor.GetHouseEditorAvailability` and `GetHouseEditorModeAvailability` both
     // return synchronously in retail (no server roundtrip).
 
-    // Retired 2026-05-12: HousingUpdateHouseInfo Ã¢â‚¬â€� orphaned after UPDATE_HOUSE_INFO CMSG retirement.
+    // Retired 2026-05-12: HousingUpdateHouseInfo — orphaned after UPDATE_HOUSE_INFO CMSG retirement.
     // SMSG opcode 0x550004 is real per IDA (sub_7FF75C1D1020) but the only emit-site was the
     // HandleHousingSystemUpdateHouseInfo handler, which never executes (no client sender).
 
@@ -1860,7 +1860,7 @@ namespace WorldPackets::Housing
         // Wire unchanged: 3 uint32 fields per entry (12 bytes), verified build 67186 sub_7FF75C0EFBA0.
         uint32 HouseDecorID = 0;    // reflection: houseDecorID
         uint32 PlacedQuantity = 0;  // reflection: placedQuantity
-        uint32 StoredQuantity = 0;  // reflection: storedQuantity (was MaxQuantity Ã¢â‚¬â€� reflection resolves it: stored, not max)
+        uint32 StoredQuantity = 0;  // reflection: storedQuantity (was MaxQuantity — reflection resolves it: stored, not max)
     };
 
     // ============================================================
@@ -1870,7 +1870,7 @@ namespace WorldPackets::Housing
     struct JamPlayerInitiativeTaskInfo
     {
         // IDA-verified wire (build 67186, sub_7FF75C0EEE00 inner loop):
-        // each task entry is exactly 2x uint32 Ã¢â‚¬â€� TC previously had a third Status field
+        // each task entry is exactly 2x uint32 — TC previously had a third Status field
         // that the client never reads.
         uint32 TaskID = 0;
         uint32 Progress = 0;
@@ -1882,7 +1882,7 @@ namespace WorldPackets::Housing
         //   PackedGUID g1
         //   PackedGUID g2
         //   uint32     a32
-        //   uint64     a40 (CompletionTime Ã¢â‚¬â€� 8 bytes)
+        //   uint64     a40 (CompletionTime — 8 bytes)
         //   uint32     a48
         //
         // Semantic mapping (best-guess until sniff confirms):
@@ -1907,7 +1907,7 @@ namespace WorldPackets::Housing
         std::vector<JamClientRefundableDecor> Decors;
     };
 
-    // SMSG_BULK_REFUND_RESPONSE (0x420378) Ã¢â‚¬â€� result of BulkRefundDecors operation
+    // SMSG_BULK_REFUND_RESPONSE (0x420378) — result of BulkRefundDecors operation
     // IDA-verified wire (build 67186, sub_7FF75C0C23B0): single uint32 result code
     class BulkRefundResponse final : public ServerPacket
     {
@@ -1997,7 +1997,7 @@ namespace WorldPackets::Housing
         //   PackedGUID NeighborhoodGuid
         //   uint32     Count
         //   NICompletedTasksEntry[Count]
-        // No leading Result byte Ã¢â‚¬â€� failure routing is via SMSG_HOUSING_SVCS_NOTIFY_PERMISSIONS_FAILURE.
+        // No leading Result byte — failure routing is via SMSG_HOUSING_SVCS_NOTIFY_PERMISSIONS_FAILURE.
         ObjectGuid NeighborhoodGuid;
         std::vector<NICompletedTasksEntry> CompletedTasks;
     };
@@ -2024,7 +2024,7 @@ namespace WorldPackets::Housing
     public:
         ClearInitiativeTaskCriteriaProgress() : ServerPacket(SMSG_CLEAR_INITIATIVE_TASK_CRITERIA_PROGRESS) { }
         WorldPacket const* Write() override;
-        // IDA-verified wire (build 67186, sub_7FF75C0EED30): uint32(count) + countÃƒâ€”uint64(criteriaID)
+        // IDA-verified wire (build 67186, sub_7FF75C0EED30): uint32(count) + count×uint64(criteriaID)
         std::vector<uint64> CriteriaIDs;
     };
 
@@ -2036,7 +2036,7 @@ namespace WorldPackets::Housing
         // IDA-verified wire (build 67186, sub_7FF75C0EF0C0 fields a1+32/+40/+56):
         //   uint32 + ObjectGuid + ObjectGuid
         // Field semantics need sniff verification; using Result+SourceGuid+TargetGuid.
-        // Old code wrote only uint8(Result) Ã¢â‚¬â€� desynced the bit stream.
+        // Old code wrote only uint8(Result) — desynced the bit stream.
         uint32 Result = 0;
         ObjectGuid SourceGuid;
         ObjectGuid TargetGuid;
@@ -2049,7 +2049,7 @@ namespace WorldPackets::Housing
         WorldPacket const* Write() override;
         // IDA-verified wire (build 67186, sub_7FF75C0EF180):
         //   uint32(count) + ObjectGuid[count]
-        // Old code wrote uint32(InitiativeID) + uint32(MilestoneIndex) Ã¢â‚¬â€� wrong shape.
+        // Old code wrote uint32(InitiativeID) + uint32(MilestoneIndex) — wrong shape.
         // Existing semantic fields kept for caller compat; serialized as 0-count
         // until reward-GUID semantics are sniffed.
         uint32 InitiativeID = 0;
@@ -2112,14 +2112,14 @@ namespace WorldPackets::Housing
     // SMSG_AUCTION_HELLO_RESPONSE: greeting for the crafting-order clerk NPC.
     //
     // IDA-verified wire, unchanged 67186 -> 68275 (68275 deserializer sub_7FF7290B9C90):
-    //   PackedGUID Guid    Ã¢â‚¬â€� the CLERK CREATURE's guid (the old "HouseGuid" name was wrong; the
+    //   PackedGUID Guid    — the CLERK CREATURE's guid (the old "HouseGuid" name was wrong; the
     //                        capture guid decodes to HighGuid type 8 / Creature, entry 243279, and is
     //                        byte-identical to the guid in the preceding CMSG_GOSSIP_SELECT_OPTION)
-    //   uint8      Flags   Ã¢â‚¬â€� bit 0x80 -> Field0, bit 0x40 -> OpenForBusiness
+    //   uint8      Flags   — bit 0x80 -> Field0, bit 0x40 -> OpenForBusiness
     //
     // Client handler sub_7FF72ACDB8D0 reads only the guid and the 0x40 bit, opens
     // PlayerInteractionType 60 (ProfessionsCustomerOrder), then fires CRAFTINGORDERS_SHOW_CUSTOMER
-    // when the bit is set and CRAFTING_HOUSE_DISABLED when it is clear Ã¢â‚¬â€� the positional analogue of
+    // when the bit is set and CRAFTING_HOUSE_DISABLED when it is clear — the positional analogue of
     // AuctionHelloResponse::OpenForBusiness. Bit 0x80 is stored by the deserializer and read by
     // nothing in the 68275 client; retail sent it clear. Capture: 3 samples, body a7e7 <13-byte
     // packed guid> 40.
@@ -2130,8 +2130,8 @@ namespace WorldPackets::Housing
         WorldPacket const* Write() override;
 
         ObjectGuid Guid;
-        bool Field0 = false;            // bit 0x80 Ã¢â‚¬â€� dead in the 68275 client, meaning unrecovered
-        bool OpenForBusiness = false;   // bit 0x40 Ã¢â‚¬â€� false raises CRAFTING_HOUSE_DISABLED instead
+        bool Field0 = false;            // bit 0x80 — dead in the 68275 client, meaning unrecovered
+        bool OpenForBusiness = false;   // bit 0x40 — false raises CRAFTING_HOUSE_DISABLED instead
     };
 
     // SMSG_GUILD_OTHERS_OWNED_HOUSES_RESULT (0x4E0047)
@@ -2139,7 +2139,7 @@ namespace WorldPackets::Housing
     //   uint8 Result
     //   PackedGUID GuildGuid
     //   uint32 Count
-    //   HouseInfoStruct[Count]    (80 bytes/entry Ã¢â‚¬â€� same shape as 0x540012)
+    //   HouseInfoStruct[Count]    (80 bytes/entry — same shape as 0x540012)
     //
     // The shared WriteJamCliHouse helper emits HouseInfoStruct payloads.
     class GuildOthersOwnedHousesResult final : public ServerPacket
@@ -2156,7 +2156,7 @@ namespace WorldPackets::Housing
     // Replaces the old NeighborhoodUpdateNameNotification (the 0x5C0004 slot is now
     // SMSG_NEIGHBORHOOD_REMOVE_SECONDARY_OWNER_RESPONSE in 12.0.5). Real opcode:
     // SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION (0x540023). Wire format
-    // preserved from the old packet Ã¢â‚¬â€� needs 12.0.5 sniff verification.
+    // preserved from the old packet — needs 12.0.5 sniff verification.
     class HousingSvcsNeighborhoodUpdateNameNotification final : public ServerPacket
     {
     public:
@@ -2238,7 +2238,7 @@ namespace WorldPackets::Neighborhood
     };
 
     // Retired 2026-05-12: NeighborhoodCharterSignResponsePacket (TC-CUSTOM CMSG 0x370002)
-    // and NeighborhoodCharterRemoveSignature (TC-CUSTOM CMSG 0x370005) Ã¢â‚¬â€� STUB-OK only;
+    // and NeighborhoodCharterRemoveSignature (TC-CUSTOM CMSG 0x370005) — STUB-OK only;
     // IDA verification (build 67186): no client senders.
 
     // ============================================================
@@ -2340,7 +2340,7 @@ namespace WorldPackets::Neighborhood
         void Read() override;
 
         // IDA-verified wire (build 67186, sub_7FF75C177630): 2 PackedGUIDs only.
-        // Earlier 12.0.1 "uint32 + PackedGUID + uint16" parse was a sniff misread Ã¢â‚¬â€�
+        // Earlier 12.0.1 "uint32 + PackedGUID + uint16" parse was a sniff misread —
         // the leading 4 bytes are actually the first GUID's mask + low bytes, and
         // the trailing 2 bytes are the second GUID's mask. No HouseStyleID on wire.
         ObjectGuid CornerstoneGuid;
@@ -2357,7 +2357,7 @@ namespace WorldPackets::Neighborhood
         // 12.0.5 wire (26 bytes) = CornerstoneGuid + HouseGuid. IDA-verified
         // against client TryMoveHouse Lua handler at 0x7FF75CC59CA1: the client
         // explicitly checks `(firstGuid.HiPart >> 58) == 11` (HighGuid::GameObject)
-        // and resets to Empty if not Ã¢â‚¬â€� so the first GUID is a destination plot
+        // and resets to Empty if not — so the first GUID is a destination plot
         // cornerstone GO GUID. The CMSG serializer (sub_7FF75C177680) writes the
         // opcode (0x39000A) followed by the two PackedGUIDs. Sample bytes:
         //   ef ff 69 93 6b 09 72 a4 01 80 6d be e1 55 2d 2f 2c   <- 17B GameObject GUID
@@ -2510,7 +2510,7 @@ namespace WorldPackets::Neighborhood
         uint8 Result = 0;  // IDA 12.0 verified (0x5C0003): single uint8
     };
 
-    // Old NeighborhoodUpdateNameNotification (0x5C0004) removed in 12.0.5 Ã¢â‚¬â€�
+    // Old NeighborhoodUpdateNameNotification (0x5C0004) removed in 12.0.5 —
     // moved to SMSG_HOUSING_SVCS_NEIGHBORHOOD_UPDATE_NAME_NOTIFICATION (0x540023).
     // The replacement class lives in the Housing namespace (this file, earlier).
 
@@ -2562,13 +2562,13 @@ namespace WorldPackets::Neighborhood
         WorldPacket const* Write() override;
 
         // Wire format verified against retail 12.0.1 build 65940 packet captures
-        // IDA deserializer sub_7FF6F6E3E200: uint32Ã¢â€ â€™+32, GUIDÃ¢â€ â€™+40, GUIDÃ¢â€ â€™+56, uint64Ã¢â€ â€™+72, uint8Ã¢â€ â€™+80, GUIDÃ¢â€ â€™+128
+        // IDA deserializer sub_7FF6F6E3E200: uint32→+32, GUID→+40, GUID→+56, uint64→+72, uint8→+80, GUID→+128
         uint32 PlotIndex = 0;               // Echoed from CMSG (NOT a result code)
-        ObjectGuid PlotOwnerGuid;           // Ã¢â€ â€™Buffer+40: Player GUID when owned, Empty when unclaimed
-        ObjectGuid NeighborhoodGuid;        // Ã¢â€ â€™Buffer+56: Housing GUID when owned, Empty when unclaimed
-        uint64 Cost = 0;                    // Ã¢â€ â€™Buffer+72: Purchase price (0 if owned or free)
-        uint8 PurchaseStatus = 0;           // Ã¢â€ â€™Buffer+80: 73 (0x49) = purchasable, 0 = not. Client checks ==73
-        ObjectGuid CornerstoneGuid;         // Ã¢â€ â€™Buffer+128: Cornerstone game object GUID
+        ObjectGuid PlotOwnerGuid;           // →Buffer+40: Player GUID when owned, Empty when unclaimed
+        ObjectGuid NeighborhoodGuid;        // →Buffer+56: Housing GUID when owned, Empty when unclaimed
+        uint64 Cost = 0;                    // →Buffer+72: Purchase price (0 if owned or free)
+        uint8 PurchaseStatus = 0;           // →Buffer+80: 73 (0x49) = purchasable, 0 = not. Client checks ==73
+        ObjectGuid CornerstoneGuid;         // →Buffer+128: Cornerstone game object GUID
         bool IsPlotOwned = false;           // Whether this plot has an owner
         bool CanPurchase = false;           // Whether the player can purchase this plot
         bool HasResidents = false;          // Whether the plot has residents
@@ -2621,7 +2621,7 @@ namespace WorldPackets::Neighborhood
         NeighborhoodPlayerGetInviteResponse() : ServerPacket(SMSG_NEIGHBORHOOD_PLAYER_GET_INVITE_RESPONSE) { }
         WorldPacket const* Write() override;
         // IDA-verified wire (build 67186, 0x5C000B): uint8 Result + InviteEntry(48 bytes)
-        // Per Housing_ParseInviteEntry (sub_7FF75C1ACB90): uint64 + 2Ãƒâ€”PackedGUID + uint64.
+        // Per Housing_ParseInviteEntry (sub_7FF75C1ACB90): uint64 + 2×PackedGUID + uint64.
         uint8 Result = 0;
         Housing::InviteEntry Entry;
     };
@@ -2673,7 +2673,7 @@ namespace WorldPackets::Neighborhood
         };
         std::vector<RosterMemberData> Members;
 
-        // Group entry fields Ã¢â‚¬â€� the client deserializes these to populate
+        // Group entry fields — the client deserializes these to populate
         // the HousingNeighborhoodState singleton that GetCornerstoneNeighborhoodInfo() reads.
         ObjectGuid GroupNeighborhoodGuid;   // Neighborhood GUID (stored at singleton offset 352)
         ObjectGuid GroupOwnerGuid;          // Neighborhood owner GUID (used to compute neighborhoodOwnerType)
@@ -2687,7 +2687,7 @@ namespace WorldPackets::Neighborhood
         {
             ObjectGuid PlayerGuid;
             uint8 UpdateType = 0;   // 0=Added, 1=RoleChanged, 2=Removed
-            bool IsPrivileged = false; // IDA: client reads uint8, extracts bit7 only (>> 7), stores as bool Ã¢â‚¬â€� true for Manager/Owner
+            bool IsPrivileged = false; // IDA: client reads uint8, extracts bit7 only (>> 7), stores as bool — true for Manager/Owner
         };
 
         NeighborhoodRosterResidentUpdate() : ServerPacket(SMSG_NEIGHBORHOOD_ROSTER_RESIDENT_UPDATE) { }
@@ -2752,7 +2752,7 @@ namespace WorldPackets::Neighborhood
 
     // 12.0.5 sniff-verified opcode 0x380003. Sent by C_NeighborhoodInitiative.RequestNeighborhoodInitiativeInfo
     // Lua API. Body = packed NeighborhoodGuid only (7 bytes). Always paired with
-    // ACTIVITY_LOG_REQUEST in observed traffic Ã¢â‚¬â€� same NeighborhoodGuid, fired together when
+    // ACTIVITY_LOG_REQUEST in observed traffic — same NeighborhoodGuid, fired together when
     // the player opens the neighborhood initiative panel. Server should respond with current
     // initiative state (use existing FNeighborhoodMirrorData_C update on Account entity, or
     // an explicit JamCliInitiativeInfo SMSG once that response opcode is identified).
@@ -2773,9 +2773,9 @@ namespace WorldPackets::Neighborhood
     };
 
     // ============================================================================
-    // 0x38xxxx NeighborhoodInitiative Ã¢â‚¬â€� IDA-decoded wire formats from build 67186
+    // 0x38xxxx NeighborhoodInitiative — IDA-decoded wire formats from build 67186
     // (INITIATIVE_WIRE_FORMAT_AUTHORITATIVE_67186.md). The named opcodes 0x380000,
-    // 0x380002-0x380004 are above. The remaining 12 are below Ã¢â‚¬â€� semantic naming
+    // 0x380002-0x380004 are above. The remaining 12 are below — semantic naming
     // requires runtime sniff to bind 1:1 to Lua APIs (see methodology doc).
     // ============================================================================
 
@@ -2850,7 +2850,7 @@ namespace WorldPackets::Neighborhood
         ObjectGuid NeighborhoodGuid;
     };
 
-    // 0x38000D Ã¢â‚¬â€� uint32 + uint32 + (uint32,uint32)[N] + Bits<1>
+    // 0x38000D — uint32 + uint32 + (uint32,uint32)[N] + Bits<1>
     class NeighborhoodInitiativeOp0D final : public ClientPacket
     {
     public:
@@ -2862,7 +2862,7 @@ namespace WorldPackets::Neighborhood
         bool Flag = false;
     };
 
-    // 0x38000E Ã¢â‚¬â€� uint32 count + uint32[count]. Per IDA & memory the batch flush
+    // 0x38000E — uint32 count + uint32[count]. Per IDA & memory the batch flush
     // path for AddTrackedInitiativeTask / RemoveTrackedInitiativeTask.
     class NeighborhoodInitiativeOp0E final : public ClientPacket
     {
@@ -2872,7 +2872,7 @@ namespace WorldPackets::Neighborhood
         std::vector<uint32> TaskIDs;
     };
 
-    // 0x38000F Ã¢â‚¬â€� uint32 count + (uint32Ãƒâ€”4)[count]
+    // 0x38000F — uint32 count + (uint32×4)[count]
     class NeighborhoodInitiativeOp0F final : public ClientPacket
     {
     public:
