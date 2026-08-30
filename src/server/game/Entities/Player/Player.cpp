@@ -14892,8 +14892,16 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             SendRespecWipeConfirm(guid, GetNextResetTalentsCost(), SPEC_RESET_TALENTS);
             break;
         case GossipOptionNpc::Stablemaster:
+            // Sniff-verified against a real 12.0.7 stablemaster visit: retail sends NO gossip
+            // interaction packet for a stablemaster option. The client opens the stable window
+            // itself from selecting the OptionNPC == Stablemaster gossip option plus the
+            // ActivePlayerData::PetStable::StableMaster update field that SetStableMaster sets
+            // (delivered via the normal object update). Falling through to the generic
+            // !handled block sends SMSG_GOSSIP_OPTION_NPC_INTERACTION / NPCInteractionOpenResult,
+            // which retail never sends and which suppresses the client-side open — so mark it
+            // handled and send nothing extra.
             SetStableMaster(guid);
-            handled = false;
+            handled = true;
             break;
         case GossipOptionNpc::PetSpecializationMaster:
             PlayerTalkClass->SendCloseGossip();
@@ -34176,9 +34184,13 @@ ObjectGuid Player::GetStableMaster() const
 
 void Player::SetStableMaster(ObjectGuid stableMaster)
 {
-    if (!m_activePlayerData->PetStable.has_value())
-        return;
-
+    // The modern (Dragonflight+) stable window is opened client-side from the
+    // ActivePlayerData::PetStable update field: the client shows it once StableMaster
+    // is a valid GUID. The previous early-return when PetStable had no value meant a
+    // hunter whose stable info was not yet initialized (e.g. no pets in the stable
+    // list) never got StableMaster set, so the stable window would not open at all.
+    // Passing index 0 to ModifyValue initialises the optional if it is not present,
+    // exactly as AddPetToUpdateFields does, so the window can always open.
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
         .ModifyValue(&UF::ActivePlayerData::PetStable, 0)
         .ModifyValue(&UF::StableInfo::StableMaster), stableMaster);
