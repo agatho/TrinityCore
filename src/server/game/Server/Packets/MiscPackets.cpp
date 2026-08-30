@@ -761,6 +761,11 @@ void MountSetFavorite::Read()
     _worldPacket >> Bits<1>(IsFavorite);
 }
 
+void MountClearFanfare::Read()
+{
+    _worldPacket >> MountSpellID;
+}
+
 void CloseInteraction::Read()
 {
     _worldPacket >> SourceGuid;

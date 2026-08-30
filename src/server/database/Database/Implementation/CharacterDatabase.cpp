@@ -568,6 +568,11 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_INS_CHARACTER_SOCIAL, "INSERT INTO character_social (guid, friend, flags) VALUES (?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_CHARACTER_SOCIAL, "DELETE FROM character_social WHERE guid = ? AND friend = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_CHARACTER_SOCIAL_NOTE, "UPDATE character_social SET note = ? WHERE guid = ? AND friend = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_RECENT_ALLIES, "SELECT allyGuid, allyAccount, note FROM character_recent_allies WHERE ownerGuid = ? ORDER BY lastGrouped DESC LIMIT 100", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_RECENT_ALLY, "INSERT INTO character_recent_allies (ownerGuid, allyGuid, allyAccount, lastGrouped) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE allyAccount = VALUES(allyAccount), lastGrouped = VALUES(lastGrouped)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_UPD_RECENT_ALLY_NOTE, "UPDATE character_recent_allies SET note = ? WHERE ownerGuid = ? AND allyGuid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_RECENT_ALLY_SETTING, "SELECT allowSeeLocation FROM character_recent_ally_settings WHERE ownerGuid = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_RECENT_ALLY_SETTING, "REPLACE INTO character_recent_ally_settings (ownerGuid, allowSeeLocation) VALUES (?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_CHARACTER_POSITION, "UPDATE characters SET position_x = ?, position_y = ?, position_z = ?, orientation = ?, map = ?, zone = ?, trans_x = 0, trans_y = 0, trans_z = 0, transguid = 0, taxi_path = '', cinematic = 1 WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_CHARACTER_POSITION_BY_MAPID, "UPDATE characters SET position_x = ?, position_y = ?, position_z = ?, orientation = ?, map = ?, zone = ?, trans_x = 0, trans_y = 0, trans_z = 0, transguid = 0, taxi_path = '', cinematic = 1 WHERE guid = ? AND map = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_CHARACTER_AURA_FROZEN, "SELECT characters.name, character_aura.remainTime FROM characters LEFT JOIN character_aura ON (characters.guid = character_aura.guid) WHERE character_aura.spell = 9454", CONNECTION_SYNCH);
