@@ -885,6 +885,20 @@ namespace WorldPackets
         // Retired 2026-05-12 (batch 2): 8 fake SVCS CMSG class forward decls deleted.
         // Retired 2026-05-12: group 0x35 system CMSG classes (HouseStatusQuery, GetHouseInfoAlt,
         // HouseSnapshot, ExportHouse, UpdateHouseInfo) â€” no client senders in build 67186.
+    namespace Social
+    {
+        class AddFriend;
+        class AddIgnore;
+        class DelFriend;
+        class DelIgnore;
+        class MakeConditionalAppearancePermanent;
+        class RecentAllyRequestData;
+        class RecentAllySetNote;
+        class SendContactList;
+        class SetAllowRecentAlliesSeeLocation;
+        class SetContactNotes;
+        class SocialContractRequest;
+        class AcceptSocialContract;
     }
     namespace Movement
     {
@@ -1982,6 +1996,11 @@ class TC_GAME_API WorldSession
         void HandleQueryNeighborhoodInfo(WorldPackets::Housing::QueryNeighborhoodInfo const& queryNeighborhoodInfo);
         void HandleInvitePlayerToNeighborhood(WorldPackets::Housing::InvitePlayerToNeighborhood const& invitePlayerToNeighborhood);
         void HandleGuildGetOthersOwnedHouses(WorldPackets::Housing::GuildGetOthersOwnedHouses const& guildGetOthersOwnedHouses);
+        // Social
+        void HandleSetAllowRecentAlliesSeeLocation(WorldPackets::Social::SetAllowRecentAlliesSeeLocation& packet);
+        void HandleRecentAllyRequestData(WorldPackets::Social::RecentAllyRequestData& packet);
+        void HandleRecentAllySetNote(WorldPackets::Social::RecentAllySetNote& packet);
+        void HandleAcceptSocialContract(WorldPackets::Social::AcceptSocialContract& acceptSocialContract);
 
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);
