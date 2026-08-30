@@ -74,6 +74,7 @@
 #include "Language.h"
 #include "ManagedWorldStateMgr.h"
 #include "LanguageMgr.h"
+#include "LoaBlessingMgr.h"
 #include "Log.h"
 #include "LootItemStorage.h"
 #include "LootMgr.h"
@@ -1691,6 +1692,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();
+
+    TC_LOG_INFO("server.loading", "Loading Loa Blessing options...");
+    sLoaBlessingMgr->LoadFromDB();                              // Zul'Aman Altar of Blessings worship options (realm-safe if absent)
 
     TC_LOG_INFO("server.loading", "Loading creature summoned data...");
     sObjectMgr->LoadCreatureSummonedData();                     // must be after LoadCreatureTemplates() and LoadQuests()
