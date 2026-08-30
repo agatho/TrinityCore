@@ -233,22 +233,27 @@ namespace WorldPackets
         class AccountCharacterCurrencyLists final : public ServerPacket
         {
         public:
-            struct CharacterCurrency
+            struct CharacterCurrencyData
             {
-                int32 CurrencyID = 0;
-                ObjectGuid Character;
-                uint32 Quantity = 0;
-                uint32 WeeklyQuantity = 0;
-                uint32 MaxQuantity = 0;
-                bool Flag = false;
+                ObjectGuid CharacterGUID;
+                std::string CharacterName;
+                uint8 ClassID = 0;
+                int32 Level = 0;
             };
 
-            explicit AccountCharacterCurrencyLists() : ServerPacket(SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS, 4 + 1) { }
+            struct CurrencyQuantityData
+            {
+                ObjectGuid CharacterGUID;
+                int32 CurrencyTypeID = 0;
+                int32 Quantity = 0;
+            };
+
+            explicit AccountCharacterCurrencyLists() : ServerPacket(SMSG_ACCOUNT_CHARACTER_CURRENCY_LISTS) { }
 
             WorldPacket const* Write() override;
 
-            std::vector<CharacterCurrency> Currencies;
-            bool TrailingFlag = false;
+            std::vector<CharacterCurrencyData> Characters;
+            std::vector<CurrencyQuantityData> CurrencyData;
         };
 
         // SMSG_REATTACH_RESURRECT (0x4201F3): login-sequence resurrect-state reattach (sniff 68275:
