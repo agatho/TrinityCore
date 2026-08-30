@@ -282,7 +282,7 @@ void HousingRoomMoveRoom::Read()
 void HousingRoomSetComponentTheme::Read()
 {
     _worldPacket >> RoomGuid;
-    _worldPacket >> BoundedSize<uint32>(OptionIDs); // NOT Size<> — an unbounded count here is a world-thread bad_alloc
+    _worldPacket >> BoundedSize<uint32>(OptionIDs); // NOT Size<> Ã¢â‚¬â€� an unbounded count here is a world-thread bad_alloc
     _worldPacket >> HouseThemeID;
     for (uint32& optionID : OptionIDs)
         _worldPacket >> optionID;
@@ -296,10 +296,10 @@ void HousingRoomApplyComponentMaterials::Read()
     // IDA-verified wire order (sub_7FF75C1AC240, opcode 0x320006):
     //   PackedGUID + uint32 Count + uint32 ColorOverride + uint32 TextureID
     //   + uint8 ComponentSlot + uint32[Count] OptionIDs.
-    // The byte sits BEFORE the array, not after — earlier guess parsed it as a
+    // The byte sits BEFORE the array, not after Ã¢â‚¬â€� earlier guess parsed it as a
     // trailing Bits<1> which misaligned OptionIDs[0] one byte forward.
     _worldPacket >> RoomGuid;
-    _worldPacket >> BoundedSize<uint32>(OptionIDs); // NOT Size<> — an unbounded count here is a world-thread bad_alloc
+    _worldPacket >> BoundedSize<uint32>(OptionIDs); // NOT Size<> Ã¢â‚¬â€� an unbounded count here is a world-thread bad_alloc
     _worldPacket >> ColorOverride;
     _worldPacket >> RoomComponentTextureID;
     _worldPacket >> ComponentSlot;
@@ -400,7 +400,7 @@ void HousingSvcsTeleportToPlot::Read()
 }
 
 // Removed 2026-04-24: HousingSvcsSetTutorialState / HousingSvcsCompleteTutorialStep
-// Read() — no matching C_Housing Lua API in 12.0.5.
+// Read() Ã¢â‚¬â€� no matching C_Housing Lua API in 12.0.5.
 
 // Retired 2026-05-12: HousingDecorConfirmPreviewPlacement::Read (fake CMSG 0x300011).
 
@@ -432,7 +432,7 @@ void HousingSvcsGetBnetFriendNeighborhoods::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GET_BNET_FRIEND_NEIGHBORHOODS BnetAccountGuid: {}", BnetAccountGuid.ToString());
 }
 
-// Retired 2026-05-12 (batch 2): Read() bodies for 8 fake SVCS CMSGs deleted —
+// Retired 2026-05-12 (batch 2): Read() bodies for 8 fake SVCS CMSGs deleted Ã¢â‚¬â€�
 // dual IDA + sniff cross-check confirmed no client senders in build 67186.
 
 // --- Housing Misc ---
@@ -458,7 +458,7 @@ void HousingSvcsGetPotentialHouseOwners::Read()
 }
 
 // Retired 2026-05-12: HousingSystemGetHouseInfoAlt / HousingSystemHouseSnapshot /
-// HousingSystemExportHouse / HousingSystemUpdateHouseInfo Read() bodies deleted —
+// HousingSystemExportHouse / HousingSystemUpdateHouseInfo Read() bodies deleted Ã¢â‚¬â€�
 // IDA verification confirms no client senders in build 67186.
 
 // --- Other Housing CMSG ---
@@ -572,7 +572,7 @@ WorldPacket const* HouseExteriorSetHousePositionResponse::Write()
 // House Interior SMSG (0x2Fxxxx)
 // ============================================================
 
-// Removed 2026-04-24: HouseInteriorEnterHouse / HouseInteriorLeaveHouseResponse —
+// Removed 2026-04-24: HouseInteriorEnterHouse / HouseInteriorLeaveHouseResponse Ã¢â‚¬â€�
 // these SMSGs no longer exist in 12.0.5. House entry/leave is communicated via the
 // PlayerHouseInfoComponentData.CurrentHouse UpdateField (IDA-verified).
 
@@ -669,7 +669,7 @@ WorldPacket const* HousingDecorLockResponse::Write()
 
 WorldPacket const* HousingDecorDeleteFromStorageResponse::Write()
 {
-    // IDA case 5308421: uint8(Result) only — client reads nothing else
+    // IDA case 5308421: uint8(Result) only Ã¢â‚¬â€� client reads nothing else
     _worldPacket << uint8(Result);
 
     TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_RESPONSE Result: {}", Result);
@@ -768,7 +768,7 @@ WorldPacket const* HousingFixtureCreateBasicHouseResponse::Write()
     return &_worldPacket;
 }
 
-// Retired 2026-05-12: HousingFixtureDeleteHouseResponse::Write — orphaned after FIXTURE_DELETE_HOUSE CMSG retirement.
+// Retired 2026-05-12: HousingFixtureDeleteHouseResponse::Write Ã¢â‚¬â€� orphaned after FIXTURE_DELETE_HOUSE CMSG retirement.
 
 WorldPacket const* HousingFixtureSetHouseSizeResponse::Write()
 {
@@ -896,7 +896,7 @@ WorldPacket const* HousingRoomSetComponentThemeResponse::Write()
 WorldPacket const* HousingRoomApplyComponentMaterialsResponse::Write()
 {
     // Sniff-verified: PackedGUID + uint32(arrayCount) + uint32(TextureID) + uint8(Result) + uint32[arrayCount]
-    // NOTE: ColorOverride is NOT echoed in response — only TextureID
+    // NOTE: ColorOverride is NOT echoed in response Ã¢â‚¬â€� only TextureID
     _worldPacket << RoomGuid;
     _worldPacket << uint32(OptionIDs.size());
     _worldPacket << uint32(RoomComponentTextureID);
@@ -995,7 +995,7 @@ WorldPacket const* HousingSvcsNeighborhoodReservePlotResponse::Write()
     return &_worldPacket;
 }
 
-// Retired 2026-05-12 (batch 2): HousingSvcsClearPlotReservationResponse::Write — orphaned.
+// Retired 2026-05-12 (batch 2): HousingSvcsClearPlotReservationResponse::Write Ã¢â‚¬â€� orphaned.
 
 WorldPacket const* HousingSvcsRelinquishHouseResponse::Write()
 {
@@ -1026,16 +1026,16 @@ WorldPacket const* HousingSvcsCancelRelinquishHouseResponse::Write()
 ByteBuffer& operator<<(ByteBuffer& data, HouseInfo const& houseInfo)
 {
     // IDA (0x5C0008/0x5C0009): PackedGUID + PackedGUID + PackedGUID + uint8 + uint32
-    //   + uint8(flags) [+ optional payloads in bit-7→bit-4 order]
+    //   + uint8(flags) [+ optional payloads in bit-7Ã¢â€ â€™bit-4 order]
     //
     // Flags byte bit layout (see HousingPackets.h struct comment):
-    //   bit 7 HasMoveOutTime      → uint64 MoveOutTime
-    //   bit 6 HasHouseName        → CString HouseName
-    //   bit 5 HasNeighborhoodName → CString NeighborhoodName
-    //   bit 4 PlotReserved        → no payload (single-bit bool)
+    //   bit 7 HasMoveOutTime      Ã¢â€ â€™ uint64 MoveOutTime
+    //   bit 6 HasHouseName        Ã¢â€ â€™ CString HouseName
+    //   bit 5 HasNeighborhoodName Ã¢â€ â€™ CString NeighborhoodName
+    //   bit 4 PlotReserved        Ã¢â€ â€™ no payload (single-bit bool)
     //
     // Back-compat: when all four bits are zero, flags=0x00 and no payload
-    // follows — wire is byte-identical to the pre-widening format that's
+    // follows Ã¢â‚¬â€� wire is byte-identical to the pre-widening format that's
     // IDA-verified for 0x5C0008/0x5C0009.
     data << houseInfo.HouseGuid;
     data << houseInfo.OwnerGuid;
@@ -1222,11 +1222,11 @@ WorldPacket const* HousingSvcsGuildRemoveHouseNotification::Write()
     return &_worldPacket;
 }
 
-// Retired 2026-05-12 (batch 2): HousingSvcsGuildAppendNeighborhoodNotification::Write — orphaned.
+// Retired 2026-05-12 (batch 2): HousingSvcsGuildAppendNeighborhoodNotification::Write Ã¢â‚¬â€� orphaned.
 
 WorldPacket const* HousingSvcsGuildRenameNeighborhoodNotification::Write()
 {
-    // IDA case 5505045: uint8(nameLen) + String(nameLen) — NO GUID
+    // IDA case 5505045: uint8(nameLen) + String(nameLen) Ã¢â‚¬â€� NO GUID
     uint8 nameLen = static_cast<uint8>(std::min<size_t>(NewName.size() + 1, 255));
     _worldPacket << uint8(nameLen);
     if (nameLen > 0)
@@ -1273,10 +1273,10 @@ WorldPacket const* HousingSvcsNeighborhoodOwnershipTransferredResponse::Write()
 {
     // IDA case 5505049: bit-packed blob via ai_Decode_ClientOpcodeData
     // Client reads first byte: top 6 bits = blobSize, bottom 2 bits cached
-    // Then reads blobSize raw bytes into a 49-byte struct (3×16-byte raw GUIDs + 1 byte)
+    // Then reads blobSize raw bytes into a 49-byte struct (3Ãƒâ€”16-byte raw GUIDs + 1 byte)
     if (Result == 0)
     {
-        uint8 blobSize = 49; // 3×16-byte raw ObjectGuids + 1 byte
+        uint8 blobSize = 49; // 3Ãƒâ€”16-byte raw ObjectGuids + 1 byte
         _worldPacket << uint8((blobSize << 2) | (Result & 0x03));
         _worldPacket.append(OwnerGUID.GetRawValue().data(), 16);
         _worldPacket.append(HouseGUID.GetRawValue().data(), 16);
@@ -1307,13 +1307,13 @@ WorldPacket const* HousingSvcsGetPotentialHouseOwnersResponse::Write()
     //     char[nameLen] name    (NO null terminator on the wire)
     //
     // Verified against sniff entries:
-    //   "Anondk-AltarofStorms"     (20 chars) → lenByte1=0x0A, lenByte2=0x00
-    //   "Dahuntermon-AltarofStorms" (25 chars) → lenByte1=0x0C, lenByte2=0x80
+    //   "Anondk-AltarofStorms"     (20 chars) Ã¢â€ â€™ lenByte1=0x0A, lenByte2=0x00
+    //   "Dahuntermon-AltarofStorms" (25 chars) Ã¢â€ â€™ lenByte1=0x0C, lenByte2=0x80
     //
     // The previous +1 (include NUL) shifted the encoding: for a 20-char name we
     // emitted lenByte1=0x0A, lenByte2=0x80 (encoding 21) and appended a trailing
     // zero byte. The client then read 21 chars but the next entry's GUID mask
-    // landed inside the name buffer — corrupted ownership/access display.
+    // landed inside the name buffer Ã¢â‚¬â€� corrupted ownership/access display.
     _worldPacket << uint32(PotentialOwners.size());
     for (auto const& owner : PotentialOwners)
     {
@@ -1337,11 +1337,11 @@ WorldPacket const* HousingSvcsGetPotentialHouseOwnersResponse::Write()
 WorldPacket const* HousingSvcsUpdateHouseSettingsResponse::Write()
 {
     // 12.0.5 sniff-validated wire (SNIFF_VALIDATION_67186.md):
-    //   uint8(Result) + 3×PackedGUID + uint8(HouseLevel) + uint8(PlotIndex) + uint32(SettingsFlags)
+    //   uint8(Result) + 3Ãƒâ€”PackedGUID + uint8(HouseLevel) + uint8(PlotIndex) + uint32(SettingsFlags)
     // Sample sniff (31 bytes):
     //   00 07 c3 0b 31 15 07 80 60 dc 0f a0 17 05 61 0c d4 08 03 d0 f0 6c 01 80 dc 29 20 00 00 00 00
     //
-    // NOT WriteJamCliHouse — that helper writes uint32(PlotIndex) BEFORE uint8(HouseLevel)
+    // NOT WriteJamCliHouse Ã¢â‚¬â€� that helper writes uint32(PlotIndex) BEFORE uint8(HouseLevel)
     // for opcodes 0x540012/0x540013 (IDA-confirmed via in-game testing of the regular-map
     // neighborhood UI). 0x54001B is a different opcode with a different field order.
     _worldPacket << uint8(Result);
@@ -1371,7 +1371,7 @@ WorldPacket const* HousingSvcsGetHouseFinderInfoResponse::Write()
     for (auto const& entry : Entries)
         WriteJamCliHouseFinderNeighborhood(_worldPacket, entry);
 
-    TC_LOG_INFO("housing", "SMSG_HOUSING_SVCS_GET_HOUSE_FINDER_INFO_RESPONSE EntryCount: {} PacketSize: {} (Result {} dropped — not on wire)",
+    TC_LOG_INFO("housing", "SMSG_HOUSING_SVCS_GET_HOUSE_FINDER_INFO_RESPONSE EntryCount: {} PacketSize: {} (Result {} dropped Ã¢â‚¬â€� not on wire)",
         Entries.size(), _worldPacket.size(), Result);
     for (size_t i = 0; i < Entries.size(); ++i)
     {
@@ -1501,7 +1501,7 @@ WorldPacket const* HousingExportHouseResponse::Write()
     _worldPacket << HouseGuid;
     _worldPacket << uint8(Status);
     // Optional name string: presence byte (bit7 = present). Empty-name path is exact; the
-    // bit-packed length encoding of the present path is unconfirmed — flagged in the header.
+    // bit-packed length encoding of the present path is unconfirmed Ã¢â‚¬â€� flagged in the header.
     if (ExportName)
     {
         // H-24: the length field carries 7 bits, so a name longer than 127 bytes used to
@@ -1552,7 +1552,7 @@ WorldPacket const* HousingResetKioskModeResponse::Write()
 
 // Retired 2026-05-11: HousingEditorAvailabilityResponse Write() deleted (Lua API is sync).
 
-// Retired 2026-05-12: HousingUpdateHouseInfo::Write — orphaned after UPDATE_HOUSE_INFO CMSG retirement.
+// Retired 2026-05-12: HousingUpdateHouseInfo::Write Ã¢â‚¬â€� orphaned after UPDATE_HOUSE_INFO CMSG retirement.
 // SMSG 0x550004 is real per IDA, but the only emit-site was a handler with no client sender.
 
 // Retired 2026-05-11: SMSG_HOUSING_SET_HOUSE_NAME_RESPONSE class deleted (was using fake
@@ -1572,7 +1572,7 @@ WorldPacket const* HousingResetKioskModeResponse::Write()
 //   uint32 IDs[IDs.size()]
 //   Bits<1> StateFlags[StateFlags.size()]   (8 per byte, bit 7 first)
 //
-// Bit and byte streams are byte-aligned in this opcode — no FlushBits
+// Bit and byte streams are byte-aligned in this opcode Ã¢â‚¬â€� no FlushBits
 // is needed because the integer reads happen before the bit loop.
 void AccountCollectionUpdateBase::WriteCollection()
 {
@@ -1667,7 +1667,7 @@ void BulkRefund::Read()
     uint32 count = 0;
     _worldPacket >> count;
 
-    // Sane limit — retail client UI limits to the refund window (2h) worth of decor
+    // Sane limit Ã¢â‚¬â€� retail client UI limits to the refund window (2h) worth of decor
     if (count > 500)
         count = 500;
 
@@ -1881,7 +1881,7 @@ WorldPacket const* CraftingHouseHelloResponse::Write()
 {
     // IDA-verified wire, unchanged 67186 -> 68275 (68275 deserializer sub_7FF7290B9C90):
     //   PackedGUID Guid (the clerk creature)
-    //   uint8 Flags  — bit 0x80 = Field0, bit 0x40 = OpenForBusiness
+    //   uint8 Flags  Ã¢â‚¬â€� bit 0x80 = Field0, bit 0x40 = OpenForBusiness
     // The client reads the flags with a whole-byte ReadUInt8, so a plain uint8 is byte-exact.
     _worldPacket << Guid;
     uint8 flags = 0;
@@ -2218,7 +2218,7 @@ WorldPacket const* NeighborhoodCharterSignatureRemovedNotification::Write()
 
 WorldPacket const* NeighborhoodEvictPlayerResponse::Write()
 {
-    // UNVERIFIED — needs live sniff. 12.0.7 client consumes this body as opaque bytes[rest]
+    // UNVERIFIED Ã¢â‚¬â€� needs live sniff. 12.0.7 client consumes this body as opaque bytes[rest]
     // without decoding fields, so the internal layout cannot be confirmed offline (RE 0x5c0000).
     _worldPacket << PlayerGuid;
 
@@ -2283,26 +2283,26 @@ WorldPacket const* NeighborhoodMoveHouseResponse::Write()
 WorldPacket const* NeighborhoodOpenCornerstoneUIResponse::Write()
 {
     // Wire format verified against retail 12.0.1 build 65940 packet captures (Alliance + Horde)
-    // IDA deserializer sub_7FF6F6E3E200: uint32→+32, GUID→+40, GUID→+56, uint64→+72, uint8→+80, GUID→+128
+    // IDA deserializer sub_7FF6F6E3E200: uint32Ã¢â€ â€™+32, GUIDÃ¢â€ â€™+40, GUIDÃ¢â€ â€™+56, uint64Ã¢â€ â€™+72, uint8Ã¢â€ â€™+80, GUIDÃ¢â€ â€™+128
     // Fixed fields
     _worldPacket << uint32(PlotIndex);          // Echoed from CMSG (NOT a result code)
-    _worldPacket << PlotOwnerGuid;              // →+40: Player GUID when owned, Empty when unclaimed
-    _worldPacket << NeighborhoodGuid;           // →+56: Housing GUID when owned, Empty when unclaimed
-    _worldPacket << uint64(Cost);               // →+72: Purchase price
-    _worldPacket << uint8(PurchaseStatus);      // →+80: 73=purchasable, 0=not. Client checks ==73
-    _worldPacket << CornerstoneGuid;            // →+128: Cornerstone game object
+    _worldPacket << PlotOwnerGuid;              // Ã¢â€ â€™+40: Player GUID when owned, Empty when unclaimed
+    _worldPacket << NeighborhoodGuid;           // Ã¢â€ â€™+56: Housing GUID when owned, Empty when unclaimed
+    _worldPacket << uint64(Cost);               // Ã¢â€ â€™+72: Purchase price
+    _worldPacket << uint8(PurchaseStatus);      // Ã¢â€ â€™+80: 73=purchasable, 0=not. Client checks ==73
+    _worldPacket << CornerstoneGuid;            // Ã¢â€ â€™+128: Cornerstone game object
 
     // Bit-packed section: 1 bool + 8-bit nameLen + 6 bools = 15 bits = 2 bytes.
     // Per IDA Housing_ParseCornerstoneHouseInfo, bit B.bit4 gates an embedded
     // Housing_ParseHouseInfoStruct that the cornerstone Lua reads as "the player
-    // already has a current house" — used to flip the cornerstone button from Buy
+    // already has a current house" Ã¢â‚¬â€� used to flip the cornerstone button from Buy
     // to Move.
     bool const hasExistingHouse = ExistingHouse.has_value();
     _worldPacket << Bits<1>(IsPlotOwned);
     _worldPacket << SizedCString::BitsSize<8>(NeighborhoodName);
     _worldPacket << OptionalInit(AlternatePrice);
     _worldPacket << Bits<1>(CanPurchase);
-    _worldPacket.WriteBit(hasExistingHouse);    // B.bit4 — HasOptionalStruct
+    _worldPacket.WriteBit(hasExistingHouse);    // B.bit4 Ã¢â‚¬â€� HasOptionalStruct
     _worldPacket << Bits<1>(HasResidents);
     _worldPacket << OptionalInit(StatusValue);
     _worldPacket << Bits<1>(IsInitiative);
@@ -2412,17 +2412,17 @@ WorldPacket const* NeighborhoodGetRosterResponse::Write()
     // Step 1: Result (uint8, NOT uint32)
     _worldPacket << uint8(Result);
 
-    // Step 2: Count A — number of entries in the flat player-GUID array at the end
+    // Step 2: Count A Ã¢â‚¬â€� number of entries in the flat player-GUID array at the end
     _worldPacket << uint32(Members.size());
 
-    // Step 3: Array B — "groups" (always 1 group = the neighborhood)
+    // Step 3: Array B Ã¢â‚¬â€� "groups" (always 1 group = the neighborhood)
     _worldPacket << uint32(1); // Count B = 1 group
 
     // Step 3b: Single group entry (sub_7FF6A8B3A570)
     // These GUIDs populate the HousingNeighborhoodState singleton (sub_7FF6F69ECCD0):
     //   offset 352 = NeighborhoodGUID, offset 292 = ownerType (computed from OwnerGUID)
-    _worldPacket << GroupNeighborhoodGuid;  // PackedGUID — Neighborhood GUID
-    _worldPacket << GroupOwnerGuid;         // PackedGUID — Neighborhood owner GUID
+    _worldPacket << GroupNeighborhoodGuid;  // PackedGUID Ã¢â‚¬â€� Neighborhood GUID
+    _worldPacket << GroupOwnerGuid;         // PackedGUID Ã¢â‚¬â€� Neighborhood owner GUID
     _worldPacket << uint64(0);             // Value 1 (timestamp or flags, 0 in sniff)
     _worldPacket << uint64(0);             // Value 2 (timestamp or flags, 0 in sniff)
 
@@ -2438,12 +2438,12 @@ WorldPacket const* NeighborhoodGetRosterResponse::Write()
     // Group flags (bit 7 unused for now)
     _worldPacket << uint8(0);
 
-    // Step 3b-viii: Sub-entries — per-resident data (sub_7FF6A8B3A420)
+    // Step 3b-viii: Sub-entries Ã¢â‚¬â€� per-resident data (sub_7FF6A8B3A420)
     for (auto const& member : Members)
     {
-        _worldPacket << member.HouseGuid;        // PackedGUID — house GUID
-        _worldPacket << member.PlayerGuid;       // PackedGUID — player GUID
-        _worldPacket << member.BnetAccountGuid;  // PackedGUID — bnet account GUID (usually empty)
+        _worldPacket << member.HouseGuid;        // PackedGUID Ã¢â‚¬â€� house GUID
+        _worldPacket << member.PlayerGuid;       // PackedGUID Ã¢â‚¬â€� player GUID
+        _worldPacket << member.BnetAccountGuid;  // PackedGUID Ã¢â‚¬â€� bnet account GUID (usually empty)
         _worldPacket << uint8(member.PlotIndex); // Plot index
         _worldPacket << uint32(member.JoinTime); // Join timestamp
         _worldPacket << uint8(0);                // Entry flags (bit 7 = has optional uint64)
@@ -2456,7 +2456,7 @@ WorldPacket const* NeighborhoodGetRosterResponse::Write()
     // Step 4: Main flags byte (bit 7 = has optional trailing GUID)
     _worldPacket << uint8(0);
 
-    // Step 5: Array A — flat player GUID list with 2 status bytes each (sub_7FF6A8B3A780)
+    // Step 5: Array A Ã¢â‚¬â€� flat player GUID list with 2 status bytes each (sub_7FF6A8B3A780)
     for (auto const& member : Members)
     {
         _worldPacket << member.PlayerGuid; // PackedGUID
@@ -2483,7 +2483,7 @@ WorldPacket const* NeighborhoodRosterResidentUpdate::Write()
     {
         _worldPacket << resident.PlayerGuid;
         _worldPacket << uint8(resident.UpdateType);
-        // IDA: client deserializer does v6 >> 7 — only bit 7 is kept as bool
+        // IDA: client deserializer does v6 >> 7 Ã¢â‚¬â€� only bit 7 is kept as bool
         _worldPacket << uint8(resident.IsPrivileged ? 0x80 : 0x00);
     }
 
@@ -2561,7 +2561,7 @@ void InitiativeUpdateActiveNeighborhood::Read()
 }
 
 // ============================================================================
-// 0x38xxxx NeighborhoodInitiative — generic Op-XX read implementations
+// 0x38xxxx NeighborhoodInitiative Ã¢â‚¬â€� generic Op-XX read implementations
 // ============================================================================
 
 void NeighborhoodInitiativeOp01::Read()

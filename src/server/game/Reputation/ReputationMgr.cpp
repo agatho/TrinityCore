@@ -102,16 +102,6 @@ bool ReputationMgr::IsAtWar(uint32 faction_id) const
     return IsAtWar(factionEntry);
 }
 
-bool ReputationMgr::IsAtWar(FactionEntry const* factionEntry) const
-{
-    if (!factionEntry)
-        return false;
-
-    if (FactionState const* factionState = GetState(factionEntry))
-        return factionState->Flags.HasFlag(ReputationFlags::AtWar);
-    return false;
-}
-
 int32 ReputationMgr::GetReputation(uint32 faction_id) const
 {
     FactionEntry const* factionEntry = sFactionStore.LookupEntry(faction_id);
@@ -185,18 +175,6 @@ int32 ReputationMgr::GetMaxReputation(FactionEntry const* factionEntry) const
     return *ReputationRankThresholds.rbegin();
 }
 
-int32 ReputationMgr::GetReputation(FactionEntry const* factionEntry) const
-{
-    // Faction without recorded reputation. Just ignore.
-    if (!factionEntry)
-        return 0;
-
-    if (FactionState const* state = GetState(factionEntry))
-        return GetBaseReputation(factionEntry) + state->Standing;
-
-    return 0;
-}
-
 ReputationRank ReputationMgr::GetRank(FactionEntry const* factionEntry) const
 {
     int32 reputation = GetReputation(factionEntry);
@@ -230,22 +208,12 @@ ReputationRank const* ReputationMgr::GetForcedRankIfAny(FactionTemplateEntry con
     return GetForcedRankIfAny(factionTemplateEntry->Faction);
 }
 
-ReputationRank const* ReputationMgr::GetForcedRankIfAny(uint32 factionId) const
-{
-    return Trinity::Containers::MapGetValuePtr(_forcedReactions, factionId);
-}
-
 bool ReputationMgr::IsParagonReputation(FactionEntry const* factionEntry) const
 {
     if (sDB2Manager.GetParagonReputation(factionEntry->ID))
         return true;
 
     return false;
-}
-
-int32 ReputationMgr::GetParagonLevel(uint32 paragonFactionId) const
-{
-    return GetParagonLevel(sFactionStore.LookupEntry(paragonFactionId));
 }
 
 int32 ReputationMgr::GetParagonLevel(FactionEntry const* paragonFactionEntry) const
@@ -626,29 +594,6 @@ bool ReputationMgr::SetOneFactionReputation(FactionEntry const* factionEntry, in
     return false;
 }
 
-void ReputationMgr::SetVisible(FactionTemplateEntry const* factionTemplateEntry)
-{
-    if (!factionTemplateEntry->Faction)
-        return;
-
-    if (FactionEntry const* factionEntry = sFactionStore.LookupEntry(factionTemplateEntry->Faction))
-        // Never show factions of the opposing team
-        if (!(factionEntry->ReputationRaceMask2.HasRace(_player->GetRace()) && factionEntry->ReputationBase[1] == Reputation_Bottom))
-            SetVisible(factionEntry);
-}
-
-void ReputationMgr::SetVisible(FactionEntry const* factionEntry)
-{
-    if (!factionEntry->CanHaveReputation())
-        return;
-
-    FactionStateList::iterator itr = _factions.find(factionEntry->ReputationIndex);
-    if (itr == _factions.end())
-        return;
-
-    SetVisible(&itr->second);
-}
-
 void ReputationMgr::SetVisible(FactionState* faction)
 {
     // always invisible or hidden faction can't be make visible
@@ -674,19 +619,6 @@ void ReputationMgr::SetVisible(FactionState* faction)
     SendVisible(faction);
 }
 
-void ReputationMgr::SetAtWar(RepListID repListID, bool on)
-{
-    FactionStateList::iterator itr = _factions.find(repListID);
-    if (itr == _factions.end())
-        return;
-
-    // always invisible or hidden faction can't change war state
-    if (itr->second.Flags.HasFlag(ReputationFlags::Hidden | ReputationFlags::Header))
-        return;
-
-    SetAtWar(&itr->second, on);
-}
-
 void ReputationMgr::SetAtWar(FactionState* faction, bool atWar) const
 {
     // Do not allow to declare war to our own faction. But allow for rival factions (eg Aldor vs Scryer).
@@ -704,15 +636,6 @@ void ReputationMgr::SetAtWar(FactionState* faction, bool atWar) const
 
     faction->needSend = true;
     faction->needSave = true;
-}
-
-void ReputationMgr::SetInactive(RepListID repListID, bool on)
-{
-    FactionStateList::iterator itr = _factions.find(repListID);
-    if (itr == _factions.end())
-        return;
-
-    SetInactive(&itr->second, on);
 }
 
 void ReputationMgr::SetInactive(FactionState* faction, bool inactive) const

@@ -160,14 +160,15 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _calendarEventCreationCooldown(0),
     _battlePetMgr(std::make_unique<BattlePets::BattlePetMgr>(this)),
     _collectionMgr(std::make_unique<CollectionMgr>(this)),
+    _chatCautionMgr(std::make_unique<ChatCautionMgr>(this)),
+    _chatCautionAccepted(false)
+    _collectionMgr(std::make_unique<CollectionMgr>(this)),
     // Einheit w4_cmsg_43_3D - fluechtiger Sitzungszustand der Sammelfamilien 0x43 / 0x3D
     _excludedChatCensorSources(0),
     _quickJoinAutoAcceptRequests(false),
     _engineSurveyReceived(false),
     _lastReportServerLagTime(0),
-    _warden3DisabledSent(false),
-    _chatCautionMgr(std::make_unique<ChatCautionMgr>(this)),
-    _chatCautionAccepted(false)
+    _warden3DisabledSent(false)
 {
     if (m_Socket[CONNECTION_TYPE_REALM])
     {
@@ -730,6 +731,13 @@ void WorldSession::LogoutPlayer(bool save)
             sWorld->ReleaseAccountInventoryLock(GetBattlenetAccountGUID(), this);
         }
 
+        ///- Release account-wide bank inventory lock (both the client-facing flag and the
+        ///  authoritative server-side reservation) so another same-bnet session can acquire it.
+        if (_player->HasPlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK))
+        {
+            _player->RemovePlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK);
+        }
+
         ///- Clear whisper whitelist
         _player->ClearWhisperWhiteList();
 
@@ -860,21 +868,6 @@ bool WorldSession::DisallowHyperlinksAndMaybeKick(std::string const& str)
         KickPlayer("WorldSession::DisallowHyperlinksAndMaybeKick Illegal chat link");
 
     return false;
-}
-
-void WorldSession::SendNotification(char const* format, ...)
-{
-    if (format)
-    {
-        va_list ap;
-        char szStr[1024];
-        szStr[0] = '\0';
-        va_start(ap, format);
-        vsnprintf(szStr, 1024, format, ap);
-        va_end(ap);
-
-        SendPacket(WorldPackets::Chat::PrintNotification(szStr).Write());
-    }
 }
 
 void WorldSession::SendNotification(uint32 stringId, ...)
@@ -1373,19 +1366,6 @@ void WorldSession::SetPlayerDataElementAccount(uint32 dataElementId, float value
 
     elementItr->NeedSave = true;
     elementItr->FloatValue = value;
-}
-
-void WorldSession::SetPlayerDataElementAccount(uint32 dataElementId, int64 value)
-{
-    auto elementItr = std::ranges::find(_playerDataAccount.Elements, dataElementId, &PlayerDataAccount::Element::Id);
-    if (elementItr == _playerDataAccount.Elements.end())
-    {
-        elementItr = _playerDataAccount.Elements.emplace(_playerDataAccount.Elements.end());
-        elementItr->Id = dataElementId;
-    }
-
-    elementItr->NeedSave = true;
-    elementItr->Int64Value = value;
 }
 
 void WorldSession::SetPlayerDataFlagAccount(uint32 dataFlagId, bool on)

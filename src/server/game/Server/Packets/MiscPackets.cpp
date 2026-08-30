@@ -180,44 +180,6 @@ WorldPacket const* ReattachResurrect::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* CurrencyTransferLog::Write()
-{
-    _worldPacket << Size<uint32>(Entries);
-
-    for (Entry const& entry : Entries)
-    {
-        _worldPacket << entry.Source;              // PackedGuid (source character)
-        _worldPacket << entry.Dest;                // PackedGuid (destination character)
-        _worldPacket << int32(entry.CurrencyID);
-        _worldPacket << int32(entry.Quantity);
-        _worldPacket << int32(entry.Field3);
-        _worldPacket << uint64(entry.TransferTime);
-    }
-
-    return &_worldPacket;
-}
-
-WorldPacket const* AccountCharacterCurrencyLists::Write()
-{
-    _worldPacket << Size<uint32>(Currencies);
-
-    for (CharacterCurrency const& currency : Currencies)
-    {
-        _worldPacket << int32(currency.CurrencyID);
-        _worldPacket << currency.Character;        // PackedGuid
-        _worldPacket << uint32(currency.Quantity);
-        _worldPacket << uint32(currency.WeeklyQuantity);
-        _worldPacket << uint32(currency.MaxQuantity);
-        _worldPacket << Bits<1>(currency.Flag);
-        _worldPacket.FlushBits();
-    }
-
-    _worldPacket << Bits<1>(TrailingFlag);
-    _worldPacket.FlushBits();
-
-    return &_worldPacket;
-}
-
 void ViolenceLevel::Read()
 {
     _worldPacket >> ViolenceLvl;
@@ -1428,6 +1390,113 @@ void ServerValidationSignatureRequest::Read()
     _worldPacket >> Guid;
 
     _worldPacket >> SizedCString::Data(Signature);
+}
+
+WorldPacket const* GodMode::Write()
+{
+    _worldPacket << Bits<1>(Enable);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* PetGodMode::Write()
+{
+    _worldPacket << Bits<1>(Enable);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CooldownCheat::Write()
+{
+    _worldPacket << Bits<1>(Enable);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ConsoleWrite::Write()
+{
+    // The length field carries the NUL, and the client's ReadDynString (0x347D750) consumes
+    // nothing at all for a length of 0 or 1 - SizedCString writes length + 1 and omits both
+    // string and NUL when empty, which is exactly that case.
+    ASSERT(Text.length() <= MaxTextLength);
+
+    _worldPacket << SizedCString::BitsSize<14>(Text);
+    _worldPacket.FlushBits();
+    _worldPacket << uint32(ColorType);
+    _worldPacket << SizedCString::Data(Text);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* GameSpeedSet::Write()
+{
+    _worldPacket << float(Speed);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* RuneRegenDebug::Write()
+{
+    _worldPacket << uint32(RegenTimer);
+    _worldPacket << uint32(BaseCooldown);
+    _worldPacket << uint32(ActiveRuneMask);
+    // Both counts go out before either payload - see the class comment.
+    _worldPacket << Size<uint32>(Cooldowns);
+    _worldPacket << Size<uint32>(RuneTypes);
+
+    for (int32 cooldown : Cooldowns)
+        _worldPacket << int32(cooldown);
+
+    for (int32 runeType : RuneTypes)
+        _worldPacket << int32(runeType);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ForceAnim::Write()
+{
+    ASSERT(AnimName.length() <= MaxAnimNameLength);
+
+    _worldPacket << UnitGUID;
+    _worldPacket << SizedString::BitsSize<9>(AnimName);
+    _worldPacket.FlushBits();
+    _worldPacket << SizedString::Data(AnimName);    // no NUL on the wire
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ForceAnimations::Write()
+{
+    _worldPacket << UnitGUID;
+    // Both counts go out before either payload - see the class comment.
+    _worldPacket << Size<uint32>(AnimIDs);
+    _worldPacket << Size<uint32>(Variations);
+    _worldPacket << uint32(LoopCount);
+    _worldPacket << float(Speed);
+    _worldPacket << uint8(BoneType);
+
+    for (int32 animId : AnimIDs)
+        _worldPacket << int32(animId);
+
+    for (uint8 variation : Variations)
+        _worldPacket << uint8(variation);
+
+    return &_worldPacket;
+}
+
+void KioskEnableGodMode::Read()
+{
+    _worldPacket >> Bits<1>(Enable);
+}
+
+void SetGameEventDebugViewState::Read()
+{
+    _worldPacket >> ViewIndex;
+    _worldPacket >> Bits<1>(State);
+}
 WorldPacket const* FailedPlayerCondition::Write()
 {
     _worldPacket << int32(PlayerConditionID);
@@ -1514,36 +1583,6 @@ WorldPacket const* ScheduledAreaPoiUpdateResponse::Write()
         _worldPacket << uint64(event.EndTime);
         _worldPacket << int32(event.EventSchedulerEventID);
         _worldPacket << int32(event.Data);
-void TransferCurrencyFromAccountCharacter::Read()
-{
-    _worldPacket >> SourceCharacterGUID;
-    _worldPacket >> CurrencyID;
-    _worldPacket >> Quantity;
-}
-
-WorldPacket const* AccountCharacterCurrencyLists::Write()
-{
-    _worldPacket << Size<uint32>(Characters);
-    _worldPacket << Size<uint32>(CurrencyData);
-
-    for (CharacterCurrencyData const& character : Characters)
-    {
-        _worldPacket << character.CharacterGUID;
-        _worldPacket << uint8(character.ClassID);
-        _worldPacket << int32(character.Level);
-        _worldPacket << SizedString::BitsSize<6>(character.CharacterName);
-    }
-
-    _worldPacket.FlushBits();
-
-    for (CharacterCurrencyData const& character : Characters)
-        _worldPacket << SizedString::Data(character.CharacterName);
-
-    for (CurrencyQuantityData const& currency : CurrencyData)
-    {
-        _worldPacket << currency.CharacterGUID;
-        _worldPacket << int32(currency.CurrencyTypeID);
-        _worldPacket << int32(currency.Quantity);
     }
 
     return &_worldPacket;
@@ -1552,12 +1591,6 @@ WorldPacket const* AccountCharacterCurrencyLists::Write()
 WorldPacket const* PlayerShowUiEventToast::Write()
 {
     _worldPacket << int32(UiEventToastID);
-WorldPacket const* CurrencyTransferResult::Write()
-{
-    _worldPacket << int32(CurrencyID);
-    _worldPacket << int32(Quantity);
-    _worldPacket << int32(TotalQuantity);
-    _worldPacket << uint32(Result);
 
     return &_worldPacket;
 }
@@ -1695,111 +1728,8 @@ void AbandonNPEResponse::Read()
 void SubscriptionInterstitialResponse::Read()
 {
     _worldPacket >> Bits<3>(Response);
-WorldPacket const* GodMode::Write()
-{
-    _worldPacket << Bits<1>(Enable);
-    _worldPacket.FlushBits();
-
-    return &_worldPacket;
 }
 
-WorldPacket const* PetGodMode::Write()
-{
-    _worldPacket << Bits<1>(Enable);
-    _worldPacket.FlushBits();
-
-    return &_worldPacket;
-}
-
-WorldPacket const* CooldownCheat::Write()
-{
-    _worldPacket << Bits<1>(Enable);
-    _worldPacket.FlushBits();
-
-    return &_worldPacket;
-}
-
-WorldPacket const* ConsoleWrite::Write()
-{
-    // The length field carries the NUL, and the client's ReadDynString (0x347D750) consumes
-    // nothing at all for a length of 0 or 1 - SizedCString writes length + 1 and omits both
-    // string and NUL when empty, which is exactly that case.
-    ASSERT(Text.length() <= MaxTextLength);
-
-    _worldPacket << SizedCString::BitsSize<14>(Text);
-    _worldPacket.FlushBits();
-    _worldPacket << uint32(ColorType);
-    _worldPacket << SizedCString::Data(Text);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* GameSpeedSet::Write()
-{
-    _worldPacket << float(Speed);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* RuneRegenDebug::Write()
-{
-    _worldPacket << uint32(RegenTimer);
-    _worldPacket << uint32(BaseCooldown);
-    _worldPacket << uint32(ActiveRuneMask);
-    // Both counts go out before either payload - see the class comment.
-    _worldPacket << Size<uint32>(Cooldowns);
-    _worldPacket << Size<uint32>(RuneTypes);
-
-    for (int32 cooldown : Cooldowns)
-        _worldPacket << int32(cooldown);
-
-    for (int32 runeType : RuneTypes)
-        _worldPacket << int32(runeType);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* ForceAnim::Write()
-{
-    ASSERT(AnimName.length() <= MaxAnimNameLength);
-
-    _worldPacket << UnitGUID;
-    _worldPacket << SizedString::BitsSize<9>(AnimName);
-    _worldPacket.FlushBits();
-    _worldPacket << SizedString::Data(AnimName);    // no NUL on the wire
-
-    return &_worldPacket;
-}
-
-WorldPacket const* ForceAnimations::Write()
-{
-    _worldPacket << UnitGUID;
-    // Both counts go out before either payload - see the class comment.
-    _worldPacket << Size<uint32>(AnimIDs);
-    _worldPacket << Size<uint32>(Variations);
-    _worldPacket << uint32(LoopCount);
-    _worldPacket << float(Speed);
-    _worldPacket << uint8(BoneType);
-
-    for (int32 animId : AnimIDs)
-        _worldPacket << int32(animId);
-
-    for (uint8 variation : Variations)
-        _worldPacket << uint8(variation);
-
-    return &_worldPacket;
-}
-
-void KioskEnableGodMode::Read()
-{
-    _worldPacket >> Bits<1>(Enable);
-}
-
-void SetGameEventDebugViewState::Read()
-{
-    _worldPacket >> ViewIndex;
-    _worldPacket >> Bits<1>(State);
-}
 WorldPacket const* DisplayWorldText::Write()
 {
     _worldPacket << Guid;
@@ -1809,6 +1739,55 @@ WorldPacket const* DisplayWorldText::Write()
     _worldPacket.FlushBits();
 
     _worldPacket << SizedString::Data(Text);
+
+    return &_worldPacket;
+}
+
+void TransferCurrencyFromAccountCharacter::Read()
+{
+    _worldPacket >> SourceCharacterGUID;
+    _worldPacket >> CurrencyID;
+    _worldPacket >> Quantity;
+}
+
+WorldPacket const* AccountCharacterCurrencyLists::Write()
+{
+    _worldPacket << Size<uint32>(Characters);
+    _worldPacket << Size<uint32>(CurrencyData);
+
+    for (CharacterCurrencyData const& character : Characters)
+    {
+        _worldPacket << character.CharacterGUID;
+        _worldPacket << uint8(character.ClassID);
+        _worldPacket << int32(character.Level);
+        _worldPacket << SizedString::BitsSize<6>(character.CharacterName);
+    }
+
+    _worldPacket.FlushBits();
+
+    for (CharacterCurrencyData const& character : Characters)
+        _worldPacket << SizedString::Data(character.CharacterName);
+
+    for (CurrencyQuantityData const& currency : CurrencyData)
+    {
+        _worldPacket << currency.CharacterGUID;
+        _worldPacket << int32(currency.CurrencyTypeID);
+        _worldPacket << int32(currency.Quantity);
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CurrencyTransferResult::Write()
+{
+    _worldPacket << int32(CurrencyID);
+    _worldPacket << int32(Quantity);
+    _worldPacket << int32(TotalQuantity);
+    _worldPacket << uint32(Result);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* CurrencyTransferLog::Write()
 {
     _worldPacket << Size<uint32>(Entries);

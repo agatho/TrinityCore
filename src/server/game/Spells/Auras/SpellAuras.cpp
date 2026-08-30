@@ -1355,11 +1355,6 @@ AuraApplication const* Aura::GetApplicationOfTarget(ObjectGuid guid) const
     return Trinity::Containers::MapGetValuePtr(m_applications, guid);
 }
 
-AuraApplication* Aura::GetApplicationOfTarget(ObjectGuid guid)
-{
-    return Trinity::Containers::MapGetValuePtr(m_applications, guid);
-}
-
 bool Aura::IsAppliedOnTarget(ObjectGuid guid) const
 {
     return m_applications.contains(guid);
@@ -1762,7 +1757,7 @@ bool Aura::CanStackWith(Aura const* existingAura) const
         if (!GetCastItemGUID().IsEmpty() && !existingAura->GetCastItemGUID().IsEmpty())
             if (GetCastItemGUID() != existingAura->GetCastItemGUID() && (m_spellInfo->HasAttribute(SPELL_ATTR0_CU_ENCHANT_PROC)))
                 return true;
-        // A Fire Inside (427775) — multiple Immolation Aura (258920) instances with independent durations
+        // A Fire Inside (427775) Ã¢â‚¬â€� multiple Immolation Aura (258920) instances with independent durations
         if (sameCaster && m_spellInfo->Id == 258920 && existingSpellInfo->Id == 258920)
             if (Unit* caster = GetCaster())
                 if (caster->HasAura(427775))
@@ -2303,35 +2298,6 @@ void Aura::CallScriptEffectAfterAbsorbHandlers(AuraEffect* aurEff, AuraApplicati
         for (AuraScript::EffectAbsorbHandler const& afterEffectAbsorb : script->AfterEffectAbsorb)
             if (afterEffectAbsorb.IsEffectAffected(m_spellInfo, aurEff->GetEffIndex()))
                 afterEffectAbsorb.Call(script, aurEff, dmgInfo, absorbAmount);
-
-        script->_FinishScriptCall();
-    }
-}
-
-void Aura::CallScriptEffectAbsorbHandlers(AuraEffect* aurEff, AuraApplication const* aurApp, HealInfo& healInfo, uint32& absorbAmount, bool& defaultPrevented)
-{
-    for (AuraScript* script : m_loadedScripts)
-    {
-        script->_PrepareScriptCall(AURA_SCRIPT_HOOK_EFFECT_ABSORB, aurApp);
-        for (AuraScript::EffectAbsorbHealHandler const& onEffectAbsorbHeal : script->OnEffectAbsorbHeal)
-            if (onEffectAbsorbHeal.IsEffectAffected(m_spellInfo, aurEff->GetEffIndex()))
-                onEffectAbsorbHeal.Call(script, aurEff, healInfo, absorbAmount);
-
-        if (!defaultPrevented)
-            defaultPrevented = script->_IsDefaultActionPrevented();
-
-        script->_FinishScriptCall();
-    }
-}
-
-void Aura::CallScriptEffectAfterAbsorbHandlers(AuraEffect* aurEff, AuraApplication const* aurApp, HealInfo& healInfo, uint32& absorbAmount)
-{
-    for (AuraScript* script : m_loadedScripts)
-    {
-        script->_PrepareScriptCall(AURA_SCRIPT_HOOK_EFFECT_AFTER_ABSORB, aurApp);
-        for (AuraScript::EffectAbsorbHealHandler const& afterEffectAbsorbHeal : script->AfterEffectAbsorbHeal)
-            if (afterEffectAbsorbHeal.IsEffectAffected(m_spellInfo, aurEff->GetEffIndex()))
-                afterEffectAbsorbHeal.Call(script, aurEff, healInfo, absorbAmount);
 
         script->_FinishScriptCall();
     }

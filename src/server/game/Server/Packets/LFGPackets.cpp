@@ -226,13 +226,6 @@ WorldPacket const* RequestPvpRewardsResponse::Write()
 
     _worldPacket << uint8(BrawlFlags);
     _worldPacket << uint8(ExtraFlags);
-    // Block 0, then the two loose flag bytes, then blocks 1..12. The two bytes sit AFTER the first block,
-    // not at the head of the packet - that ordering is what makes the captured bodies balance exactly.
-    _worldPacket << Activity[RandomBattleground];
-    _worldPacket << uint8(BrawlFlags);
-    _worldPacket << uint8(ExtraFlags);
-    for (std::size_t slot = 1; slot < Activity.size(); ++slot)
-        _worldPacket << Activity[slot];
 
     return &_worldPacket;
 }
@@ -529,6 +522,14 @@ WorldPacket const* LFGTeleportDenied::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* OpenLfgDungeonFinder::Write()
+{
+    // INFERRED (needs sniff validation) - single uint32 LFGDungeons.db2 id. See the class comment in LFGPackets.h.
+    _worldPacket << uint32(DungeonID);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* LFGExpandSearchPrompt::Write()
 {
     _worldPacket << Ticket;
@@ -541,10 +542,6 @@ WorldPacket const* LFGSlotInvalid::Write()
     _worldPacket << uint32(Reason);
     _worldPacket << int32(SubReason1);
     _worldPacket << int32(SubReason2);
-WorldPacket const* OpenLfgDungeonFinder::Write()
-{
-    // INFERRED (needs sniff validation) - single uint32 LFGDungeons.db2 id. See the class comment in LFGPackets.h.
-    _worldPacket << uint32(DungeonID);
 
     return &_worldPacket;
 }

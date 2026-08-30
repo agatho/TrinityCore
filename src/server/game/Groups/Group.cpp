@@ -462,16 +462,6 @@ Player* Group::GetInvited(ObjectGuid guid) const
     return nullptr;
 }
 
-Player* Group::GetInvited(const std::string& name) const
-{
-    for (InvitesList::const_iterator itr = m_invitees.begin(); itr != m_invitees.end(); ++itr)
-    {
-        if ((*itr) && (*itr)->GetName() == name)
-            return (*itr);
-    }
-    return nullptr;
-}
-
 bool Group::AddMember(Player* player)
 {
     // Get first not-full group
@@ -560,7 +550,7 @@ bool Group::AddMember(Player* player)
     player->FailCriteria(CriteriaFailEvent::ModifyPartyStatus, 0);
 
     // Record the "recent allies" relationship: the joining player and every other online, real member of this
-    // group are now people they recently grouped with (skip battleground/battlefield groups â€” those are not social).
+    // group are now people they recently grouped with (skip battleground/battlefield groups ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã¯Â¿Â½ those are not social).
     if (!isBGGroup() && !isBFGroup())
     {
         for (GroupReference const& itr : GetMembers())
@@ -1998,16 +1988,6 @@ bool Group::IsReadyCheckCompleted(void) const
     return true;
 }
 
-void Group::SetMemberReadyCheck(ObjectGuid guid, bool ready)
-{
-    if (!m_readyCheckStarted)
-        return;
-
-    member_witerator slot = _getMemberWSlot(guid);
-    if (slot != m_memberSlots.end())
-        SetMemberReadyCheck(&(*slot), ready);
-}
-
 void Group::SetMemberReadyCheck(MemberSlot* slot, bool ready)
 {
     WorldPackets::Party::ReadyCheckResponse response;
@@ -2176,22 +2156,6 @@ uint8 Group::GetMemberFlags(ObjectGuid guid) const
     if (mslot == m_memberSlots.end())
         return 0u;
     return mslot->flags;
-}
-
-bool Group::SameSubGroup(ObjectGuid guid1, ObjectGuid guid2) const
-{
-    member_citerator mslot2 = _getMemberCSlot(guid2);
-    if (mslot2 == m_memberSlots.end())
-       return false;
-    return SameSubGroup(guid1, &*mslot2);
-}
-
-bool Group::SameSubGroup(ObjectGuid guid1, MemberSlot const* slot2) const
-{
-    member_citerator mslot1 = _getMemberCSlot(guid1);
-    if (mslot1 == m_memberSlots.end() || !slot2)
-        return false;
-    return (mslot1->group == slot2->group);
 }
 
 bool Group::HasFreeSlotSubGroup(uint8 subgroup) const

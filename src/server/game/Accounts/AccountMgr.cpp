@@ -353,25 +353,6 @@ bool AccountMgr::GetEmail(uint32 accountId, std::string& email)
     return false;
 }
 
-bool AccountMgr::CheckPassword(std::string username, std::string password)
-{
-    Utf8ToUpperOnlyLatin(username);
-    Utf8ToUpperOnlyLatin(password);
-
-    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_CHECK_PASSWORD_BY_NAME);
-    stmt->setString(0, username);
-
-    if (PreparedQueryResult result = LoginDatabase.Query(stmt))
-    {
-        Trinity::Crypto::SRP::Salt salt = (*result)[0].GetBinary<Trinity::Crypto::SRP::SALT_LENGTH>();
-        Trinity::Crypto::SRP::Verifier verifier = (*result)[1].GetBinary();
-        if (AccountSRP6(username, salt, verifier).CheckCredentials(username, password))
-            return true;
-    }
-
-    return false;
-}
-
 bool AccountMgr::CheckPassword(uint32 accountId, std::string password)
 {
     std::string username;

@@ -883,41 +883,6 @@ void Channel::Invite(Player const* player, std::string const& newname)
     SendToOne(builder, guid);
 }
 
-void Channel::SetOwner(ObjectGuid const& guid, bool exclaim)
-{
-    if (!_ownerGuid.IsEmpty())
-    {
-        auto itr = _playersStore.find(_ownerGuid);
-        if (itr != _playersStore.end())
-            itr->second.SetOwner(false);
-    }
-
-    _ownerGuid = guid;
-    if (!_ownerGuid.IsEmpty())
-    {
-        auto itr = _playersStore.find(_ownerGuid);
-        if (itr == _playersStore.end())
-            return;
-
-        uint8 oldFlag = itr->second.GetFlags();
-        itr->second.SetModerator(true);
-        itr->second.SetOwner(true);
-
-        ModeChangeAppend appender(_ownerGuid, oldFlag, itr->second.GetFlags());
-        ChannelNameBuilder<ModeChangeAppend> builder(this, appender);
-        SendToAll(builder);
-
-        if (exclaim)
-        {
-            OwnerChangedAppend ownerAppender(_ownerGuid);
-            ChannelNameBuilder<OwnerChangedAppend> ownerBuilder(this, ownerAppender);
-            SendToAll(ownerBuilder);
-        }
-
-        _isDirty = true;
-    }
-}
-
 // CMSG_CHAT_CHANNEL_MODERATE (0x2C0016). Toggle, exactly like Channel::Announce - the client's
 // argument class for this opcode is the one-argument "Usage: %s(\"channel\")" group (sender
 // 0x20B9F10), which contains only queries and target-less toggles.

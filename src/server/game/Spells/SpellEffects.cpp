@@ -35,6 +35,7 @@
 #include "CreatureTextMgr.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
+#include "DB2Structure.h"
 #include "DuelPackets.h"
 #include "DynamicObject.h"
 #include "GameEventSender.h"
@@ -42,6 +43,7 @@
 #include "GameObjectAI.h"
 #include "GameTime.h"
 #include "Garrison.h"
+#include "GarrisonMgr.h"
 #include "GossipDef.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
@@ -172,6 +174,8 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectUnused,                                   // 78 SPELL_EFFECT_ATTACK
     &Spell::EffectSanctuary,                                // 79 SPELL_EFFECT_SANCTUARY
     &Spell::EffectModifyFollowerItemLevel,                   // 80 SPELL_EFFECT_MODIFY_FOLLOWER_ITEM_LEVEL
+    &Spell::EffectNULL,                                     // 81 SPELL_EFFECT_PUSH_ABILITY_TO_ACTION_BAR
+    &Spell::EffectNULL,                                     // 80 SPELL_EFFECT_MODIFY_FOLLOWER_ITEM_LEVEL
     &Spell::EffectPushAbilityToActionBar,                   // 81 SPELL_EFFECT_PUSH_ABILITY_TO_ACTION_BAR
     &Spell::EffectNULL,                                     // 82 SPELL_EFFECT_BIND_SIGHT
     &Spell::EffectDuel,                                     // 83 SPELL_EFFECT_DUEL
@@ -5504,7 +5508,14 @@ void Spell::EffectLearnGarrisonBuilding()
     if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
         return;
 
-    if (Garrison* garrison = unitTarget->ToPlayer()->GetGarrison())
+    // Same defect (and same fix) as EffectAddGarrisonFollower above: GetGarrison() resolves the WoD garrison,
+    // so a blueprint belonging to any other garrison type was learned into the wrong (or a missing) garrison.
+    // GarrBuilding.db2 publishes the owning type.
+    GarrisonType garrType = GARRISON_TYPE_GARRISON;
+    if (GarrBuildingEntry const* building = sGarrBuildingStore.LookupEntry(uint32(effectInfo->MiscValue)))
+        garrType = GarrisonType(building->GarrTypeID);
+
+    if (Garrison* garrison = unitTarget->ToPlayer()->GetGarrison(garrType))
         garrison->LearnBlueprint(effectInfo->MiscValue);
 }
 
@@ -5570,8 +5581,16 @@ void Spell::EffectAddGarrisonFollower()
     if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
         return;
 
-    if (Garrison* garrison = unitTarget->ToPlayer()->GetGarrison())
-        garrison->AddFollower(effectInfo->MiscValue);
+    // Route to the follower's own garrison type. GetGarrison() defaults to the WoD garrison (type 2),
+    // so without this every Legion/BfA/Shadowlands follower-granting spell silently failed with
+    // GARRISON_ERROR_INVALID_GARRISON (follower GarrTypeID != garrison type).
+    uint32 garrFollowerId = effectInfo->MiscValue;
+    GarrisonType garrType = GARRISON_TYPE_GARRISON;
+    if (GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(garrFollowerId))
+        garrType = GarrisonType(followerEntry->GarrTypeID);
+
+    if (Garrison* garrison = unitTarget->ToPlayer()->GetGarrison(garrType))
+        garrison->AddFollower(garrFollowerId);
 }
 
 void Spell::EffectCreateHeirloomItem()
@@ -6455,33 +6474,6 @@ void Spell::EffectEquipTransmogOutfit()
     target->EquipTransmogOutfit(m_misc.EquipTransmogOutfit.TransmogOutfitId, static_cast<TransmogSituationTrigger>(m_misc.EquipTransmogOutfit.SituationTrigger), locked);
 }
 
-void Spell::EffectSetItemBonusListGroupEntry()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    Player* player = m_caster->ToPlayer();
-    if (!player || !itemTarget)
-        return;
-
-    // MiscValue = the ItemBonusListGroupEntry to set the item to (no cost; used by scripted conversions).
-    sItemUpgradeMgr.SetGroupEntry(player, itemTarget, uint32(effectInfo->MiscValue));
-}
-
-void Spell::EffectIncreaseItemBonusListGroupStep()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    // The retail 12.x gear-upgrade transaction: the client casts the item's upgrade spell once per rank
-    // (C_ItemUpgrade.UpgradeItem); the effect advances the track one step, charging crests + gold.
-    Player* player = m_caster->ToPlayer();
-    if (!player || !itemTarget)
-        return;
-
-    sItemUpgradeMgr.PerformUpgrade(player, itemTarget);
-}
-
 void Spell::EffectRestoreGarrisonTroopVitality()
 {
     if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
@@ -6909,4 +6901,31 @@ void Spell::EffectModifyFollowerItemLevel()
         garrison->UpgradeFollowerItemLevel(dbId, iLevelDelta, miscValueB, upgradeData);
         break;
     }
+}
+
+void Spell::EffectSetItemBonusListGroupEntry()
+{
+    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
+        return;
+
+    Player* player = m_caster->ToPlayer();
+    if (!player || !itemTarget)
+        return;
+
+    // MiscValue = the ItemBonusListGroupEntry to set the item to (no cost; used by scripted conversions).
+    sItemUpgradeMgr.SetGroupEntry(player, itemTarget, uint32(effectInfo->MiscValue));
+}
+
+void Spell::EffectIncreaseItemBonusListGroupStep()
+{
+    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
+        return;
+
+    // The retail 12.x gear-upgrade transaction: the client casts the item's upgrade spell once per rank
+    // (C_ItemUpgrade.UpgradeItem); the effect advances the track one step, charging crests + gold.
+    Player* player = m_caster->ToPlayer();
+    if (!player || !itemTarget)
+        return;
+
+    sItemUpgradeMgr.PerformUpgrade(player, itemTarget);
 }

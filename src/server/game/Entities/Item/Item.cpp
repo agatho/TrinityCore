@@ -3002,19 +3002,6 @@ void BonusData::Initialize(ItemTemplate const* proto)
     _state.HasItemLimitCategory = false;
 }
 
-void BonusData::Initialize(WorldPackets::Item::ItemInstance const& itemInstance)
-{
-    ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemInstance.ItemID);
-    if (!proto)
-        return;
-
-    Initialize(proto);
-
-    if (itemInstance.ItemBonus)
-        for (uint32 bonusListID : itemInstance.ItemBonus->BonusListIDs)
-            AddBonusList(bonusListID);
-}
-
 void BonusData::AddBonusList(uint32 bonusListId)
 {
     for (ItemBonusEntry const* bonus : ItemBonusMgr::GetItemBonuses(bonusListId))

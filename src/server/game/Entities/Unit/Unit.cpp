@@ -3884,27 +3884,6 @@ void Unit::_UnapplyAura(AuraApplicationMap::iterator& i, AuraRemoveMode removeMo
     i = m_appliedAuras.begin();
 }
 
-void Unit::_UnapplyAura(AuraApplication* aurApp, AuraRemoveMode removeMode)
-{
-    // aura can be removed from unit only if it's applied on it, shouldn't happen
-    ASSERT(aurApp->GetBase()->GetApplicationOfTarget(GetGUID()) == aurApp);
-
-    uint32 spellId = aurApp->GetBase()->GetId();
-    AuraApplicationMapBoundsNonConst range = m_appliedAuras.equal_range(spellId);
-
-    for (AuraApplicationMap::iterator iter = range.first; iter != range.second;)
-    {
-        if (iter->second == aurApp)
-        {
-            _UnapplyAura(iter, removeMode);
-            return;
-        }
-        else
-            ++iter;
-    }
-    ABORT();
-}
-
 void Unit::_RemoveNoStackAurasDueToAura(Aura* aura, bool owned)
 {
     SpellInfo const* spellProto = aura->GetSpellInfo();
@@ -3941,27 +3920,6 @@ void Unit::_RegisterAuraEffect(AuraEffect* aurEff, bool apply)
 }
 
 // All aura base removes should go through this function!
-void Unit::RemoveOwnedAura(AuraMap::iterator& i, AuraRemoveMode removeMode)
-{
-    Aura* aura = i->second;
-    ASSERT(!aura->IsRemoved());
-
-    // if unit currently update aura list then make safe update iterator shift to next
-    if (m_auraUpdateIterator == i)
-        ++m_auraUpdateIterator;
-
-    m_ownedAuras.erase(i);
-    m_removedAuras.push_front(aura);
-
-    // Unregister single target aura
-    if (aura->IsSingleTarget())
-        aura->UnregisterSingleTarget();
-
-    aura->_Remove(removeMode);
-
-    i = m_ownedAuras.begin();
-}
-
 void Unit::RemoveOwnedAura(uint32 spellId, ObjectGuid casterGUID, uint32 reqEffMask, AuraRemoveMode removeMode)
 {
     for (AuraMap::iterator itr = m_ownedAuras.lower_bound(spellId); itr != m_ownedAuras.upper_bound(spellId);)
@@ -4018,19 +3976,6 @@ Aura* Unit::GetOwnedAura(uint32 spellId, ObjectGuid casterGUID, ObjectGuid itemC
     return nullptr;
 }
 
-void Unit::RemoveAura(AuraApplicationMap::iterator &i, AuraRemoveMode mode)
-{
-    AuraApplication * aurApp = i->second;
-    // Do not remove aura which is already being removed
-    if (aurApp->GetRemoveMode())
-        return;
-    Aura* aura = aurApp->GetBase();
-    _UnapplyAura(i, mode);
-    // Remove aura - for Area and Target auras
-    if (aura->GetOwner() == this)
-        aura->Remove(mode);
-}
-
 void Unit::RemoveAura(uint32 spellId, ObjectGuid caster, uint32 reqEffMask, AuraRemoveMode removeMode)
 {
     AuraApplicationMapBoundsNonConst range = m_appliedAuras.equal_range(spellId);
@@ -4081,14 +4026,6 @@ void Unit::RemoveAura(AuraApplication * aurApp, AuraRemoveMode mode)
         else
             ++iter;
     }
-}
-
-void Unit::RemoveAura(Aura* aura, AuraRemoveMode mode)
-{
-    if (aura->IsRemoved())
-        return;
-    if (AuraApplication * aurApp = aura->GetApplicationOfTarget(GetGUID()))
-        RemoveAura(aurApp, mode);
 }
 
 void Unit::RemoveAppliedAuras(std::function<bool(AuraApplication const*)> const& check, AuraRemoveMode removeMode /*= AURA_REMOVE_BY_DEFAULT*/)
@@ -4863,28 +4800,10 @@ AuraApplication* Unit::GetAuraApplication(uint32 spellId, std::function<bool(Aur
     return nullptr;
 }
 
-AuraApplication* Unit::GetAuraApplication(uint32 spellId, std::function<bool(Aura const*)> const& predicate) const
-{
-    for (AuraApplicationMap::value_type const& pair : Trinity::Containers::MapEqualRange(m_appliedAuras, spellId))
-        if (predicate(pair.second->GetBase()))
-            return pair.second;
-
-    return nullptr;
-}
-
 AuraApplication* Unit::GetAuraApplication(std::function<bool(AuraApplication const*)> const& predicate) const
 {
     for (AuraApplicationMap::value_type const& pair : m_appliedAuras)
         if (predicate(pair.second))
-            return pair.second;
-
-    return nullptr;
-}
-
-AuraApplication* Unit::GetAuraApplication(std::function<bool(Aura const*)> const& predicate) const
-{
-    for (AuraApplicationMap::value_type const& pair : m_appliedAuras)
-        if (predicate(pair.second->GetBase()))
             return pair.second;
 
     return nullptr;
@@ -5608,30 +5527,6 @@ void Unit::RemoveGameObject(GameObject* gameObj, bool del)
     }
 }
 
-void Unit::RemoveGameObject(uint32 spellid, bool del)
-{
-    if (m_gameObj.empty())
-        return;
-    GameObjectList::iterator i, next;
-    for (i = m_gameObj.begin(); i != m_gameObj.end(); i = next)
-    {
-        next = i;
-        if (spellid == 0 || (*i)->GetSpellId() == spellid)
-        {
-            (*i)->SetOwnerGUID(ObjectGuid::Empty);
-            if (del)
-            {
-                (*i)->SetRespawnTime(0);
-                (*i)->Delete();
-            }
-
-            next = m_gameObj.erase(i);
-        }
-        else
-            ++next;
-    }
-}
-
 void Unit::RemoveAllGameObjects()
 {
     // remove references to unit
@@ -5687,18 +5582,6 @@ void Unit::RemoveAreaTrigger(uint32 spellId)
         }
         else
             ++i;
-    }
-}
-
-void Unit::RemoveAreaTrigger(AuraEffect const* aurEff)
-{
-    for (AreaTrigger* areaTrigger : m_areaTrigger)
-    {
-        if (areaTrigger->GetAuraEffect() == aurEff)
-        {
-            areaTrigger->Remove();
-            break; // There can only be one AreaTrigger per AuraEffect
-        }
     }
 }
 
@@ -6892,11 +6775,6 @@ bool Unit::isPossessedByPlayer() const
     return HasUnitState(UNIT_STATE_POSSESSED) && GetCharmerGUID().IsPlayer();
 }
 
-bool Unit::isPossessing(Unit* u) const
-{
-    return u->isPossessed() && GetCharmedGUID() == u->GetGUID();
-}
-
 bool Unit::isPossessing() const
 {
     if (Unit* u = GetCharmed())
@@ -7853,7 +7731,7 @@ int32 Unit::SpellHealingBonusTaken(Unit* caster, SpellInfo const* spellProto, in
         });
     }
 
-    // [Midnight Season 1 PvP RULE — PLACEHOLDER, verify vs 12.0.7 patch notes]
+    // [Midnight Season 1 PvP RULE ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¯Ã‚Â¿Ã‚Â½ PLACEHOLDER, verify vs 12.0.7 patch notes]
     // Players receive reduced healing while in a battleground (retail S1: -20%,
     // includes Battleground Blitz / rated BG). Single incoming-heal choke point.
     if (IsPlayer() && GetMap()->IsBattleground())
@@ -9452,7 +9330,7 @@ void Unit::SetDriveCapabilityID(int32 driveCapabilityId, bool clientUpdate)
     SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::DriveCapabilityID), driveCapabilityId);
 
     // 12.1 has no MovementFlags3 drive flag on the wire; the DriveCapabilityID UpdateField plus the
-    // SMSG_MOVE_(UN)SET_CAN_DRIVE packets below drive the client. (Fork MOVEMENTFLAG3_CAN_DRIVE dropped —
+    // SMSG_MOVE_(UN)SET_CAN_DRIVE packets below drive the client. (Fork MOVEMENTFLAG3_CAN_DRIVE dropped ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¯ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â½
     // adding it would change MovementInfo wire serialization for every player.)
 
     if (!clientUpdate)
@@ -9561,65 +9439,6 @@ void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUp
         selfpacket.MoverGUID = GetGUID();
         selfpacket.SequenceIndex = m_movementCounter++;
         selfpacket.Speed = newValue;
-        playerMover->GetSession()->SendPacket(selfpacket.Write());
-    }
-}
-
-void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeRange speedType, bool clientUpdate, bool force /*= false*/)
-{
-    FlightCapabilityEntry const* flightCapabilityEntry = sFlightCapabilityStore.LookupEntry(GetFlightCapabilityID());
-    if (!flightCapabilityEntry)
-        flightCapabilityEntry = sFlightCapabilityStore.AssertEntry(1);
-
-    auto [opcode, min, max, rateAura] = [&]
-    {
-        switch (speedType)
-        {
-            case ADV_FLYING_BANKING_RATE:
-                return std::tuple(SMSG_MOVE_SET_ADV_FLYING_BANKING_RATE, flightCapabilityEntry->BankingRateMin, flightCapabilityEntry->BankingRateMax, SPELL_AURA_MOD_ADV_FLYING_BANKING_RATE);
-            case ADV_FLYING_PITCHING_RATE_DOWN:
-                return std::tuple(SMSG_MOVE_SET_ADV_FLYING_PITCHING_RATE_DOWN, flightCapabilityEntry->PitchingRateDownMin, flightCapabilityEntry->PitchingRateDownMax, SPELL_AURA_MOD_ADV_FLYING_PITCHING_RATE_DOWN);
-            case ADV_FLYING_PITCHING_RATE_UP:
-                return std::tuple(SMSG_MOVE_SET_ADV_FLYING_PITCHING_RATE_UP, flightCapabilityEntry->PitchingRateUpMin, flightCapabilityEntry->PitchingRateUpMax, SPELL_AURA_MOD_ADV_FLYING_PITCHING_RATE_UP);
-            case ADV_FLYING_TURN_VELOCITY_THRESHOLD:
-                return std::tuple(SMSG_MOVE_SET_ADV_FLYING_TURN_VELOCITY_THRESHOLD, flightCapabilityEntry->TurnVelocityThresholdMin, flightCapabilityEntry->TurnVelocityThresholdMax, SPELL_AURA_NONE);
-            default:
-                return std::tuple<OpcodeServer, float, float, AuraType>();
-        }
-    }();
-
-    if (rateAura != SPELL_AURA_NONE)
-    {
-        // take only lowest negative and highest positive auras - these effects do not stack
-        if (float neg = GetMaxNegativeAuraModifier(rateAura, [](AuraEffect const* mod) { return mod->GetAmount() > 0 && mod->GetAmount() < 100; }))
-        {
-            ApplyPct(min, neg);
-            ApplyPct(max, neg);
-        }
-
-        if (float pos = GetMaxPositiveAuraModifier(rateAura, [](AuraEffect const* mod) { return mod->GetAmount() > 100; }))
-        {
-            ApplyPct(min, pos);
-            ApplyPct(max, pos);
-        }
-    }
-
-    if (!force && m_advFlyingSpeed[speedType] == min && m_advFlyingSpeed[speedType + 1] == max)
-        return;
-
-    m_advFlyingSpeed[speedType] = min;
-    m_advFlyingSpeed[speedType + 1] = max;
-
-    if (!clientUpdate)
-        return;
-
-    if (Player* playerMover = Unit::ToPlayer(GetUnitBeingMoved()))
-    {
-        WorldPackets::Movement::SetAdvFlyingSpeedRange selfpacket(opcode);
-        selfpacket.MoverGUID = GetGUID();
-        selfpacket.SequenceIndex = m_movementCounter++;
-        selfpacket.SpeedMin = min;
-        selfpacket.SpeedMax = max;
         playerMover->GetSession()->SendPacket(selfpacket.Write());
     }
 }
@@ -11660,26 +11479,6 @@ Pet* Unit::CreateTamedPetFrom(Creature* creatureTarget, uint32 spell_id)
     return pet;
 }
 
-Pet* Unit::CreateTamedPetFrom(uint32 creatureEntry, uint32 spell_id)
-{
-    if (GetTypeId() != TYPEID_PLAYER)
-        return nullptr;
-
-    CreatureTemplate const* creatureInfo = sObjectMgr->GetCreatureTemplate(creatureEntry);
-    if (!creatureInfo)
-        return nullptr;
-
-    Pet* pet = new Pet(ToPlayer(), HUNTER_PET);
-
-    if (!pet->CreateBaseAtCreatureInfo(creatureInfo, this) || !InitTamedPet(pet, GetLevel(), spell_id))
-    {
-        delete pet;
-        return nullptr;
-    }
-
-    return pet;
-}
-
 bool Unit::InitTamedPet(Pet* pet, uint8 level, uint32 spell_id)
 {
     Player* player = ToPlayer();
@@ -12893,20 +12692,6 @@ void Unit::SendPlaySpellVisual(Unit* target, uint32 spellVisualId, uint8 missRea
     SendMessageToSet(playSpellVisual.Write(), true);
 }
 
-void Unit::SendPlaySpellVisual(Position const& targetPosition, uint32 spellVisualId, uint8 missReason, uint8 reflectStatus, float travelSpeed, bool speedAsTime /*= false*/, float launchDelay /*= 0.0f*/)
-{
-    WorldPackets::Spells::PlaySpellVisual playSpellVisual;
-    playSpellVisual.Source = GetGUID();
-    playSpellVisual.TargetPosition = targetPosition;
-    playSpellVisual.SpellVisualID = spellVisualId;
-    playSpellVisual.TravelSpeed = travelSpeed;
-    playSpellVisual.MissReason = missReason;
-    playSpellVisual.ReflectStatus = reflectStatus;
-    playSpellVisual.SpeedAsTime = speedAsTime;
-    playSpellVisual.LaunchDelay = launchDelay;
-    SendMessageToSet(playSpellVisual.Write(), true);
-}
-
 void Unit::SendCancelSpellVisual(uint32 id)
 {
     WorldPackets::Spells::CancelSpellVisual cancelSpellVisual;
@@ -13583,11 +13368,6 @@ void Unit::NearTeleportTo(TeleportLocation const& target, bool casting)
         UpdatePosition(target.Location, true);
         UpdateObjectVisibility();
     }
-}
-
-void Unit::NearTeleportTo(Position const& pos, bool casting /*= false*/)
-{
-    NearTeleportTo(TeleportLocation{ .Location = { GetMapId(), pos } }, casting);
 }
 
 void Unit::SendTeleportPacket(TeleportLocation const& teleportLocation)
@@ -15285,11 +15065,6 @@ void Unit::Say(uint32 textId, WorldObject const* target /*= nullptr*/)
 void Unit::Yell(uint32 textId, WorldObject const* target /*= nullptr*/)
 {
     Talk(textId, CHAT_MSG_MONSTER_YELL, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_YELL), target);
-}
-
-void Unit::TextEmote(uint32 textId, WorldObject const* target /*= nullptr*/, bool isBossEmote /*= false*/)
-{
-    Talk(textId, isBossEmote ? CHAT_MSG_RAID_BOSS_EMOTE : CHAT_MSG_MONSTER_EMOTE, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_TEXTEMOTE), target);
 }
 
 void Unit::Whisper(uint32 textId, Player* target, bool isBossWhisper /*= false*/)

@@ -28,8 +28,8 @@ Account::Account(WorldSession* session, ObjectGuid guid, std::string&& name) : m
     _Create(guid);
 
     // Only FHousingStorage_C belongs on the BNetAccount entity.
-    // FHousingPlayerHouse_C â†’ Housing/3 entity (HousingPlayerHouseEntity)
-    // FNeighborhoodMirrorData_C â†’ Housing/4 entity (HousingNeighborhoodMirrorEntity)
+    // FHousingPlayerHouse_C ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Housing/3 entity (HousingPlayerHouseEntity)
+    // FNeighborhoodMirrorData_C ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Housing/4 entity (HousingNeighborhoodMirrorEntity)
     m_entityFragments.Add(WowCS::EntityFragment::FHousingStorage_C, false, WowCS::GetRawFragmentData(m_housingStorageData));
 
     // Default value

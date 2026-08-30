@@ -10291,11 +10291,6 @@ size_t ObjectMgr::ScriptNameContainer::size() const
     return IndexToName.size();
 }
 
-ObjectMgr::ScriptNameContainer::NameMap::const_iterator ObjectMgr::ScriptNameContainer::find(size_t index) const
-{
-    return index < IndexToName.size() ? IndexToName[index] : end();
-}
-
 ObjectMgr::ScriptNameContainer::NameMap::const_iterator ObjectMgr::ScriptNameContainer::find(std::string_view name) const
 {
     // assume "" is the first element

@@ -725,24 +725,6 @@ void CollectionMgr::SaveAccountItemAppearances(LoginDatabaseTransaction trans)
     }
 }
 
-void CollectionMgr::AddItemAppearance(Item* item)
-{
-    if (!item->IsSoulBound())
-        return;
-
-    ItemModifiedAppearanceEntry const* itemModifiedAppearance = item->GetItemModifiedAppearance();
-    if (!CanAddAppearance(itemModifiedAppearance))
-        return;
-
-    if (item->IsBOPTradeable() || item->IsRefundable())
-    {
-        AddTemporaryAppearance(item->GetGUID(), itemModifiedAppearance);
-        return;
-    }
-
-    AddItemAppearance(itemModifiedAppearance);
-}
-
 void CollectionMgr::AddItemAppearance(uint32 itemId, uint32 appearanceModId /*= 0*/)
 {
     ItemModifiedAppearanceEntry const* itemModifiedAppearance = TransmogMgr::GetItemModifiedAppearance(itemId, appearanceModId);

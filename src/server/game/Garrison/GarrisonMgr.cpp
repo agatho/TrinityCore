@@ -1303,7 +1303,7 @@ CharShipmentContainerEntry const* GarrisonMgr::GetShipmentContainerForBuilding(u
 
     CharShipmentContainerEntry const* container = itr->second;
     // WoD shipment containers come in an Alliance/Horde pair (CharShipmentContainer.Faction, CrossFactionID).
-    // The by-building-type index keeps only one of the pair, so pick the one matching the garrison's faction —
+    // The by-building-type index keeps only one of the pair, so pick the one matching the garrison's faction Ã¢â‚¬â€�
     // sending the wrong-faction container crashes the client when it opens the work-order UI. Faction: 0=Horde,
     // 1=Alliance, matching GarrisonFactionIndex.
     if (container->Faction != int8(factionIndex) && container->CrossFactionID)

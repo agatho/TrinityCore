@@ -583,8 +583,8 @@ WorldPacket const* PetBattleFinalRound::Write()
     // flags_byte = MSB-first bitfield{4}: bit7=Abandoned, bit6=PvpBattle, bit5=Winners[0] (team0), bit4=Winners[1] (team1).
     _worldPacket << Bits<1>(Abandoned);
     _worldPacket << Bits<1>(PvpBattle);
-    _worldPacket << Bits<1>(Winners[0]);    // bit5 â€” team0 won (0 in every captured win/loss unless that team won)
-    _worldPacket << Bits<1>(Winners[1]);    // bit4 â€” team1 won
+    _worldPacket << Bits<1>(Winners[0]);    // bit5 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ team0 won (0 in every captured win/loss unless that team won)
+    _worldPacket << Bits<1>(Winners[1]);    // bit4 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ team1 won
     _worldPacket.FlushBits();
 
     _worldPacket << uint32(0);              // flat field #1: 0 in every captured battle; role unknown, NOT winners

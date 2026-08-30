@@ -16,9 +16,9 @@
  */
 
 #include "InstanceScript.h"
-#include "CombatLogPackets.h"
 #include "ChallengeMode.h"
 #include "ChallengeModeMgr.h"
+#include "CombatLogPackets.h"
 #include "AreaBoundary.h"
 #include "Config.h"
 #include "Creature.h"
@@ -188,14 +188,6 @@ void InstanceScript::LoadDoorData(std::span<DoorData const> data)
     TC_LOG_DEBUG("scripts", "InstanceScript::LoadDoorData: {} doors loaded.", uint64(doors.size()));
 }
 
-void InstanceScript::LoadObjectData(std::span<ObjectData const> creatureData, std::span<ObjectData const> gameObjectData)
-{
-    LoadObjectData(creatureData, _creatureInfo);
-    LoadObjectData(gameObjectData, _gameObjectInfo);
-
-    TC_LOG_DEBUG("scripts", "InstanceScript::LoadObjectData: {} objects loaded.", _creatureInfo.size() + _gameObjectInfo.size());
-}
-
 void InstanceScript::LoadDungeonEncounterData(std::span<DungeonEncounterData const> encounters)
 {
     for (DungeonEncounterData const& encounter : encounters)
@@ -327,13 +319,6 @@ void InstanceScript::AddObject(Creature* obj, bool add)
 {
     ObjectInfoMap::const_iterator j = _creatureInfo.find(obj->GetEntry());
     if (j != _creatureInfo.end())
-        AddObject(obj, j->second, add);
-}
-
-void InstanceScript::AddObject(GameObject* obj, bool add)
-{
-    ObjectInfoMap::const_iterator j = _gameObjectInfo.find(obj->GetEntry());
-    if (j != _gameObjectInfo.end())
         AddObject(obj, j->second, add);
 }
 
@@ -827,11 +812,6 @@ void InstanceScript::DoCastSpellOnPlayer(Player* player, uint32 spell, bool incl
 bool InstanceScript::ServerAllowsTwoSideGroups()
 {
     return sWorld->getBoolConfig(CONFIG_ALLOW_TWO_SIDE_INTERACTION_GROUP);
-}
-
-DungeonEncounterEntry const* InstanceScript::GetBossDungeonEncounter(uint32 id) const
-{
-    return id < bosses.size() ? bosses[id].GetDungeonEncounterForDifficulty(instance->GetDifficultyID()) : nullptr;
 }
 
 DungeonEncounterEntry const* InstanceScript::GetBossDungeonEncounter(Creature const* creature) const

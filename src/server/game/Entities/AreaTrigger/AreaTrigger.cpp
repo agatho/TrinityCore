@@ -611,13 +611,6 @@ float AreaTrigger::GetScaleCurveValue(UF::ScaleCurve const& scaleCurve, uint32 t
     return GetScaleCurveValueAtProgress(scaleCurve, GetScaleCurveProgress(scaleCurve, timeTo));
 }
 
-void AreaTrigger::SetScaleCurve(UF::MutableFieldReference<UF::ScaleCurve, false> scaleCurveMutator, float constantValue)
-{
-    ScaleCurveData curveTemplate;
-    curveTemplate.Curve = constantValue;
-    SetScaleCurve(scaleCurveMutator, curveTemplate);
-}
-
 void AreaTrigger::SetScaleCurve(UF::MutableFieldReference<UF::ScaleCurve, false> scaleCurveMutator, std::array<DBCPosition2D, 2> const& points,
     Optional<uint32> startTimeOffset, CurveInterpolationMode interpolation)
 {
@@ -1637,7 +1630,7 @@ void AreaTrigger::InitHousingPlotVisuals()
             SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::SpellVisual).ModifyValue(&UF::SpellCastVisual::SpellXSpellVisualID), int32(510142));
     }
 
-    // PeriodModifier=(0, 1.0) â€” retail sniff-verified on all housing plot ATs.
+    // PeriodModifier=(0, 1.0) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ retail sniff-verified on all housing plot ATs.
     {
         auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);
         SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::PeriodModifier)
@@ -1646,7 +1639,7 @@ void AreaTrigger::InitHousingPlotVisuals()
             .ModifyValue(&UF::AreaTriggerActionSetPeriodModifier::Field_4), 1.0f);
     }
 
-    // ExtraScaleCurve: ParameterCurve=0x3F800001, OverrideActive=true â€” tells client to
+    // ExtraScaleCurve: ParameterCurve=0x3F800001, OverrideActive=true ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ tells client to
     // flatten terrain / remove grass within the plot boundary (decor placement surface).
     {
         auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);

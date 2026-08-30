@@ -349,7 +349,7 @@ bool Garrison::LoadFromDB(PreparedQueryResult garrison, PreparedQueryResult blue
                 mission.PacketInfo.Flags = missionEntry->Flags;
 
                 // Encounters, Rewards and OvermaxRewards are runtime-only (not stored in
-                // character_garrison_missions), so regenerate them from DB2 on load — otherwise a mission
+                // character_garrison_missions), so regenerate them from DB2 on load Ã¢â‚¬â€� otherwise a mission
                 // that was in progress across a restart reloads with an empty Rewards vector and
                 // ClaimMissionReward grants the player nothing. Same source used when the mission is first
                 // offered (AddMission -> PopulateMissionData), so the data is identical.
@@ -363,7 +363,7 @@ bool Garrison::LoadFromDB(PreparedQueryResult garrison, PreparedQueryResult blue
     // persisted; the authoritative record is each follower's persisted CurrentMissionID (== missionRecID,
     // set in StartMission). Without this rebuild, a mission that was in progress across a restart reloads
     // with an empty follower list, so ClaimMissionReward awards no follower XP and never clears
-    // CurrentMissionID — leaving the follower permanently stuck "on a mission". Followers whose mission is
+    // CurrentMissionID Ã¢â‚¬â€� leaving the follower permanently stuck "on a mission". Followers whose mission is
     // no longer present (already claimed/removed) are orphans and get freed here.
     for (auto& [followerDbId, follower] : _followers)
     {
@@ -373,7 +373,7 @@ bool Garrison::LoadFromDB(PreparedQueryResult garrison, PreparedQueryResult blue
         if (Mission* mission = GetMissionByRecID(follower.PacketInfo.CurrentMissionID))
             mission->CurrentFollowerDBIDs.push_back(follower.PacketInfo.DbID);
         else
-            follower.PacketInfo.CurrentMissionID = 0; // orphaned link — the mission is gone, free the follower
+            follower.PacketInfo.CurrentMissionID = 0; // orphaned link Ã¢â‚¬â€� the mission is gone, free the follower
     }
 
     // Back-fill board slots for missions that were already running before slots were stored: those rows
@@ -998,15 +998,6 @@ Garrison::Plot* Garrison::GetPlot(uint32 garrPlotInstanceId)
     return nullptr;
 }
 
-Garrison::Plot const* Garrison::GetPlot(uint32 garrPlotInstanceId) const
-{
-    auto itr = _plots.find(garrPlotInstanceId);
-    if (itr != _plots.end())
-        return &itr->second;
-
-    return nullptr;
-}
-
 void Garrison::LearnBlueprint(uint32 garrBuildingId)
 {
     WorldPackets::Garrison::GarrisonLearnBlueprintResult learnBlueprintResult;
@@ -1541,7 +1532,7 @@ void Garrison::BuildInfoPacket(WorldPackets::Garrison::GarrisonInfo& garrison) c
         garrison.Followers.push_back(&p.second.PacketInfo);
 
     // Missions: inline Encounters/Rewards/OvermaxRewards must be empty in the
-    // GarrisonInfo mission structs — the rewards go ONLY in the garrison-level
+    // GarrisonInfo mission structs Ã¢â‚¬â€� the rewards go ONLY in the garrison-level
     // parallel arrays.  The client reads both, so writing them in both places
     // causes a packet desync (double data).  We build temporary copies with
     // the inline vectors cleared.
@@ -1663,11 +1654,11 @@ void Garrison::SendDeleteExpiredMissionsResult() const
 {
     WorldPackets::Garrison::DeleteExpiredMissionsResult result;
     result.GarrTypeID = static_cast<uint8>(_garrType);
-    result.Result = GARRISON_SUCCESS; // must be 0 (client gates the mission-open fire on it) — GARRISON_SUCCESS == 0
+    result.Result = GARRISON_SUCCESS; // must be 0 (client gates the mission-open fire on it) Ã¢â‚¬â€� GARRISON_SUCCESS == 0
     result.Succeeded = true;
     // CRITICAL: this bit (wire bit6, the second packed bit) MUST be 0. The 68275 client fires the
     // legacy GARRISON_MISSION_NPC_OPENED event from the SMSG_DELETE_EXPIRED_MISSIONS_RESULT (0x4F0022)
-    // handler *while PlayerInteractionType == GarrMission(32)* — but ONLY if the second u32 (Result) is 0
+    // handler *while PlayerInteractionType == GarrMission(32)* Ã¢â‚¬â€� but ONLY if the second u32 (Result) is 0
     // AND this trailing bit is 0. Sending it as 1 makes the client silently skip the fire, which is why
     // the WoD command table never opened. (Binary-traced: fire fn sub_7FF72AD3DAD0, gate cmp [mgr+0x30],0x20.)
     result.LegionUnkBit = false;
@@ -1694,15 +1685,6 @@ void Garrison::SendTroopQualityRefresh() const
 // ============================================================
 // Follower management
 // ============================================================
-
-Garrison::Follower* Garrison::GetFollower(uint64 dbId)
-{
-    auto itr = _followers.find(dbId);
-    if (itr != _followers.end())
-        return &itr->second;
-
-    return nullptr;
-}
 
 void Garrison::RemoveFollower(uint64 dbId)
 {
@@ -2190,24 +2172,6 @@ Garrison::Mission const* Garrison::GetMission(uint64 dbId) const
     return nullptr;
 }
 
-Garrison::Mission* Garrison::GetMission(uint64 dbId)
-{
-    auto itr = _missions.find(dbId);
-    if (itr != _missions.end())
-        return &itr->second;
-
-    return nullptr;
-}
-
-Garrison::Mission const* Garrison::GetMissionByRecID(uint32 missionRecID) const
-{
-    for (auto const& p : _missions)
-        if (static_cast<uint32>(p.second.PacketInfo.MissionRecID) == missionRecID)
-            return &p.second;
-
-    return nullptr;
-}
-
 Garrison::Mission* Garrison::GetMissionByRecID(uint32 missionRecID)
 {
     // A rec id is supposed to be unique per garrison, but rows written before the load-time duplicate guard
@@ -2643,7 +2607,7 @@ GarrisonError Garrison::StartMission(uint32 missionRecID, std::vector<uint64> co
     // "Assign followers to mission" step), so it cannot catch the same follower listed twice. Without
     // this guard one companion could fill every slot: CalculateSuccessChance would count its bias N
     // times (success ~100%), RollMissionOutcome would build N combatants from it, and FinalizeMission
-    // would award its follower XP / decrement its troop durability N times — a guaranteed-win XP farm
+    // would award its follower XP / decrement its troop durability N times Ã¢â‚¬â€� a guaranteed-win XP farm
     // from a single follower. De-dup before any other check.
     std::unordered_set<uint64> seenFollowerDbIds;
     for (uint64 followerDbId : followerDBIDs)
@@ -2875,7 +2839,7 @@ bool Garrison::RollMissionOutcome(Mission& mission, uint32 missionRecID)
 }
 
 // Grants rewards + follower XP, frees the followers and removes the mission. Called from the opcodes the
-// WoD client actually sends (BONUS_ROLL on success, COMPLETE on failure) — NOT from the never-sent
+// WoD client actually sends (BONUS_ROLL on success, COMPLETE on failure) Ã¢â‚¬â€� NOT from the never-sent
 // GET_MISSION_REWARD. Uses the outcome stored at CompleteMission; re-rolls once only if the mission was
 // caught mid-completion by a restart (ResultDetermined lost with the runtime state).
 GarrisonError Garrison::FinalizeMission(uint32 missionRecID, bool grantOvermax)
@@ -2958,7 +2922,7 @@ GarrisonError Garrison::FinalizeMission(uint32 missionRecID, bool grantOvermax)
 
                 // Only a follower at its TRUE terminal level rolls excess XP into quality (iLvl). The DB2
                 // marks that level with XpToNextLevel == 0. A NULL levelXP means we simply have no row for
-                // this (type, level) — treat that as "can't level right now" and KEEP the accumulated XP;
+                // this (type, level) Ã¢â‚¬â€� treat that as "can't level right now" and KEEP the accumulated XP;
                 // it must never be silently deleted (that zeroed every mission's follower XP when the
                 // GarrFollowerLevelXP row for the follower's level was absent).
                 if (levelXP && levelXP->XpToNextLevel == 0)
@@ -3075,7 +3039,7 @@ GarrisonError Garrison::FinalizeMission(uint32 missionRecID, bool grantOvermax)
 
     // Salvage Yard is a WoD-only building (BuildingType 35) that has no equivalent in
     // Class Order Halls / War Campaign / Covenant. Guard the WoD-specific reward path here
-    // — the equivalent expansion-specific bonus reward mechanics live in their own scripts.
+    // Ã¢â‚¬â€� the equivalent expansion-specific bonus reward mechanics live in their own scripts.
     if (GetType() == GARRISON_TYPE_GARRISON)
     {
         static constexpr uint32 BUILDING_TYPE_SALVAGE_YARD = 35;
@@ -3147,7 +3111,7 @@ GarrisonError Garrison::FinalizeMission(uint32 missionRecID, bool grantOvermax)
 GarrisonError Garrison::MissionBonusRoll(uint32 missionRecID)
 {
     // The WoD client sends CMSG_GARRISON_MISSION_BONUS_ROLL when the player opens the reward chest on a
-    // successful mission — the client itself comments this call "-- complete mission". It is the finalize
+    // successful mission Ã¢â‚¬â€� the client itself comments this call "-- complete mission". It is the finalize
     // step: grant base + overmax (chest) rewards + follower XP, free the followers and remove the mission.
     // (The reward code used to live only in ClaimMissionReward / GET_MISSION_REWARD, an opcode the WoD
     // client never sends, so completed missions granted nothing and lingered forever.)
@@ -3871,7 +3835,7 @@ void Garrison::AddFollowerXP(uint64 dbId, uint32 xp)
     }
 
     // Only a follower at its TRUE terminal level (DB2 row present with XpToNextLevel == 0) rolls excess XP
-    // into quality. A NULL levelXP just means we have no row for this (type, level) — keep the accumulated
+    // into quality. A NULL levelXP just means we have no row for this (type, level) Ã¢â‚¬â€� keep the accumulated
     // XP rather than deleting it. (Mirrors the mission-reward path; see FinalizeMission.)
     if (levelXP && levelXP->XpToNextLevel == 0)
     {
@@ -5227,7 +5191,7 @@ void Garrison::SendShipmentInfo(ObjectGuid npcGUID)
         return;
     }
 
-    // ShipmentID is a CharShipment.db2 id (the work-order recipe), NOT the container id — the client looks
+    // ShipmentID is a CharShipment.db2 id (the work-order recipe), NOT the container id Ã¢â‚¬â€� the client looks
     // it up to load reagents/output, so an invalid value (the container id) null-derefs and crashes it
     // (sniff-verified: retail sends the CharShipment whose ContainerID == this container).
     CharShipmentEntry const* recipe = shipmentEntries->front();

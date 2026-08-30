@@ -5710,7 +5710,6 @@ void ActivePlayerData::WriteUpdate(Mask const& changesMask, ByteBuffer& data, Pl
             }
         }
     }
-    data.FlushBits();
     if (changesMask[0])
     {
         if (changesMask[11])

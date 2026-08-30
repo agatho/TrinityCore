@@ -1223,6 +1223,8 @@ WorldPacket const* XPAwardedFromCurrency::Write()
     _worldPacket.FlushBits();
 
     return &_worldPacket;
+}
+
 void OpenTradeSkillNpc::Read()
 {
     _worldPacket >> NpcGUID;
@@ -1279,14 +1281,6 @@ WorldPacket const* SpellFailureMessage::Write()
 
 WorldPacket const* ScriptCast::Write()
 {
-void RequestCrowdControlSpell::Read()
-{
-    _worldPacket >> Target;
-}
-
-WorldPacket const* ArenaCrowdControlSpellResult::Write()
-{
-    _worldPacket << Guid;
     _worldPacket << int32(SpellID);
 
     return &_worldPacket;
@@ -1348,30 +1342,15 @@ WorldPacket const* AuraPointsDepleted::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* ResumeCast::Write()
+void RequestCrowdControlSpell::Read()
 {
-    _worldPacket << CasterGUID;
-    _worldPacket << Visual;
-    _worldPacket << CastID;
-    _worldPacket << TargetGUID;
-    _worldPacket << int32(SpellID);
-
-    return &_worldPacket;
+    _worldPacket >> Target;
 }
 
-WorldPacket const* ResumeCastBar::Write()
+WorldPacket const* ArenaCrowdControlSpellResult::Write()
 {
-    _worldPacket << CasterGUID;
-    _worldPacket << TargetGUID;
+    _worldPacket << Guid;
     _worldPacket << int32(SpellID);
-    _worldPacket << Visual;
-    _worldPacket << TimeRemaining;
-    _worldPacket << CastTime;
-    _worldPacket << OptionalInit(InterruptImmunities);
-    _worldPacket.FlushBits();
-
-    if (InterruptImmunities)
-        _worldPacket << *InterruptImmunities;
 
     return &_worldPacket;
 }

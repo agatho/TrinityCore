@@ -61,11 +61,11 @@ ByteBuffer& operator<<(ByteBuffer& data, GarrisonBuildingInfo const& buildingInf
 }
 
 // Sniff-verified for 12.0.1.66102 (148-byte and 156-byte FOLLOWER_CHANGED_QUALITY bodies
-// match this writer byte-for-byte — see SNIFF_AUDIT_12.0.1.66102.md §3.1).
+// match this writer byte-for-byte ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see SNIFF_AUDIT_12.0.1.66102.md Ãƒâ€šÃ‚Â§3.1).
 // Note: AGENT_BRIEF_GARRISON.md's Deserialize_JamGarrisonFollower @ 0x7FF75C1752A0 decodes
 // the JAM-mirror wire format (account-data field-mask packet, 16 VarUInt32 reads ending in
 // HealCost/HealStartTime/HealDuration). That is a SEPARATE code path from the dedicated
-// SMSGs — do NOT transplant the brief's layout here. Audit §5.1 verified that doing so
+// SMSGs ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ do NOT transplant the brief's layout here. Audit Ãƒâ€šÃ‚Â§5.1 verified that doing so
 // produces nonsense values (e.g. DbID=49148642 vs the actual 397927906).
 ByteBuffer& operator<<(ByteBuffer& data, GarrisonFollower const& follower)
 {
@@ -112,8 +112,8 @@ ByteBuffer& operator<<(ByteBuffer& data, GarrisonEncounter const& encounter)
     return data;
 }
 
-// Sniff-verified for 12.0.1.66102 — observed in the 8316-byte SMSG_GET_GARRISON_INFO_RESULT
-// body (SNIFF_AUDIT_12.0.1.66102.md §5.3). int32 ItemFileDataID is always present
+// Sniff-verified for 12.0.1.66102 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ observed in the 8316-byte SMSG_GET_GARRISON_INFO_RESULT
+// body (SNIFF_AUDIT_12.0.1.66102.md Ãƒâ€šÃ‚Â§5.3). int32 ItemFileDataID is always present
 // (sometimes zero, sometimes a real DBD ID like 1599042); the trailing OptionalInit bit
 // gates an optional ItemInstance blob.
 // The brief's Deserialize_JamGarrisonMissionReward @ 0x7FF75C1754C0 (Byte-gated VarUInt32)
@@ -140,11 +140,11 @@ ByteBuffer& operator<<(ByteBuffer& data, GarrisonMissionReward const& missionRew
     return data;
 }
 
-// Sniff-verified for 12.0.1.66102 (SNIFF_AUDIT_12.0.1.66102.md §3.15, embedded in
+// Sniff-verified for 12.0.1.66102 (SNIFF_AUDIT_12.0.1.66102.md Ãƒâ€šÃ‚Â§3.15, embedded in
 // the 188-byte SMSG_GET_GARRISON_INFO_RESULT). MissionScalar(float) sits between
 // Flags and ContentTuningID followed by 3 size fields. Note: SMSG_GARRISON_START_MISSION_RESULT
 // embeds a Mission whose exact byte layout has a residual ~2-byte misalignment vs this
-// writer (audit §4.1) — needs IDA pseudocode of Build_GarrisonStartMissionResult to fully
+// writer (audit Ãƒâ€šÃ‚Â§4.1) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ needs IDA pseudocode of Build_GarrisonStartMissionResult to fully
 // resolve. The brief's Deserialize_JamGarrisonMission @ 0x7FF75C1755E0 with Currency/
 // BonusActions/AutoMissionData tail is the JAM-mirror path, NOT this dedicated SMSG.
 ByteBuffer& operator<<(ByteBuffer& data, GarrisonMission const& mission)
@@ -201,7 +201,7 @@ ByteBuffer& operator<<(ByteBuffer& data, GarrisonTalent const& talent)
     // The client reads the wire `flags` field with its OWN semantics, which differ from TC's internal
     // Garrison::Talent::Flags. Bits were pinned by live client testing (the builder that computes these is
     // control-flow-flattened, so it isn't offline-decompilable):
-    //   client bit 0x4 = "this talent is being researched" — gates whether the Order Advancement UI reads
+    //   client bit 0x4 = "this talent is being researched" ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ gates whether the Order Advancement UI reads
     //       researchStartTime and renders the research timer. Verified live: flags=0 kept the client's startTime in
     //       memory (proven by a server-side diag log + a sentinel injection) but drew the talent idle; setting 0x4
     //       makes C_Garrison.GetTalentInfo(id).isBeingResearched=true with the real DB2 researchDuration.
@@ -597,7 +597,7 @@ WorldPacket const* GarrisonCompleteBuildingConstructionResult::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980791 (§8.45): PackedGuid + sub-call + varU32 size + varU32[size].
+// IDA case 4980791 (Ãƒâ€šÃ‚Â§8.45): PackedGuid + sub-call + varU32 size + varU32[size].
 WorldPacket const* GarrisonOpenCrafter::Write()
 {
     _worldPacket << NpcGUID;
@@ -609,7 +609,7 @@ WorldPacket const* GarrisonOpenCrafter::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980817 (§8.51): generic byte-block helper. Conservative: u32 NewMinLevel.
+// IDA case 4980817 (Ãƒâ€šÃ‚Â§8.51): generic byte-block helper. Conservative: u32 NewMinLevel.
 // 8 bytes, not 4 - the client's handler (0x22A0BA0) reads two u32s out of the opaque tail. See the header.
 WorldPacket const* GarrisonAutoTroopMinLevelUpdateResult::Write()
 {
@@ -619,7 +619,7 @@ WorldPacket const* GarrisonAutoTroopMinLevelUpdateResult::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980772 (§8.30): u8 GarrTypeID + GarrisonSmallStruct.
+// IDA case 4980772 (Ãƒâ€šÃ‚Â§8.30): u8 GarrTypeID + GarrisonSmallStruct.
 // Conservative inner shape: {u32 MissionRecID, u32 BonusAbilityID}.
 WorldPacket const* GarrisonActivateMissionBonusAbility::Write()
 {
@@ -651,7 +651,7 @@ void GarrisonStartMission::Read()
     {
         _worldPacket >> FollowerDBIDs[i];
         // BoardIndex: the ally board slot the player dropped this companion into. This used to be
-        // skipped as "unused, always -1" — true for the boardless WoD/Legion mission UIs, but the
+        // skipped as "unused, always -1" ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ true for the boardless WoD/Legion mission UIs, but the
         // Shadowlands Adventures UI sends a real GarrAutoBoardIndex here (optional third argument of
         // C_Garrison.AddFollowerToMission) and then expects it echoed back in
         // SMSG_GARRISON_START_MISSION_RESULT to fill its own follower record. Discarding it is what
@@ -678,7 +678,7 @@ void GarrisonMissionBonusRoll::Read()
 void OpenMissionNpc::Read()
 {
     _worldPacket >> NpcGUID;
-    // Trailing uint8 (GarrFollowerTypeID). Consumed but deliberately not stored — see GarrisonPackets.h for
+    // Trailing uint8 (GarrFollowerTypeID). Consumed but deliberately not stored ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see GarrisonPackets.h for
     // why this class must not grow a member. Skipping it keeps the object layout byte-identical and stops the
     // "read stop at 14 from 15" tail warning the client's extra byte produced on every open.
     _worldPacket.read_skip<uint8>();
@@ -686,7 +686,7 @@ void OpenMissionNpc::Read()
 
 void GarrisonGetMissionReward::Read()
 {
-    _worldPacket >> DbID;           // RAW uint64, not a PackedGuid — see GarrisonPackets.h
+    _worldPacket >> DbID;           // RAW uint64, not a PackedGuid ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see GarrisonPackets.h
     _worldPacket >> MissionRecID;
 }
 
@@ -702,7 +702,7 @@ void GarrisonGetMissionReward::Read()
 //   FollowerInfo[FollowerInfoCount]   (each: u64 DbID, i32 BoardIndex, i32 Health,
 //                                      u8 HasFollowerEntry; if HasFollowerEntry then u32 FollowerEntry),
 //   GarrisonFollower[FollowersCount]
-// See SNIFF_AUDIT_12.0.1.66102.md §8.1.
+// See SNIFF_AUDIT_12.0.1.66102.md Ãƒâ€šÃ‚Â§8.1.
 WorldPacket const* GarrisonStartMissionResult::Write()
 {
     _worldPacket << uint32(Result);
@@ -725,7 +725,7 @@ WorldPacket const* GarrisonStartMissionResult::Write()
     return &_worldPacket;
 }
 
-// IDA-confirmed (12.0.5.67186) layout — see SNIFF_AUDIT §10.1.
+// IDA-confirmed (12.0.5.67186) layout ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see SNIFF_AUDIT Ãƒâ€šÃ‚Â§10.1.
 // 7 CONFIRMED + 3 HIGH + 2 LOW fields (the LOW are field NAMES inside the 32-byte
 // FollowerInfo sub-struct; the wire SHAPE is fully locked in).
 WorldPacket const* GarrisonCompleteMissionResult::Write()
@@ -748,7 +748,7 @@ WorldPacket const* GarrisonCompleteMissionResult::Write()
 
     // Single byte where the client reads bit7 as Succeeded and bit6 as OvermaxSucceeded.
     // Written directly because TC's Bits<1> writer is LSB-first while the client reads
-    // MSB-first (see SNIFF_AUDIT §10.1.8 bit-pack note).
+    // MSB-first (see SNIFF_AUDIT Ãƒâ€šÃ‚Â§10.1.8 bit-pack note).
     _worldPacket << uint8((Succeeded ? 0x80u : 0u) | (OvermaxSucceeded ? 0x40u : 0u));
 
     for (GarrisonAutoMissionRound const& round : Rounds)
@@ -781,8 +781,8 @@ WorldPacket const* GarrisonCompleteMissionResult::Write()
     return &_worldPacket;
 }
 
-// IDA-confirmed (12.0.5.67186) layout — see SNIFF_AUDIT §10.2. 3 CONFIRMED + 2 HIGH
-// fields. FollowerInfo struct shape matches COMPLETE_MISSION_RESULT (§10.1.3).
+// IDA-confirmed (12.0.5.67186) layout ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see SNIFF_AUDIT Ãƒâ€šÃ‚Â§10.2. 3 CONFIRMED + 2 HIGH
+// fields. FollowerInfo struct shape matches COMPLETE_MISSION_RESULT (Ãƒâ€šÃ‚Â§10.1.3).
 WorldPacket const* GarrisonMissionBonusRollResult::Write()
 {
     _worldPacket << Mission;
@@ -798,16 +798,16 @@ WorldPacket const* GarrisonMissionBonusRollResult::Write()
         _worldPacket << uint32(info.State);
     }
 
-    // Wire reads bit7 → Succeeded. The remaining 7 low bits are unused.
+    // Wire reads bit7 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Succeeded. The remaining 7 low bits are unused.
     _worldPacket << uint8(Succeeded ? 0x80u : 0u);
 
     return &_worldPacket;
 }
 
 // IDA case 4980762: u8 GarrTypeID, u32 Result, u8 State, Bits<1>+Flush, GarrisonMission.
-// The Mission struct already contains its own Rewards/OvermaxRewards arrays — duplicating
+// The Mission struct already contains its own Rewards/OvermaxRewards arrays ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ duplicating
 // them at the outer level (as TC previously did) wrote bytes the client never reads.
-// See SNIFF_AUDIT §8.23.
+// See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.23.
 WorldPacket const* GarrisonAddMissionResult::Write()
 {
     _worldPacket << uint8(GarrTypeID);
@@ -820,7 +820,7 @@ WorldPacket const* GarrisonAddMissionResult::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980771: u8 GarrTypeID, u32 Result, u32 MissionRecID. See SNIFF_AUDIT §8.29.
+// IDA case 4980771: u8 GarrTypeID, u32 Result, u32 MissionRecID. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.29.
 WorldPacket const* GarrisonDeleteMissionResult::Write()
 {
     _worldPacket << uint8(GarrTypeID);
@@ -855,7 +855,7 @@ WorldPacket const* GarrisonIsUpgradeableResponse::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980765 (§8.25): u32 Result, u32 MissionRecID, GarrisonMission.
+// IDA case 4980765 (Ãƒâ€šÃ‚Â§8.25): u32 Result, u32 MissionRecID, GarrisonMission.
 WorldPacket const* GarrisonChangeMissionStartTimeResult::Write()
 {
     _worldPacket << uint32(Result);
@@ -865,7 +865,7 @@ WorldPacket const* GarrisonChangeMissionStartTimeResult::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980766 (§8.26): u32 Result, u64 LastUsedTimestamp.
+// IDA case 4980766 (Ãƒâ€šÃ‚Â§8.26): u32 Result, u64 LastUsedTimestamp.
 WorldPacket const* GarrisonGetRecallPortalLastUsedTimeResult::Write()
 {
     _worldPacket << uint32(Result);
@@ -874,7 +874,7 @@ WorldPacket const* GarrisonGetRecallPortalLastUsedTimeResult::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980767 (§8.27): u32 Result, u32 MissionRecID, u64 RecallTimestamp, GarrisonMission.
+// IDA case 4980767 (Ãƒâ€šÃ‚Â§8.27): u32 Result, u32 MissionRecID, u64 RecallTimestamp, GarrisonMission.
 WorldPacket const* GarrisonUseRecallPortalResult::Write()
 {
     _worldPacket << uint32(Result);
@@ -885,7 +885,7 @@ WorldPacket const* GarrisonUseRecallPortalResult::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980803 (§8.53): u32 Result, u64 ItemDbID, u32 size, u32 size,
+// IDA case 4980803 (Ãƒâ€šÃ‚Â§8.53): u32 Result, u64 ItemDbID, u32 size, u32 size,
 // GarrisonMissionReward[size], GarrisonMissionReward[size].
 WorldPacket const* GarrisonMissionRequestRewardInfoResponse::Write()
 {
@@ -993,7 +993,7 @@ void GarrisonSetRecruitmentPreferences::Read()
 // Follower SMSG Write implementations
 // ============================================================
 
-// IDA case 4980780: u32 Result, u64 FollowerDBID, u32 PlotInstanceID. See SNIFF_AUDIT §8.37.
+// IDA case 4980780: u32 Result, u64 FollowerDBID, u32 PlotInstanceID. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.37.
 WorldPacket const* GarrisonAssignFollowerToBuildingResult::Write()
 {
     _worldPacket << uint32(Result);
@@ -1003,7 +1003,7 @@ WorldPacket const* GarrisonAssignFollowerToBuildingResult::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980781: u32 Result, u64 FollowerDBID. See SNIFF_AUDIT §8.38.
+// IDA case 4980781: u32 Result, u64 FollowerDBID. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.38.
 WorldPacket const* GarrisonRemoveFollowerFromBuildingResult::Write()
 {
     _worldPacket << uint32(Result);
@@ -1012,7 +1012,7 @@ WorldPacket const* GarrisonRemoveFollowerFromBuildingResult::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980782: u32 Result, GarrisonFollower. See SNIFF_AUDIT §8.39.
+// IDA case 4980782: u32 Result, GarrisonFollower. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.39.
 WorldPacket const* GarrisonRenameFollowerResult::Write()
 {
     _worldPacket << uint32(Result);
@@ -1056,7 +1056,7 @@ WorldPacket const* GarrisonUpdateFollower::Write()
 }
 
 // IDA case 4980788: u32 Result, GarrisonFollower (single follower).
-// See SNIFF_AUDIT §8.43.
+// See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.43.
 WorldPacket const* GarrisonRecruitFollowerResult::Write()
 {
     _worldPacket << uint32(Result);
@@ -1065,7 +1065,7 @@ WorldPacket const* GarrisonRecruitFollowerResult::Write()
     return &_worldPacket;
 }
 
-// IDA-confirmed (12.0.5.67186) — see SNIFF_AUDIT §10.3.
+// IDA-confirmed (12.0.5.67186) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see SNIFF_AUDIT Ãƒâ€šÃ‚Â§10.3.
 // All 6 fields have two-source evidence (IDA pseudocode + C_Garrison Lua accessors:
 // CanGenerateRecruits, CanSetRecruitmentPreference, GetAvailableRecruits,
 // SetRecruitmentPreferences). The previous {AbilityCounters, AbilityTraits, GarrTypeID,
@@ -1088,7 +1088,7 @@ WorldPacket const* GarrisonOpenRecruitmentNpc::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980778 (§8.35): u8 GarrTypeID, u32 Result.
+// IDA case 4980778 (Ãƒâ€šÃ‚Â§8.35): u8 GarrTypeID, u32 Result.
 WorldPacket const* GarrisonFollowerFatigueCleared::Write()
 {
     _worldPacket << uint8(GarrTypeID);
@@ -1097,7 +1097,7 @@ WorldPacket const* GarrisonFollowerFatigueCleared::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980783 (§8.40): full GarrisonFollower.
+// IDA case 4980783 (Ãƒâ€šÃ‚Â§8.40): full GarrisonFollower.
 WorldPacket const* GarrisonRemoveFollowerAbilityResult::Write()
 {
     _worldPacket << Follower;
@@ -1105,7 +1105,7 @@ WorldPacket const* GarrisonRemoveFollowerAbilityResult::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980787 (§8.42): exactly 3 inline GarrisonFollowers (no count prefix).
+// IDA case 4980787 (Ãƒâ€šÃ‚Â§8.42): exactly 3 inline GarrisonFollowers (no count prefix).
 WorldPacket const* GarrisonGenerateFollowersResult::Write()
 {
     for (GarrisonFollower const& follower : Followers)
@@ -1114,7 +1114,7 @@ WorldPacket const* GarrisonGenerateFollowersResult::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980761 (§8.22): u32 size, GarrisonFollower[size].
+// IDA case 4980761 (Ãƒâ€šÃ‚Â§8.22): u32 size, GarrisonFollower[size].
 WorldPacket const* GarrisonListFollowersCheatResult::Write()
 {
     _worldPacket << uint32(Followers.size());
@@ -1124,7 +1124,7 @@ WorldPacket const* GarrisonListFollowersCheatResult::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980800 (§8.50): u32 size, u32[size].
+// IDA case 4980800 (Ãƒâ€šÃ‚Â§8.50): u32 size, u32[size].
 WorldPacket const* GarrisonListCompletedMissionsCheatResult::Write()
 {
     _worldPacket << uint32(MissionRecIDs.size());
@@ -1134,7 +1134,7 @@ WorldPacket const* GarrisonListCompletedMissionsCheatResult::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980816 (§8.62-66): u32 Result, u32 MissionRecID, u32 NewState, GarrisonMission.
+// IDA case 4980816 (Ãƒâ€šÃ‚Â§8.62-66): u32 Result, u32 MissionRecID, u32 NewState, GarrisonMission.
 WorldPacket const* GarrisonUpdateMissionCheatResult::Write()
 {
     _worldPacket << uint32(Result);
@@ -1146,7 +1146,7 @@ WorldPacket const* GarrisonUpdateMissionCheatResult::Write()
 }
 
 // ============================================================
-// Collection / event-list / spec-group SMSG implementations (§8.54-8.61)
+// Collection / event-list / spec-group SMSG implementations (Ãƒâ€šÃ‚Â§8.54-8.61)
 // ============================================================
 
 WorldPacket const* GarrisonCollectionUpdateEntry::Write()
@@ -1270,7 +1270,7 @@ void GarrisonSwapBuildings::Read()
     _worldPacket >> PlotInstanceID2;
 }
 
-// IDA case 4980796: 3 × u32. See SNIFF_AUDIT §8.46.
+// IDA case 4980796: 3 ÃƒÆ’Ã¢â‚¬â€� u32. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.46.
 WorldPacket const* GarrisonSwapBuildingsResponse::Write()
 {
     _worldPacket << uint32(Result);
@@ -1287,7 +1287,7 @@ WorldPacket const* GarrisonSwapBuildingsResponse::Write()
 void GarrisonLearnTalent::Read()
 {
     _worldPacket >> GarrTalentID;
-    _worldPacket >> IsTemporary;        // whole uint32, not a bit — see GarrisonPackets.h
+    _worldPacket >> IsTemporary;        // whole uint32, not a bit ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see GarrisonPackets.h
 }
 
 void GarrisonResearchTalent::Read()
@@ -1299,7 +1299,7 @@ void GarrisonResearchTalent::Read()
 }
 
 // IDA case 4980750: u32 Result, u8 GarrTypeID, Bits<1>+Flush, GarrisonTalent.
-// See SNIFF_AUDIT §8.11.
+// See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.11.
 WorldPacket const* GarrisonResearchTalentResult::Write()
 {
     _worldPacket << uint32(Result);
@@ -1311,7 +1311,7 @@ WorldPacket const* GarrisonResearchTalentResult::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980751: u8, u32, u32, u32. See SNIFF_AUDIT §8.12.
+// IDA case 4980751: u8, u32, u32, u32. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.12.
 WorldPacket const* GarrisonTalentCompleted::Write()
 {
     _worldPacket << uint8(GarrTypeID);
@@ -1322,7 +1322,7 @@ WorldPacket const* GarrisonTalentCompleted::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980752: u8, u32. See SNIFF_AUDIT §8.13.
+// IDA case 4980752: u8, u32. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.13.
 WorldPacket const* GarrisonTalentRemoved::Write()
 {
     _worldPacket << uint8(GarrTypeID);
@@ -1331,7 +1331,7 @@ WorldPacket const* GarrisonTalentRemoved::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980753: u8, u32, optional<TalentSocket> (top-bit-gated). See SNIFF_AUDIT §8.14.
+// IDA case 4980753: u8, u32, optional<TalentSocket> (top-bit-gated). See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.14.
 WorldPacket const* GarrisonTalentUpdateSocketData::Write()
 {
     _worldPacket << uint8(GarrTypeID);
@@ -1344,7 +1344,7 @@ WorldPacket const* GarrisonTalentUpdateSocketData::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980754: u8, u32. See SNIFF_AUDIT §8.15.
+// IDA case 4980754: u8, u32. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.15.
 WorldPacket const* GarrisonTalentRemoveSocketData::Write()
 {
     _worldPacket << uint8(GarrTypeID);
@@ -1353,7 +1353,7 @@ WorldPacket const* GarrisonTalentRemoveSocketData::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980755: u8, u32. See SNIFF_AUDIT §8.16.
+// IDA case 4980755: u8, u32. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.16.
 WorldPacket const* GarrisonResetTalentTree::Write()
 {
     _worldPacket << uint8(GarrTypeID);
@@ -1362,7 +1362,7 @@ WorldPacket const* GarrisonResetTalentTree::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980756: u8, u32. See SNIFF_AUDIT §8.17.
+// IDA case 4980756: u8, u32. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.17.
 WorldPacket const* GarrisonResetTalentTreeSocketData::Write()
 {
     _worldPacket << uint8(GarrTypeID);
@@ -1371,7 +1371,7 @@ WorldPacket const* GarrisonResetTalentTreeSocketData::Write()
     return &_worldPacket;
 }
 
-// IDA case 4980813: u8 GarrTypeID, u32 size, GarrisonTalent[size]. See SNIFF_AUDIT §8.62.
+// IDA case 4980813: u8 GarrTypeID, u32 size, GarrisonTalent[size]. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.62.
 WorldPacket const* GarrisonSwitchTalentTreeBranch::Write()
 {
     _worldPacket << uint8(GarrTypeID);
@@ -1383,7 +1383,7 @@ WorldPacket const* GarrisonSwitchTalentTreeBranch::Write()
 }
 
 // IDA case 4980814: opaque (helper). Conservative shape: u8 GarrTypeID + size-prefixed
-// list of unlocked talent tree IDs. See SNIFF_AUDIT §8.63.
+// list of unlocked talent tree IDs. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.63.
 WorldPacket const* GarrisonTalentWorldQuestUnlocksResponse::Write()
 {
     _worldPacket << uint8(GarrTypeID);
@@ -1395,7 +1395,7 @@ WorldPacket const* GarrisonTalentWorldQuestUnlocksResponse::Write()
 }
 
 // IDA case 4980815: opaque (helper). Conservative shape: u8 GarrTypeID + size-prefixed
-// {GarrTalentID, Socket} pairs. See SNIFF_AUDIT §8.64.
+// {GarrTalentID, Socket} pairs. See SNIFF_AUDIT Ãƒâ€šÃ‚Â§8.64.
 WorldPacket const* GarrisonApplyTalentSocketDataChanges::Write()
 {
     _worldPacket << uint8(GarrTypeID);
@@ -1528,13 +1528,13 @@ void SetUsingPartyGarrison::Read()
 
 void QueryGarrisonPetName::Read()
 {
-    // Leading raw uint64 the reader used to swallow as the guid's mask bytes — see GarrisonPackets.h.
+    // Leading raw uint64 the reader used to swallow as the guid's mask bytes ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see GarrisonPackets.h.
     // Consumed rather than stored so the packet object's layout does not change; the handler needs only the guid.
     _worldPacket.read_skip<uint64>();
     _worldPacket >> NpcGUID;
 }
 
-// IDA case 4980801 (§8.51 pet name): {ObjectGuid NpcGUID, 7-bit-prefixed string PetName}.
+// IDA case 4980801 (Ãƒâ€šÃ‚Â§8.51 pet name): {ObjectGuid NpcGUID, 7-bit-prefixed string PetName}.
 WorldPacket const* QueryGarrisonPetNameResponse::Write()
 {
     _worldPacket << NpcGUID;

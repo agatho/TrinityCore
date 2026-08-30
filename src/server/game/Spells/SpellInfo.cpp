@@ -458,19 +458,9 @@ bool SpellEffectInfo::IsEffect() const
     return Effect != 0;
 }
 
-bool SpellEffectInfo::IsEffect(SpellEffects effectName) const
-{
-    return Effect == effectName;
-}
-
 bool SpellEffectInfo::IsAura() const
 {
     return (IsUnitOwnedAuraEffect() || Effect == SPELL_EFFECT_PERSISTENT_AREA_AURA) && ApplyAuraName != 0;
-}
-
-bool SpellEffectInfo::IsAura(AuraType aura) const
-{
-    return IsAura() && ApplyAuraName == aura;
 }
 
 bool SpellEffectInfo::IsTargetingArea() const
@@ -2713,11 +2703,6 @@ Mechanics SpellInfo::GetEffectMechanic(SpellEffIndex effIndex) const
     return MECHANIC_NONE;
 }
 
-uint32 SpellInfo::GetDispelMask() const
-{
-    return GetDispelMask(DispelType(Dispel));
-}
-
 uint32 SpellInfo::GetDispelMask(DispelType type)
 {
     // If dispel all
@@ -4044,23 +4029,6 @@ uint32 SpellInfo::CalcCastTime(Spell* spell /*= nullptr*/) const
 uint32 SpellInfo::GetRecoveryTime() const
 {
     return RecoveryTime > CategoryRecoveryTime ? RecoveryTime : CategoryRecoveryTime;
-}
-
-Optional<SpellPowerCost> SpellInfo::CalcPowerCost(Powers powerType, bool optionalCost, WorldObject const* caster, SpellSchoolMask schoolMask, Spell* spell /*= nullptr*/) const
-{
-    // gameobject casts don't use power
-    Unit const* unitCaster = caster->ToUnit();
-    if (!unitCaster)
-        return {};
-
-    auto itr = std::find_if(PowerCosts.cbegin(), PowerCosts.cend(), [powerType](SpellPowerEntry const* spellPowerEntry)
-    {
-        return spellPowerEntry && spellPowerEntry->PowerType == powerType;
-    });
-    if (itr == PowerCosts.cend())
-        return {};
-
-    return CalcPowerCost(*itr, optionalCost, caster, schoolMask, spell);
 }
 
 Optional<SpellPowerCost> SpellInfo::CalcPowerCost(SpellPowerEntry const* power, bool optionalCost, WorldObject const* caster, SpellSchoolMask schoolMask, Spell* spell /*= nullptr*/) const

@@ -1352,13 +1352,6 @@ void AuraEffect::HandleEffect(AuraApplication * aurApp, uint8 mode, bool apply, 
         GetBase()->CallScriptAfterEffectRemoveHandlers(this, aurApp, (AuraEffectHandleModes)mode);
 }
 
-void AuraEffect::HandleEffect(Unit* target, uint8 mode, bool apply, AuraEffect const* triggeredBy /*= nullptr*/)
-{
-    AuraApplication* aurApp = GetBase()->GetApplicationOfTarget(target->GetGUID());
-    ASSERT(aurApp);
-    HandleEffect(aurApp, mode, apply, triggeredBy);
-}
-
 void AuraEffect::ApplySpellMod(Unit* target, bool apply, AuraEffect const* triggeredBy /*= nullptr*/)
 {
     if (!m_spellmod || target->GetTypeId() != TYPEID_PLAYER)
@@ -3689,6 +3682,9 @@ void AuraEffect::HandleAuraModSpeedNoControl(AuraApplication const* aurApp, uint
     if (target->IsDeferringDashMovementSpeedUpdates())
         return;
 
+    if (target->IsDeferringDashMovementSpeedUpdates())
+        return;
+
     target->UpdateSpeed(MOVE_RUN);
     target->UpdateSpeed(MOVE_RUN_BACK);
     target->UpdateSpeed(MOVE_WALK);
@@ -4281,7 +4277,7 @@ void AuraEffect::HandleModVersatilityByPct(AuraApplication const* aurApp, uint8 
     }
 }
 
-// Local DifficultyID=0 census (build 12.0.7.67808): only three spells use aura 540 —
+// Local DifficultyID=0 census (build 12.0.7.67808): only three spells use aura 540 Ã¢â‚¬â€�
 // 395152 Ebon Might misc 1 (primary), 410089 Prescience misc 5 (crit %), 413984 Shifting Sands misc 6 (versatility %).
 void AuraEffect::HandleModSupportStat(AuraApplication const* aurApp, uint8 mode, bool apply) const
 {

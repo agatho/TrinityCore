@@ -50,34 +50,6 @@ void ItemInstance::Initialize(::Item const* item)
         Modifications.Values.push_back({ .Value = mod.Value, .Type = ItemModifier(mod.Type) });
 }
 
-void ItemInstance::Initialize(UF::SocketedGem const* gem)
-{
-    ItemID = gem->ItemID;
-
-    ItemBonuses bonus;
-    bonus.Context = ItemContext(*gem->Context);
-    for (uint16 bonusListId : gem->BonusListIDs)
-        if (bonusListId)
-            bonus.BonusListIDs.push_back(bonusListId);
-
-    if (bonus.Context != ItemContext::NONE || !bonus.BonusListIDs.empty())
-        ItemBonus = bonus;
-}
-
-void ItemInstance::Initialize(::LootItem const& lootItem)
-{
-    ItemID = lootItem.itemid;
-
-    if (!lootItem.BonusListIDs.empty() || lootItem.randomBonusListId)
-    {
-        ItemBonus.emplace();
-        ItemBonus->BonusListIDs = lootItem.BonusListIDs;
-        ItemBonus->Context = lootItem.context;
-        if (lootItem.randomBonusListId)
-            ItemBonus->BonusListIDs.push_back(lootItem.randomBonusListId);
-    }
-}
-
 bool ItemInstance::operator==(ItemInstance const& r) const
 {
     if (ItemID != r.ItemID)

@@ -939,6 +939,8 @@ void SetupWarbandGroups::Read()
 
         _worldPacket >> SizedString::Data(group.Name);
     }
+}
+
 void NeutralPlayerSelectFaction::Read()
 {
     _worldPacket >> FactionIndex;

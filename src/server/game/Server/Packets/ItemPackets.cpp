@@ -437,27 +437,25 @@ WorldPacket const* SendItemPassives::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* OpenContainer::Write()
-{
-    _worldPacket << ContainerGUID;
 void PerformItemInteraction::Read()
 {
     _worldPacket >> ItemGuid;
     _worldPacket >> AgentGuid;
     _worldPacket >> InteractionType;
     _worldPacket >> BaseItemId;
-void PerformItemInteraction::Read()
-{
-    _worldPacket >> Banker;
-    _worldPacket >> ItemGuid;
-    _worldPacket >> InteractionID;
 }
 
 WorldPacket const* ItemInteractionComplete::Write()
 {
     _worldPacket << Bits<1>(Error);
     _worldPacket.FlushBits();
-    _worldPacket << int32(InteractionID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* OpenContainer::Write()
+{
+    _worldPacket << ContainerGUID;
 
     return &_worldPacket;
 }

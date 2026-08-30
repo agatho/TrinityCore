@@ -313,12 +313,6 @@ void SpellCastTargets::SetSrc(Position const& pos)
     m_targetMask |= TARGET_FLAG_SOURCE_LOCATION;
 }
 
-void SpellCastTargets::SetSrc(WorldObject const& wObj)
-{
-    m_src = SpellDestination(wObj);
-    m_targetMask |= TARGET_FLAG_SOURCE_LOCATION;
-}
-
 void SpellCastTargets::ModSrc(Position const& pos)
 {
     ASSERT(m_targetMask & TARGET_FLAG_SOURCE_LOCATION);
@@ -352,34 +346,10 @@ void SpellCastTargets::SetDst(Position const& pos)
     m_targetMask |= TARGET_FLAG_DEST_LOCATION;
 }
 
-void SpellCastTargets::SetDst(WorldObject const& wObj)
-{
-    m_dst = SpellDestination(wObj);
-    m_targetMask |= TARGET_FLAG_DEST_LOCATION;
-}
-
-void SpellCastTargets::SetDst(SpellDestination const& spellDest)
-{
-    m_dst = spellDest;
-    m_targetMask |= TARGET_FLAG_DEST_LOCATION;
-}
-
-void SpellCastTargets::SetDst(SpellCastTargets const& spellTargets)
-{
-    m_dst = spellTargets.m_dst;
-    m_targetMask |= TARGET_FLAG_DEST_LOCATION;
-}
-
 void SpellCastTargets::ModDst(Position const& pos)
 {
     ASSERT(m_targetMask & TARGET_FLAG_DEST_LOCATION);
     m_dst.Relocate(pos);
-}
-
-void SpellCastTargets::ModDst(SpellDestination const& spellDest)
-{
-    ASSERT(m_targetMask & TARGET_FLAG_DEST_LOCATION);
-    m_dst = spellDest;
 }
 
 void SpellCastTargets::RemoveDst()
@@ -500,7 +470,7 @@ m_spellValue(new SpellValue(m_spellInfo, caster)), _spellEvent(nullptr)
 
     if (Player const* playerCaster = m_caster->ToPlayer())
     {
-        // wand case (overrides ability school mask — wand damage type is authoritative)
+        // wand case (overrides ability school mask Ã¢â‚¬â€� wand damage type is authoritative)
         if (m_attackType == RANGED_ATTACK)
             if ((playerCaster->GetClassMask() & CLASSMASK_WAND_USERS) != 0)
                 if (Item* pItem = playerCaster->GetWeaponForAttack(RANGED_ATTACK))
@@ -8431,11 +8401,6 @@ bool Spell::CheckEffectTarget(GameObject const* target, SpellEffectInfo const& s
     return true;
 }
 
-bool Spell::CheckEffectTarget(Item const* /*target*/, SpellEffectInfo const& /*spellEffectInfo*/) const
-{
-    return true;
-}
-
 bool Spell::IsTriggered() const
 {
     return (!m_fromClient && (_triggeredCastFlags & TRIGGERED_IS_TRIGGERED_MASK) != 0)
@@ -9377,7 +9342,7 @@ void Spell::TriggerGlobalCooldown()
     }
 
     m_caster->ToUnit()->GetSpellHistory()->AddGlobalCooldown(m_spellInfo, gcd);
-    // Retail leech is GCD-batched (SimC / Nyr97 on TC#30385) — grant stored heal when a GCD starts
+    // Retail leech is GCD-batched (SimC / Nyr97 on TC#30385) Ã¢â‚¬â€� grant stored heal when a GCD starts
     m_caster->ToUnit()->RewardLeech();
 }
 
