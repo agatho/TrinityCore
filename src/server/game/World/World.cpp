@@ -128,6 +128,7 @@
 #include "ZoneEventMgr.h"
 #include "VoidAssaultMgr.h"
 #include <zlib.h>
+#include "PetBattleMgr.h"
 
 TC_GAME_API std::atomic<bool> World::m_stopEvent(false);
 TC_GAME_API uint8 World::m_ExitCode = SHUTDOWN_EXIT_CODE;
@@ -2117,6 +2118,14 @@ bool World::SetInitialWorldSettings()
     mail_timer_expires = ((DAY * IN_MILLISECONDS) / (m_timers[WUPDATE_AUCTIONS].GetInterval()));
     TC_LOG_INFO("server.loading", "Mail timer set to: {}, mail return is called every {} minutes", uint64(mail_timer), uint64(mail_timer_expires));
 
+    // Battle pet data must be loaded before map initialization â€” creature spawning
+    // calls TryMarkAsWildBattlePet() which needs the species-by-creature map populated
+    TC_LOG_INFO("server.loading", "Loading battle pets info...");
+    BattlePets::BattlePetMgr::Initialize();
+
+    TC_LOG_INFO("server.loading", "Initializing pet battle system...");
+    sPetBattleMgr->Initialize();
+
     ///- Initialize MapManager
     TC_LOG_INFO("server.loading", "Starting Map System");
     sMapMgr->Initialize();
@@ -2181,9 +2190,6 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading character templates...");
     sCharacterTemplateDataStore->LoadCharacterTemplates();
-
-    TC_LOG_INFO("server.loading", "Loading battle pets info...");
-    BattlePets::BattlePetMgr::Initialize();
 
     TC_LOG_INFO("server.loading", "Loading scenarios");
     sScenarioMgr->LoadDB2Data();
@@ -2455,6 +2461,11 @@ void World::Update(uint32 diff)
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update battlegrounds"));
         sBattlegroundMgr->Update(diff);
+    }
+
+    {
+        TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update pet battles"));
+        sPetBattleMgr->Update(diff);
     }
 
     {
