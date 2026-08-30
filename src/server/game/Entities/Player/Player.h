@@ -79,6 +79,7 @@ class CinematicMgr;
 class Creature;
 class DynamicObject;
 class Garrison;
+class MythicPlusData;
 class Group;
 class Guild;
 class Item;
@@ -1101,6 +1102,9 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_CORPSE_LOCATION,
     PLAYER_LOGIN_QUERY_LOAD_PET_SLOTS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY,
+    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_BLUEPRINTS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_BUILDINGS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWERS,
@@ -1110,6 +1114,7 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_DATA_ELEMENTS,
     PLAYER_LOGIN_QUERY_LOAD_DATA_FLAGS,
     PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS,
+    PLAYER_LOGIN_QUERY_LOAD_CONTENT_TRACKING,
     MAX_PLAYER_LOGIN_QUERY
 };
 
@@ -1858,6 +1863,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SetSeasonalQuestStatus(uint32 quest_id);
         void DailyReset();
         void ResetWeeklyQuestStatus();
+        void UpdateWeeklyRewardsPeriod();
         void ResetMonthlyQuestStatus();
         void ResetSeasonalQuestStatus(uint16 event_id, time_t eventStartTime);
 
@@ -1922,6 +1928,11 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendQuestUpdateAddPlayer(Quest const* quest, uint16 newCount) const;
         void SendQuestGiverStatusMultiple();
         void SendDisplayToast(uint32 entry, DisplayToastType type, bool isBonusRoll, uint32 quantity, DisplayToastMethod method, uint32 questId = 0, Item* item = nullptr) const;
+
+        // Content tracking: mirrors a tracked map-content entry into the ActivePlayer.TrackedCollectableSources update
+        // field and persists it, so tracking survives relog. Returns true if the tracked set changed.
+        bool AddTrackedContent(int32 targetType, int32 targetId, int32 collectableSourceInfoId);
+        bool RemoveTrackedContent(int32 targetType, int32 targetId);
 
         uint32 GetSharedQuestID() const { return m_sharedQuestId; }
         ObjectGuid GetPlayerSharingQuest() const { return m_playerSharingQuest; }
@@ -2657,6 +2668,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         void SendEquipmentSetList();
         void SetEquipmentSet(EquipmentSetInfo::EquipmentSetData const& newEqSet);
+        void SetEquipmentSetAssignedSpec(uint64 setGuid, int32 assignedSpecIndex);
         void DeleteEquipmentSet(uint64 id);
 
         void SendInitWorldStates(uint32 zoneId, uint32 areaId) const;
@@ -2982,6 +2994,12 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void CreateGarrison(uint32 garrSiteId);
         void DeleteGarrison();
         Garrison* GetGarrison() const { return _garrison.get(); }
+        MythicPlusData* GetMythicPlusData() const { return _mythicPlusData.get(); }
+        // Rebuilds the Mythic+ rating update fields (PlayerData + ActivePlayerData DungeonScore) from
+        // MythicPlusData. Called on load and after every recorded keystone run.
+        void UpdateDungeonScore();
+        // Sets one ActivePlayerData::ItemUpgradeHighWatermark slot (item upgrade crest-waiver display).
+        void SetItemUpgradeWatermark(uint32 slot, float itemLevel);
 
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }
@@ -3289,6 +3307,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _LoadQuestStatusObjectives(PreparedQueryResult result);
         void _LoadQuestStatusObjectiveSpawnTrackings(PreparedQueryResult result);
         void _LoadQuestStatusRewarded(PreparedQueryResult result);
+        void _LoadContentTracking(PreparedQueryResult result);
         void _LoadDailyQuestStatus(PreparedQueryResult result);
         void _LoadWeeklyQuestStatus(PreparedQueryResult result);
         void _LoadMonthlyQuestStatus(PreparedQueryResult result);
@@ -3560,6 +3579,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint32 _activeCheats;
 
         std::unique_ptr<Garrison> _garrison;
+        std::unique_ptr<MythicPlusData> _mythicPlusData;
 
         bool _advancedCombatLoggingEnabled;
 

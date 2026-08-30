@@ -35,6 +35,7 @@
 #include "Group.h"
 #include "InstanceLockMgr.h"
 #include "InstancePackets.h"
+#include "ChallengeMode.h"
 #include "InstanceScenario.h"
 #include "InstanceScript.h"
 #include "Log.h"
@@ -2890,6 +2891,30 @@ InstanceMap::InstanceMap(uint32 id, time_t expiry, uint32 InstanceId, Difficulty
         i_instanceLock->SetInUse(true);
         i_instanceExpireEvent = i_instanceLock->GetExpiryTime(); // ignore extension state for reset event (will ask players to accept extended save on expiration)
     }
+
+    // Mythic Keystone instances carry a per-run ChallengeMode state; it stays idle until a keystone is activated.
+    if (GetDifficultyID() == DIFFICULTY_MYTHIC_KEYSTONE)
+        i_challengeMode = std::make_unique<ChallengeMode>(this);
+}
+
+void InstanceMap::ActivateChallengeMode()
+{
+    // Difficulty 8 (Mythic Keystone) carries Flags 0x1 and NOT DIFFICULTY_FLAG_CAN_SELECT (0x04) on
+    // 12.1.0.69497 (measured, wago.tools), so no client can enter this difficulty. The dungeon is entered
+    // at Mythic (23 - the FallbackDifficultyID of row 8) and the keystone activated at the Font of Power
+    // lifts the live run to keystone difficulty here on the server. This is the writer the tree was missing:
+    // the InstanceMap constructor above only builds i_challengeMode when the difficulty is already 8, and
+    // nothing else in the branch ever sets DIFFICULTY_MYTHIC_KEYSTONE.
+    //
+    // UNVERIFIED: retail may hard-reset/recreate the instance at difficulty 8 (an M+ start teleports and
+    // resets the whole group) rather than convert it in place. In-place conversion is chosen because
+    // recreate+teleport is a larger instance-lifecycle change outside this unit, and once i_spawnMode == 8
+    // and i_challengeMode exists the difficulty-8 semantics (IsMythicPlus, boss scaling reads that consult
+    // GetChallengeMode) are identical either way. Creatures already spawned at Mythic (23) keep their spawn;
+    // ChallengeMode::Start drives the run's own reset. Not client-verifiable in this run (no client on 69465).
+    i_spawnMode = DIFFICULTY_MYTHIC_KEYSTONE;
+    if (!i_challengeMode)
+        i_challengeMode = std::make_unique<ChallengeMode>(this);
 }
 
 InstanceMap::~InstanceMap()
@@ -3064,6 +3089,9 @@ void InstanceMap::Update(uint32 t_diff)
 
     if (i_scenario)
         i_scenario->Update(t_diff);
+
+    if (i_challengeMode)
+        i_challengeMode->Update(t_diff);
 
     if (i_instanceExpireEvent && i_instanceExpireEvent < GameTime::GetSystemTime())
     {

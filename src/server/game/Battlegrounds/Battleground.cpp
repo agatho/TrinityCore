@@ -723,6 +723,17 @@ void Battleground::EndBattleground(Team winner)
             CharacterDatabase.Execute(stmt);
         }
 
+        // Great Vault: a PvP win no longer credits the World activity row.
+        //
+        // The World row is world content (delves), and its per-slot reward is generated at ItemContext
+        // Delves_Jackpot scaled by the recorded level = the delve TIER. A battleground bracket id is not a delve
+        // tier, so crediting it here both unlocked delve gear slots from PvP and fed a meaningless "tier" into the
+        // reward scaling. PvP has its own vault row in the client (WeeklyRewardChestThresholdType::RankedPvP = 2)
+        // and 12.0.7.68275's live WeeklyRewardChestThreshold.db2 group (ids 196-206) contains no Type 2 rows at
+        // all, i.e. this season has no PvP vault row to fill - matching Blizzard_WeeklyRewards.lua, which shows the
+        // PvP row only when no World activity came back. Wiring a real conquest-point RankedPvP row is a separate
+        // piece of work; until then no row is credited rather than the wrong one.
+
         // Reward winner team
         if (team == winner)
         {

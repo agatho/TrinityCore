@@ -49,6 +49,7 @@ class BaseEntity;
 class Battleground;
 class BattlegroundMap;
 class BattlegroundScript;
+class ChallengeMode;
 class CreatureGroup;
 class GameObjectModel;
 class Group;
@@ -901,6 +902,12 @@ class TC_GAME_API InstanceMap : public Map
         InstanceScenario* GetInstanceScenario() { return i_scenario.get(); }
         InstanceScenario const* GetInstanceScenario() const { return i_scenario.get(); }
         void SetInstanceScenario(InstanceScenario* scenario);
+        ChallengeMode* GetChallengeMode() { return i_challengeMode.get(); }
+        ChallengeMode const* GetChallengeMode() const { return i_challengeMode.get(); }
+        // Lift a live Mythic (23) dungeon to Mythic Keystone (8) and create its ChallengeMode.
+        // The client can never enter at difficulty 8 (not DIFFICULTY_FLAG_CAN_SELECT), so the
+        // keystone activation is the server-side writer that reaches DIFFICULTY_MYTHIC_KEYSTONE.
+        void ActivateChallengeMode();
         InstanceLock const* GetInstanceLock() const { return i_instanceLock; }
         void UpdateInstanceLock(UpdateBossStateSaveDataEvent const& updateSaveDataEvent);
         void UpdateInstanceLock(UpdateAdditionalSaveDataEvent const& updateSaveDataEvent);
@@ -923,6 +930,7 @@ class TC_GAME_API InstanceMap : public Map
         InstanceScript* i_data;
         uint32 i_script_id;
         std::unique_ptr<InstanceScenario> i_scenario;
+        std::unique_ptr<ChallengeMode> i_challengeMode;
         InstanceLock* i_instanceLock;
         GroupInstanceReference i_owningGroupRef;
         Optional<uint32> i_lfgDungeonsId;

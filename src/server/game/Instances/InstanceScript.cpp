@@ -17,7 +17,10 @@
 
 #include "InstanceScript.h"
 #include "CombatLogPackets.h"
+#include "ChallengeMode.h"
+#include "ChallengeModeMgr.h"
 #include "AreaBoundary.h"
+#include "Config.h"
 #include "Creature.h"
 #include "CreatureAI.h"
 #include "CreatureAIImpl.h"
@@ -37,6 +40,7 @@
 #include "ObjectMgr.h"
 #include "PhasingHandler.h"
 #include "Player.h"
+#include "WeeklyRewardsMgr.h"
 #include "RBAC.h"
 #include "ScriptedCreature.h"
 #include "ScriptReloadMgr.h"
@@ -405,14 +409,23 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                         if (minion->isWorldBoss() && minion->IsAlive())
                             return false;
 
+            // During a Mythic Keystone run the combat-res pool is run-wide (1 charge + 1 per interval, managed by
+            // ChallengeMode) and must not be re-initialized or cleared by individual encounters.
+            bool const activeChallengeMode = instance->GetChallengeMode() && instance->GetChallengeMode()->IsActive();
+
             DungeonEncounterEntry const* dungeonEncounter = nullptr;
             switch (state)
             {
                 case IN_PROGRESS:
                 {
-                    uint32 resInterval = GetCombatResurrectionChargeInterval();
-                    InitializeCombatResurrections(1, resInterval);
-                    SendEncounterStart(1, 9, resInterval, resInterval);
+                    if (!activeChallengeMode)
+                    {
+                        uint32 resInterval = GetCombatResurrectionChargeInterval();
+                        InitializeCombatResurrections(1, resInterval);
+                        SendEncounterStart(1, 9, resInterval, resInterval);
+                    }
+                    else
+                        SendEncounterStart(GetCombatResurrectionCharges(), 9, GetCombatResurrectionChargeInterval(), _combatResurrectionTimer);
 
                     instance->DoOnPlayers([](Player* player)
                     {
@@ -422,7 +435,8 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 }
                 case FAIL:
                 {
-                    ResetCombatResurrections();
+                    if (!activeChallengeMode)
+                        ResetCombatResurrections();
                     SendEncounterEnd();
                     if (DungeonEncounterEntry const* endedEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID()))
                         ClearEncounterTimeline(endedEncounter->ID);
@@ -436,7 +450,8 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 }
                 case DONE:
                 {
-                    ResetCombatResurrections();
+                    if (!activeChallengeMode)
+                        ResetCombatResurrections();
                     SendEncounterEnd();
                     dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
                     if (dungeonEncounter)
@@ -444,10 +459,17 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
 
                     if (dungeonEncounter)
                     {
+                        bool const isRaidEncounter = instance->IsRaid();
                         instance->DoOnPlayers([&](Player* player)
                         {
                             if (!player->IsLockedToDungeonEncounter(dungeonEncounter->ID))
                                 player->UpdateCriteria(CriteriaType::DefeatDungeonEncounterWhileElegibleForLoot, dungeonEncounter->ID);
+
+                            // Great Vault: credit the kill toward this week's raid or dungeon activity row. The
+                            // instance difficulty stands in for the reward tier (raid difficulty / keystone level).
+                            sWeeklyRewardsMgr.RecordActivity(player,
+                                isRaidEncounter ? WeeklyRewards::ActivityType::Raid : WeeklyRewards::ActivityType::Dungeon,
+                                uint32(instance->GetDifficultyID()));
                         });
 
                         DoUpdateCriteria(CriteriaType::DefeatDungeonEncounter, dungeonEncounter->ID);
@@ -492,6 +514,38 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 UpdateMinionState(minion, state);
 
         UpdateSpawnGroups();
+
+        // Mythic Keystone: the run completes once every encounter in the instance is defeated.
+        if (state == DONE)
+        {
+            bool allDone = true;
+            for (BossInfo const& boss : bosses)
+            {
+                if (boss.state != DONE)
+                {
+                    allDone = false;
+                    break;
+                }
+            }
+
+            if (allDone)
+            {
+                if (ChallengeMode* challenge = instance->GetChallengeMode())
+                {
+                    if (challenge->IsActive())
+                        challenge->OnAllEncountersDone();
+                }
+                // Mythic (M0): completing a season dungeon awards a first keystone to players without one.
+                else if (instance->GetDifficultyID() == DIFFICULTY_MYTHIC)
+                {
+                    instance->DoOnPlayers([](Player* player)
+                    {
+                        sChallengeModeMgr.OnMythicDungeonCompleted(player);
+                    });
+                }
+            }
+        }
+
         return true;
     }
     return false;
@@ -1360,6 +1414,12 @@ void InstanceScript::ResetCombatResurrections()
 
 uint32 InstanceScript::GetCombatResurrectionChargeInterval() const
 {
+    // Mythic Keystone runs use the retail dungeon-wide accrual (one charge per fixed interval, default 10 min)
+    // instead of the raid encounter formula (90 min / player count).
+    if (ChallengeMode const* challenge = instance->GetChallengeMode())
+        if (challenge->IsActive())
+            return uint32(sConfigMgr->GetIntDefault("ChallengeMode.CombatRes.IntervalMs", 10 * MINUTE * IN_MILLISECONDS));
+
     uint32 interval = 0;
     if (uint32 playerCount = instance->GetPlayers().size())
         interval = 90 * MINUTE * IN_MILLISECONDS / playerCount;

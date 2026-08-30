@@ -45,8 +45,11 @@ namespace WorldPackets
             uint32 StateFlags = 0;
             uint32 Flags = 0;
             WowTime Date;
-            Duration<Seconds> TimeFromStart;
-            Duration<Seconds> TimeFromCreate;
+            // Explicit int64: sniff-pinned at 12.0.7/68275 (57-byte CriteriaProgress on the wire). This is
+            // also Duration's default underlying type - keep it spelled out so a future default change
+            // cannot silently shrink the field.
+            Duration<Seconds, int64> TimeFromStart;
+            Duration<Seconds, int64> TimeFromCreate;
             Optional<uint64> DynamicID;
         };
 

@@ -34,6 +34,7 @@
 #include "BlackMarketPackets.h"
 #include "BleepPackets.h"
 #include "CalendarPackets.h"
+#include "ChallengeModePackets.h"
 #include "ChannelPackets.h"
 #include "CharacterPackets.h"
 #include "ChatPackets.h"
@@ -41,6 +42,7 @@
 #include "CollectionPackets.h"
 #include "CombatLogPackets.h"
 #include "CombatPackets.h"
+#include "ContentTrackingPackets.h"
 #include "DuelPackets.h"
 #include "EquipmentSetPackets.h"
 #include "GameObjectPackets.h"
@@ -88,6 +90,7 @@
 #include "VoiceChatPackets.h"
 #include "VignettePackets.h"
 #include "VoidStoragePackets.h"
+#include "WeeklyRewardsPackets.h"
 #include "WhoPackets.h"
 #include "WorldStatePackets.h"
 

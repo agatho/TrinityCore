@@ -105,6 +105,12 @@ void DeleteEquipmentSet::Read()
     _worldPacket >> ID;
 }
 
+void AssignEquipmentSetSpec::Read()
+{
+    _worldPacket >> GUID;
+    _worldPacket >> AssignedSpecIndex;
+}
+
 void UseEquipmentSet::Read()
 {
     _worldPacket >> Inv;

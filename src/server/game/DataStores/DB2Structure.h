@@ -2457,6 +2457,23 @@ struct ItemCreationContextEntry
     uint32 ItemCreationContextGroupID;
 };
 
+struct ItemConversionEntry
+{
+    uint32 ID;
+    int32 Unknown920;
+    int32 ItemBonusTreeID;
+    int32 ItemLogicalCostGroupID;
+    int32 AlternateItemLogicalCostGroupID;
+    int32 PlayerConditionID;
+};
+
+struct ItemConversionEntryEntry
+{
+    uint32 ID;
+    int32 ItemID;
+    uint32 ItemConversionID;
+};
+
 struct ItemCurrencyCostEntry
 {
     uint32 ID;
@@ -2580,6 +2597,15 @@ struct ItemLimitCategoryConditionEntry
     int8 AddQuantity;
     uint32 PlayerConditionID;
     uint32 ParentItemLimitCategoryID;
+};
+
+struct ItemLogicalCostEntry
+{
+    uint32 ID;
+    int32 InventoryTypeSlotMask;
+    int32 Flags;
+    int32 ItemExtendedCostID;
+    uint32 ItemLogicalCostGroupID;
 };
 
 struct ItemModifiedAppearanceEntry
@@ -2852,6 +2878,40 @@ struct KeychainEntry
 {
     uint32 ID;
     std::array<uint8, KEYCHAIN_SIZE> Key;
+};
+
+struct MythicPlusSeasonKeyFloorEntry
+{
+    uint32 ID;
+    int32 KeyFloor;
+    int32 PlayerConditionID;
+    uint32 DisplaySeasonID;
+};
+
+struct MythicPlusSeasonRewardLevelsEntry
+{
+    uint32 ID;
+    uint32 MythicPlusSeasonID;
+    int32 ActivityTierID;
+    int32 DifficultyLevel;
+    int32 WeeklyRewardLevel;
+    int32 EndOfRunRewardLevel;
+};
+
+struct MythicPlusSeasonTrackedAffixEntry
+{
+    uint32 ID;
+    int32 KeystoneAffixID;
+    int32 BonusRating;
+    int32 Field_9_1_0_38511_004;
+    uint32 DisplaySeasonID;
+};
+
+struct MythicPlusSeasonTrackedMapEntry
+{
+    uint32 ID;
+    int32 MapChallengeModeID;
+    uint32 DisplaySeasonID;
 };
 
 struct KeystoneAffixEntry
@@ -5294,6 +5354,14 @@ struct WarbandSceneEntry
     int32 DefaultScenePriority;
 
     EnumFlag<WarbandSceneFlags> GetFlags() const { return static_cast<WarbandSceneFlags>(Flags); }
+};
+
+struct WeeklyRewardChestThresholdEntry
+{
+    uint32 ID;
+    int8 Type;              // WeeklyRewardChestThresholdType: 1=MythicPlus, 2=RankedPVP, 3=Raid, 4=AlsoReceive, 5=Concession
+    int32 Threshold;        // count required to unlock this slot (M+: 1/4/8)
+    int32 Index;            // slot index 0/1/2 (rows are not unique per index; the highest ID per (Type,Index) is the live one)
 };
 
 struct WMOAreaTableEntry

@@ -23,9 +23,11 @@
 #include "DB2Stores.h"
 #include "GossipDef.h"
 #include "Item.h"
+#include "ItemConversionMgr.h"
 #include "ItemPackets.h"
 #include "Log.h"
 #include "NPCPackets.h"
+#include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "World.h"
@@ -1313,4 +1315,27 @@ void WorldSession::SendOpenContainer(ObjectGuid containerGuid)
     openContainer.ContainerGUID = containerGuid;
 
     SendPacket(openContainer.Write());
+void WorldSession::HandlePerformItemInteraction(WorldPackets::Item::PerformItemInteraction& performItemInteraction)
+{
+    Player* player = GetPlayer();
+
+    WorldPackets::Item::ItemInteractionComplete response;
+    response.Error = true;
+
+    // UIItemInteractionType::ItemConversion (4) is the only interaction the server implements (Matrix Catalyst).
+    constexpr int32 UI_ITEM_INTERACTION_ITEM_CONVERSION = 4;
+
+    // The interaction agent the client has open must exist near the player (the Catalyst console/steward).
+    // Kept as a range check only: which unit/GO offers the UI is world content (UiItemInteractionID links).
+    bool agentOk = performItemInteraction.AgentGuid.IsEmpty();
+    if (!agentOk)
+        if (WorldObject const* agent = ObjectAccessor::GetWorldObject(*player, performItemInteraction.AgentGuid))
+            agentOk = player->IsWithinDistInMap(agent, INTERACTION_DISTANCE * 4);
+
+    if (agentOk && performItemInteraction.InteractionType == UI_ITEM_INTERACTION_ITEM_CONVERSION)
+        if (Item* item = player->GetItemByGuid(performItemInteraction.ItemGuid))
+            if (sItemConversionMgr.PerformConversion(player, item))
+                response.Error = false;
+
+    SendPacket(response.Write());
 }

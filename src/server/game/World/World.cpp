@@ -54,6 +54,9 @@
 #include "GameObjectModel.h"
 #include "GameTables.h"
 #include "GameTime.h"
+#include "ChallengeModeMgr.h"
+#include "ItemConversionMgr.h"
+#include "ItemUpgradeMgr.h"
 #include "GarrisonMgr.h"
 #include "GitRevision.h"
 #include "GridNotifiersImpl.h"
@@ -1936,6 +1939,15 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading garrison info...");
     sGarrisonMgr.Initialize();
 
+    TC_LOG_INFO("server.loading", "Loading Mythic+ (Challenge Mode) data...");
+    sChallengeModeMgr.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading item conversions (Matrix Catalyst)...");
+    sItemConversionMgr.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading item upgrade tracks...");
+    sItemUpgradeMgr.Initialize();
+
     ///- Handle outdated emails (delete/return)
     TC_LOG_INFO("server.loading", "Returning old mails...");
     sObjectMgr->ReturnOrDeleteOldMails(false);
@@ -3179,7 +3191,12 @@ void World::ResetWeeklyQuests()
     // reset all quest status in memory
     for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
         if (Player* player = itr->second->GetPlayer())
+        {
             player->ResetWeeklyQuestStatus();
+            // Roll the client's weekly-reward period for players online across the reset so the vault
+            // UI / PlayerHasWeeklyRewardsAvailable stay correct without a relog.
+            player->UpdateWeeklyRewardsPeriod();
+        }
 
     // reselect pools
     sQuestPoolMgr->ChangeWeeklyQuests();
@@ -3194,6 +3211,10 @@ void World::ResetWeeklyQuests()
 
     m_NextWeeklyQuestReset = next;
     SetPersistentWorldVariable(NextWeeklyQuestResetTimeVarId, uint64(next));
+
+    // Mythic+ weekly rollover. Must run AFTER m_NextWeeklyQuestReset has advanced: every piece of Mythic+ weekly
+    // state (vault run history, vault claim, keystone adjustment, affix week index) is keyed on that boundary.
+    sChallengeModeMgr.OnWeeklyReset();
 
     TC_LOG_INFO("misc", "Weekly quests for all characters have been reset.");
 }

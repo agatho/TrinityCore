@@ -56,6 +56,7 @@
 #include "DatabaseEnv.h"
 #include "DisableMgr.h"
 #include "DuelPackets.h"
+#include "ElapsedTimerMgr.h"
 #include "EquipmentSetPackets.h"
 #include "Formulas.h"
 #include "GameEventMgr.h"
@@ -63,6 +64,8 @@
 #include "GameObjectAI.h"
 #include "Garrison.h"
 #include "GarrisonMgr.h"
+#include "MythicPlusData.h"
+#include "MythicPlusPacketsCommon.h"
 #include "GitRevision.h"
 #include "GossipDef.h"
 #include "GridNotifiers.h"
@@ -143,6 +146,7 @@
 #include "VehiclePackets.h"
 #include "Vignette.h"
 #include "VignettePackets.h"
+#include "WeeklyRewardsMgr.h"
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
@@ -390,6 +394,10 @@ void Player::CleanupsBeforeDelete(bool finalCleanup)
 {
     TradeCancel(false);
     DuelComplete(DUEL_INTERRUPTED);
+
+    // Elapsed timers are per-session bookkeeping keyed by player GUID; drop ours so the manager
+    // does not accumulate entries for characters that are gone.
+    sElapsedTimerMgr->RemoveAllTimers(GetGUID());
 
     Unit::CleanupsBeforeDelete(finalCleanup);
 }
@@ -18864,6 +18872,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     _LoadQuestStatusObjectives(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES));
     _LoadQuestStatusObjectiveSpawnTrackings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_SPAWN_TRACKING));
     _LoadQuestStatusRewarded(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_REW));
+    _LoadContentTracking(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CONTENT_TRACKING));
     _LoadDailyQuestStatus(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_DAILY_QUEST_STATUS));
     _LoadWeeklyQuestStatus(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WEEKLY_QUEST_STATUS));
     _LoadSeasonalQuestStatus(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SEASONAL_QUEST_STATUS));
@@ -19035,6 +19044,15 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWERS),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWER_ABILITIES)))
         _garrison = std::move(garrison);
+
+    _mythicPlusData = std::make_unique<MythicPlusData>(this);
+    _mythicPlusData->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS));
+    // The vault row must load BEFORE the weekly runs: loading the runs prunes a week that has already reset,
+    // and that prune both reads the stored claim/keystone boundaries and rewrites the row with the previous
+    // week's captured summary. Loading it afterwards would clobber the capture with the pre-reset values.
+    _mythicPlusData->LoadVaultFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT));
+    _mythicPlusData->LoadWeeklyFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY));
+    UpdateDungeonScore();
 
     _InitHonorLevelOnLoadFromDB(fields.honor, fields.honorLevel);
 
@@ -20011,6 +20029,63 @@ void Player::_LoadQuestStatusRewarded(PreparedQueryResult result)
     }
 }
 
+bool Player::AddTrackedContent(int32 targetType, int32 targetId, int32 collectableSourceInfoId)
+{
+    // Ignore duplicates: the same (TargetType, TargetID) is only tracked once.
+    if (m_activePlayerData->TrackedCollectableSources.FindIndexIf([targetType, targetId](UF::CollectableSourceTrackedData const& e)
+        { return e.TargetType == targetType && e.TargetID == targetId; }) >= 0)
+        return false;
+
+    auto trackedSources = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::TrackedCollectableSources);
+    auto entry = AddDynamicUpdateFieldValue(trackedSources);
+    entry.ModifyValue(&UF::CollectableSourceTrackedData::TargetType).SetValue(targetType);
+    entry.ModifyValue(&UF::CollectableSourceTrackedData::TargetID).SetValue(targetId);
+    entry.ModifyValue(&UF::CollectableSourceTrackedData::CollectableSourceInfoID).SetValue(collectableSourceInfoId);
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CONTENT_TRACKING);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    stmt->setInt32(1, targetType);
+    stmt->setInt32(2, targetId);
+    stmt->setInt32(3, collectableSourceInfoId);
+    CharacterDatabase.Execute(stmt);
+    return true;
+}
+
+bool Player::RemoveTrackedContent(int32 targetType, int32 targetId)
+{
+    auto trackedSources = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::TrackedCollectableSources);
+    int32 const index = m_activePlayerData->TrackedCollectableSources.FindIndexIf([targetType, targetId](UF::CollectableSourceTrackedData const& e)
+        { return e.TargetType == targetType && e.TargetID == targetId; });
+    if (index < 0)
+        return false;
+
+    RemoveDynamicUpdateFieldValue(trackedSources, index);
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CONTENT_TRACKING);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    stmt->setInt32(1, targetType);
+    stmt->setInt32(2, targetId);
+    CharacterDatabase.Execute(stmt);
+    return true;
+}
+
+void Player::_LoadContentTracking(PreparedQueryResult result)
+{
+    if (!result)
+        return;
+
+    auto trackedSources = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::TrackedCollectableSources);
+    do
+    {
+        Field* fields = result->Fetch();
+        auto entry = AddDynamicUpdateFieldValue(trackedSources);
+        entry.ModifyValue(&UF::CollectableSourceTrackedData::TargetType).SetValue(fields[0].GetInt32());
+        entry.ModifyValue(&UF::CollectableSourceTrackedData::TargetID).SetValue(fields[1].GetInt32());
+        entry.ModifyValue(&UF::CollectableSourceTrackedData::CollectableSourceInfoID).SetValue(fields[2].GetInt32());
+    }
+    while (result->NextRow());
+}
+
 void Player::_LoadDailyQuestStatus(PreparedQueryResult result)
 {
     m_DFQuests.clear();
@@ -20980,6 +21055,9 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveCharacterBankTabSettings(trans);
     if (_garrison)
         _garrison->SaveToDB(trans);
+
+    if (_mythicPlusData)
+        _mythicPlusData->SaveToDB(trans);
 
     // check if stats should only be saved on logout
     // save stats can be out of transaction
@@ -25527,6 +25605,10 @@ void Player::SendInitialPacketsBeforeAddToMap()
     initialSetup.ServerExpansionLevel = sWorld->getIntConfig(CONFIG_EXPANSION);
     SendDirectMessage(initialSetup.Write());
 
+    // Publish the current weekly-reward period so the client's vault UI and, crucially,
+    // ModifierTreeType::PlayerHasWeeklyRewardsAvailable (which fails while the field is 0) are correct.
+    UpdateWeeklyRewardsPeriod();
+
     SetMovedUnit(this);
 
     // Announce that the initial object update is coming. Retail sends this before the first large
@@ -25674,6 +25756,12 @@ void Player::SendInitialPacketsAfterAddToMap()
     }
 
     GetSceneMgr().TriggerDelayedScenes();
+
+    // Resynchronise the client's world elapsed timers for the map we just entered. This is what
+    // makes a mid-run zone-in (or a relog inside a running Mythic+ instance) show the dungeon timer
+    // at the correct elapsed value - previously the timer was only ever pushed once, at run start,
+    // so anyone who was not present at that moment saw nothing.
+    sElapsedTimerMgr->SendActiveTimers(this);
 }
 
 void Player::SendUpdateToOutOfRangeGroupMembers()
@@ -26131,6 +26219,16 @@ void Player::DailyReset()
         _garrison->ResetFollowerActivationLimit();
 
     FailCriteria(CriteriaFailEvent::DailyQuestsCleared, 0);
+}
+
+void Player::UpdateWeeklyRewardsPeriod()
+{
+    // WeeklyRewardsPeriodSinceOrigin is the week index the client uses to gate the Great Vault UI and
+    // ModifierTreeType::PlayerHasWeeklyRewardsAvailable (313), which returns false while the field is 0.
+    // It was never written, so that modifier always failed. Mirror the exact value the vault system
+    // uses (WeeklyRewardsMgr::GetCurrentPeriod) so the field and the vault roll over together.
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::WeeklyRewardsPeriodSinceOrigin),
+        WeeklyRewardsMgr::GetCurrentPeriod());
 }
 
 void Player::ResetWeeklyQuestStatus()
@@ -28912,6 +29010,23 @@ void Player::SetEquipmentSet(EquipmentSetInfo::EquipmentSetData const& newEqSet)
     eqSlot.State = eqSlot.State == EQUIPMENT_SET_NEW ? EQUIPMENT_SET_NEW : EQUIPMENT_SET_CHANGED;
 }
 
+void Player::SetEquipmentSetAssignedSpec(uint64 setGuid, int32 assignedSpecIndex)
+{
+    auto itr = _equipmentSets.find(setGuid);
+    if (itr == _equipmentSets.end())
+        return;
+
+    EquipmentSetInfo& eqSet = itr->second;
+    // A negative index clears the assignment (no spec auto-equips this set).
+    if (assignedSpecIndex >= 0)
+        eqSet.Data.AssignedSpecIndex = assignedSpecIndex;
+    else
+        eqSet.Data.AssignedSpecIndex.reset();
+
+    if (eqSet.State != EQUIPMENT_SET_NEW)
+        eqSet.State = EQUIPMENT_SET_CHANGED;
+}
+
 void Player::_SaveEquipmentSets(CharacterDatabaseTransaction trans)
 {
     for (EquipmentSetContainer::iterator itr = _equipmentSets.begin(); itr != _equipmentSets.end();)
@@ -30820,6 +30935,27 @@ void Player::DeleteGarrison()
         _garrison->Delete();
         _garrison.reset();
     }
+}
+
+void Player::UpdateDungeonScore()
+{
+    // The client renders Mythic+ rating purely from these two update fields: the public roster summary
+    // (party frames / inspect) and the owner's full per-season score tree (the Mythic+ UI, score colors).
+    WorldPackets::MythicPlus::DungeonScoreSummary summary;
+    WorldPackets::MythicPlus::DungeonScoreData data;
+    if (MythicPlusData* mythicPlus = GetMythicPlusData())
+    {
+        mythicPlus->BuildDungeonScoreSummary(summary);
+        mythicPlus->BuildDungeonScoreData(data);
+    }
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::DungeonScore), std::move(summary));
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::DungeonScore), std::move(data));
+}
+
+void Player::SetItemUpgradeWatermark(uint32 slot, float itemLevel)
+{
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ItemUpgradeHighWatermark, slot), itemLevel);
 }
 
 void Player::SendMovementSetCollisionHeight(float height, WorldPackets::Movement::UpdateCollisionHeightReason reason)

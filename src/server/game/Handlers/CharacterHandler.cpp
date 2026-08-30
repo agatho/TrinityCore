@@ -51,6 +51,9 @@
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Pet.h"
+#include "ChallengeModeMgr.h"
+#include "ItemConversionMgr.h"
+#include "ItemUpgradeMgr.h"
 #include "Player.h"
 #include "PlayerDump.h"
 #include "QueryHolder.h"
@@ -150,6 +153,10 @@ bool LoginQueryHolder::Initialize()
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_QUESTSTATUS_DAILY);
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_DAILY_QUEST_STATUS, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CONTENT_TRACKING);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_CONTENT_TRACKING, stmt);
 
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_QUESTSTATUS_WEEKLY);
     stmt->setUInt64(0, lowGuid);
@@ -333,6 +340,18 @@ bool LoginQueryHolder::Initialize()
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_GARRISON);
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_GARRISON, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_MYTHIC_PLUS);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_MYTHIC_PLUS_WEEKLY);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_MYTHIC_PLUS_VAULT);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT, stmt);
 
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_GARRISON_BLUEPRINTS);
     stmt->setUInt64(0, lowGuid);
@@ -1379,6 +1398,15 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     // acts on cached data, and the handler (RVA 0x341AD0) is order independent - it compares
     // stamps against CVars and flushes on mismatch, whenever it runs.
     SendCacheInfo();
+    // Mythic+ weekly keystone maintenance: after a weekly reset the carried keystone is adjusted from last week's
+    // runs and restamped with the new week's affixes (no new key is granted here; the Great Vault does that).
+    sChallengeModeMgr.UpdateKeystoneForNewWeek(pCurrChar, false /*createIfMissing*/);
+
+    // Matrix Catalyst charge accrual (biweekly drip, lazily granted at login).
+    sItemConversionMgr.UpdateCharges(pCurrChar);
+
+    // Item upgrade watermarks (per-slot crest-waiver levels shown by the upgrade UI).
+    sItemUpgradeMgr.LoadWatermarks(pCurrChar);
 
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHAR_ONLINE);
     stmt->setUInt64(0, pCurrChar->GetGUID().GetCounter());
@@ -2153,6 +2181,11 @@ void WorldSession::HandleEquipmentSetSave(WorldPackets::EquipmentSet::SaveEquipm
 void WorldSession::HandleDeleteEquipmentSet(WorldPackets::EquipmentSet::DeleteEquipmentSet& deleteEquipmentSet)
 {
     _player->DeleteEquipmentSet(deleteEquipmentSet.ID);
+}
+
+void WorldSession::HandleAssignEquipmentSetSpec(WorldPackets::EquipmentSet::AssignEquipmentSetSpec& assignEquipmentSetSpec)
+{
+    _player->SetEquipmentSetAssignedSpec(assignEquipmentSetSpec.GUID, assignEquipmentSetSpec.AssignedSpecIndex);
 }
 
 void WorldSession::HandleUseEquipmentSet(WorldPackets::EquipmentSet::UseEquipmentSet& useEquipmentSet)

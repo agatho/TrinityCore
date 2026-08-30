@@ -364,6 +364,8 @@ class TC_GAME_API Spell
         void EffectProspecting();
         void EffectMilling();
         void EffectRenamePet();
+        void EffectSetItemBonusListGroupEntry();
+        void EffectIncreaseItemBonusListGroupStep();
         void EffectSendTaxi();
         void EffectKnockBack();
         void EffectPullTowards();

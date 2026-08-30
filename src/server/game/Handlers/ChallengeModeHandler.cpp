@@ -1,0 +1,190 @@
+/*
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include "WorldSession.h"
+#include "ChallengeMode.h"
+#include "ChallengeModeMgr.h"
+#include "ChallengeModePackets.h"
+#include "Config.h"
+#include "Item.h"
+#include "ItemDefines.h"
+#include "Log.h"
+#include "Map.h"
+#include "MythicPlusData.h"
+#include "Player.h"
+
+void WorldSession::HandleRequestMythicPlusSeasonData(WorldPackets::ChallengeMode::RequestMythicPlusSeasonData& /*requestMythicPlusSeasonData*/)
+{
+    WorldPackets::ChallengeMode::MythicPlusSeasonData response;
+    response.IsMythicPlusActive = sChallengeModeMgr.GetActiveSeasonId() != 0;
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleRequestMythicPlusAffixes(WorldPackets::ChallengeMode::RequestMythicPlusAffixes& /*requestMythicPlusAffixes*/)
+{
+    WorldPackets::ChallengeMode::MythicPlusCurrentAffixes response;
+
+    int32 const seasonId = int32(sChallengeModeMgr.GetActiveSeasonId());
+    for (uint32 affixId : sChallengeModeMgr.GetWeeklyAffixes())
+    {
+        WorldPackets::ChallengeMode::CurrentAffix& affix = response.Affixes.emplace_back();
+        affix.KeystoneAffixID = int32(affixId);
+        affix.SeasonID = seasonId;
+    }
+
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleStartChallengeMode(WorldPackets::ChallengeMode::StartChallengeMode& startChallengeMode)
+{
+    Player* player = GetPlayer();
+
+    // The keystone the player slotted into the font of power.
+    Item* keystone = player->GetItemByPos(startChallengeMode.Bag, startChallengeMode.Slot);
+    if (!keystone)
+    {
+        player->SendEquipError(EQUIP_ERR_ITEM_NOT_FOUND, nullptr, nullptr);
+        return;
+    }
+
+    // Only the actual Mythic Keystone item may start a run (config-tunable; 0 disables the check).
+    if (uint32 keystoneItemId = sChallengeModeMgr.GetKeystoneItemId())
+        if (keystone->GetEntry() != keystoneItemId)
+            return;
+
+    uint32 const mapChallengeModeId = keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_MAP_CHALLENGE_MODE_ID);
+    uint32 const keystoneLevel = keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_LEVEL);
+    if (!mapChallengeModeId || !keystoneLevel)
+        return;
+
+    // The player must be standing in the dungeon this keystone belongs to. The client can only enter it at
+    // Mythic (23): difficulty 8 (Mythic Keystone) is not DIFFICULTY_FLAG_CAN_SELECT (Flags 0x1, measured on
+    // 12.1.0.69497), so no client ever selects it. Accept a Mythic run about to be converted, or an already
+    // converted keystone instance (e.g. a relog into a live run). The old gate required IsMythicPlus() (== 8)
+    // here, which nothing on the client path could ever produce - it locked the whole challenge mode out.
+    Map* map = player->GetMap();
+    InstanceMap* instanceMap = map->ToInstanceMap();
+    if (!instanceMap || !(map->IsMythic() || map->IsMythicPlus()))
+        return;
+
+    if (sChallengeModeMgr.GetMapIdForChallengeMode(mapChallengeModeId) != map->GetId())
+        return;
+
+    // Activating the keystone at the Font of Power is what lifts the run to Mythic Keystone (8): the server
+    // is the writer, because the client cannot enter at 8. Convert the live Mythic instance and create the
+    // ChallengeMode object the run needs (see InstanceMap::ActivateChallengeMode). Skipped if already 8.
+    if (!map->IsMythicPlus())
+        instanceMap->ActivateChallengeMode();
+
+    ChallengeMode* challenge = instanceMap->GetChallengeMode();
+    if (!challenge || challenge->IsActive() || challenge->IsCompleted())
+        return;
+
+    // Retail activates the run from the Font of Power pedestal. When enforced, require the pedestal gameobject
+    // near the player; lenient by default because the GO spawn is world-DB content.
+    if (sConfigMgr->GetBoolDefault("ChallengeMode.RequireFontOfPower", false))
+        if (!player->FindNearestGameObjectOfType(GAMEOBJECT_TYPE_CHALLENGE_MODE_REWARD, 40.0f))
+            return;
+
+    std::array<uint32, 4> const affixes =
+    {
+        keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_AFFIX_ID_1),
+        keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_AFFIX_ID_2),
+        keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_AFFIX_ID_3),
+        keystone->GetModifier(ITEM_MODIFIER_CHALLENGE_KEYSTONE_AFFIX_ID_4)
+    };
+
+    challenge->Start(mapChallengeModeId, keystoneLevel, affixes, player->GetGUID(), keystone->GetGUID());
+}
+
+void WorldSession::HandleMythicPlusRequestMapStats(WorldPackets::ChallengeMode::MythicPlusRequestMapStats& /*request*/)
+{
+    Player* player = GetPlayer();
+
+    WorldPackets::ChallengeMode::MythicPlusAllMapStats response;
+    response.Field80 = sChallengeModeMgr.GetActiveSeasonId();
+
+    // One map-stat row per dungeon the player has a recorded best run for. The requester is the sole member; the
+    // full party roster is not persisted server-side. MapChallengeModeID/BestLevel/DurationMs/Affixes are populated;
+    // the remaining scalar slots await a live sniff to map (the wire is exact, so a zero there is not a desync).
+    if (MythicPlusData* data = player->GetMythicPlusData())
+    {
+        for (auto const& [challengeModeId, run] : data->GetBestRuns())
+        {
+            WorldPackets::ChallengeMode::MythicPlusMapStat& mapStat = response.MapStats.emplace_back();
+            mapStat.MapChallengeModeID = challengeModeId;
+            mapStat.BestLevel = run.Level;
+            mapStat.DurationMs = run.DurationMs;
+            mapStat.Affixes = run.Affixes;
+
+            WorldPackets::ChallengeMode::MythicPlusMapStatMember& member = mapStat.Members.emplace_back();
+            member.PlayerGUID = player->GetGUID();
+        }
+    }
+
+    SendPacket(response.Write());
+}
+
+// NOTE (assembly): CMSG_REQUEST_WEEKLY_REWARDS / CMSG_CLAIM_WEEKLY_REWARD are NOT handled here.
+// This branch merges feature/great-vault, whose WeeklyRewardHandler.cpp serves all three Great Vault rows
+// (Dungeon / Raid / World) over the WorldPackets::WeeklyRewards packet family, and an opcode can only have one
+// bound handler. The Mythic+-only pair that used to live here (over WorldPackets::ChallengeMode) is gone; the one
+// behaviour it had that the bound handler lacked - refreshing the carried keystone when the vault is opened after
+// a weekly reset - is called from WeeklyRewardHandler.cpp instead. The reward rules stay shared, never duplicated:
+// the Mythic+ row's season reward-level cap still comes from ChallengeModeMgr (GetVaultRewardLevelCap), and
+// ChallengeModeMgr's BuildMythicPlusVaultOptions / ClaimMythicPlusVaultReward / GetMythicPlusVaultSlotForThreshold
+// remain available for an assembly that binds a Mythic+-only handler instead.
+
+void WorldSession::HandleResetChallengeMode(WorldPackets::ChallengeMode::ResetChallengeMode& /*resetChallengeMode*/)
+{
+    InstanceMap* instanceMap = GetPlayer()->GetMap()->ToInstanceMap();
+    if (!instanceMap)
+        return;
+
+    // Abort the active run and stop the timer. Trash/boss respawn goes through the standard instance reset path.
+    if (ChallengeMode* challenge = instanceMap->GetChallengeMode())
+    {
+        if (challenge->IsActive())
+        {
+            challenge->Reset();
+
+            // Notify the party UI that the keystone was reset (SMSG_CHALLENGE_MODE_RESET carries the instance MapID).
+            WorldPackets::ChallengeMode::ChallengeModeReset resetPacket;
+            resetPacket.MapID = instanceMap->GetId();
+            instanceMap->SendToPlayers(resetPacket.Write());
+        }
+    }
+}
+
+void WorldSession::HandleChallengeModeRequestLeaders(WorldPackets::ChallengeMode::RequestLeaders& request)
+{
+    // The client asks for the guild + realm best-run leaders of one dungeon (MapId + ChallengeModeId), passing
+    // the timestamps it last saw so the server could answer "nothing newer". This branch keeps no challenge
+    // leaderboard records, so both boards go out empty. The request and its two answers are one closed exchange
+    // (subplan 2.2, kept together per DoD 4.3); the two SMSG were taken from the unassigned cut rest_kern_weltzustand.
+    WorldPackets::ChallengeMode::ChallengeModeRequestLeadersResult leaders;
+    leaders.MapId = request.MapId;
+    leaders.ChallengeModeId = request.ChallengeModeId;
+    leaders.LastGuildUpdate = uint32(request.LastGuildUpdate);
+    leaders.LastRealmUpdate = uint32(request.LastRealmUpdate);
+    SendPacket(leaders.Write());
+
+    WorldPackets::ChallengeMode::ChallengeModeRequestLeaderboardResult board;
+    board.MapId = request.MapId;
+    board.ChallengeModeId = request.ChallengeModeId;
+    SendPacket(board.Write());
+}

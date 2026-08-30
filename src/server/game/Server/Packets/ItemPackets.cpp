@@ -430,6 +430,18 @@ WorldPacket const* SendItemPassives::Write()
 WorldPacket const* OpenContainer::Write()
 {
     _worldPacket << ContainerGUID;
+void PerformItemInteraction::Read()
+{
+    _worldPacket >> ItemGuid;
+    _worldPacket >> AgentGuid;
+    _worldPacket >> InteractionType;
+    _worldPacket >> BaseItemId;
+}
+
+WorldPacket const* ItemInteractionComplete::Write()
+{
+    _worldPacket << Bits<1>(Error);
+    _worldPacket.FlushBits();
 
     return &_worldPacket;
 }
