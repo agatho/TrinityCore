@@ -22,13 +22,17 @@
 #include "ClientConfigPackets.h"
 #include "DisableMgr.h"
 #include "GameTime.h"
+#include "Log.h"
 #include "ObjectMgr.h"
 #include "RBAC.h"
 #include "RealmList.h"
+#include "StringFormat.h"
 #include "SystemPackets.h"
 #include "Timezone.h"
 #include "Util.h"
 #include "World.h"
+
+#include <utf8.h>
 
 void WorldSession::SendAuthResponse(uint32 code, bool queued, uint32 queuePos)
 {
@@ -163,4 +167,196 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
     WorldPackets::System::MirrorVars variables;
     variables.Variables = vars;
     SendPacket(variables.Write());
+}
+
+// CMSG_LATENCY_REPORT (12.1 0x44000F). The client sends these self-timed from C++ in triples ~200 ms apart, with
+// Kind 0/1/2 carrying 3/7/11 entries; the coupling is exception-free over the corpus's 4522 packets, and the entry
+// list is cumulative - the Kind 2 body starts byte-identically with the whole Kind 1 body, which in turn starts with
+// the whole Kind 0 body. (The corpus is defined once above WorldPackets::Auth::SuspendComms in
+// AuthenticationPackets.h, and every figure in this function is measured on it.)
+// Taking only Kind 2 therefore keeps every measurement of the triple exactly once; taking all
+// three would count every measurement three times (finding K3 of AGENT_BRIEF_CONN_44_4C).
+//
+// D2/D4 - what the server does with it: nothing observable by the client. There is no reply opcode, no Lua event
+// (the report has no Lua trigger and no Lua reader; only the display getters GetNetStats/GetFramerate exist) and no
+// CVar that gates it, so anything the server sends back would be invented. Decision O3 of unit conn_44_4C: the
+// values are aggregated into per-session statistics and deliberately NOT persisted. A table would take roughly
+// 20000 rows per play session with no retention strategy.
+//
+// The aggregate has exactly one consumer, and it is server side: WorldSession::~WorldSession writes one summary
+// line per session that reported anything, through GetClientPerformanceStats(). That line is visible in the
+// shipped configuration - logger network.telemetry is enabled at Info in worldserver.conf.dist - because a
+// handler whose only effect needs the operator to lower a log level first has no effect. The per report line
+// below stays at Trace: it is detail for someone chasing one session, not something a realm wants every few
+// seconds per player.
+void WorldSession::HandleLatencyReport(WorldPackets::Auth::LatencyReport const& latencyReport)
+{
+    // Deduplication. 2 is the last and largest stage of the triple.
+    if (latencyReport.Kind != 2)
+        return;
+
+    ++_clientPerformanceStats.Reports;
+
+    for (WorldPackets::Auth::LatencyReportEntry const& entry : latencyReport.Entries)
+    {
+        // The client's clock, taken from EVERY entry - deliberately BEFORE the frame rate filter below.
+        // LastTimestampMS is declared as the newest timestamp seen and it is the one member of this aggregate that
+        // says something about the client's clock instead of its frame rate, so it must not inherit the frame
+        // rate's selection: an entry with Frame == 0 still carries a perfectly good timestamp. Over the corpus -
+        // 4522 packets, 31 650 entries, 9052 of them with Frame == 0 - not one Frame == 0 entry has
+        // TimestampMS == 0, so there is nothing here to guard against.
+        // A maximum rather than "the last one written", because the entries of one packet are NOT in timestamp
+        // order: the entry the sender appends itself (Unknown8 == 33) is ALWAYS older than the entry before it -
+        // 9043 of the 27 128 consecutive within-packet pairs go backwards, that is exactly the number of
+        // Unknown8 == 33 entries, and in all 9043 the later entry of the pair IS the ==33 one. Across packets
+        // the per-packet maximum IS monotonic (4498 comparisons, 0 violations), which is what makes this
+        // accumulator meaningful at all.
+        if (entry.TimestampMS > _clientPerformanceStats.LastTimestampMS)
+            _clientPerformanceStats.LastTimestampMS = entry.TimestampMS;
+
+        // Frame == 0 means this entry carries no frame rate. It happens: in the decoded reference triple entry 0
+        // has Frame 0 while entries 1 and 2 have 21 and 33.
+        // The report is built out of one BLOCK per stage, appended to the cumulative list, and over the corpus the
+        // block has a fixed shape at both ends - measured, without exception: it BEGINS with a Frame == 0 entry and
+        // ENDS with the entry the sender we decoded appends itself (Unknown8 == 33, Server == 0, Unknown4 == 0).
+        // Kind 0 contributes indices 0..2, Kind 1 appends 3..6, Kind 2 appends 7..10, so the corpus holds
+        // 1*1508 + 2*1507 + 3*1507 = 9043 blocks; Unknown8 == 33 occurs 9043 times and only ever at a block's last
+        // index (1508 at index 2 for Kind 0; 1507 each at 2 and 6 for Kind 1; 1507 each at 2, 6 and 10 for Kind 2),
+        // and Frame == 0 occurs at a block's FIRST index 9043 times - once per block.
+        // So an earlier revision's "only the last entry of a packet is written by the sender we decoded" does not
+        // account for the ==33 entries of a multi-stage packet: it covers 4522 of 9043 of them. The rest are the
+        // block-closing entries of the EARLIER stages, carried along because the list is cumulative. Consistently
+        // with 0x20E6F0 always storing at least 1, not one of those 9043 entries has Frame == 0.
+        // UNVERIFIED: which function opens a block, i.e. the producer of the Frame == 0 entry. Its POSITION is
+        // settled by the measurement above, its identity is not. Their frame rate is skipped rather than averaged
+        // in, because folding a zero into a frame rate average would understate it. Their timestamp is NOT skipped
+        // - see above. The 9 remaining Frame == 0 entries (9052 in total against 9043 blocks) sit in a block's
+        // interior, on the Unknown8 == 0 slot: 3 Kind 1 packets carry one at index 4, and 3 Kind 2 packets carry
+        // one at index 4 and one at index 8. The skip covers them the same way.
+        if (!entry.Frame)
+            continue;
+
+        ++_clientPerformanceStats.Samples;
+        _clientPerformanceStats.FrameRateSum += entry.Frame;
+
+        // "Last" is meant as the NEWEST measurement, so it is selected by timestamp - the same selection as
+        // LastTimestampMS above, for the same reason, and it has to be made separately because the filter this
+        // branch sits behind makes the two selections range over different entries.
+        // Assigning in iteration order instead, as an earlier revision of this handler did, hands the value to
+        // the last entry that passes the filter, and that entry is not merely sometimes stale - it is the
+        // block-closing Unknown8 == 33 at index 10 in 1507 of the corpus's 1507 accepted packets, it never has
+        // Frame == 0 so it always passes, and by the measurement above it is older than the entry before it in
+        // all 1507. So the iteration-order value is the newest measurement in 0 of 1507 packets. The two rules
+        // disagree in 1440 of the 1507 (95.6%), by a median of 5 and up to 192 frames per second: not a rounding
+        // difference in a diagnostic, a different measurement.
+        // >= and not >, i.e. a tie goes to the LATER entry: indices 8 and 9 carry the same millisecond in 743 of
+        // the 1507 packets, and in 733 of those their frame rates differ - median 31 apart - so the tie is real
+        // and has to be broken on purpose rather than by accident. With this rule the entry chosen is index 9 in
+        // 1507 of 1507.
+        // UNVERIFIED: that the later of two equally stamped entries is the better of the two. Nothing available
+        // orders them - both sit in the interior of the last stage's block, the timestamps are equal at the
+        // millisecond the field resolves, and the only thing telling them apart is Unknown8 (0 at index 8, 12 at
+        // index 9), whose meaning is itself unverified. What IS measured is that either of them beats index 10,
+        // which is the whole point of this selection.
+        if (entry.TimestampMS >= _clientPerformanceStats.LastFrameRateTimestampMS)
+        {
+            _clientPerformanceStats.LastFrameRateTimestampMS = entry.TimestampMS;
+            _clientPerformanceStats.LastFrameRate = entry.Frame;
+        }
+
+        if (!_clientPerformanceStats.MinFrameRate || entry.Frame < _clientPerformanceStats.MinFrameRate)
+            _clientPerformanceStats.MinFrameRate = entry.Frame;
+
+        if (entry.Frame > _clientPerformanceStats.MaxFrameRate)
+            _clientPerformanceStats.MaxFrameRate = entry.Frame;
+    }
+
+    TC_LOG_TRACE("network.telemetry", "WorldSession::HandleLatencyReport: {} reported {} entries (fps last {} min {} max {} avg {}, {} samples over {} reports)",
+        GetPlayerInfo(), latencyReport.Entries.size(), _clientPerformanceStats.LastFrameRate, _clientPerformanceStats.MinFrameRate,
+        _clientPerformanceStats.MaxFrameRate, _clientPerformanceStats.AverageFrameRate(), _clientPerformanceStats.Samples,
+        _clientPerformanceStats.Reports);
+}
+
+// Makes an arbitrary byte string off the wire safe to hand to TC_LOG_*, for two separate reasons.
+//
+// Control characters collapse to '.' so that a crafted message cannot forge log lines - the message is
+// attacker-controlled and would otherwise reach the log verbatim.
+//
+// Every byte that is not part of a valid UTF-8 sequence is escaped as \xNN, because the log pipeline DOES
+// interpret the text even though nothing in the handler does. On Windows - the platform of this tree - the
+// console appender hands prefix + text + "\n" to WriteWinConsole (AppenderConsole.cpp), which calls Utf8toWStr
+// first and returns without writing a single character as soon as utf8::utf8to16 throws (Util.cpp: the exception
+// is caught, wstr is cleared, false is returned). WriteConsoleW is never reached, so the entire line is lost
+// silently - no prefix, no truncation marker, nothing in the log saying a report was dropped - while the file
+// appender writes the same line raw (AppenderFile.cpp, fwrite). The shipped configuration has both appenders on
+// this logger (worldserver.conf.dist: Logger.network.telemetry=3,Console Server), so half of it would go blind,
+// and since logging IS the whole effect of this opcode (decision O4) that is the effect going missing.
+// It matters here specifically: CMSG_LOG_STREAMING_ERROR is the one client string in this tree that is read with
+// Strings::DontValidateUtf8 (see LogStreamingError::Read) - every other logged client string comes in under the
+// Strings::ValidUtf8 default and cannot carry an invalid sequence at all. Reading it unvalidated stays the right
+// call, a malformed diagnostic must not cost the client its session, but it only holds if the string is made
+// loggable before it is logged, and that is what this function is for.
+//
+// \xNN rather than U+FFFD, and rather than the '.' the control characters get: the payload is a vsnprintf result
+// out of the client's CASC layer that can legitimately carry binary key material, and for a diagnostic the byte
+// value is the interesting part. Collapsing distinct bytes into one glyph would throw away the only content such
+// a report has. utf8::find_invalid returns the first byte of the offending sequence, so a multi-byte sequence
+// truncated at the 511 byte message boundary comes out as one escape per byte instead of swallowing the rest.
+static std::string MakeStreamingErrorMessageLoggable(std::string const& raw)
+{
+    std::string message;
+    message.reserve(raw.length());
+
+    std::string::const_iterator itr = raw.begin();
+    while (itr != raw.end())
+    {
+        std::string::const_iterator invalid = utf8::find_invalid(itr, raw.end());
+        for (; itr != invalid; ++itr)
+        {
+            unsigned char const c = static_cast<unsigned char>(*itr);
+            message += (c < 0x20 || c == 0x7F) ? '.' : *itr;
+        }
+
+        if (itr == raw.end())
+            break;
+
+        message += Trinity::StringFormat(R"(\x{:02X})", static_cast<unsigned char>(*itr));
+        ++itr;
+    }
+
+    return message;
+}
+
+// CMSG_LOG_STREAMING_ERROR (12.1 0x44000B). Free-form English CASC/TACT error text out of the client's streaming
+// logger; only severity >= 4 messages reach the ring this is drained from. There is nothing structured in it - no
+// file name field, no FileDataID field, no error code - and the Streaming Lua API has an empty Events table, so
+// there is no client state to change and no reply to send. Logging it is the whole of the effect (decision O4),
+// which is why the line goes to network.telemetry: worldserver.conf.dist enables that logger at Info, so it is
+// actually written in the shipped configuration. On the "network" logger it would fall through to Logger.root=5
+// (Error) and be discarded - the handler would then have no effect at all, which is exactly the empty handler
+// this opcode was implemented to avoid.
+//
+// The message is attacker-controlled and the client keeps a 64 slot error ring it can drain in a burst, so the
+// output is capped per session and the text goes through MakeStreamingErrorMessageLoggable above - which both
+// keeps a crafted message from forging log lines and keeps the line from vanishing in the console appender.
+// What the cap suppresses is not lost: the reports keep being counted and ~WorldSession logs the total, so the
+// counter has a reader for every value it can take.
+void WorldSession::HandleLogStreamingError(WorldPackets::Auth::LogStreamingError const& logStreamingError)
+{
+    if (_streamingErrorsReported >= MaxStreamingErrorsLoggedPerSession)
+    {
+        ++_streamingErrorsReported;
+        return;
+    }
+
+    std::string const message = MakeStreamingErrorMessageLoggable(logStreamingError.Message);
+
+    ++_streamingErrorsReported;
+
+    TC_LOG_INFO("network.telemetry", "WorldSession::HandleLogStreamingError: {} reported a content streaming error ({}/{}): {}",
+        GetPlayerInfo(), _streamingErrorsReported, MaxStreamingErrorsLoggedPerSession, message);
+
+    if (_streamingErrorsReported == MaxStreamingErrorsLoggedPerSession)
+        TC_LOG_INFO("network.telemetry", "WorldSession::HandleLogStreamingError: {} reached the per session streaming error log cap, further reports are counted but not logged - ~WorldSession prints the total",
+            GetPlayerInfo());
 }

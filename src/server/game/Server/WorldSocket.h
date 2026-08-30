@@ -28,6 +28,8 @@
 #include "WorldPacketCrypt.h"
 #include <array>
 #include <mutex>
+#include <span>
+#include <vector>
 
 namespace JSON::RealmList
 {
@@ -84,6 +86,16 @@ class TC_GAME_API WorldSocket final : public Trinity::Net::Socket<>
 {
     static uint32 const MinSizeForCompression;
 
+    // Limits for SMSG_MULTIPLE_PACKETS bundles. Neither is a client limit - the client's framing loop
+    // (0x18C0490) stops when fewer than 4 bytes remain and its only hard bound is the uint16 inner length.
+    // These keep one frame from growing without bound; bundling is only worthwhile for small packets anyway.
+    // UNVERIFIED: the two values themselves. 0x2000 bytes and 64 entries are CHOSEN, not measured - no client
+    // limit constrains them (see above) and no retail bundle is available to compare against, because the
+    // sniffer hooks behind the transport decapsulation and never records one. A measurement needs a retail
+    // capture taken below that layer.
+    static uint32 const MaxBundlePayloadSize;
+    static uint32 const MaxBundleEntries;
+
     static std::array<uint8, 32> const AuthCheckSeed;
     static std::array<uint8, 32> const SessionKeySeed;
     static std::array<uint8, 32> const ContinuedSessionSeed;
@@ -137,7 +149,10 @@ private:
     /// sends and logs network.opcode without accessing WorldSession
     void SendPacketAndLogOpcode(WorldPacket const& packet);
     void WritePacketToBuffer(EncryptablePacket const& packet, MessageBuffer& buffer);
+    void WriteBundleToBuffer(std::span<EncryptablePacket* const> packets, MessageBuffer& buffer);
+    bool CanBundle(EncryptablePacket const& packet) const;
     uint32 CompressPacket(uint8* buffer, WorldPacket const& packet);
+    void ResetCompressionContext();
 
     ReadDataHandlerResult HandleAuthSession(WorldPacket&& packet);
     void HandleAuthSessionCallback(WorldPackets::Auth::AuthSession const* authSession, JSON::RealmList::RealmJoinTicket* joinTicket, PreparedResultSet const* result);
@@ -165,6 +180,13 @@ private:
     WorldSession* _worldSession;
     bool _authed;
     bool _canRequestHotfixes;
+    // Mirror of the client's per socket suspend flag, the second of the three receive gates every packet - and,
+    // through the recursion in 0x18C0490, every BUNDLED packet - has to pass. True from the moment this socket is
+    // known to be the instance connection, because the client's NetClient constructor already marks slot 1 as
+    // suspended; cleared by SMSG_RESUME_COMMS and set again by SMSG_SUSPEND_COMMS, tracked in send order in
+    // Update(). Read by CanBundle only - the single packet path does not need it, since a lone packet carries its
+    // own opcode into the gate and the gate is the client's business, not ours.
+    bool _clientSuspended;
 
     MessageBuffer _headerBuffer;
     MessageBuffer _packetBuffer;

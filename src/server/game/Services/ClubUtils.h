@@ -23,6 +23,11 @@
 namespace Battlenet::Services::Clubs
 {
 uint64 CreateClubMemberId(ObjectGuid guid);
+
+// Inverse of CreateClubMemberId. Returns an empty guid for every member id this realm cannot have minted, which
+// is two distinct cases: an id carrying another realm's id in bits 48..59, and an id with bits 40..47 or 60..63
+// set - bits CreateClubMemberId leaves at zero, so no realm produced it. Either way nothing here can resolve it.
+ObjectGuid GetGuidFromClubMemberId(uint64 memberId);
 }
 
 #endif // TRINITYCORE_CLUB_UTILS_H

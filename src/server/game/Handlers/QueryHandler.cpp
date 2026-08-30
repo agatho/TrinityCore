@@ -16,6 +16,8 @@
  */
 
 #include "WorldSession.h"
+#include "CharacterCache.h"
+#include "ClubUtils.h"
 #include "Common.h"
 #include "Corpse.h"
 #include "DatabaseEnv.h"
@@ -54,6 +56,150 @@ void WorldSession::HandleQueryPlayerNames(WorldPackets::Query::QueryPlayerNames&
         BuildNameQueryData(guid, response.Players.emplace_back());
 
     SendPacket(response.Write());
+}
+
+// The Communities and Channel member lists identify a club member only by the pair
+// { BNet account guid, club member id } - never by character guid - so the ordinary CMSG_QUERY_PLAYER_NAMES path
+// cannot resolve them. Without an answer C_Club.AreMembersReady stays false forever: the member list is hidden and
+// the spinner runs unbounded, because CommunitiesMemberList.lua has no timer, no retry and no error dialog.
+//
+// The trigger is a cache miss in the client's CommunityNameCache (DBCacheCommunityName.cpp), reached from
+// C_Club.FocusMembers - CommunitiesMemberList.lua:498-511 and ChannelFrame.lua:103.
+// D5 note: that Lua-to-opcode mapping is derived from the cache architecture plus the only Lua entry point that
+// requests member data, not measured through a call chain - the client's CMSG senders are reached through vtables.
+// The wire format itself is measured (client writers 0x5D5C40 / 0x5D5EC0, response parser case 0x67C6ED).
+void WorldSession::SendPlayerNameByCommunityId(WorldPackets::Query::BNetAccountAndCommunityID const& member)
+{
+    WorldPackets::Query::QueryPlayerNameByCommunityIdResponse response;
+    // Echoing the key back verbatim is what the client matches the answer on. It also satisfies a hard client side
+    // precondition for free: consumer 0x3498F0 throws the guid away and substitutes an empty one unless its
+    // HighGuid is BNetAccount (30) or Null, so the guid in the answer must never be synthesized from something
+    // else - keep the echo.
+    response.Member = member;
+
+    ObjectGuid guid = Battlenet::Services::Clubs::GetGuidFromClubMemberId(member.CommunityID);
+    if (guid.IsEmpty())
+    {
+        // Either the member id belongs to another realm, or it is a value no realm can have minted (bits
+        // CreateClubMemberId leaves at zero are set) - GetGuidFromClubMemberId separates the two cases and rejects
+        // both. Neither will ever resolve here, so the permanent answer is the correct one and the client may burn
+        // the entry.
+        response.Result = WorldPackets::Query::QueryPlayerNameByCommunityIdResponse::PermanentFailure;
+    }
+    else if (!sCharacterCache->GetCharacterCacheByGuid(guid))
+    {
+        // Right realm, but no such character. Also permanent.
+        response.Result = WorldPackets::Query::QueryPlayerNameByCommunityIdResponse::PermanentFailure;
+    }
+    else
+    {
+        // Pass the online player through exactly like BuildNameQueryData does. Without it the answer would be
+        // built from cache values only, which for a logged in character means no TimerunningSeasonID, no
+        // DeclinedNames and a level that can be stale - a real divergence from the sibling path.
+        Player const* player = ObjectAccessor::FindConnectedPlayer(guid);
+        if (response.Data.emplace().Initialize(guid, player))
+            response.Result = WorldPackets::Query::QueryPlayerNameByCommunityIdResponse::Success;
+        else
+        {
+            // Unreachable as this function stands, and said so rather than dressed up as a transient state:
+            // PlayerGuidLookupData::Initialize has exactly one `return false` (QueryPackets.cpp:144-148) and its
+            // condition is the same sCharacterCache->GetCharacterCacheByGuid(guid) that the else-if above just
+            // found non-null - same synchronous function, nothing in between that could evict the entry. Result 2
+            // therefore never goes out today: of the three result values this opcode defines, the server reaches
+            // two. The third is written correctly and read correctly by the client, but there is no server state in
+            // which it is the right answer, and inventing one would be worse than recording the gap.
+            // The branch stays as a guard because if Initialize ever grows a second failure condition,
+            // TemporaryFailure remains the correct answer here: Result 1 would brand the member negative in the
+            // client's cache and leave that player nameless for the rest of the session, while Result 2 only clears
+            // the pending bit and lets the client ask again (consumer 0x3498F0).
+            response.Data.reset();
+            response.Result = WorldPackets::Query::QueryPlayerNameByCommunityIdResponse::TemporaryFailure;
+        }
+    }
+
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleQueryPlayerNameByCommunityId(WorldPackets::Query::QueryPlayerNameByCommunityId& queryPlayerNameByCommunityId)
+{
+    SendPlayerNameByCommunityId(queryPlayerNameByCommunityId.Member);
+}
+
+void WorldSession::HandleQueryPlayerNamesForCommunity(WorldPackets::Query::QueryPlayerNamesForCommunity& queryPlayerNamesForCommunity)
+{
+    // There is no batched response opcode. Checked against the 12.1 opcode table rather than inherited as a claim:
+    // Opcodes.h contains SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE (0x64000B) and no collective counterpart.
+    // The client sorts the answers out through the key each response echoes, so one response per requested member
+    // is the only form the 12.1 opcode set allows. The client's bulk observable is CLUB_MEMBERS_UPDATED, which the
+    // club subsystem raises once its cache has filled.
+    //
+    // MAY THIS SESSION ASK ABOUT THIS CLUB AT ALL? ClubID is read and then not used, and that is a decision with
+    // sources behind it, not an oversight. Three of them, in arbiter order:
+    //
+    // 1. THE WIRE SAYS THE GATE IS NOT HERE (rank 1, and on its own decisive). The single member sibling
+    //    CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID carries NO ClubID - the whole request is one
+    //    { bnetAccount, communityID } pair (client writer 0x5D5C40). A protocol that scoped name resolution to
+    //    club membership could not express that request at all: there would be no club to check it against. The
+    //    key is authorization free by construction, exactly as an ObjectGuid is for CMSG_QUERY_PLAYER_NAMES.
+    // 2. AND THE CLIENT HAS NO PLACE TO PUT SUCH A REFUSAL. The response Result is a three way discriminator and
+    //    all three values are about whether the MEMBER can be resolved - success, gone for good, ask again
+    //    (consumer 0x3498F0; see QueryPlayerNameByCommunityIdResponse::ResultCode). None of them means "you may
+    //    not ask". The same client does carry that code - ClubErrorType.ErrorClubNotMember = 18,
+    //    ClubDocumentation.lua - but on the club RPC surface, not here. Where Blizzard put the error tells us
+    //    where Blizzard put the check.
+    // 3. IN THIS TREE THE GATE IS ALREADY ON THAT RPC SURFACE, one layer up. Battlenet::Services::ClubService is
+    //    what hands out community ids in the first place, and it is membership scoped twice over:
+    //    HandleSubscribe refuses a non member with ERROR_CLUB_NOT_MEMBER (ClubService.cpp:64), and HandleGetMembers
+    //    ignores the requested club id outright and answers from player->GetGuild() alone (ClubService.cpp:132-143),
+    //    so it can only ever return the caller's own roster. Duplicating that check down here would gate the
+    //    lookup, not the disclosure.
+    //
+    // What this deliberately does NOT claim is that the answer is confidential. It is not, and not because of this
+    // handler: PlayerGuidLookupData carries AccountID, BnetAccountID, IsDeleted and GuildClubMemberID for every
+    // player it describes, and CMSG_QUERY_PLAYER_NAMES already serves exactly that struct for 50 ARBITRARY guids
+    // to any logged in session (HandleQueryPlayerNames above, Array<ObjectGuid, 50>). Player guids are as
+    // enumerable as community ids are. The same mapping is published a second time through the player update field
+    // PlayerData::GuildClubMemberID (Player.cpp, LoadFromDB). Community id <-> guid <-> name is therefore public
+    // in both directions in this tree, tree wide, independently of these two opcodes - a club membership check
+    // here would withhold nothing that is not already available for the asking one opcode over.
+    //
+    // What IS this unit's doing, and is bounded rather than argued away, is the AMPLIFICATION: 6551 answers per
+    // request against the sibling's 50, or ~0.61 MB against ~5 kB. A membership check would not have bounded
+    // it, and the reason is worth recording because it is the reason no gate of that shape can: such a check
+    // decides WHO may ask, not HOW MANY answers one request costs, and the largest request that exists - a
+    // whole cold guild roster - is precisely the one a member is entitled to make. What does bound it is
+    // written out at the end of this comment.
+    //
+    // EVERY requested member gets an answer, and every answer is a resolved one. That is not a nicety: a member the
+    // server answers with nothing at all stays pending in the client's community name cache,
+    // C_Club.AreMembersReady never turns true, and CommunitiesMemberList.lua has no timer, no retry and no error
+    // dialog to get out of it - one silent omission keeps the whole member list spinning.
+    //
+    // There is deliberately NO per request resolve budget. An earlier version resolved the first 1000 members and
+    // refused the rest with PermanentFailure; it was removed because it saved only a cache lookup and the
+    // PlayerGuidLookupData block per surplus member - 51..63 bytes, median 57, measured on the corpus; the packet,
+    // the allocation and the EncryptSend are paid either way - while PermanentFailure makes consumer 0x3498F0 brand
+    // that member negative for the rest of the session. With no guild member limit in this tree, a 1500 member
+    // guild with a cold name cache is a legitimate 1500 member request, so the budget bought ~28.5 kB and its only
+    // other measurable effect was 500 permanently nameless players. The full accounting, including why the figure
+    // 1000 did not carry its own weight, is on QueryPlayerNamesForCommunity in QueryPackets.h.
+    //
+    // WHAT BOUNDS THIS REQUEST INSTEAD - two bounds of different kind, and they must not be described as one:
+    //   * the wire, through QueryPlayerNamesForCommunity::MaxMembers. This one bounds a request at a point where it
+    //     is still answered in full, which is what a resolve budget cannot do.
+    //   * the AntiDOS entry in WorldSession::DosProtection::GetMaxPacketCounterAllowed. This one does NOT truncate
+    //     anything: on overflow EvaluateOpcode returns false (WorldSession.cpp, DosProtection::EvaluateOpcode),
+    //     WorldSession::Update discards the whole packet unread, and under the default PacketSpoof.Policy =
+    //     POLICY_KICK (World.cpp) KickPlayer closes every socket of the session. The overflowing request is not
+    //     answered at all, and the session is gone with it.
+    // That failure mode is why the rate is set where a deliberate flood reaches it and a real client cannot, rather
+    // than at the tightest value clicking around survives - see the entry itself for the figure and its reasoning.
+    // But note what the second bound does NOT do, because an earlier revision of this file got it backwards: it is
+    // a SUSTAINED per-second rate, not a per-session budget. The counter resets every calendar second, so a caller
+    // that stays at the limit is never kicked and keeps drawing limit x 6551 responses per second. The rate caps
+    // the amplification, it does not end it; the residual is carried as an open point at the entry itself.
+    for (WorldPackets::Query::BNetAccountAndCommunityID const& member : queryPlayerNamesForCommunity.Members)
+        SendPlayerNameByCommunityId(member);
 }
 
 void WorldSession::HandleQueryTimeOpcode(WorldPackets::Query::QueryTime& /*queryTime*/)

@@ -391,4 +391,58 @@ void QueuedMessagesEnd::Read()
 {
     _worldPacket >> Timestamp;
 }
+
+WorldPacket const* SuspendComms::Write()
+{
+    _worldPacket << uint32(SerialNumber);
+
+    return &_worldPacket;
+}
+
+void SuspendCommsAck::Read()
+{
+    _worldPacket >> SerialNumber;
+    _worldPacket >> ClientTick;
+}
+
+// Field order and widths are the client writer 0x5D6020 read backwards, not a guess: the entry is
+// { uint32 @0, uint32 @4, uint8 @8, uint64 @9, uint32 @17 } = 21 bytes with no alignment padding, which is what
+// makes the 8 + 21*Count length rule hold on all 4522 packets of the corpus (defined above
+// WorldPackets::Auth::SuspendComms in AuthenticationPackets.h).
+ByteBuffer& operator>>(ByteBuffer& data, LatencyReportEntry& entry)
+{
+    data >> entry.Server;
+    data >> entry.Unknown4;
+    data >> entry.Unknown8;
+    data >> entry.TimestampMS;
+    data >> entry.Frame;
+
+    return data;
+}
+
+void LatencyReport::Read()
+{
+    _worldPacket >> Kind;
+    // Array<> caps the count while reading; a plain resize() on a wire uint32 would allocate first and ask later.
+    _worldPacket >> Size<uint32>(Entries);
+    for (LatencyReportEntry& entry : Entries)
+        _worldPacket >> entry;
+}
+
+void LogStreamingError::Read()
+{
+    // bits<MessageLengthBits> length, then the raw bytes. The bit width IS the length bound - 9 bits cannot
+    // express more than MaxMessageLength - so reading through the same constant is what keeps the declared
+    // maximum and the enforced maximum from drifting apart.
+    // The message is a vsnprintf result from the client's CASC layer and can legitimately carry byte sequences
+    // that are not valid UTF-8 (embedded [Key %02X..%02X] blobs), so it is read unvalidated: the alternative is
+    // a ByteBufferInvalidValueException, i.e. the client losing its session over a diagnostic message.
+    // That shifts a duty onto the consumer and does not remove it. The string is not "never interpreted" - the
+    // log pipeline it ends up in interprets it as UTF-8, and on Windows AppenderConsole silently drops the whole
+    // line when the conversion fails. WorldSession::HandleLogStreamingError therefore runs it through
+    // MakeStreamingErrorMessageLoggable before logging; the reasoning is written out there. Any future consumer
+    // of this field has to do the same, because this Read deliberately does not.
+    _worldPacket >> SizedString::BitsSize<LogStreamingError::MessageLengthBits>(Message);
+    _worldPacket >> SizedString::Data<Strings::DontValidateUtf8>(Message);
+}
 }

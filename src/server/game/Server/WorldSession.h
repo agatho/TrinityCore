@@ -154,7 +154,10 @@ namespace WorldPackets
     namespace Auth
     {
         enum class ConnectToSerial : uint32;
+        class LatencyReport;
+        class LogStreamingError;
         class QueuedMessagesEnd;
+        class SuspendCommsAck;
     }
 
     namespace Azerite
@@ -651,7 +654,10 @@ namespace WorldPackets
     {
         class QueryCreature;
         struct NameCacheLookupResult;
+        struct BNetAccountAndCommunityID;
         class QueryPlayerNames;
+        class QueryPlayerNameByCommunityId;
+        class QueryPlayerNamesForCommunity;
         class QueryPageText;
         class QueryNPCText;
         class QueryGameObject;
@@ -1073,6 +1079,7 @@ class TC_GAME_API WorldSession
         void SendFeatureSystemStatusGlueScreen();
 
         void BuildNameQueryData(ObjectGuid guid, WorldPackets::Query::NameCacheLookupResult& lookupData);
+        void SendPlayerNameByCommunityId(WorldPackets::Query::BNetAccountAndCommunityID const& member);
 
         void SendTrainerList(Creature* npc, uint32 trainerId);
         void SendListInventory(ObjectGuid guid);
@@ -1221,8 +1228,66 @@ class TC_GAME_API WorldSession
         void RegisterTimeSync(uint32 counter);
         uint32 AdjustClientMovementTime(uint32 time) const;
 
+        // SMSG_SUSPEND_COMMS - the sending half of the suspend/ack pair, and the ONLY place a suspend serial is
+        // minted. Read the preconditions on WorldPackets::Auth::SuspendComms before adding a call: the client
+        // answers a suspend sent to the wrong socket with CMSG_LOG_DISCONNECT(3) and closes it, and the socket
+        // this is sent on must be the one being REPLACED, not the replacement.
+        // This function has no caller today, and the reason is a property of this server, not of the packet:
+        // retail sends it when a connection slot's replacement authenticates while the slot's old socket is still
+        // open, and this server never gets into that state - it closes the old instance socket before any new
+        // CONNECT_TO and never redirects the realm socket at all. The derivation and the lines that guarantee it
+        // are above WorldPackets::Auth::SuspendComms; WorldSession::AddInstanceConnection carries the guard that
+        // reports a violation. Decision O1 of unit conn_44_4C, which also records D2/D3 as NOT met for this
+        // opcode rather than closing them.
+        // The entry point exists anyway so that the serial CMSG_SUSPEND_COMMS_ACK echoes has exactly one issuer;
+        // HandleSuspendCommsAck rejects every serial that did not come from here.
+        void SendSuspendComms(ConnectionType connection);
+
         static constexpr uint32 SPECIAL_INIT_ACTIVE_MOVER_TIME_SYNC_COUNTER = 0xFFFFFFFF;
         static constexpr uint32 SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER      = 0xFFFFFFFE;
+        // The counter CMSG_SUSPEND_COMMS_ACK is booked under. The serial from the wire is NEVER used as a key:
+        // SendSuspendComms registers this constant, and HandleSuspendCommsAck only looks a sample up under it
+        // after the wire serial matched the one we issued. Keying on the wire value instead would let the client
+        // pick the key - it could consume the slot of a pending SMSG_TIME_SYNC_REQUEST, so the real
+        // CMSG_TIME_SYNC_RESPONSE for that counter is silently dropped, and push a clock delta of its own choice
+        // into _timeSyncClockDeltaQueue, which feeds AdjustClientMovementTime and the transport server time.
+        static constexpr uint32 SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER     = 0xFFFFFFFD;
+
+        // Client-reported frame rate statistics, fed from CMSG_LATENCY_REPORT. Session lifetime only - see
+        // decision O3 of unit conn_44_4C: deliberately aggregated and NOT persisted, because the client sends
+        // ~20000 measurement points per play session and there is no retention story for a table that size.
+        struct ClientPerformanceStats
+        {
+            uint32 Reports = 0;             ///< number of accepted (deduplicated) reports
+            uint32 Samples = 0;             ///< number of entries folded into the averages
+            uint32 MinFrameRate = 0;
+            uint32 MaxFrameRate = 0;
+            uint32 LastFrameRate = 0;       ///< frame rate of the NEWEST entry that carried one, picked by
+                                            ///< timestamp and not by write order - see the selection in
+                                            ///< HandleLatencyReport. Assigned in iteration order this would name
+                                            ///< the entry the sender appends itself, which is provably the oldest
+                                            ///< of its block, so "last" would mean close to the opposite of what
+                                            ///< it says.
+            uint64 FrameRateSum = 0;
+            uint64 LastTimestampMS = 0;     ///< client unix time in ms of the newest entry seen - EVERY entry,
+                                            ///< including the ones with Frame == 0 that Samples excludes. It is
+                                            ///< the client's own clock, so a value far from server time on an
+                                            ///< otherwise healthy session is the one thing this aggregate shows
+                                            ///< that the frame rates do not, and it would not be that if it hung
+                                            ///< on the frame rates' own selection. Read out in ~WorldSession.
+            uint64 LastFrameRateTimestampMS = 0;    ///< selection key for LastFrameRate: the timestamp of the
+                                            ///< entry that supplied it. Deliberately NOT LastTimestampMS, even
+                                            ///< though the two carry the same value over the whole corpus: that
+                                            ///< one advances on every entry, including the Frame == 0 ones the
+                                            ///< frame rate branch never sees, so sharing it would freeze the
+                                            ///< frame rate for the rest of the session the first time an entry
+                                            ///< without a frame rate happened to be the newest of its packet.
+                                            ///< Unlike the members above this one is not reported; it only
+                                            ///< carries the choice from one report to the next.
+            uint32 AverageFrameRate() const { return Samples ? uint32(FrameRateSum / Samples) : 0u; }
+        };
+
+        ClientPerformanceStats const& GetClientPerformanceStats() const { return _clientPerformanceStats; }
 
         // Packets cooldown
         time_t GetCalendarEventCreationCooldown() const { return _calendarEventCreationCooldown; }
@@ -1368,6 +1433,8 @@ class TC_GAME_API WorldSession
         void HandleGameobjectReportUse(WorldPackets::GameObject::GameObjReportUse& packet);
 
         void HandleQueryPlayerNames(WorldPackets::Query::QueryPlayerNames& queryPlayerNames);
+        void HandleQueryPlayerNameByCommunityId(WorldPackets::Query::QueryPlayerNameByCommunityId& queryPlayerNameByCommunityId);
+        void HandleQueryPlayerNamesForCommunity(WorldPackets::Query::QueryPlayerNamesForCommunity& queryPlayerNamesForCommunity);
         void HandleQueryTimeOpcode(WorldPackets::Query::QueryTime& queryTime);
         void HandleCreatureQuery(WorldPackets::Query::QueryCreature& packet);
         void HandleGameObjectQueryOpcode(WorldPackets::Query::QueryGameObject& packet);
@@ -1711,6 +1778,9 @@ class TC_GAME_API WorldSession
         void HandleTimeSync(uint32 counter, int64 clientTime, TimePoint responseReceiveTime);
         void HandleTimeSyncResponse(WorldPackets::Misc::TimeSyncResponse const& timeSyncResponse);
         void HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd const& queuedMessagesEnd);
+        void HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck const& suspendCommsAck);
+        void HandleLatencyReport(WorldPackets::Auth::LatencyReport const& latencyReport);
+        void HandleLogStreamingError(WorldPackets::Auth::LogStreamingError const& logStreamingError);
         void HandleWhoIsOpcode(WorldPackets::Who::WhoIsRequest& packet);
         void HandleResetInstancesOpcode(WorldPackets::Instance::ResetInstances& packet);
         void HandleInstanceLockResponse(WorldPackets::Instance::InstanceLockResponse& packet);
@@ -2025,6 +2095,14 @@ class TC_GAME_API WorldSession
         LocaleConstant m_sessionDbLocaleIndex;
         Minutes _timezoneOffset;
         std::atomic<uint32> m_latency;
+        ClientPerformanceStats _clientPerformanceStats;
+        // CMSG_LOG_STREAMING_ERROR is a free-form string from an authenticated but otherwise untrusted client and
+        // the client keeps a 64 slot error ring it can drain in a burst, so the log output is capped per session.
+        // Reports past the cap keep being counted and ~WorldSession prints the total once the cap was reached;
+        // otherwise the operator would see exactly ten lines with no hint that hundreds followed. The cap lives
+        // here rather than in the handler so the handler and its reader cannot drift apart.
+        static constexpr uint32 MaxStreamingErrorsLoggedPerSession = 10;
+        uint32 _streamingErrorsReported = 0;
         AccountData _accountData[NUM_ACCOUNT_DATA_TYPES];
         std::array<uint32, MAX_ACCOUNT_TUTORIAL_VALUES> _tutorials;
         uint8 _tutorialsChanged;
@@ -2047,6 +2125,21 @@ class TC_GAME_API WorldSession
 
         std::map<uint32, int64> _pendingTimeSyncRequests; // key: counter. value: server time when packet with that counter was sent.
         uint32 _timeSyncNextCounter;
+        // Serial of the SMSG_SUSPEND_COMMS this session is waiting to have acknowledged. Empty means no suspend
+        // is outstanding and every CMSG_SUSPEND_COMMS_ACK is unsolicited.
+        Optional<uint32> _suspendCommsPendingSerial;
+        uint32 _suspendCommsNextSerial = 1;
+        // Rejected CMSG_SUSPEND_COMMS_ACK packets, and the cap on how many of them get a log line. Same reasoning
+        // as MaxStreamingErrorsLoggedPerSession above: an authenticated client can send this opcode as often as
+        // the shared DosProtection default lets it (it has no entry of its own in GetMaxPacketCounterAllowed), and
+        // because SendSuspendComms has no caller today, EVERY ack that arrives is a rejection. Without a
+        // cap that is a client controlled tap on the log. Rejections past the cap keep being counted and
+        // ~WorldSession prints the total, so the counter has a reader for every value it can take: 1..cap from
+        // the per rejection lines in HandleSuspendCommsAck, everything above it from the destructor - and both
+        // sit on network.telemetry, the one network logger worldserver.conf.dist actually enables, so "reader"
+        // means visible as shipped and not merely present in the source.
+        static constexpr uint32 MaxSuspendCommsAcksLoggedPerSession = 10;
+        uint32 _suspendCommsAcksRejected = 0;
         uint32 _timeSyncTimer;
 
         // Packets cooldown

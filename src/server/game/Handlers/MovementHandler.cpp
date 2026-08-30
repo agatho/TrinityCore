@@ -998,6 +998,80 @@ void WorldSession::HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd
     HandleTimeSync(SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER, queuedMessagesEnd.Timestamp, queuedMessagesEnd.GetRawPacket()->GetReceivedTime());
 }
 
+// CMSG_SUSPEND_COMMS_ACK (12.1 0x440000). Same shape and the same field order as CMSG_TIME_SYNC_RESPONSE and
+// CMSG_QUEUED_MESSAGES_END, so once it is established that the ack is one of ours it yields one more clock delta
+// sample, exactly like those two.
+//
+// What ClientTick is and is not: the client fills it from its own millisecond clock (0x354ED50) while building the
+// ack in consumer 0x18C1610. Over the corpus (defined above WorldPackets::Auth::SuspendComms in
+// AuthenticationPackets.h) all 78 pairs across 24 recordings agree: (ClientTick - PKT tick) is constant to within
+// a millisecond inside a single recording and different in every recording, in the range of a process uptime
+// (1.7 h to 7.7 d). It is therefore an opaque client tick, exactly like the value CMSG_TIME_SYNC_RESPONSE
+// carries - usable for a clock delta, not comparable against server time. HandleTimeSync treats it that way.
+//
+// The other half of that equal treatment is the receive time, and it does not come for free:
+// WorldPacket::GetReceivedTime is only filled for the opcodes named in WorldSocket::ReadDataHandler, so
+// CMSG_SUSPEND_COMMS_ACK is listed there next to the other three HandleTimeSync opcodes. Without that entry the
+// roundTripDuration below would be computed against a default constructed TimePoint.
+//
+// SerialNumber is echoed from the SMSG_SUSPEND_COMMS we sent (78/78 pairs over the corpus) and is therefore
+// entirely client controlled on the way back. It must NOT reach HandleTimeSync as a counter: that counter is the
+// key of _pendingTimeSyncRequests, whose entries are all server minted (SendTimeSync, the resume counter, the
+// init-active-mover counter), and a client that echoed the sequence index of a live SMSG_TIME_SYNC_REQUEST would
+// consume that entry - dropping the genuine CMSG_TIME_SYNC_RESPONSE - and inject a clock delta of its own
+// choosing into the six slot _timeSyncClockDeltaQueue, which feeds AdjustClientMovementTime and TransportServerTime.
+//
+// So the serial is checked, not used: it only has to match the one suspend this session actually has outstanding,
+// and the sample is then booked under the reserved counter that WorldSession::SendSuspendComms registered.
+// Today nothing is ever outstanding, so every ack that arrives is unsolicited and dropped here. The reason is not
+// that the packet is unused in retail - it is that this server never reaches the situation retail sends it in. The
+// full derivation, including the client-side condition and the lines of this tree that keep it from being met, is
+// written out above WorldPackets::Auth::SuspendComms; the guard in WorldSession::AddInstanceConnection is what
+// reports it if the situation ever does arise.
+void WorldSession::HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck const& suspendCommsAck)
+{
+    // The two rejections are one branch on purpose. Both are triggerable by the client at will, and today the
+    // first one is the only path this handler ever takes, so their log output is what an authenticated client can
+    // drive - capped per session (WorldSession.h, MaxSuspendCommsAcksLoggedPerSession) exactly as the
+    // attacker-controlled text of CMSG_LOG_STREAMING_ERROR is. Deciding it once here is also what keeps the two
+    // reasons from drifting apart, and the counter is incremented before the cap is consulted so that
+    // ~WorldSession can report what the cap swallowed.
+    //
+    // network.telemetry, not network, and for the same reason the sister case uses it: worldserver.conf.dist
+    // declares no Logger.network, so Logger.root=5 (Error, line 4164) applies to it and TC_LOG_DEBUG("network")
+    // is discarded as shipped. Logger.network.telemetry=3 (Info, line 4171) with Appender.Console=1,3,0 (line
+    // 4141) is written without the operator doing anything. That matters here more than anywhere: because
+    // SendSuspendComms has no caller, _suspendCommsPendingSerial is always empty and EVERY arriving ack lands in
+    // this branch, so on the debug logger a session with up to ten unsolicited acks produced no output at all -
+    // and the reader in ~WorldSession only speaks above the cap. Values 1..10 of the counter had no reader.
+    // HandleLogStreamingError (AuthHandler.cpp) carries its lines on TC_LOG_INFO("network.telemetry") after the
+    // same finding; the cap is what bounds the volume, on either logger.
+    if (!_suspendCommsPendingSerial || *_suspendCommsPendingSerial != suspendCommsAck.SerialNumber)
+    {
+        ++_suspendCommsAcksRejected;
+        if (_suspendCommsAcksRejected <= MaxSuspendCommsAcksLoggedPerSession)
+        {
+            if (!_suspendCommsPendingSerial)
+                TC_LOG_INFO("network.telemetry", "WorldSession::HandleSuspendCommsAck: {} sent an unsolicited acknowledgement (serial {}), ignored ({}/{})",
+                    GetPlayerInfo(), suspendCommsAck.SerialNumber, _suspendCommsAcksRejected, MaxSuspendCommsAcksLoggedPerSession);
+            else
+                TC_LOG_INFO("network.telemetry", "WorldSession::HandleSuspendCommsAck: {} acknowledged serial {} while serial {} is outstanding, ignored ({}/{})",
+                    GetPlayerInfo(), suspendCommsAck.SerialNumber, *_suspendCommsPendingSerial, _suspendCommsAcksRejected, MaxSuspendCommsAcksLoggedPerSession);
+
+            if (_suspendCommsAcksRejected == MaxSuspendCommsAcksLoggedPerSession)
+                TC_LOG_INFO("network.telemetry", "WorldSession::HandleSuspendCommsAck: {} reached the per session cap on rejected acknowledgements, further ones are counted but not logged - ~WorldSession prints the total",
+                    GetPlayerInfo());
+        }
+
+        return;
+    }
+
+    // One suspend, one ack. Clearing first makes a replay of the same serial fall into the branch above.
+    _suspendCommsPendingSerial.reset();
+
+    HandleTimeSync(SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER, suspendCommsAck.ClientTick, suspendCommsAck.GetRawPacket()->GetReceivedTime());
+}
+
 void WorldSession::HandleMoveInitActiveMoverComplete(WorldPackets::Movement::MoveInitActiveMoverComplete const& moveInitActiveMoverComplete)
 {
     HandleTimeSync(SPECIAL_INIT_ACTIVE_MOVER_TIME_SYNC_COUNTER, moveInitActiveMoverComplete.Ticks, moveInitActiveMoverComplete.GetRawPacket()->GetReceivedTime());

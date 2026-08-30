@@ -643,7 +643,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_KEEP_ALIVE,                                         STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_EarlyProccess);
     DEFINE_HANDLER(CMSG_KEYBOUND_OVERRIDE,                                  STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleKeyboundOverride);
     DEFINE_HANDLER(CMSG_KIOSK_ENABLE_GOD_MODE,                              STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_LATENCY_REPORT,                                     STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_LATENCY_REPORT,                                     STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleLatencyReport);
     DEFINE_HANDLER(CMSG_LEARN_PVP_TALENTS,                                  STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleLearnPvpTalentsOpcode);
     DEFINE_HANDLER(CMSG_LEARN_TALENTS,                                      STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleLearnTalentsOpcode);
     DEFINE_HANDLER(CMSG_LEAVE_GROUP,                                        STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLeaveGroupOpcode);
@@ -683,7 +683,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_LOGOUT_LOBBY_MATCHMAKER,                            STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_LOGOUT_REQUEST,                                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLogoutRequestOpcode);
     DEFINE_HANDLER(CMSG_LOG_DISCONNECT,                                     STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_EarlyProccess);
-    DEFINE_HANDLER(CMSG_LOG_STREAMING_ERROR,                                STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_LOG_STREAMING_ERROR,                                STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleLogStreamingError);
     DEFINE_HANDLER(CMSG_LOOT_ITEM,                                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleAutostoreLootItemOpcode);
     DEFINE_HANDLER(CMSG_LOOT_MONEY,                                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLootMoneyOpcode);
     DEFINE_HANDLER(CMSG_LOOT_RELEASE,                                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLootReleaseOpcode);
@@ -898,8 +898,32 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_QUERY_PETITION,                                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleQueryPetition);
     DEFINE_HANDLER(CMSG_QUERY_PET_NAME,                                     STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleQueryPetName);
     DEFINE_HANDLER(CMSG_QUERY_PLAYER_NAMES,                                 STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleQueryPlayerNames);
-    DEFINE_HANDLER(CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY,                   STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID,                  STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    // STATUS_AUTHED on the next two, against STATUS_LOGGEDIN on the line above, which serves the same
+    // PlayerGuidLookupData. The reason is a property of this dispatcher, not an assumption about the client:
+    // STATUS_AUTHED is the only status in WorldSession::Update that never silently drops and never defers a packet
+    // once the session is past the login queue - it tests neither _player nor IsInWorld (WorldSession.cpp, case
+    // STATUS_AUTHED). STATUS_LOGGEDIN drops when _player exists but is not in world, which is every map transfer;
+    // STATUS_LOGGEDIN_OR_RECENTLY_LOGGOUT drops when there is no player at all. The word "silently" is exact for
+    // STATUS_LOGGEDIN and only for it: its _player && !IsInWorld() case falls through to the bare break at the end
+    // of the case, its !_player && m_playerRecentlyLogout case has no branch at all, and the one arm that does say
+    // something - the requeue - says it with TC_LOG_DEBUG on "network", which Logger.root=5 in worldserver.conf.dist
+    // does not write. STATUS_LOGGEDIN_OR_RECENTLY_LOGGOUT, STATUS_TRANSFER and the m_inQueue window of STATUS_AUTHED
+    // itself all drop through WorldSession::LogUnexpectedOpcode instead, which is TC_LOG_ERROR on "network.opcode"
+    // and therefore visible. So the instrument to avoid here is specifically STATUS_LOGGEDIN, and for these two
+    // opcodes a dropped answer costs more than the packet: one unanswered member leaves C_Club.AreMembersReady
+    // false and the whole member list spinning, with no timer, no retry and no error dialog to recover (see
+    // HandleQueryPlayerNamesForCommunity). The one window STATUS_AUTHED does have, m_inQueue, is before
+    // CMSG_ENUM_CHARACTERS and so before any community UI can exist - and unlike STATUS_LOGGEDIN's, it logs.
+    // UNVERIFIED: whether RETAIL admits these two before world entry. That is not measurable from here - both
+    // opcodes occur 0 times over the capture corpus (defined above WorldPackets::Auth::SuspendComms; counted as
+    // 0x44000D/0x44000E in the 12.1 window and as 0x41000D/0x41000E in the 12.0.7 one, never as one number over
+    // both, since in 12.1 numbering those are CMSG_MOVE_STOP_PITCH and CMSG_MOVE_SET_RUN_MODE), so there is no
+    // observation of the situation either way, and the client's senders are reached through vtables.
+    // The choice above is therefore argued from this server's dispatch semantics, which is a fact, and not from
+    // retail's admission rule, which is unknown. It is an EXPANSION over the sibling line: if the reservation is
+    // ever resolved against retail and retail turns out to gate them on world entry, this is the line to change.
+    DEFINE_HANDLER(CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY,                   STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleQueryPlayerNamesForCommunity);
+    DEFINE_HANDLER(CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID,                  STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleQueryPlayerNameByCommunityId);
     DEFINE_HANDLER(CMSG_QUERY_QUEST_COMPLETION_NPCS,                        STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleQueryQuestCompletionNPCs);
     DEFINE_HANDLER(CMSG_QUERY_QUEST_INFO,                                   STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleQuestQueryOpcode);
     DEFINE_HANDLER(CMSG_QUERY_QUEST_ITEM_USABILITY,                         STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
@@ -1101,7 +1125,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_SUMMON_RESPONSE,                                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleSummonResponseOpcode);
     DEFINE_HANDLER(CMSG_SUPPORT_TICKET_SUBMIT_COMPLAINT,                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleSupportTicketSubmitComplaint);
     DEFINE_HANDLER(CMSG_SURRENDER_ARENA,                                    STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_SUSPEND_COMMS_ACK,                                  STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_SUSPEND_COMMS_ACK,                                  STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleSuspendCommsAck);
     DEFINE_HANDLER(CMSG_SUSPEND_TOKEN_RESPONSE,                             STATUS_TRANSFER,  PROCESS_THREADUNSAFE, &WorldSession::HandleSuspendTokenResponse);
     DEFINE_HANDLER(CMSG_SWAP_GUILD_BANK_ITEM_WITH_GUILD_BANK_ITEM,          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleSwapGuildBankItemWithGuildBankItem);
     DEFINE_HANDLER(CMSG_SWAP_INV_ITEM,                                      STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleSwapInvItemOpcode);
@@ -1523,7 +1547,7 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_DISPLAY_WORLD_TEXT,                                           STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_DISPLAY_WORLD_TEXT_ON_TARGET,                                 STATUS_UNHANDLED,   CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_DONT_AUTO_PUSH_SPELLS_TO_ACTION_BAR,                          STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_DROP_NEW_CONNECTION,                                          STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_DROP_NEW_CONNECTION,                                          STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_DUEL_ARRANGED,                                                STATUS_UNHANDLED,   CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_DUEL_COMPLETE,                                                STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_DUEL_COUNTDOWN,                                               STATUS_NEVER,       CONNECTION_TYPE_REALM);
@@ -2087,7 +2111,12 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_MOVE_UPDATE_TELEPORT,                                         STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_MOVE_UPDATE_TURN_RATE,                                        STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_MOVE_UPDATE_WALK_SPEED,                                       STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_MULTIPLE_PACKETS,                                             STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    // Framing opcode: produced by WorldSocket::WriteBundleToBuffer, which is a member of WorldSocket and
+    // therefore active on the realm AND on the instance socket. It never travels through
+    // WorldSession::SendPacket, so this connection index is never read - the enum has no "either socket" value
+    // (CONNECTION_TYPE_DEFAULT is -1 and would index m_Socket out of bounds) and REALM is the table default for
+    // everything that is not instance only. The entry is documentary, not a routing decision.
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_MULTIPLE_PACKETS,                                             STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_MULTI_FLOOR_LEAVE_FLOOR,                                      STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_MULTI_FLOOR_NEW_FLOOR,                                        STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_MYTHIC_PLUS_ALL_MAP_STATS,                                    STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
@@ -2255,7 +2284,7 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_QUERY_PETITION_RESPONSE,                                      STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_QUERY_PET_NAME_RESPONSE,                                      STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_QUERY_PLAYER_NAMES_RESPONSE,                                  STATUS_NEVER,       CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE,                   STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE,                   STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_QUERY_QUEST_INFO_RESPONSE,                                    STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_QUERY_REALM_GUILD_MASTER_INFO_RESPONSE,                       STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_QUERY_SELECTED_WOW_LABS_AREA_RESPONSE,                        STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
@@ -2325,7 +2354,9 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_REQUEST_CEMETERY_LIST_RESPONSE,                               STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_REQUEST_PVP_REWARDS_RESPONSE,                                 STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_REQUEST_SCHEDULED_PVP_INFO_RESPONSE,                          STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESET_COMPRESSION_CONTEXT,                                    STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    // Same as SMSG_MULTIPLE_PACKETS: produced by WorldSocket::WritePacketToBuffer on whichever socket the
+    // deflate call failed on, never routed through WorldSession::SendPacket. The entry is documentary.
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESET_COMPRESSION_CONTEXT,                                    STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESET_FAILED_NOTIFY,                                          STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESET_LAST_LOADED_CONFIG_CVARS,                               STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESET_QUEST_POI,                                              STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
@@ -2339,6 +2370,17 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESTRICTED_ACCOUNT_WARNING,                                   STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESUME_CAST,                                                  STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESUME_CAST_BAR,                                              STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    // Left at the tree's CONNECTION_TYPE_REALM although the only send site passes CONNECTION_TYPE_INSTANCE
+    // (WorldSession::HandleContinuePlayerLogin), which reads like an inconsistency and is decision O9 of unit
+    // conn_44_4C. Resolved this way round because "instance" would be the wrong FACT: SMSG_RESUME_COMMS goes to
+    // whichever socket is taking over a connection slot, and retail uses it on both - over the capture corpus
+    // (defined above WorldPackets::Auth::SuspendComms) it appears on the realm slot as well as the instance slot,
+    // as does its SMSG_SUSPEND_COMMS counterpart, which stands further down this table on
+    // CONNECTION_TYPE_REALM for the same reason. The entry cannot be a routing decision either way: both
+    // constructors REQUIRE an explicit ConnectionType, so WorldSession::SendPacket always overrides this value
+    // (the override is unconditional for anything but CONNECTION_TYPE_DEFAULT, and neither opcode is in
+    // IsInstanceOnlyOpcode, so nothing here can reject a realm-side send later). Changing it would therefore have
+    // recorded a claim about the packet that the corpus contradicts, in exchange for no behaviour at all.
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESUME_COMMS,                                                 STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESUME_TOKEN,                                                 STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_RESURRECT_REQUEST,                                            STATUS_NEVER,       CONNECTION_TYPE_REALM);
@@ -2476,7 +2518,7 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_SUMMON_REQUEST,                                               STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_SUPERCEDED_SPELLS,                                            STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_SURVEY_DELIVERED,                                             STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_SUSPEND_COMMS,                                                STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_SUSPEND_COMMS,                                                STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_SUSPEND_TOKEN,                                                STATUS_NEVER,       CONNECTION_TYPE_INSTANCE);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_SYNC_WOW_ENTITLEMENTS,                                        STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_TALENTS_INVOLUNTARILY_RESET,                                  STATUS_UNHANDLED,   CONNECTION_TYPE_REALM);

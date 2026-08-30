@@ -179,6 +179,34 @@ WorldSession::~WorldSession()
 
     delete _RBACData;
 
+    ///- the reader of the CMSG_LATENCY_REPORT aggregate. One line per session that reported anything, which is
+    /// the only granularity the data supports: the client sends its reports as cumulative triples several times
+    /// a minute, so anything per report would be noise and anything persisted would be ~20000 rows per session.
+    /// Logger network.telemetry is enabled at Info in worldserver.conf.dist, so this is visible as shipped.
+    if (ClientPerformanceStats const& stats = GetClientPerformanceStats(); stats.Reports)
+        TC_LOG_INFO("network.telemetry", "Client performance for {}: fps min {} max {} avg {} last {} over {} samples in {} reports, newest client timestamp {} ms",
+            GetPlayerInfo(), stats.MinFrameRate, stats.MaxFrameRate, stats.AverageFrameRate(), stats.LastFrameRate,
+            stats.Samples, stats.Reports, stats.LastTimestampMS);
+
+    ///- the reader of the CMSG_LOG_STREAMING_ERROR counter. Below the cap every report already has its own line,
+    /// so this says nothing new; above it the reports are counted and not logged, and this is the only place that
+    /// count comes out again.
+    if (_streamingErrorsReported > MaxStreamingErrorsLoggedPerSession)
+        TC_LOG_INFO("network.telemetry", "Client streaming errors for {}: {} reported, {} logged, {} suppressed by the per session cap",
+            GetPlayerInfo(), _streamingErrorsReported, MaxStreamingErrorsLoggedPerSession,
+            _streamingErrorsReported - MaxStreamingErrorsLoggedPerSession);
+
+    ///- the reader of the CMSG_SUSPEND_COMMS_ACK rejection counter, for the values above the cap. It reports on
+    /// network.telemetry because worldserver.conf.dist enables that logger at Info and declares no Logger.network;
+    /// the per rejection lines in HandleSuspendCommsAck were TC_LOG_DEBUG("network") and therefore invisible as
+    /// shipped, which left the counter values 1..10 without any reader at all - they now sit on the same
+    /// network.telemetry/Info as this line, so the whole range of the counter is visible out of the box. Only
+    /// printed once the cap was exceeded, because up to that point every rejection has its own line.
+    if (_suspendCommsAcksRejected > MaxSuspendCommsAcksLoggedPerSession)
+        TC_LOG_INFO("network.telemetry", "Rejected suspend comms acknowledgements for {}: {} received, {} logged, {} suppressed by the per session cap",
+            GetPlayerInfo(), _suspendCommsAcksRejected, MaxSuspendCommsAcksLoggedPerSession,
+            _suspendCommsAcksRejected - MaxSuspendCommsAcksLoggedPerSession);
+
     ///- empty incoming packet queue
     WorldPacket* packet = nullptr;
     while (_recvQueue.next(packet))
@@ -318,6 +346,24 @@ void WorldSession::AddInstanceConnection(WorldSession* session, std::weak_ptr<Wo
         socket->DelayedCloseSocket();
         return;
     }
+
+    // The state in which retail sends SMSG_SUSPEND_COMMS, and the state in which this server's unpaired
+    // SMSG_RESUME_COMMS below is fatal instead of merely unusual. Both come from the same client rule: the RESUME
+    // consumer (0x18C1720) requires the suspend flag of the base slot to be set and answers a clear flag with
+    // CMSG_LOG_DISCONNECT(3) plus a closed socket. The flag is set while the slot is empty and CLEARED by the
+    // RESUME that filled it, so a replacement arriving over a still-open base socket needs a SMSG_SUSPEND_COMMS
+    // on the OLD socket first - see WorldPackets::Auth::SuspendComms for the derivation and the measurement.
+    // This server is not supposed to reach that state: the only route to a CONNECT_TO for the instance slot is
+    // HandlePlayerLoginOpcode, which requires !PlayerLoading() and no player, and both exits from a logged-in
+    // state close this socket first (LogoutPlayer below and ~WorldSession). Hence a log line and not a send: a
+    // send here would be untested code in the login path, and if it ever fires it fires because one of those
+    // invariants broke, which is worth knowing on its own. Whoever sees this line is looking at the caller this
+    // opcode is missing - the fix is SendSuspendComms(CONNECTION_TYPE_INSTANCE) on the old socket, then waiting
+    // for the ack before HandleContinuePlayerLogin, which is decision O1's path B and its own unit of work.
+    if (WorldSocket const* previous = session->m_Socket[CONNECTION_TYPE_INSTANCE].get(); previous && previous->IsOpen())
+        TC_LOG_ERROR("network", "WorldSession::AddInstanceConnection: {} is taking over an instance connection while the previous one is still open. "
+            "The client will refuse the SMSG_RESUME_COMMS that follows with CMSG_LOG_DISCONNECT(3) because no SMSG_SUSPEND_COMMS quiesced the old socket.",
+            session->GetPlayerInfo());
 
     socket->SetWorldSession(session);
     session->m_Socket[CONNECTION_TYPE_INSTANCE] = std::move(socket);
@@ -1692,6 +1738,59 @@ uint32 WorldSession::DosProtection::GetMaxPacketCounterAllowed(uint32 opcode) co
             break;
         }
 
+        // One request produces up to QueryPlayerNamesForCommunity::MaxMembers = 6551 separate responses, because
+        // 12.1 has no batched response opcode for it - by far the highest upload amplification of any client
+        // opcode. There is deliberately no per request resolve budget, because refusing the surplus leaves those
+        // players permanently nameless in the client for a saving of the PlayerGuidLookupData block each, 51..63
+        // bytes, median 57 (the accounting is on QueryPlayerNamesForCommunity in QueryPackets.h).
+        //
+        // THIS ENTRY IS A SUSTAINED PER-SECOND RATE, NOT A ONE-SHOT PER-SESSION ALLOWANCE. EvaluateOpcode above
+        // clears amountCounter whenever packetCounter.lastReceiveTime != time - that is, once per calendar second -
+        // and its guard admits the limit's own value, only tripping on the next packet after it. An account that
+        // paces itself AT the limit is therefore NEVER kicked and draws maxPacketCounterAllowed x 6551 responses
+        // every second, indefinitely. Nothing else caps it: MAX_PROCESSED_PACKETS_IN_SAME_WORLDSESSION_UPDATE = 100
+        // is above any workable value here. Revisions of this comment up to round 11 claimed the kick made the
+        // damage "a one-shot burst per SESSION, not a sustained per-second rate", and concluded from that premise
+        // that lowering the value buys close to nothing. Both are wrong: the kick bounds only a flooder that
+        // OVERSHOOTS, and for one that does not the exposure scales linearly with the value.
+        //
+        // WHAT THE VALUE COSTS, per account, sustained, at 10: 65 510 responses/s and ~6.1 MB/s of upload, each
+        // response with a sCharacterCache lookup, an ObjectAccessor::FindConnectedPlayer, an allocation and an
+        // EncryptSend on the world thread. That is NOT harmless and is not presented as such. It is the lowest
+        // figure this tool can buy without reaching into the legitimate side, and it is half of what the previous
+        // value of 20 allowed (131 020 responses/s, ~12.2 MB/s).
+        //
+        // WHY IT IS NOT SET LOWER STILL. Past the limit EvaluateOpcode returns false, WorldSession::Update drops
+        // the packet unread, and at the default PacketSpoof.Policy = POLICY_KICK (World.cpp) the session is closed.
+        // The overflow answers nothing and disconnects. A value tuned to the tightest burst a real client is
+        // believed to make therefore does not cost bandwidth when it is wrong, it costs the honest player their
+        // session - and it fails silently for the operator, because the only trace is the AntiDOS warning that a
+        // real flood produces too. So the number belongs above any plausible legitimate burst, not at it. That is
+        // the whole trade-off, and it is a real one in both directions: every unit of headroom is another
+        // 6551 responses/s of sustained exposure, every unit removed is closer to kicking a real client.
+        //
+        // Why 10 clears the legitimate side: the request goes out only on a MISS in the client's
+        // CommunityNameCache, and one C_Club.FocusMembers covers a WHOLE roster, so a club asked about once
+        // produces no further request. Both call sites focus exactly ONE club per user action and neither loops
+        // over the club list - ChannelFrameMixin:SetFocusedClub (ChannelFrame.lua:92-111) even early-returns when
+        // that club is already focused, and CommunitiesMemberListMixin:OnClubSelected
+        // (CommunitiesMemberList.lua:498-511) runs on a selection change. A legitimate client therefore emits a few
+        // requests around opening a frame with a cold cache, never a stream; reaching 10 honestly means changing
+        // club selection ten times inside one calendar second, and the counter resets per calendar second, so a
+        // burst straddling a boundary gets 20.
+        // UNVERIFIED: the figure 10 is not profiled and no legitimate burst was measured. The client exposes no
+        // club-count limit to anchor it either - ClubLimits carries only maximumNumberOfStreams
+        // (ClubDocumentation.lua:1800-1806) - so it is a judgement above the largest burst the cache-miss argument
+        // admits. If a real client is ever seen to be kicked here, the fault is this number and nothing else in
+        // the opcode.
+        // UNVERIFIED: the sustained draw above is bounded by this value alone. Bounding it properly needs a batched
+        // response opcode or a deferred response budget, and the 12.1 opcode set offers neither; see QueryPackets.h.
+        case CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY:     // not profiled                very high upload bandwidth usage
+        {
+            maxPacketCounterAllowed = 10;
+            break;
+        }
+
         case CMSG_SPELL_CLICK:                          // not profiled
         case CMSG_MOVE_DISMISS_VEHICLE:                 // not profiled
         {
@@ -1810,6 +1909,9 @@ void WorldSession::ResetTimeSync()
 {
     _timeSyncNextCounter = 0;
     _pendingTimeSyncRequests.clear();
+    // An outstanding suspend cannot survive the reset either - its entry has just been erased above, so keeping
+    // the serial would only mean accepting an ack that can no longer produce a sample.
+    _suspendCommsPendingSerial.reset();
 }
 
 void WorldSession::SendTimeSync()
@@ -1828,4 +1930,21 @@ void WorldSession::SendTimeSync()
 void WorldSession::RegisterTimeSync(uint32 counter)
 {
     _pendingTimeSyncRequests[counter] = getMSTime();
+}
+
+// Sending half of SMSG_SUSPEND_COMMS / CMSG_SUSPEND_COMMS_ACK. Everything the client requires of the moment this
+// may be sent is written out on WorldPackets::Auth::SuspendComms; this function only owns the serial.
+//
+// The serial is server minted and monotonic per session. That is the whole point of routing the send through
+// here: the ack echoes the serial, and HandleSuspendCommsAck accepts the ack only while exactly this value is
+// outstanding. Booking the sample under SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER keeps it out of the sequence
+// index space of SMSG_TIME_SYNC_REQUEST, which the client also gets to echo.
+void WorldSession::SendSuspendComms(ConnectionType connection)
+{
+    WorldPackets::Auth::SuspendComms suspendComms(connection);
+    suspendComms.SerialNumber = _suspendCommsNextSerial++;
+    SendPacket(suspendComms.Write());
+
+    _suspendCommsPendingSerial = suspendComms.SerialNumber;
+    RegisterTimeSync(SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER);
 }

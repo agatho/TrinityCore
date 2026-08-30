@@ -163,6 +163,168 @@ namespace WorldPackets
             std::vector<NameCacheLookupResult> Players;
         };
 
+        // UNVERIFIED: none of the three community messages below is proven at the wire. All three - the two 0x44
+        // requests and their 0x64 response - occur 0 times over the capture corpus (the corpus is defined above
+        // WorldPackets::Auth::SuspendComms in AuthenticationPackets.h). Counted per build window, as 0x44000D,
+        // 0x44000E, 0x64000B in the 12.1 window and as 0x41000D, 0x41000E, 0x5F000B in the 12.0.7 one - note that
+        // the family shift is NOT uniform, 0x44 -> 0x41 is -3 but 0x64 -> 0x5F is -5. A single number over a
+        // corpus that mixes windows counts a DIFFERENT opcode in half of it (0x41000D and 0x41000E are
+        // CMSG_MOVE_STOP_PITCH and CMSG_MOVE_SET_RUN_MODE in 12.1 numbering), which is why the count is not
+        // quoted that way here. Per DEFINITION_OF_DONE_pro_opcode.md section 2 the absence is a statement
+        // about our recording sessions, not about these opcodes - a character in a community was never recorded.
+        // So there are no reference bytes and no round trip was possible for any of them. The field order is the
+        // client writers and the response reader read backwards (arbiter rank 1); the only check it got is the
+        // length rule noted at each class.
+        //
+        // The client's community/club member windows identify a member by the pair
+        // JamBNetAccountAndCommunityID { ObjectGuid bnetAccount; uint64 communityID; }. The type name is proven,
+        // not derived: the destructor of the batch message class (0x5D4830) frees its element buffer tagged
+        // WowGetRawTypeName<struct JamBNetAccountAndCommunityID>, and the reflection descriptor (tag 0x388E928)
+        // declares bnetAccount@0x00 and communityID@0x10.
+        // communityID is this server's Clubs::CreateClubMemberId value - the same number PlayerGuidLookupData
+        // carries as GuildClubMemberID.
+        // Field order taken from the 12.1.0.69382 client writers 0x5D5C40 (single) and 0x5D5EC0 (batch).
+        struct BNetAccountAndCommunityID
+        {
+            ObjectGuid BnetAccountGUID;
+            uint64 CommunityID = 0;
+        };
+
+        // CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID (12.1 0x44000D) - { PackedGuid, uint64 }, client object 56 bytes.
+        // No reference bytes (see the note above the member struct); checked against the length rule alone:
+        // 10..26 byte body, packed guid 2..18 plus the uint64.
+        class QueryPlayerNameByCommunityId final : public ClientPacket
+        {
+        public:
+            explicit QueryPlayerNameByCommunityId(WorldPacket&& packet) : ClientPacket(CMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID, std::move(packet)) { }
+
+            void Read() override;
+
+            BNetAccountAndCommunityID Member;
+        };
+
+        // CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY (12.1 0x44000E) - { uint64 ClubID, uint32 Count, Count x member },
+        // client object 64 bytes, in-memory element stride 24.
+        // No reference bytes (see the note above the member struct); checked against the length rule alone:
+        // 12 + Count * (10..26) byte body.
+        class QueryPlayerNamesForCommunity final : public ClientPacket
+        {
+        public:
+            // Reading capacity, and deliberately not a policy number. The socket rejects every packet whose size
+            // is not below 0x10000 (WorldSocket.h, PacketHeader::IsValidSize) and one element cannot be shorter
+            // than 10 bytes on the wire (2 byte packed guid mask for an empty guid, plus the uint64 community id),
+            // so (0xFFFF - 4 opcode - 8 ClubID - 4 Count) / 10 is the largest member count a packet this server
+            // accepts can carry at all.
+            // Bounding the read by the wire instead of by a chosen number is what keeps a large request from being
+            // DROPPED: at the previous value of 200, Array::resize called OnInvalidArraySize and threw
+            // PacketArrayMaxCapacityException, which WorldSession::Update swallows as "Skipped packet" - the
+            // handler never ran, not one response went out, and C_Club.AreMembersReady stayed false forever. That
+            // is precisely the unbounded spinner this opcode was implemented to prevent. It is also the ONLY bound
+            // on the size of one request - see the cost accounting below for why a second, smaller budget inside
+            // the handler was tried and removed again.
+            static constexpr std::size_t MaxMembers = (0xFFFF - 4 - 8 - 4) / 10;
+
+            // WHAT ONE REQUEST COSTS. Written out because no constant bounds it and this is the open point of the
+            // opcode - whoever wants to change it needs the numbers, not a reassurance.
+            // There is no batched response opcode, so every answered member costs one SMSG of its own: one
+            // allocation, one EncryptSend, and a response body of 62..90 bytes, hence 82..110 bytes on the wire
+            // with the 16 byte PacketHeader and the 4 byte opcode - ~93 at the measured typical values. That body
+            // is the 11..27 byte negative shell (uint8 Result, packed guid 2..18, uint64 CommunityID; ~16 with a
+            // 7 byte bnet-account guid) PLUS the PlayerGuidLookupData block. The block is MEASURED, not estimated:
+            // 51..63 bytes, median 57, over the 195 blocks carried by the 132 fully parsed
+            // SMSG_QUERY_PLAYER_NAMES_RESPONSE (0x640027) packets in the 12.1 window of the corpus - the same
+            // struct this response reuses verbatim. Every figure below uses that one accounting. An earlier
+            // revision quoted "~35 byte body, hence ~55 on the wire" here and "~41 against ~55" further down,
+            // which cannot both hold: the first left out Result and Member, the second left out the block.
+            // And EVERY requested member is answered, because a member left unanswered stays pending in the
+            // client's community name cache and keeps the whole member list spinning - the failure this opcode
+            // exists to avoid; see HandleQueryPlayerNamesForCommunity.
+            // The size of ONE request is therefore bounded by the wire alone: one 65 519 byte request yields
+            // MaxMembers = 6551 responses and ~0.61 MB.
+            // The NUMBER of requests is bounded by the AntiDOS entry (WorldSession.cpp, GetMaxPacketCounterAllowed),
+            // and that entry is a SUSTAINED PER-SECOND RATE, not a one-shot allowance: EvaluateOpcode clears
+            // amountCounter once per calendar second and admits the limit's own value, so an account that paces
+            // itself AT the limit is never kicked. At the current value of 10 the sustained draw per account is
+            // 10 x 6551 = 65 510 responses/s and ~6.1 MB/s, for as long as it likes. An earlier revision of this
+            // comment read the entry as a ONE-SHOT ~131 000 responses and ~7.2 MB per session; that was wrong on
+            // both counts - the kick bounds only a flooder that OVERSHOOTS, and the per-response size was
+            // understated.
+            // UNVERIFIED: that residual sustained amplification is bounded by nothing but the AntiDOS value.
+            // Removing it needs a way to answer many members in one frame, or a deferred response budget; neither
+            // exists in the 12.1 opcode set. The value and its trade-off are written up at the case label in
+            // WorldSession.cpp.
+            // The opcode is reachable from STATUS_AUTHED.
+            //
+            // A SECOND BUDGET INSIDE THE HANDLER WAS TRIED AND REMOVED - it resolved the first 1000 members and
+            // refused the rest with ResultCode::PermanentFailure. It bought almost nothing and paid for it with a
+            // permanent defect:
+            //   * saved per surplus member: one sCharacterCache lookup, one ObjectAccessor::FindConnectedPlayer,
+            //     and the PlayerGuidLookupData block, i.e. 51..63 bytes, median 57 (a bare negative is ~36 bytes
+            //     on the wire against ~93). The packet, the allocation and the EncryptSend - the whole of the
+            //     amplification above - are paid either way, because the surplus still has to be answered at all.
+            //   * cost per surplus member: consumer 0x3498F0 answers any non-zero Result by clearing the pending
+            //     bit, and Result 1 additionally marks the entry negative and drops its callbacks, so that player
+            //     stays nameless in the UI for the rest of the session.
+            //   * and the situation is reachable on THIS server: TrinityCore enforces no guild member limit at all
+            //     (no MAX_GUILD_MEMBERS in Guild.h/.cpp, no switch in worldserver.conf.dist) and a cold name cache
+            //     makes the client ask for the entire roster at once, so a 1500 member guild produces a perfectly
+            //     legitimate 1500 member request. The budget would have left 500 of them nameless until relog, in
+            //     exchange for ~28.5 kB (500 x 57) and 500 hash lookups.
+            //   * the budget's figure was not even established for this case. 1000 is the client's own club
+            //     capacity - C_Club.GetClubCapacity is a constant-returning Lua binding, 0x7FF781C46B33
+            //     `mov [rbp+arg_10], 3E8h` written once into the slot that 0x7FF781C46F2A pushes back to Lua - and
+            //     C_Club.FocusMembers focuses a WHOLE roster (ClubDocumentation.lua: its only argument is clubId),
+            //     so 1000 is the size of request the client is built to make. Whether that capacity also governs
+            //     guild backed clubs is not measurable here. An unproven limit against a demonstrated defect.
+            // Doing better than the amplification above needs a way to answer many members in one frame, which the
+            // 12.1 opcode set does not offer. Whoever revisits it should weigh it here, against these numbers.
+
+            explicit QueryPlayerNamesForCommunity(WorldPacket&& packet) : ClientPacket(CMSG_QUERY_PLAYER_NAMES_FOR_COMMUNITY, std::move(packet)) { }
+
+            void Read() override;
+
+            uint64 ClubID = 0;
+            Array<BNetAccountAndCommunityID, MaxMembers> Members;
+        };
+
+        // SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE (12.1 0x64000B). No reference bytes either (see the note
+        // above the member struct); checked against the length rule alone: 11..27 bytes for a negative answer
+        // (uint8 Result, packed guid 2..18, uint64), plus the PlayerGuidLookupData block on success.
+        // Note the family: the response to two 0x44 opcodes lives in 0x64. Read out of the 12.1 dispatcher case at
+        // 0x67C6ED, which reads
+        //   Read<uint8> Result, ReadPackedGuid, Read<uint64>
+        // and only then, and only when Result == 0, calls the PlayerGuidLookupData sub reader 0x6E17E0 - the very
+        // same function that parses the per player payload of SMSG_QUERY_PLAYER_NAMES_RESPONSE, so the existing
+        // writer is reused verbatim.
+        // Framing detail worth stating because it looks like a contradiction: the sibling NameCacheLookupResult
+        // gates its payload with OptionalInit bits, this one gates with a full uint8. Both are correct - the client
+        // really does read a whole byte here, and the sub reader's own bit section therefore starts byte aligned.
+        class QueryPlayerNameByCommunityIdResponse final : public ServerPacket
+        {
+        public:
+            // Result is a THREE WAY discriminator, not a bool. Measured in consumer 0x3498F0
+            // (DBCacheCommunityName.cpp):
+            //   0 = success, the PlayerGuidLookupData payload is read and cached
+            //   2 = temporarily unavailable: only the pending bit is cleared, the entry and its callbacks survive
+            //       and the client may ask again
+            //   anything else = permanently unresolvable: the entry is marked negative, all waiting callbacks fire
+            //       with the error flag and are dropped. That player then stays nameless in the UI for good.
+            enum ResultCode : uint8
+            {
+                Success             = 0,
+                PermanentFailure    = 1,
+                TemporaryFailure    = 2
+            };
+
+            explicit QueryPlayerNameByCommunityIdResponse() : ServerPacket(SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE, 60) { }
+
+            WorldPacket const* Write() override;
+
+            uint8 Result = Success;   ///< one of ResultCode
+            BNetAccountAndCommunityID Member;   ///< echoed back, this is the key the client matches on
+            Optional<PlayerGuidLookupData> Data;
+        };
+
         class QueryPageText final : public ClientPacket
         {
         public:
@@ -508,6 +670,8 @@ namespace WorldPackets
         };
 
         ByteBuffer& operator<<(ByteBuffer& data, PlayerGuidLookupData const& lookupData);
+        ByteBuffer& operator>>(ByteBuffer& data, BNetAccountAndCommunityID& member);
+        ByteBuffer& operator<<(ByteBuffer& data, BNetAccountAndCommunityID const& member);
     }
 }
 

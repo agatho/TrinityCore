@@ -56,6 +56,10 @@ public:
 
     std::size_t GetApplicationSendBufferSize() const { return _socketApplicationSendBufferSize; }
 
+    // Whether outgoing packets may be combined into SMSG_MULTIPLE_PACKETS frames. Off by default - see
+    // WorldSocket::WriteBundleToBuffer for why.
+    bool IsPacketBundlingEnabled() const { return _packetBundling; }
+
 protected:
     WorldSocketMgr();
 
@@ -63,6 +67,7 @@ private:
     int32 _socketSystemSendBufferSize;
     int32 _socketApplicationSendBufferSize;
     bool _tcpNoDelay;
+    bool _packetBundling;
 };
 
 #define sWorldSocketMgr WorldSocketMgr::Instance()

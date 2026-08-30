@@ -3160,6 +3160,23 @@ Network.OutUBuff = 65536
 Network.TcpNodelay = 1
 
 #
+#    Network.PacketBundling
+#        Description: Combine consecutive small outgoing packets into one SMSG_MULTIPLE_PACKETS frame.
+#                     Saves 14 bytes per bundled packet (16 byte frame header plus 4 byte opcode become
+#                     2 byte length plus 4 byte opcode) against the 20 bytes the frame itself costs once,
+#                     so n bundled packets save n * 14 - 20 bytes and bundling pays from two packets on.
+#                     Also one encryption call per frame instead of one per packet. Only packets that
+#                     would not be compressed and that travel after the connection entered encrypted
+#                     mode are ever bundled.
+#                     Off by default: the framing matches the 12.1 client byte for byte on paper, but a
+#                     wrong length would make the client silently discard the rest of a frame instead of
+#                     reporting an error, so this is not enabled without having been run against a client.
+#         Default:    0 - (Disabled)
+#                     1 - (Enabled)
+
+Network.PacketBundling = 0
+
+#
 ###################################################################################################
 
 ###################################################################################################
@@ -4146,6 +4163,12 @@ Appender.DBErrors=2,2,0,DBErrors.log
 
 Logger.root=5,Console Server
 Logger.server=3,Console Server
+#    network.telemetry carries what the client reports about itself and nothing else: the per session frame rate
+#    summary built from CMSG_LATENCY_REPORT and the content streaming errors from CMSG_LOG_STREAMING_ERROR.
+#    Both handlers have no protocol effect - the logged line IS the effect - so this logger is enabled at Info
+#    instead of falling through to Logger.root, which discards everything below Error. Set it to 1 (Trace) to
+#    also get one line per latency report; that is several lines a minute per player.
+Logger.network.telemetry=3,Console Server
 Logger.commands.gm=3,Console GM
 Logger.scripts.hotswap=3,Console Server
 Logger.sql.sql=5,Console DBErrors

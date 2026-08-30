@@ -38,6 +38,8 @@
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#include "WorldSocketMgr.h"
+#include <algorithm>
 #include <zlib.h>
 
 #pragma pack(push, 1)
@@ -52,6 +54,8 @@ struct CompressedWorldPacket
 #pragma pack(pop)
 
 uint32 const WorldSocket::MinSizeForCompression = 0x400;
+uint32 const WorldSocket::MaxBundlePayloadSize = 0x2000;
+uint32 const WorldSocket::MaxBundleEntries = 64;
 
 std::array<uint8, 32> const WorldSocket::AuthCheckSeed = { 0xDE, 0x3A, 0x2A, 0x8E, 0x6B, 0x89, 0x52, 0x66, 0x88, 0x9D, 0x7E, 0x7A, 0x77, 0x1D, 0x5D, 0x1F,
     0x4E, 0xD9, 0x0C, 0x23, 0x9B, 0xCD, 0x0E, 0xDC, 0xD2, 0xE8, 0x04, 0x3A, 0x68, 0x64, 0xC7, 0xB0 };
@@ -64,7 +68,8 @@ std::array<uint8, 32> const WorldSocket::EncryptionKeySeed = { 0x71, 0xC9, 0xED,
 
 WorldSocket::WorldSocket(Trinity::Net::IoContextTcpSocket&& socket) : BaseSocket(std::move(socket)),
     _type(CONNECTION_TYPE_REALM), _key(0), _serverChallenge(), _sessionKey(), _encryptKey(), _overSpeedPings(0),
-    _worldSession(nullptr), _authed(false), _canRequestHotfixes(true), _headerBuffer(sizeof(IncomingPacketHeader)), _sendBufferSize(4096), _compressionStream(nullptr)
+    _worldSession(nullptr), _authed(false), _canRequestHotfixes(true), _clientSuspended(false),
+    _headerBuffer(sizeof(IncomingPacketHeader)), _sendBufferSize(4096), _compressionStream(nullptr)
 {
 }
 
@@ -204,12 +209,20 @@ bool WorldSocket::Update()
     EncryptablePacket* queued;
     if (_bufferQueue.Dequeue(queued))
     {
+        bool const bundling = sWorldSocketMgr.IsPacketBundlingEnabled();
+
         // Allocate buffer only when it's needed but not on every Update() call.
         MessageBuffer buffer(_sendBufferSize);
-        do
+
+        // Run of consecutive bundleable packets waiting to become one SMSG_MULTIPLE_PACKETS frame. Ownership of
+        // everything in here belongs to this vector until FlushBundle deletes it.
+        std::vector<EncryptablePacket*> bundle;
+        std::size_t bundlePayloadSize = 0;
+
+        auto writeSinglePacket = [&](EncryptablePacket* packet)
         {
-            uint32 packetSize = queued->size() + 4 /*opcode*/;
-            if (packetSize > MinSizeForCompression && queued->NeedsEncryption())
+            uint32 packetSize = packet->size() + 4 /*opcode*/;
+            if (packetSize > MinSizeForCompression && packet->NeedsEncryption())
                 packetSize = deflateBound(_compressionStream, packetSize) + sizeof(CompressedWorldPacket);
 
             // Flush current buffer if too small for next packet
@@ -220,16 +233,81 @@ bool WorldSocket::Update()
             }
 
             if (buffer.GetRemainingSpace() >= packetSize + sizeof(PacketHeader))
-                WritePacketToBuffer(*queued, buffer);
+                WritePacketToBuffer(*packet, buffer);
             else    // single packet larger than _sendBufferSize
             {
                 MessageBuffer packetBuffer(packetSize + sizeof(PacketHeader));
-                WritePacketToBuffer(*queued, packetBuffer);
+                WritePacketToBuffer(*packet, packetBuffer);
                 QueuePacket(std::move(packetBuffer));
             }
+        };
+
+        auto flushBundle = [&]()
+        {
+            if (bundle.empty())
+                return;
+
+            // A bundle of one saves nothing and costs 6 bytes: the outer 16 byte PacketHeader plus 4 byte outer
+            // opcode merely replace the ones the packet would have carried itself, while the 2 byte inner length
+            // and the repeated 4 byte inner opcode are pure addition (n * 14 - 20 is -6 at n == 1). It would also
+            // add a layer the client has to recurse through for nothing. Send it plainly.
+            if (bundle.size() == 1)
+                writeSinglePacket(bundle.front());
+            else
+            {
+                std::size_t frameSize = sizeof(uint32) /*outer opcode*/ + bundlePayloadSize + sizeof(PacketHeader);
+                if (buffer.GetRemainingSpace() < frameSize)
+                {
+                    QueuePacket(std::move(buffer));
+                    buffer.Resize(std::max<std::size_t>(_sendBufferSize, frameSize));
+                }
+
+                WriteBundleToBuffer(bundle, buffer);
+            }
+
+            for (EncryptablePacket* bundled : bundle)
+                delete bundled;
+
+            bundle.clear();
+            bundlePayloadSize = 0;
+        };
+
+        do
+        {
+            // CanBundle has to be asked BEFORE this packet is allowed to move the suspend flag, and the order is
+            // load bearing in both directions. SMSG_RESUME_COMMS is asked while the socket still counts as
+            // suspended, so it is refused and travels as a single packet - which is what makes it provably reach
+            // the client ahead of everything its own arrival unblocks. SMSG_SUSPEND_COMMS is asked while the
+            // socket still counts as open, which is correct for the same reason: at the moment it is written the
+            // client has not yet closed the gate.
+            bool const bundleThisPacket = bundling && CanBundle(*queued);
+            switch (queued->GetOpcode())
+            {
+                case SMSG_SUSPEND_COMMS: _clientSuspended = true;  break;
+                case SMSG_RESUME_COMMS:  _clientSuspended = false; break;
+                default:                                           break;
+            }
+
+            if (bundleThisPacket)
+            {
+                std::size_t entrySize = sizeof(uint16) /*inner length*/ + sizeof(uint32) /*inner opcode*/ + queued->size();
+                if (bundle.size() >= MaxBundleEntries || bundlePayloadSize + entrySize > MaxBundlePayloadSize)
+                    flushBundle();
+
+                bundle.push_back(queued);
+                bundlePayloadSize += entrySize;
+                continue;   // ownership is with `bundle` now
+            }
+
+            // Anything that cannot be bundled terminates the run, so the order packets were queued in is the order
+            // they reach the client in.
+            flushBundle();
+            writeSinglePacket(queued);
 
             delete queued;
         } while (_bufferQueue.Dequeue(queued));
+
+        flushBundle();
 
         if (buffer.GetActiveSize() > 0)
             QueuePacket(std::move(buffer));
@@ -405,7 +483,12 @@ WorldSocket::ReadDataHandlerResult WorldSocket::ReadDataHandler()
             return HandleEnterEncryptedModeAck();
         default:
         {
-            if (opcode == CMSG_TIME_SYNC_RESPONSE || opcode == CMSG_MOVE_INIT_ACTIVE_MOVER_COMPLETE || opcode == CMSG_QUEUED_MESSAGES_END)
+            // This is the only place the receive time is ever stamped, so the list must name every opcode whose
+            // handler reads WorldPacket::GetReceivedTime - today exactly the callers of WorldSession::HandleTimeSync.
+            // An opcode missing here arrives with a default constructed TimePoint, and getMSTimeDiff then wraps
+            // instead of failing visibly, poisoning _timeSyncClockDeltaQueue with a delta off by ~2.1e9 ms.
+            if (opcode == CMSG_TIME_SYNC_RESPONSE || opcode == CMSG_MOVE_INIT_ACTIVE_MOVER_COMPLETE || opcode == CMSG_QUEUED_MESSAGES_END
+                || opcode == CMSG_SUSPEND_COMMS_ACK)
                 packet.SetReceiveTime(std::chrono::steady_clock::now());
             else if (opcode == CMSG_HOTFIX_REQUEST)
                 _canRequestHotfixes = false;
@@ -488,19 +571,40 @@ void WorldSocket::WritePacketToBuffer(EncryptablePacket const& packet, MessageBu
         cmp.UncompressedSize = packetSize + sizeof(opcode);
         cmp.UncompressedAdler = adler32(adler32(0x9827D8F1, (Bytef*)&opcode, sizeof(opcode)), packet.data(), packetSize);
 
-        // Reserve space for compression info - uncompressed size and checksums
+        // Space for compression info - uncompressed size and checksums. Deliberately NOT committed with
+        // WriteCompleted before the deflate result is known: on failure this frame turns into
+        // SMSG_RESET_COMPRESSION_CONTEXT instead, and a committed write pointer could not be taken back.
         uint8* compressionInfo = buffer.GetWritePointer();
-        buffer.WriteCompleted(sizeof(CompressedWorldPacket));
+        uint8* compressedData = compressionInfo + sizeof(CompressedWorldPacket);
 
-        uint32 compressedSize = CompressPacket(buffer.GetWritePointer(), packet);
+        uint32 compressedSize = CompressPacket(compressedData, packet);
+        if (!compressedSize)
+        {
+            // deflate failed. Every compressed packet after a failed one belongs to a deflate stream the client can
+            // no longer follow, and the client answers that with CMSG_LOG_DISCONNECT(17) plus a closed connection.
+            // Recover instead: reset our deflate stream and tell the client to inflateReset its own, by turning
+            // this frame into SMSG_RESET_COMPRESSION_CONTEXT (0x4C000A, empty payload - consumer 0x18C0D90 reads
+            // nothing and tail-jumps into zlib inflateReset). Both sides then start a fresh deflate stream.
+            // The packet whose compression failed is lost; before this recovery existed the whole connection was.
+            TC_LOG_ERROR("network", "WorldSocket::WritePacketToBuffer: compression of opcode {} for {} failed, dropping the packet and resetting the compression context of both sides",
+                opcode, GetRemoteIpAddress());
 
-        cmp.CompressedAdler = adler32(0x9827D8F1, buffer.GetWritePointer(), compressedSize);
+            ResetCompressionContext();
 
-        memcpy(compressionInfo, &cmp, sizeof(CompressedWorldPacket));
-        buffer.WriteCompleted(compressedSize);
-        packetSize = compressedSize + sizeof(CompressedWorldPacket);
+            opcode = SMSG_RESET_COMPRESSION_CONTEXT;
+            packetSize = 0;
+        }
+        else
+        {
+            cmp.CompressedAdler = adler32(0x9827D8F1, compressedData, compressedSize);
 
-        opcode = SMSG_COMPRESSED_PACKET;
+            memcpy(compressionInfo, &cmp, sizeof(CompressedWorldPacket));
+            buffer.WriteCompleted(sizeof(CompressedWorldPacket));
+            buffer.WriteCompleted(compressedSize);
+            packetSize = compressedSize + sizeof(CompressedWorldPacket);
+
+            opcode = SMSG_COMPRESSED_PACKET;
+        }
     }
     else if (!packet.empty())
         buffer.Write(packet.data(), packet.size());
@@ -543,6 +647,133 @@ uint32 WorldSocket::CompressPacket(uint8* buffer, WorldPacket const& packet)
     }
 
     return bufferSize - _compressionStream->avail_out;
+}
+
+// SMSG_MULTIPLE_PACKETS (12.1 0x4C000D). Framing read off the client's own framing function 0x18C0490:
+//
+//     uint32 opcode                    // 0x4C000D
+//     while at least 4 bytes remain:
+//         uint16 innerBodyLen          // length of the inner packet WITHOUT its 4 opcode bytes
+//         bytes[innerBodyLen + 4]      // the complete inner packet, its opcode included
+//
+// The client recurses into 0x18C0490 for every inner packet, which means every inner packet passes all three
+// receive gates again. Three consequences that this code depends on:
+//   * the pre-encryption whitelist binds the INNER packets, not the outer frame. Said precisely, because the
+//     obvious reading of it is wrong: bitmask 0x2A1F at RVA 0x389DC00 (quoted in full above
+//     WorldPackets::Auth::SuspendComms) admits 0x4C0000..0x4C0004, 0x4C0009, 0x4C000B, 0x4C000D and
+//     SMSG_AUTH_FAILED - and bit 13 of that mask IS 0x4C000D, so the frame itself would pass the gate before
+//     encryption. What would not pass is its contents: every inner packet re-enters the same gate through the
+//     recursion, and none of the handful of opcodes this server sends before SMSG_ENTER_ENCRYPTED_MODE that are
+//     not themselves on the list would survive it. A bundle may therefore only be built once encryption is
+//     active - CanBundle enforces that through NeedsEncryption().
+//   * the suspend gate binds the INNER packets as well, and for the same reason. A suspended socket admits family
+//     0x4C only (check 0x18C0F60), and every instance socket is suspended from the moment the client creates it -
+//     so the enter-world traffic on a fresh instance socket must not be bundled until SMSG_RESUME_COMMS has gone
+//     out. CanBundle enforces that through _clientSuspended; the full argument is there.
+//   * a wrong innerBodyLen is NOT reported: the loop breaks silently when innerBodyLen + 4 exceeds the remaining
+//     bytes and the rest of the frame is discarded without an error. Getting the length arithmetic wrong here
+//     loses packets quietly, which is why bundling is a config switch and off by default.
+//
+// The gain per bundled packet is the 16 bytes of PacketHeader (uint32 Size + uint8 Tag[12], see WorldSocket.h)
+// traded for a 2 byte length; the 4 byte opcode is paid either way. That is 14 bytes per packet, against the
+// 20 bytes the outer frame costs once, so n bundled packets save n * 14 - 20 bytes - negative for a single
+// packet and positive from two on. On top of that comes one WorldPacketCrypt::EncryptSend call for the whole
+// frame instead of one per packet. There is no packet class for
+// this opcode, exactly as with SMSG_COMPRESSED_PACKET: it is an opcode substitution in the write path and never
+// travels through WorldSession::SendPacket. The client has no message class for it either - the factory stub scan
+// over .text finds stubs for 0x4C0000..0x4C000C and none for 0x4C000D.
+//
+// UNVERIFIED: no client has ever parsed a bundle produced by this code, and there are no reference bytes for the
+// opcode to round-trip against. The framing above is read out of the client's own framing function, so the field
+// order is measured - what is not measured is that a frame this function writes is accepted. Step 2 of the
+// verification loop is impossible here (the sniffer hooks behind the transport decapsulation, so a bundle never
+// appears in any recording) and step 3 has not run. That is what keeps bundling off by default
+// (WorldSocketMgr::StartNetwork) and what the debug line at the end of this function is for.
+void WorldSocket::WriteBundleToBuffer(std::span<EncryptablePacket* const> packets, MessageBuffer& buffer)
+{
+    uint32 opcode = SMSG_MULTIPLE_PACKETS;
+
+    // Reserve space for buffer
+    uint8* headerPos = buffer.GetWritePointer();
+    buffer.WriteCompleted(sizeof(PacketHeader));
+    uint8* dataPos = buffer.GetWritePointer();
+    buffer.WriteCompleted(sizeof(opcode));
+    memcpy(dataPos, &opcode, sizeof(opcode));
+
+    uint32 packetSize = sizeof(opcode);
+
+    for (EncryptablePacket* packet : packets)
+    {
+        uint16 innerBodyLen = uint16(packet->size());
+        uint32 innerOpcode = packet->GetOpcode();
+
+        buffer.Write(&innerBodyLen, sizeof(innerBodyLen));
+        buffer.Write(&innerOpcode, sizeof(innerOpcode));
+        if (!packet->empty())
+            buffer.Write(packet->data(), packet->size());
+
+        packetSize += sizeof(innerBodyLen) + sizeof(innerOpcode) + innerBodyLen;
+    }
+
+    PacketHeader header;
+    header.Size = packetSize;
+    _authCrypt.EncryptSend(dataPos, header.Size, header.Tag);
+
+    memcpy(headerPos, &header, sizeof(PacketHeader));
+
+    // Deliberately logged: step 3 of the verification loop ("send it, watch the client react") has no Lua event
+    // to watch for a framing opcode, and a wrong inner length is discarded by the client WITHOUT an error. This
+    // line plus the CMSG_LOG_DISCONNECT reason that WorldSocket::HandleLogDisconnect already logs are the whole
+    // test: bundles emitted and no reason 3 means the client accepted them. Turning that check into one login and
+    // two greps is the point.
+    TC_LOG_DEBUG("network", "WorldSocket::WriteBundleToBuffer: bundled {} packets into one SMSG_MULTIPLE_PACKETS frame of {} bytes for {}",
+        packets.size(), packetSize, GetRemoteIpAddress());
+}
+
+bool WorldSocket::CanBundle(EncryptablePacket const& packet) const
+{
+    // Gate 1 of the client's receive path (see WriteBundleToBuffer). What this rejects is a bundle whose INNER
+    // packets would be refused - the 0x4C000D frame itself is on the pre-encryption whitelist, its contents are
+    // not. NeedsEncryption() is true from the moment the crypt is initialized, which is exactly the window in
+    // which arbitrary opcodes are accepted.
+    if (!packet.NeedsEncryption())
+        return false;
+
+    // Gate 2 of the same receive path, and the reason this function may not look at the packet alone. A suspended
+    // socket accepts family 0x4C and NOTHING else - the check is 0x18C0F60, and any other opcode in that window
+    // closes the connection; the full argument sits above WorldPackets::Auth::SuspendComms. Because 0x18C0490
+    // recurses into itself for every inner packet, the inner opcodes face that gate too, so the 0x4C000D frame
+    // being family 0x4C says nothing whatever about its contents.
+    // This is not a theoretical window that only opens after an explicit SMSG_SUSPEND_COMMS - which this server
+    // never sends. Every instance socket starts out suspended (see the _clientSuspended assignment in
+    // HandleAuthContinuedSession), and the enter-world packets HandlePlayerLogin queues onto that socket are
+    // candidates for the very first bundle on it. Without this gate, whether the first frame survives would rest
+    // on nothing but the FIFO order happening to put SMSG_RESUME_COMMS in front - a promise neither made nor
+    // enforced anywhere. Getting it wrong is not a lost packet but a closed connection: that exact gate violation
+    // cost every character its world entry once (88bcee58de, reverted by 5778fe4266).
+    // Refused outright instead of admitting family 0x4C only: the sole 0x4C packets this server sends in that
+    // window are SMSG_RESUME_COMMS (0 bytes) and SMSG_SUSPEND_COMMS (4 bytes), so the most such a bundle could
+    // save is 8 bytes, against giving up the ordering guarantee described in Update().
+    if (_clientSuspended)
+        return false;
+
+    // Never bundle what WritePacketToBuffer would compress. Compression is stateful and per frame, so a compressed
+    // bundle would have to be one deflate unit; keeping the two apart also keeps the failure modes apart.
+    if (packet.size() > MinSizeForCompression)
+        return false;
+
+    // innerBodyLen is a uint16, so a body of 0x10000 bytes or more can never be bundled.
+    return packet.size() <= 0xFFFF;
+}
+
+// Puts the server side deflate stream back to its initial state. Only ever called together with sending
+// SMSG_RESET_COMPRESSION_CONTEXT, because a reset on one side alone desynchronizes the pair.
+void WorldSocket::ResetCompressionContext()
+{
+    int32 z_res = deflateReset(_compressionStream);
+    if (z_res != Z_OK)
+        TC_LOG_ERROR("network", "WorldSocket::ResetCompressionContext: deflateReset failed for {}. Error code: {} ({})",
+            GetRemoteIpAddress(), z_res, zError(z_res));
 }
 
 struct AccountInfo
@@ -893,6 +1124,13 @@ WorldSocket::ReadDataHandlerResult WorldSocket::HandleAuthContinuedSession(World
         return ReadDataHandlerResult::Error;
     }
 
+    // The client considers this socket suspended before it has received anything at all: the NetClient constructor
+    // (0x18BEA60, store at 0x18BEF6D `mov word ptr [rbx+0x218], 0x100`) marks slot 1 - the instance slot - as
+    // suspended, which is why this server's unpaired SMSG_RESUME_COMMS works. Mirror that starting state, or
+    // CanBundle would judge the first frame on a fresh instance socket against the wrong gate. See the argument
+    // above WorldPackets::Auth::SuspendComms.
+    _clientSuspended = true;
+
     uint32 accountId = uint32(key.Fields.AccountId);
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_INFO_CONTINUED_SESSION);
     stmt->setUInt32(0, accountId);
@@ -996,6 +1234,21 @@ WorldSocket::ReadDataHandlerResult WorldSocket::HandleConnectToFailed(WorldPacke
     {
         if (_worldSession->PlayerLoading())
         {
+            // Do NOT send SMSG_DROP_NEW_CONNECTION here, however tempting it looks. The client does not only send
+            // CMSG_CONNECT_TO_FAILED when its connect attempt failed - it also sends it when it REFUSED the order,
+            // because consumer 0x18C0FF0 bails out before touching the payload if the pending slot Con|2 is already
+            // taken:
+            //     018C1156  cmp qword [rsi + rax*8 + 0x1A0], 0   ; rax = Con|2
+            //     018C115F  jne  018C14B0                        ; -> CMSG_CONNECT_TO_FAILED
+            // A pending socket left over from an earlier attempt therefore makes every retry fail the same way, and
+            // SMSG_DROP_NEW_CONNECTION is the opcode that clears a pending slot - but it cannot clear THIS one.
+            // Consumer 0x18C1500 does not take the slot from the payload (there is none); it looks the RECEIVING
+            // socket up in NetClient+0x1A0[0..3] and clears idx|2 of the index it finds. Sent over the realm socket
+            // (index 0) it clears slot 2, the pending REALM slot, which this server never fills because it never
+            // issues a CONNECT_TO with Con = 0. The pending slot of the instance handover is Con|2 = 3 (WorldSession
+            // sets connectTo.Con = CONNECTION_TYPE_INSTANCE), and slot 3 is only reachable over the ESTABLISHED
+            // instance socket at index 1 - which by definition does not exist while the handover to it is failing.
+            // A send from here is a packet the client answers with nothing at all.
             switch (connectToFailed.Serial)
             {
                 case WorldPackets::Auth::ConnectToSerial::WorldAttempt1:
