@@ -16,6 +16,7 @@
  */
 
 #include "MiscPackets.h"
+#include "Errors.h"
 #include "PacketOperators.h"
 #include "PacketUtilities.h"
 #include "Player.h"
@@ -1489,5 +1490,109 @@ void AbandonNPEResponse::Read()
 void SubscriptionInterstitialResponse::Read()
 {
     _worldPacket >> Bits<3>(Response);
+WorldPacket const* GodMode::Write()
+{
+    _worldPacket << Bits<1>(Enable);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* PetGodMode::Write()
+{
+    _worldPacket << Bits<1>(Enable);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CooldownCheat::Write()
+{
+    _worldPacket << Bits<1>(Enable);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ConsoleWrite::Write()
+{
+    // The length field carries the NUL, and the client's ReadDynString (0x347D750) consumes
+    // nothing at all for a length of 0 or 1 - SizedCString writes length + 1 and omits both
+    // string and NUL when empty, which is exactly that case.
+    ASSERT(Text.length() <= MaxTextLength);
+
+    _worldPacket << SizedCString::BitsSize<14>(Text);
+    _worldPacket.FlushBits();
+    _worldPacket << uint32(ColorType);
+    _worldPacket << SizedCString::Data(Text);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* GameSpeedSet::Write()
+{
+    _worldPacket << float(Speed);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* RuneRegenDebug::Write()
+{
+    _worldPacket << uint32(RegenTimer);
+    _worldPacket << uint32(BaseCooldown);
+    _worldPacket << uint32(ActiveRuneMask);
+    // Both counts go out before either payload - see the class comment.
+    _worldPacket << Size<uint32>(Cooldowns);
+    _worldPacket << Size<uint32>(RuneTypes);
+
+    for (int32 cooldown : Cooldowns)
+        _worldPacket << int32(cooldown);
+
+    for (int32 runeType : RuneTypes)
+        _worldPacket << int32(runeType);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ForceAnim::Write()
+{
+    ASSERT(AnimName.length() <= MaxAnimNameLength);
+
+    _worldPacket << UnitGUID;
+    _worldPacket << SizedString::BitsSize<9>(AnimName);
+    _worldPacket.FlushBits();
+    _worldPacket << SizedString::Data(AnimName);    // no NUL on the wire
+
+    return &_worldPacket;
+}
+
+WorldPacket const* ForceAnimations::Write()
+{
+    _worldPacket << UnitGUID;
+    // Both counts go out before either payload - see the class comment.
+    _worldPacket << Size<uint32>(AnimIDs);
+    _worldPacket << Size<uint32>(Variations);
+    _worldPacket << uint32(LoopCount);
+    _worldPacket << float(Speed);
+    _worldPacket << uint8(BoneType);
+
+    for (int32 animId : AnimIDs)
+        _worldPacket << int32(animId);
+
+    for (uint8 variation : Variations)
+        _worldPacket << uint8(variation);
+
+    return &_worldPacket;
+}
+
+void KioskEnableGodMode::Read()
+{
+    _worldPacket >> Bits<1>(Enable);
+}
+
+void SetGameEventDebugViewState::Read()
+{
+    _worldPacket >> ViewIndex;
+    _worldPacket >> Bits<1>(State);
 }
 }

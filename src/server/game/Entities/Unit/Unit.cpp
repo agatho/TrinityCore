@@ -870,8 +870,22 @@ bool Unit::HasBreakableByDamageCrowdControlAura(Unit const* excludeCasterChannel
     }
 
     if (Player* player = victim->ToPlayer())
+    {
         if (player->GetCommandStatus(CHEAT_GOD))
             return 0;
+    }
+    // .cheat petgod - PlayerCommandStates live on the Player, so a companion can only be protected
+    // through its owner. SMSG_PET_GOD_MODE (0x450127) is the client side receipt of this state;
+    // its consumer 0x1E2EDF0 only prints a console line, the protection itself is ours.
+    // UNVERIFIED: reach of the protection. Chosen here is every unit whose
+    // GetCharmerOrOwnerPlayerOrPlayerItself is the cheating player - pet, guardian, minion and
+    // charm alike. The client says nothing about the intended set: its consumer writes a console
+    // line and never names which units it expects to become invulnerable.
+    else if (Player* owner = victim->GetCharmerOrOwnerPlayerOrPlayerItself())
+    {
+        if (owner->GetCommandStatus(CHEAT_PET_GOD))
+            return 0;
+    }
 
     if (damagetype != NODAMAGE)
     {

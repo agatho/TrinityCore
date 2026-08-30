@@ -27,6 +27,7 @@ EndScriptData */
 #include "ChatCommand.h"
 #include "DB2Stores.h"
 #include "Language.h"
+#include "MiscPackets.h"
 #include "Player.h"
 #include "RBAC.h"
 #include "SpellPackets.h"
@@ -44,6 +45,7 @@ public:
         static ChatCommandTable cheatCommandTable =
         {
             { "god",            HandleGodModeCheatCommand,   rbac::RBAC_PERM_COMMAND_CHEAT_GOD,       Console::No },
+            { "petgod",         HandlePetGodModeCheatCommand,rbac::RBAC_PERM_COMMAND_CHEAT_GOD,       Console::No },
             { "casttime",       HandleCasttimeCheatCommand,  rbac::RBAC_PERM_COMMAND_CHEAT_CASTTIME,  Console::No },
             { "cooldown",       HandleCoolDownCheatCommand,  rbac::RBAC_PERM_COMMAND_CHEAT_COOLDOWN,  Console::No },
             { "power",          HandlePowerCheatCommand,     rbac::RBAC_PERM_COMMAND_CHEAT_POWER,     Console::No },
@@ -97,20 +99,57 @@ public:
 
     static bool HandleGodModeCheatCommand(ChatHandler* handler, Optional<bool> enableArg)
     {
-        bool enable = !handler->GetSession()->GetPlayer()->GetCommandStatus(CHEAT_GOD);
+        Player* player = handler->GetSession()->GetPlayer();
+
+        bool enable = !player->GetCommandStatus(CHEAT_GOD);
         if (enableArg)
             enable = *enableArg;
 
         if (enable)
         {
-            handler->GetSession()->GetPlayer()->SetCommandStatusOn(CHEAT_GOD);
+            player->SetCommandStatusOn(CHEAT_GOD);
             handler->SendSysMessage("Godmode is ON. You won't take damage.");
         }
         else
         {
-            handler->GetSession()->GetPlayer()->SetCommandStatusOff(CHEAT_GOD);
+            player->SetCommandStatusOff(CHEAT_GOD);
             handler->SendSysMessage("Godmode is OFF. You can take damage.");
         }
+
+        // Retail acknowledges the state change to the client; its consumer (0x1E1DAE0) writes
+        // "Godmode enabled"/"Godmode disabled" to the developer console and nothing else.
+        player->SendDirectMessage(WorldPackets::Misc::GodMode(enable).Write());
+
+        return true;
+    }
+
+    // Companion counterpart of .cheat god. TrinityCore had no state for this at all: cheat bits live
+    // on the Player and the damage cancel in Unit::DealDamage only ever looked at a Player victim,
+    // so a pet ran straight past it. CHEAT_PET_GOD plus the owner lookup in Unit::DealDamage closes
+    // that; SMSG_PET_GOD_MODE (0x450127) is the receipt the client expects, its consumer 0x1E2EDF0
+    // prints "Pet Godmode enabled"/"Pet Godmode disabled".
+    // UNVERIFIED: which units the flag actually covers - the choice is made at the owner lookup in
+    // Unit::DealDamage and is unbacked by the client, see the marker there.
+    static bool HandlePetGodModeCheatCommand(ChatHandler* handler, Optional<bool> enableArg)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+
+        bool enable = !player->GetCommandStatus(CHEAT_PET_GOD);
+        if (enableArg)
+            enable = *enableArg;
+
+        if (enable)
+        {
+            player->SetCommandStatusOn(CHEAT_PET_GOD);
+            handler->SendSysMessage("Pet Godmode is ON. Your companions won't take damage.");
+        }
+        else
+        {
+            player->SetCommandStatusOff(CHEAT_PET_GOD);
+            handler->SendSysMessage("Pet Godmode is OFF. Your companions can take damage.");
+        }
+
+        player->SendDirectMessage(WorldPackets::Misc::PetGodMode(enable).Write());
 
         return true;
     }
@@ -152,6 +191,11 @@ public:
             handler->SendSysMessage("Cooldown Cheat is OFF. You are on the global cooldown.");
         }
 
+        // The only message of this block that is visible in the stock UI: the consumer (0x1DB7360)
+        // rebuilds spellbook, shapeshift bar and bag cooldown displays and fires the Lua event
+        // PET_BAR_UPDATE_COOLDOWN, which PetActionBar.lua:88 handles.
+        handler->GetSession()->GetPlayer()->SendDirectMessage(WorldPackets::Misc::CooldownCheat(enable).Write());
+
         return true;
     }
 
@@ -188,6 +232,7 @@ public:
 
         handler->SendSysMessage(LANG_COMMAND_CHEAT_STATUS);
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_GOD, player->GetCommandStatus(CHEAT_GOD) ? enabled : disabled);
+        handler->PSendSysMessage("Pet Godmode ........ %s", player->GetCommandStatus(CHEAT_PET_GOD) ? enabled : disabled);
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_CD, player->GetCommandStatus(CHEAT_COOLDOWN) ? enabled : disabled);
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_CT, player->GetCommandStatus(CHEAT_CASTTIME) ? enabled : disabled);
         handler->PSendSysMessage(LANG_COMMAND_CHEAT_POWER, player->GetCommandStatus(CHEAT_POWER) ? enabled : disabled);

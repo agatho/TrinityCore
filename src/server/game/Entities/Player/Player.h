@@ -1156,6 +1156,8 @@ enum PlayerCommandStates
     CHEAT_POWER     = 0x08,
     CHEAT_WATERWALK = 0x10,
     CHEAT_IGNORE_DIMINISHING_RETURNS = 0x20      // SMSG_CHEAT_IGNORE_DIMISHING_RETURNS (0x670002)
+    // 0x20 is taken on feature/spell (CHEAT_IGNORE_DIMINISHING_RETURNS) - do not reuse
+    CHEAT_PET_GOD   = 0x40
 };
 
 enum PlayerLogXPReason : uint8

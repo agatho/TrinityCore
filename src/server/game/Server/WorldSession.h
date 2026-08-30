@@ -34,6 +34,7 @@
 #include <boost/circular_buffer_fwd.hpp>
 #include <array>
 #include <atomic>
+#include <bitset>
 #include <map>
 #include <memory>
 #include <span>
@@ -654,6 +655,8 @@ namespace WorldPackets
         class SubscriptionInterstitialResponse;
         class RequestScheduledAreaPoiUpdate;
         class BonusRoll;
+        class KioskEnableGodMode;
+        class SetGameEventDebugViewState;
     }
 
     namespace Movement
@@ -2125,6 +2128,15 @@ class TC_GAME_API WorldSession
         void HandleSubscriptionInterstitialResponse(WorldPackets::Misc::SubscriptionInterstitialResponse& subscriptionInterstitialResponse);
         void HandleRequestScheduledAreaPoiUpdate(WorldPackets::Misc::RequestScheduledAreaPoiUpdate& requestScheduledAreaPoiUpdate);
         void HandleBonusRoll(WorldPackets::Misc::BonusRoll& bonusRoll);
+        // GM / Cheat / Debug (families 0x45 and 0x3D)
+        void HandleKioskEnableGodMode(WorldPackets::Misc::KioskEnableGodMode& kioskEnableGodMode);
+        void HandleSetGameEventDebugViewState(WorldPackets::Misc::SetGameEventDebugViewState& setGameEventDebugViewState);
+
+        // Subscription state of the client debug views (table 0x43BD1C0, indices 0..39), driven by
+        // CMSG_SET_GAME_EVENT_DEBUG_VIEW_STATE. Deliberately session bound and never persisted: the
+        // client re-announces every subscription after each SMSG_DEBUG_MENU_MANAGER_FULL_UPDATE.
+        bool IsDebugViewSubscribed(uint32 viewIndex) const { return viewIndex < MaxDebugViews && _debugViewSubscriptions.test(viewIndex); }
+        std::bitset<40> const& GetDebugViewSubscriptions() const { return _debugViewSubscriptions; }
 
         // Adventure Journal
         void HandleAdventureJournalOpenQuest(WorldPackets::AdventureJournal::AdventureJournalOpenQuest& openQuest);
@@ -2529,6 +2541,8 @@ class TC_GAME_API WorldSession
         // Der Baum hat kein Anti-Cheat. SMSG_WARDEN3_DISABLED geht genau EINMAL je Sitzung
         // hinaus - der Client schickt sonst rund 1400 Datenpakete ins Leere.
         bool _warden3DisabledSent;
+        static constexpr uint32 MaxDebugViews = 40;
+        std::bitset<MaxDebugViews> _debugViewSubscriptions;
 
         WorldSession(WorldSession const& right) = delete;
         WorldSession& operator=(WorldSession const& right) = delete;

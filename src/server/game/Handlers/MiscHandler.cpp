@@ -48,6 +48,7 @@
 #include "ObjectMgr.h"
 #include "OutdoorPvP.h"
 #include "Player.h"
+#include "RBAC.h"
 #include "RestMgr.h"
 #include "ScriptMgr.h"
 #include "Spell.h"
@@ -1858,4 +1859,60 @@ void WorldSession::HandleRequestScheduledAreaPoiUpdate(WorldPackets::Misc::Reque
 void WorldSession::HandleBonusRoll(WorldPackets::Misc::BonusRoll& /*bonusRoll*/)
 {
     SendPacket(WorldPackets::Misc::PlayerBonusRollFailed().Write());
+// GM / Cheat / Debug (client 12.1.0.69382, family 0x3D)
+
+// CMSG_KIOSK_ENABLE_GOD_MODE - writer 0x6CD330, sent from Lua Kiosk.EnableGodMode() (0x11684B0),
+// called in Blizzard_Kiosk/Housing/Game.lua:186 so that a trade-show visitor cannot die inside the
+// demo house. The client hardcodes the bit to true and offers no counterpart to switch it off.
+//
+// Retail gates this on kiosk mode, which the server announces through
+// FeatureSystemStatus::KioskModeEnabled - a field TrinityCore serialises but never sets, so no
+// unmodified client will ever send this opcode (open question F4 of the unit brief). That leaves an
+// unauthenticated invulnerability request on the wire, so it is gated on the same permission that
+// governs .cheat god: an account allowed to make itself invulnerable by command may do so here too,
+// everyone else is refused and logged.
+void WorldSession::HandleKioskEnableGodMode(WorldPackets::Misc::KioskEnableGodMode& kioskEnableGodMode)
+{
+    if (!HasPermission(rbac::RBAC_PERM_COMMAND_CHEAT_GOD))
+    {
+        TC_LOG_INFO("entities.player.cheat", "WorldSession::HandleKioskEnableGodMode: Player {} ({}) requested kiosk god mode without permission - refused",
+            _player->GetName(), _player->GetGUID().ToString());
+        return;
+    }
+
+    if (kioskEnableGodMode.Enable)
+        _player->SetCommandStatusOn(CHEAT_GOD);
+    else
+        _player->SetCommandStatusOff(CHEAT_GOD);
+
+    // Session bound on purpose: _activeCheats is never written to the database, and the client has
+    // no disable path - the state has to lapse with the session.
+    SendPacket(WorldPackets::Misc::GodMode(kioskEnableGodMode.Enable).Write());
+}
+
+// CMSG_SET_GAME_EVENT_DEBUG_VIEW_STATE - writer 0x6CCC40. Nothing to do with game events:
+// ViewIndex addresses the client debug view table at 0x43BD1C0 (0..39). The client sends this
+// either as its answer to SMSG_DEBUG_MENU_MANAGER_FULL_UPDATE (consumer 0x4EF5F0, one message per
+// subscribed view) or from its own console command (0x4EF456).
+//
+// The views it names are the message set of family 0x4D - the AI debug channel - which has no
+// server side implementation yet (no opcode of family 0x4D is declared in Opcodes.h). The switch is
+// therefore recorded but currently drives nothing; that is tracked as open question F5.
+void WorldSession::HandleSetGameEventDebugViewState(WorldPackets::Misc::SetGameEventDebugViewState& setGameEventDebugViewState)
+{
+    if (!HasPermission(rbac::RBAC_PERM_COMMAND_DEBUG))
+    {
+        TC_LOG_INFO("entities.player.cheat", "WorldSession::HandleSetGameEventDebugViewState: Player {} ({}) tried to subscribe to debug view {} without permission",
+            _player->GetName(), _player->GetGUID().ToString(), setGameEventDebugViewState.ViewIndex);
+        return;
+    }
+
+    if (setGameEventDebugViewState.ViewIndex >= MaxDebugViews)
+    {
+        TC_LOG_DEBUG("network", "WorldSession::HandleSetGameEventDebugViewState: Player {} sent out of range ViewIndex {} (client knows {})",
+            _player->GetName(), setGameEventDebugViewState.ViewIndex, MaxDebugViews);
+        return;
+    }
+
+    _debugViewSubscriptions.set(setGameEventDebugViewState.ViewIndex, setGameEventDebugViewState.State);
 }

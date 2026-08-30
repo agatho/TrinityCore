@@ -1243,6 +1243,200 @@ namespace WorldPackets
         {
         public:
             explicit LowLevelRaid1(WorldPacket&& packet) : ClientPacket(CMSG_LOW_LEVEL_RAID1, std::move(packet)) { }
+        // GM / Cheat / Debug block - client 12.1.0.69382, families 0x45 (SMSG) and 0x3D (CMSG).
+        // Every wire layout below is taken from the client reader/writer, not from a recording:
+        // none of these eleven opcodes occurs in any of our 2.38M analysed sniff records
+        // (the situations that trigger them - GM account, kiosk client, developer build -
+        // were never recorded and are not obtainable). See AGENT_BRIEF_W4_GM_DEBUG.md.
+
+        // Enum.ConsoleColorType, ConsoleDocumentation.lua:219-240 (12 values).
+        // The client indexes its colour table at 0x4374620 with this value and performs
+        // NO range check (ConsoleGetColorFromType @ 0x0D38780) - values >= 12 read out of bounds.
+        enum class ConsoleColorType : uint32
+        {
+            DefaultColor        = 0,
+            InputColor          = 1,
+            EchoColor           = 2,
+            ErrorColor          = 3,
+            WarningColor        = 4,
+            GlobalColor         = 5,
+            AdminColor          = 6,
+            HighlightColor      = 7,
+            BackgroundColor     = 8,
+            ClickbufferColor    = 9,
+            PrivateColor        = 10,
+            DefaultGreen        = 11,
+
+            Max                 = 12
+        };
+
+        // Number of debug views the client knows, table at 0x43BD1C0, read by DebugViewName @ 0x1CDC460.
+        constexpr uint32 MAX_DEBUG_VIEWS = 40;
+
+        // Reader 0x5F5E10: Read<uint8> + shr 7 -> one bit, 1 byte on the wire.
+        // Consumer 0x1E1DAE0 writes "Godmode enabled"/"Godmode disabled" to the developer
+        // console and does nothing else - the message is the receipt, not the mechanism.
+        class GodMode final : public ServerPacket
+        {
+        public:
+            explicit GodMode(bool enable = false) : ServerPacket(SMSG_GOD_MODE, 1), Enable(enable) { }
+
+            WorldPacket const* Write() override;
+
+            bool Enable = false;
+        };
+
+        // Reader 0x5EE690, bit-identical to GodMode. Consumer 0x1E2EDF0 prints
+        // "Pet Godmode enabled"/"Pet Godmode disabled".
+        class PetGodMode final : public ServerPacket
+        {
+        public:
+            explicit PetGodMode(bool enable = false) : ServerPacket(SMSG_PET_GOD_MODE, 1), Enable(enable) { }
+
+            WorldPacket const* Write() override;
+
+            bool Enable = false;
+        };
+
+        // Reader 0x5F8C80, bit-identical to GodMode. Consumer 0x1DB7360 rebuilds every cooldown
+        // display: spellbook, shapeshift bar, bags, and fires the Lua event PET_BAR_UPDATE_COOLDOWN
+        // (hash 0xAE0EB1A02CFEB3DD, handled in PetActionBar.lua:88). It does not suppress cooldowns
+        // itself - that stays server side (Spell.cpp).
+        class CooldownCheat final : public ServerPacket
+        {
+        public:
+            explicit CooldownCheat(bool enable = false) : ServerPacket(SMSG_COOLDOWN_CHEAT, 1), Enable(enable) { }
+
+            WorldPacket const* Write() override;
+
+            bool Enable = false;
+        };
+
+        // Reader 0x5EA250: bits<14> length (including the terminating NUL), flush, uint32 colour,
+        // then the string. Consumer 0x1D26CD0 -> ConsoleWrite(COLOR_T, char const*) @ 0x32D240,
+        // which feeds the developer console, ConsoleLog.cpp and the Lua event
+        // CONSOLE_MESSAGE(message, colorType) handled in Blizzard_Console.lua:132-135.
+        // Payload is 6 bytes for empty text, at most 16389 bytes (14 bit length -> 16384 buffer).
+        class ConsoleWrite final : public ServerPacket
+        {
+        public:
+            explicit ConsoleWrite() : ServerPacket(SMSG_CONSOLE_WRITE, 2 + 4 + 128) { }
+
+            WorldPacket const* Write() override;
+
+            // 16384 byte buffer, length includes the NUL, and ReadDynString rejects a length
+            // whose last byte is not 0 - so 16382 payload characters is the hard maximum.
+            static constexpr std::size_t MaxTextLength = 16382;
+
+            std::string Text;
+            ConsoleColorType ColorType = ConsoleColorType::DefaultColor;
+        };
+
+        // Reader 0x5EE9E0 is the opaque message class (no Read<T> at all), so the payload is defined
+        // by the consumer 0x1CE3840: it reads exactly one float at offset 0 and stores it in the
+        // global 0x43BF260. The only reader of that global, 0x1CDB530, advances the world clock by
+        // one game minute per accumulated unit - the float is GAME MINUTES PER REAL SECOND, i.e. the
+        // runtime version of the NewSpeed field of SMSG_LOGIN_SET_TIME_SPEED, not a movement or
+        // animation rate. The client clamps to [1/60, 60]; 0.01666667f is real time and is exactly
+        // the value TrinityCore hardcodes at login (Player.cpp, SendInitialPacketsBeforeAddToMap).
+        class GameSpeedSet final : public ServerPacket
+        {
+        public:
+            explicit GameSpeedSet(float speed = 0.01666667f) : ServerPacket(SMSG_GAME_SPEED_SET, 4), Speed(speed) { }
+
+            WorldPacket const* Write() override;
+
+            static constexpr float MinSpeed = 0.01666667f;
+            static constexpr float MaxSpeed = 60.0f;
+
+            float Speed = 0.01666667f;
+        };
+
+        // Empty by design: the consumer 0x4EF5F0 never touches the payload. What it does instead is
+        // walk all 40 debug views and answer with one CMSG_SET_GAME_EVENT_DEBUG_VIEW_STATE(i, true)
+        // per view that has a local listener - a re-subscription after a server restart or resync.
+        // Do not send this without being able to receive the answer.
+        class DebugMenuManagerFullUpdate final : public ServerPacket
+        {
+        public:
+            explicit DebugMenuManagerFullUpdate() : ServerPacket(SMSG_DEBUG_MENU_MANAGER_FULL_UPDATE, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        // Reader 0x5DE620: three scalars, then BOTH array counts, then both array payloads.
+        // The obvious "count, array, count, array" order would produce a wrong wire format, and
+        // because the consumer is the deliberate no-op stub at 0x1D9E30 (bytes c2 00 00 = ret 0)
+        // the mistake would never surface. Payload is 20 + 4 * (Cooldowns + RuneTypes) bytes.
+        class RuneRegenDebug final : public ServerPacket
+        {
+        public:
+            explicit RuneRegenDebug() : ServerPacket(SMSG_RUNE_REGEN_DEBUG, 20) { }
+
+            WorldPacket const* Write() override;
+
+            // UNVERIFIED: the three scalars have no JAM descriptor, no consumer and no Lua side.
+            // The names below follow Player::ResyncRunes, which keeps exactly the two lists that
+            // the two arrays carry - that is an analogy, not a measurement.
+            uint32 RegenTimer = 0;
+            uint32 BaseCooldown = 0;
+            uint32 ActiveRuneMask = 0;
+            std::vector<int32> Cooldowns;   // UNVERIFIED: element meaning
+            std::vector<int32> RuneTypes;   // UNVERIFIED: element meaning
+        };
+
+        // Reader 0x5F9FC0: PackedGuid, bits<9> length, flush, then the raw characters.
+        // No NUL on the wire - the client appends it itself. The 9 bit width is confirmed twice:
+        // the reader folds two bytes as (B0 << 1) | (B1 >> 7), and the message object is 560 bytes
+        // with a 48 byte header, leaving exactly the 512 byte buffer that 9 bits address.
+        // Consumer is the no-op stub 0x1D9E30 - the retail client parses and discards this.
+        // UNVERIFIED: namespace of AnimName (open question F2). Neither AnimationData nor AnimKit
+        // carries animation names, so it stays undecided whether this is a DB2 backed name or a
+        // client internal one; the field is carried through verbatim.
+        class ForceAnim final : public ServerPacket
+        {
+        public:
+            explicit ForceAnim() : ServerPacket(SMSG_FORCE_ANIM, 18 + 2 + 32) { }
+
+            WorldPacket const* Write() override;
+
+            static constexpr std::size_t MaxAnimNameLength = 511;
+
+            ObjectGuid UnitGUID;
+            std::string AnimName;
+        };
+
+        // Reader 0x5FA0A0, field names from the JAM type ForceAnimationsData (tag 0x38951B8).
+        // Both array counts precede both payloads, same trap as RuneRegenDebug. Speed is a float:
+        // movss emission at 0x5FA17D/0x5FA18B, reader default 0x3F800000, JAM descriptor 0x37AB200
+        // (the float descriptor), and the field name all agree. BoneType is a full byte, not a bit.
+        // Consumer is the no-op stub 0x1D9E30.
+        class ForceAnimations final : public ServerPacket
+        {
+        public:
+            explicit ForceAnimations() : ServerPacket(SMSG_FORCE_ANIMATIONS, 18 + 17) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid UnitGUID;
+            std::vector<int32> AnimIDs;     // AnimationData::ID, DB2 FDID 1375431
+            std::vector<uint8> Variations;
+            uint32 LoopCount = 1;
+            float Speed = 1.0f;
+            uint8 BoneType = 0;
+        };
+
+        // Writer 0x6CD330 (body 0x6A35C0), identity proven through vtable slot 3 at 0x6CD390:
+        // mov dword ptr [rdx], 0x3d009a. One bit, 1 byte, and the client hardcodes it to true -
+        // there is no Kiosk.DisableGodMode, the state is meant to expire with the session.
+        // Sent from Lua Kiosk.EnableGodMode() (0x11684B0), called in
+        // Blizzard_Kiosk/Housing/Game.lua:186 after C_Housing.IsInsideHouse(): a kiosk visitor
+        // must not be able to die in the demo house. Gated on the kiosk mode flag inside the
+        // client, so a normal retail client never sends it.
+        class KioskEnableGodMode final : public ClientPacket
+        {
+        public:
+            explicit KioskEnableGodMode(WorldPacket&& packet) : ClientPacket(CMSG_KIOSK_ENABLE_GOD_MODE, std::move(packet)) { }
 
             void Read() override;
 
@@ -2283,6 +2477,22 @@ namespace WorldPackets
             explicit BonusRoll(WorldPacket&& packet) : ClientPacket(CMSG_BONUS_ROLL, std::move(packet)) { }
 
             void Read() override { }
+        // Writer 0x6CCC40 (body 0x6A31A0): uint32 ViewIndex, then one bit State, then flush - 5 bytes.
+        // Despite the name this has nothing to do with game_event/GameEventMgr: ViewIndex is an index
+        // 0..39 into the compiled-in debug view table at 0x43BD1C0 ("Area Triggers", "AI Brain",
+        // "Behavior Tree", "Pathing", "Aura Debugger", ...), whose entries match the message set of
+        // family 0x4D. This is the subscription switch of the AI debug channel.
+        // Two senders: 0x4EF5F0 (the answer to SMSG_DEBUG_MENU_MANAGER_FULL_UPDATE) and 0x4EF456
+        // (a client console command of the form "<view name> <0|1>").
+        class SetGameEventDebugViewState final : public ClientPacket
+        {
+        public:
+            explicit SetGameEventDebugViewState(WorldPacket&& packet) : ClientPacket(CMSG_SET_GAME_EVENT_DEBUG_VIEW_STATE, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 ViewIndex = 0;
+            bool State = false;
         };
     }
 }
