@@ -252,8 +252,35 @@ namespace WorldPackets
     namespace SizedString
     {
         template<uint32 BitCount, StringWritable Container>
+        struct SizeWriter
+        {
+            Container const& Value;
+
+            friend inline ByteBuffer& operator<<(ByteBuffer& data, SizeWriter const& size)
+            {
+                data.WriteBits(static_cast<uint32>(size.Value.length()), BitCount);
+                return data;
+            }
+        };
 
         template<uint32 BitCount, StringReadable Container>
+        struct SizeReaderWriter : SizeWriter<BitCount, Container>
+        {
+            friend inline ByteBuffer& operator>>(ByteBuffer& data, SizeReaderWriter const& size)
+            {
+                uint32 length = data.ReadBits(BitCount);
+                if (size_t rpos = data.rpos(); length > data.size() - rpos)
+                    data.OnInvalidPosition(rpos, length);
+
+                if constexpr (std::is_same_v<Container, std::string_view>)
+                    // create a temporary string_view pointing at start of ByteBuffer to be able to retrieve the length later
+                    const_cast<std::string_view&>(size.Value) = { reinterpret_cast<char const*>(data.data()), length };
+                else
+                    const_cast<Container&>(size.Value).resize(length);
+
+                return data;
+            }
+        };
 
         template<uint32 BitCount, StringWritable Container>
         inline SizeWriter<BitCount, Container> BitsSize(Container const& value) { return { value }; }
@@ -296,8 +323,37 @@ namespace WorldPackets
     namespace SizedCString
     {
         template<uint32 BitCount, StringWritable Container>
+        struct SizeWriter
+        {
+            Container const& Value;
+
+            friend inline ByteBuffer& operator<<(ByteBuffer& data, SizeWriter const& size)
+            {
+                data.WriteBits(static_cast<uint32>(size.Value.length() + 1), BitCount);
+                return data;
+            }
+        };
 
         template<uint32 BitCount, StringReadable Container>
+        struct SizeReaderWriter : SizeWriter<BitCount, Container>
+        {
+            friend inline ByteBuffer& operator>>(ByteBuffer& data, SizeReaderWriter const& size)
+            {
+                if (uint32 bytesIncludingNullTerminator = data.ReadBits(BitCount); bytesIncludingNullTerminator > 1)
+                {
+                    uint32 length = bytesIncludingNullTerminator - 1;
+                    if (size_t rpos = data.rpos(); length > data.size() - rpos)
+                        data.OnInvalidPosition(rpos, bytesIncludingNullTerminator);
+
+                    if constexpr (std::is_same_v<Container, std::string_view>)
+                    // create a temporary string_view pointing at start of ByteBuffer to be able to retrieve the length later
+                        const_cast<std::string_view&>(size.Value) = { reinterpret_cast<char const*>(data.data()), length };
+                    else
+                        const_cast<Container&>(size.Value).resize(length);
+                }
+                return data;
+            }
+        };
 
         template<uint32 BitCount, StringWritable Container>
         inline SizeWriter<BitCount, Container> BitsSize(Container const& value) { return { value }; }
@@ -306,8 +362,36 @@ namespace WorldPackets
         inline SizeReaderWriter<BitCount, Container> BitsSize(Container& value) { return { value }; }
 
         template<StringWritable Container>
+        struct DataWriter
+        {
+            Container const& Value;
+
+            friend inline ByteBuffer& operator<<(ByteBuffer& data, DataWriter const& string)
+            {
+                if (!string.Value.empty())
+                {
+                    data.WriteString(string.Value);
+                    data << char('\0');
+                }
+                return data;
+            }
+        };
 
         template<StringReadable Container, Strings::Utf8Mode Mode>
+        struct DataReaderWriter : DataWriter<Container>
+        {
+            static constexpr bool IsUtf8() { return Mode == Strings::ValidUtf8; }
+
+            friend inline ByteBuffer& operator>>(ByteBuffer& data, DataReaderWriter const& string)
+            {
+                if (!string.Value.empty())
+                {
+                    const_cast<Container&>(string.Value) = data.ReadString(string.Value.length(), IsUtf8());
+                    (void)data.read<char>(); // null terminator
+                }
+                return data;
+            }
+        };
 
         template<Strings::Utf8Mode = Strings::ValidUtf8, StringWritable Container>
         inline DataWriter<Container> Data(Container const& value) { return { value }; }
@@ -319,8 +403,33 @@ namespace WorldPackets
     namespace Bytes
     {
         template<AsWritable Underlying>
+        struct SizeWriter
+        {
+            std::span<uint8> const& Value;
+
+            friend inline ByteBuffer& operator<<(ByteBuffer& data, SizeWriter const& size)
+            {
+                data << static_cast<Underlying>(size.Value.size());
+                return data;
+            }
+        };
 
         template<AsWritable Underlying>
+        struct SizeReaderWriter : SizeWriter<Underlying>
+        {
+            friend inline ByteBuffer& operator>>(ByteBuffer& data, SizeReaderWriter const& size)
+            {
+                Underlying temp;
+                data >> temp;
+
+                if (size_t rpos = data.rpos(); temp > data.size() - rpos)
+                    data.OnInvalidPosition(rpos, temp);
+
+                // create a temporary span pointing at random position in ByteBuffer to be able to retrieve the length later
+                const_cast<std::span<uint8>&>(size.Value) = { data.data(), temp };
+                return data;
+            }
+        };
 
         template<AsWritable Underlying>
         inline SizeWriter<Underlying> Size(std::span<uint8> const& value) { return { value }; }
@@ -329,8 +438,31 @@ namespace WorldPackets
         inline SizeReaderWriter<Underlying> Size(std::span<uint8>& value) { return { value }; }
 
         template<uint32 BitCount>
+        struct BitsSizeWriter
+        {
+            std::span<uint8> const& Value;
+
+            friend inline ByteBuffer& operator<<(ByteBuffer& data, BitsSizeWriter const& size)
+            {
+                data.WriteBits(static_cast<uint32>(size.Value.size()), BitCount);
+                return data;
+            }
+        };
 
         template<uint32 BitCount>
+        struct BitsSizeReaderWriter : BitsSizeWriter<BitCount>
+        {
+            friend inline ByteBuffer& operator>>(ByteBuffer& data, BitsSizeReaderWriter const& size)
+            {
+                uint32 length = data.ReadBits(BitCount);
+                if (size_t rpos = data.rpos(); length > data.size() - rpos)
+                    data.OnInvalidPosition(rpos, length);
+
+                // create a temporary span pointing at start of ByteBuffer to be able to retrieve the length later
+                const_cast<std::span<uint8>&>(size.Value) = { data.data(), length };
+                return data;
+            }
+        };
 
         template<uint32 BitCount>
         inline BitsSizeWriter<BitCount> BitsSize(std::span<uint8> const& value) { return { value }; }
@@ -338,7 +470,26 @@ namespace WorldPackets
         template<uint32 BitCount>
         inline BitsSizeReaderWriter<BitCount> BitsSize(std::span<uint8>& value) { return { value }; }
 
+        struct DataWriter
+        {
+            std::span<uint8> const& Value;
 
+            friend inline ByteBuffer& operator<<(ByteBuffer& data, DataWriter const& span)
+            {
+                if (!data.empty())
+                    data.append(span.Value.data(), span.Value.size());
+                return data;
+            }
+        };
+
+        struct DataReaderWriter : DataWriter
+        {
+            friend inline ByteBuffer& operator>>(ByteBuffer& data, DataReaderWriter const& string)
+            {
+                const_cast<std::span<uint8>&>(string.Value) = data.ReadBytes(string.Value.size());
+                return data;
+            }
+        };
 
         inline DataWriter Data(std::span<uint8> const& value) { return { value }; }
 
@@ -373,7 +524,7 @@ namespace WorldPackets
     inline constexpr IgnoredReaderWriter<T> Ignored;
 
     // Size<> resizes from the wire value before a single element is read, so a
-    // hostile count is an allocation request, not a short read Ã¢â‚¬â€� an unbounded
+    // hostile count is an allocation request, not a short read — an unbounded
     // uint32 asks for up to 16 GiB and takes the world thread down with
     // std::bad_alloc. BoundedSize clamps the count against the bytes actually
     // left in the packet first: no element occupies less than one byte, so the
