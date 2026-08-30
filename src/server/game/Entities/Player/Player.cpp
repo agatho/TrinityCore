@@ -19385,11 +19385,6 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     SetFactionForRace(GetRace());
 
 
-    if (fields.timerunningSeasonId)
-        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
-            .ModifyValue(&UF::ActivePlayerData::TimerunningSeasonID),
-            int32(fields.timerunningSeasonId));
-
     // Always set FactionGroup on CtrOptions (needed for party sync and content tuning)
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
         .ModifyValue(&UF::PlayerData::CtrOptions)
@@ -22477,7 +22472,6 @@ void Player::GrantRenownRewardsUpTo(uint32 covenantId, int32 currentLevel)
     if (!covenantId || currentLevel <= 0)
         return;
 
-    int32 currentLevel = GetReputationMgr().GetRenownLevel(renownFaction);
     uint32& granted = m_renownRewardsGranted[covenantId];
     if (int32(granted) >= currentLevel)
         return;
