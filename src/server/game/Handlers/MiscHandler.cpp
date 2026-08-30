@@ -1792,4 +1792,70 @@ void WorldSession::HandleWarden3Data(WorldPackets::Misc::Warden3Data& warden3Dat
 
     _warden3DisabledSent = true;
     SendPacket(WorldPackets::Misc::Warden3Disabled().Write());
+// Answer to SMSG_CHECK_ABANDON_NPE. The client sends this from the two buttons of
+// StaticPopupDialogs["LEAVING_TUTORIAL_AREA"]: C_Tutorial.ReturnToTutorialArea writes bit 0,
+// C_Tutorial.AbandonTutorialArea writes bit 1 (writer RVA 0x6D1CB0, one body byte).
+void WorldSession::HandleAbandonNPEResponse(WorldPackets::Misc::AbandonNPEResponse& abandonNpeResponse)
+{
+    if (_player->GetCreateMode() != PlayerCreateMode::NPE)
+        return;
+
+    PlayerInfo const* info = sObjectMgr->GetPlayerInfo(_player->GetRace(), _player->GetClass());
+    if (!info || !info->createPositionNPE)
+        return;
+
+    if (!abandonNpeResponse.Abandon)
+    {
+        // "Return to the tutorial area" - put the character back where it started. The once-per-session
+        // guard is NOT cleared here: the far teleport that follows leaves the current map first, and
+        // that map leave still reports the map the character is coming from, so clearing the guard now
+        // would re-ask the question during the trip back. Player::UpdateNPEExitState clears it on
+        // arrival on the tutorial map instead, which is the moment the question makes sense again.
+        _player->TeleportTo(info->createPositionNPE->Loc);
+        return;
+    }
+
+    // "Leave for good". The create mode is what still points homebind, the graveyard fallback and the
+    // intro scene at the tutorial (Player.cpp: createPositionNPE branches). Leaving it on NPE would
+    // keep dragging the character back and would re-arm this prompt on the next departure.
+    // D4: this is the one durable state change of the whole handshake, so it goes to the database at
+    // once (characters.createMode, written by CHAR_UPD_CHARACTER_CREATE_MODE; the column already
+    // exists and is read back by Player::LoadFromDB, no migration). The in-memory setter alone would
+    // lose the decision on relog - the sole guard against re-asking (m_npeAbandonPrompted) is
+    // transient by design, so the character would be asked once more after the next login.
+    _player->SetCreateMode(PlayerCreateMode::Normal, true);
+    _player->SetHomebind(*_player, _player->GetAreaId());
+}
+
+// Answer to SMSG_PLAYER_OPEN_SUBSCRIPTION_INTERSTITIAL (writer RVA 0x6D1C50, bits<3>, one body byte).
+// There is no server side state behind this: the interstitial is a Battle.net store prompt and the
+// three answers (Closed / Clicked / WebRedirect) only tell the retail backend what the player did with
+// it. Nothing in a realm's own state depends on the answer, so this handler deliberately only records
+// it - a private realm has no store to open. Reading it still matters: without a handler the packet
+// counts as unhandled and the tail check logs on every click.
+void WorldSession::HandleSubscriptionInterstitialResponse(WorldPackets::Misc::SubscriptionInterstitialResponse& subscriptionInterstitialResponse)
+{
+    TC_LOG_DEBUG("network", "CMSG_SUBSCRIPTION_INTERSTITIAL_RESPONSE: {} answered with wire value {}",
+        GetPlayerInfo(), AsUnderlyingType(subscriptionInterstitialResponse.Response));
+}
+
+// Request for SMSG_SCHEDULED_AREA_POI_UPDATE_RESPONSE (writer RVA 0x6D1230, empty, 4 bytes).
+// Sent by C_EventScheduler.RequestEvents() when the in-game event calendar opens.
+// @todo: this tree has no AreaPOI rotation and no EventScheduler content yet, so the answer is an
+// empty pair of lists. That is a valid answer - "nothing scheduled" - and it is what keeps the frame
+// from waiting forever; the same shape as SMSG_WORLD_QUEST_UPDATE_RESPONSE, which also answers empty.
+void WorldSession::HandleRequestScheduledAreaPoiUpdate(WorldPackets::Misc::RequestScheduledAreaPoiUpdate& /*requestScheduledAreaPoiUpdate*/)
+{
+    SendPacket(WorldPackets::Misc::ScheduledAreaPoiUpdateResponse().Write());
+}
+
+// CMSG_BONUS_ROLL (writer RVA 0x6D16E0, empty, 4 bytes).
+// This tree has no bonus roll system - no currency, no loot table, no reroll bookkeeping. The correct
+// answer to "give me a bonus roll" from a server that cannot grant one is the defined failure, not
+// silence: SMSG_PLAYER_BONUS_ROLL_FAILED fires Lua BONUS_ROLL_FAILED and releases the button, whereas
+// Handle_NULL leaves the client waiting on a roll that never resolves. The client shows no reason and
+// there is no error code on the wire, so there is nothing else to fill in.
+void WorldSession::HandleBonusRoll(WorldPackets::Misc::BonusRoll& /*bonusRoll*/)
+{
+    SendPacket(WorldPackets::Misc::PlayerBonusRollFailed().Write());
 }

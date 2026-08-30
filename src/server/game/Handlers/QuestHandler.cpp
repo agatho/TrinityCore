@@ -757,6 +757,10 @@ void WorldSession::HandleRequestWorldQuestUpdate(WorldPackets::Quest::RequestWor
     SendPacket(response.Write());
 }
 
+// Every abort path below used to log and return. The client keeps the choice frame open in that case
+// and waits forever. SMSG_PLAYER_CHOICE_DISPLAY_ERROR is the message retail has for exactly this:
+// the client subscriber (RVA 0x254BFB0) ignores the payload and prints
+// ERR_PLAYER_CHOICE_ERROR_PENDING_CHOICE, so a single empty packet closes the dead end.
 void WorldSession::HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceResponse const& choiceResponse)
 {
     PlayerChoiceData const* playerChoiceData = _player->PlayerTalkClass->GetInteractionData().GetPlayerChoice();
@@ -764,6 +768,7 @@ void WorldSession::HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceRespons
     {
         TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_CHOICE_RESPONSE: {} tried to respond to invalid player choice {} (none allowed)",
             GetPlayerInfo(), choiceResponse.ChoiceID);
+        _player->SendPlayerChoiceDisplayError();
         return;
     }
 
@@ -771,6 +776,7 @@ void WorldSession::HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceRespons
     {
         TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_CHOICE_RESPONSE: {} tried to respond to invalid player choice {} ({} allowed)",
             GetPlayerInfo(), choiceResponse.ChoiceID, playerChoiceData->GetChoiceId());
+        _player->SendPlayerChoiceDisplayError();
         return;
     }
 
@@ -778,6 +784,9 @@ void WorldSession::HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceRespons
     {
         TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_CHOICE_RESPONSE: {} tried to respond to expired player choice {})",
             GetPlayerInfo(), choiceResponse.ChoiceID);
+        _player->SendPlayerChoiceDisplayError();
+        // An expired choice is gone for good, so close it instead of leaving it on screen.
+        _player->ClearPlayerChoice();
         return;
     }
 
@@ -786,18 +795,23 @@ void WorldSession::HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceRespons
     {
         TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_CHOICE_RESPONSE: {} tried to select invalid player choice response identifier {}",
             GetPlayerInfo(), choiceResponse.ResponseIdentifier);
+        _player->SendPlayerChoiceDisplayError();
         return;
     }
 
     PlayerChoice const* playerChoice = sObjectMgr->GetPlayerChoice(choiceResponse.ChoiceID);
     if (!playerChoice)
+    {
+        _player->SendPlayerChoiceDisplayError();
         return;
+    }
 
     PlayerChoiceResponse const* playerChoiceResponse = playerChoice->GetResponse(*responseId);
     if (!playerChoiceResponse)
     {
         TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_CHOICE_RESPONSE: {} tried to select invalid player choice response {}",
             GetPlayerInfo(), *responseId);
+        _player->SendPlayerChoiceDisplayError();
         return;
     }
 
@@ -805,11 +819,25 @@ void WorldSession::HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceRespons
     {
         TC_LOG_ERROR("entities.player.cheat", "Error in CMSG_CHOICE_RESPONSE: {} tried to select disabled player choice response {}",
             GetPlayerInfo(), *responseId);
+        _player->SendPlayerChoiceDisplayError();
         return;
     }
 
-    sScriptMgr->OnPlayerChoiceResponse(ObjectAccessor::GetWorldObject(*_player, _player->PlayerTalkClass->GetInteractionData().SourceGuid), _player,
-        playerChoice, playerChoiceResponse, choiceResponse.ResponseIdentifier);
+    // Everything the cleanup below needs is read BEFORE the script hook runs. The hook may answer a
+    // choice by opening the next one (Player::SendPlayerChoice), which overwrites SourceGuid and the
+    // stored choice id - reading them afterwards would describe the new choice, not the answered one.
+    bool const keepOpen = playerChoice->KeepOpenAfterChoice;
+    uint32 const answeredChoiceId = playerChoiceData->GetChoiceId();
+    WorldObject* sender = ObjectAccessor::GetWorldObject(*_player, _player->PlayerTalkClass->GetInteractionData().SourceGuid);
+
+    sScriptMgr->OnPlayerChoiceResponse(sender, _player, playerChoice, playerChoiceResponse, choiceResponse.ResponseIdentifier);
+
+    // Player::SendPlayerChoice had no counterpart at all: the interaction data was never reset and the
+    // frame was never closed from the server side. KeepOpenAfterChoice is the flag that says whether
+    // the choice survives an answer, so it is also the flag that decides whether we close it.
+    // Passing the answered id makes the close a no-op if the hook already opened a follow-up choice.
+    if (!keepOpen)
+        _player->ClearPlayerChoice(answeredChoiceId);
 }
 
 void WorldSession::HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& /*closeQuestChoice*/)

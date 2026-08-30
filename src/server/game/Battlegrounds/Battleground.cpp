@@ -776,6 +776,14 @@ void Battleground::EndBattleground(Team winner)
 
         player->SendDirectMessage(pvpMatchComplete.GetRawPacket());
 
+        // No SMSG_PLAYER_SHOW_PARTY_POSE_UI here, on purpose - see MiscPackets.h. An earlier version
+        // of this unit sent the pose from this spot on the reasoning that UiPartyPose carries a MapID
+        // column, so the map must select the pose. The table refutes it: at 12.1.0.69382 UiPartyPose
+        // has 19 rows and not one names a battleground or arena map, so a map keyed lookup found
+        // nothing on every battleground and the call was dead. The rated battleground recording that runs to
+        // SMSG_PVP_MATCH_COMPLETE carries no such packet either. The rows that belong to this frame
+        // are Plunderstorm (121-123) and delve completion (124) - neither system exists in this tree.
+
         player->UpdateCriteria(CriteriaType::ParticipateInBattleground, player->GetMapId());
 
         GetBgMap()->GetBattlegroundScript()->OnEnd(winner);

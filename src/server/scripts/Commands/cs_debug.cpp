@@ -44,6 +44,8 @@ EndScriptData */
 #include "Log.h"
 #include "M2Stores.h"
 #include "MapManager.h"
+#include "MiscPackets.h"
+#include "PlayerChoicePackets.h"
 #include "MovementPackets.h"
 #include "MovementTypedefs.h"
 #include "ObjectAccessor.h"
@@ -97,6 +99,24 @@ public:
             { "playerchoice",       HandleDebugSendPlayerChoiceCommand,    rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "timeadjustment",     HandleDebugSendTimeAdjustmentCommand,  rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "markremotetimeinvalid", HandleDebugSendMarkRemoteTimeInvalidCommand, rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
+            // Client family 0x64 - player state and UI remote control (12.1.0.69382).
+            // Retail drives these from quest/scenario script logic; here they are also reachable by
+            // hand so the client side effect of each opcode can actually be observed.
+            { "playerchoiceclear",  HandleDebugSendPlayerChoiceClearCommand, rbac::RBAC_PERM_COMMAND_DEBUG,  Console::No },
+            { "playerchoiceerror",  HandleDebugSendPlayerChoiceErrorCommand, rbac::RBAC_PERM_COMMAND_DEBUG,  Console::No },
+            { "uieventtoast",       HandleDebugSendUiEventToastCommand,    rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "widgetdisplay",      HandleDebugSendWidgetDisplayCommand,   rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "arrowcallout",       HandleDebugSendArrowCalloutCommand,    rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "partypose",          HandleDebugSendPartyPoseCommand,       rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "endofmatch",         HandleDebugSendEndOfMatchCommand,      rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "tutorialspell",      HandleDebugSendTutorialSpellCommand,   rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "interstitial",       HandleDebugSendInterstitialCommand,    rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "leavertimer",        HandleDebugSendLeaverTimerCommand,     rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "playerskinned",      HandleDebugSendPlayerSkinnedCommand,   rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "checkabandonnpe",    HandleDebugSendCheckAbandonNPECommand, rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "failedcondition",    HandleDebugSendFailedConditionCommand, rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "gmplayerinfo",       HandleDebugSendGMPlayerInfoCommand,    rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "uploadscreenshot",   HandleDebugSendUploadScreenshotCommand, rbac::RBAC_PERM_COMMAND_DEBUG,  Console::No },
         };
         static ChatCommandTable debugCommandTable =
         {
@@ -315,6 +335,182 @@ public:
     {
         Player* player = handler->GetPlayer();
         player->SendPlayerChoice(player->GetGUID(), choiceId);
+        return true;
+    }
+
+    // ---- Client family 0x64: player state and UI remote control -------------------------------
+    // Each of these drives exactly one opcode so its effect can be observed in a running client.
+    // See MiscPackets.h for the wire layouts and for what the client requires of each id.
+
+    // SMSG_PLAYER_CHOICE_CLEAR. The gameplay path (Player::ClearPlayerChoice) always sends the shape
+    // retail sends - ChoiceID 0, match bit clear. This command writes the packet itself so the other
+    // wire form stays reachable for the client test: .debug send playerchoiceclear [choiceId] [match].
+    static bool HandleDebugSendPlayerChoiceClearCommand(ChatHandler* handler, Optional<int32> choiceId, Optional<bool> matchCurrentChoiceOnly)
+    {
+        WorldPackets::PlayerChoice::PlayerChoiceClear playerChoiceClear;
+        playerChoiceClear.ChoiceID = choiceId.value_or(0);
+        playerChoiceClear.MatchCurrentChoiceOnly = matchCurrentChoiceOnly.value_or(false);
+        handler->GetSession()->SendPacket(playerChoiceClear.Write());
+        return true;
+    }
+
+    // SMSG_PLAYER_CHOICE_DISPLAY_ERROR. Always prints ERR_PLAYER_CHOICE_ERROR_PENDING_CHOICE.
+    static bool HandleDebugSendPlayerChoiceErrorCommand(ChatHandler* handler)
+    {
+        handler->GetPlayer()->SendPlayerChoiceDisplayError();
+        return true;
+    }
+
+    // The four id driven .db2 commands below share this: the sender checks the id against the store the
+    // client itself indexes and refuses to send when the client would drop the packet. Report that
+    // refusal instead of leaving the tester with a command that looks as if it did something.
+    static bool ReportSuppressed(ChatHandler* handler, bool sent, char const* what, int32 id)
+    {
+        if (!sent)
+            handler->PSendSysMessage("{} {} not sent: the id is not usable for this character, see Player.cpp for the gate.", what, id);
+
+        return true;
+    }
+
+    // SMSG_PLAYER_SHOW_UI_EVENT_TOAST. Nothing appears unless the row exists in UIEventToast.db2, its
+    // EventType is one of { 12, 13, 16, 17, 18, 19, 20, 22 } and its DisplayType is at most 15.
+    static bool HandleDebugSendUiEventToastCommand(ChatHandler* handler, int32 uiEventToastId)
+    {
+        return ReportSuppressed(handler, handler->GetPlayer()->SendUiEventToast(uiEventToastId), "UIEventToast", uiEventToastId);
+    }
+
+    // SMSG_PLAYER_SHOW_GENERIC_WIDGET_DISPLAY. 69382 ships rows 1, 6, 7, 8 and 9.
+    static bool HandleDebugSendWidgetDisplayCommand(ChatHandler* handler, int32 uiGenericWidgetDisplayId)
+    {
+        return ReportSuppressed(handler, handler->GetPlayer()->SendGenericWidgetDisplay(uiGenericWidgetDisplayId), "UIGenericWidgetDisplay", uiGenericWidgetDisplayId);
+    }
+
+    // SMSG_PLAYER_SHOW / HIDE / ACKNOWLEDGE_ARROW_CALLOUT.
+    // action: 0 = show, 1 = hide, 2 = acknowledge. A callout whose bit is already set in the account
+    // CVar acknowledgedArrowCallouts will not reappear, and Blizzard_ArrowCalloutFrame is gated to the
+    // plunderstorm game type - the C side subscriber runs either way.
+    static bool HandleDebugSendArrowCalloutCommand(ChatHandler* handler, int32 arrowCalloutId, Optional<uint8> action)
+    {
+        Player* player = handler->GetPlayer();
+        bool sent = false;
+        switch (action.value_or(0))
+        {
+            case 1:
+                sent = player->SendHideArrowCallout(arrowCalloutId);
+                break;
+            case 2:
+                sent = player->SendAcknowledgeArrowCallout(arrowCalloutId);
+                break;
+            default:
+                sent = player->SendShowArrowCallout(arrowCalloutId);
+                break;
+        }
+        return ReportSuppressed(handler, sent, "UIArrowCallout", arrowCalloutId);
+    }
+
+    // SMSG_PLAYER_SHOW_PARTY_POSE_UI. The id must exist in UiPartyPose.db2 or LoadPartyPose indexes nil.
+    static bool HandleDebugSendPartyPoseCommand(ChatHandler* handler, int32 partyPoseId, Optional<bool> victory)
+    {
+        return ReportSuppressed(handler, handler->GetPlayer()->SendPartyPoseUI(partyPoseId, victory.value_or(true)), "UiPartyPose", partyPoseId);
+    }
+
+    // SMSG_PLAYER_END_OF_MATCH_DETAILS. Placement is 1 based (1 = winner).
+    static bool HandleDebugSendEndOfMatchCommand(ChatHandler* handler, int32 placement, int32 kills, int32 plunderAcquired, Optional<bool> matchEnded)
+    {
+        handler->GetPlayer()->SendEndOfMatchDetails(placement, kills, plunderAcquired, matchEnded.value_or(true));
+        return true;
+    }
+
+    // SMSG_PLAYER_TUTORIAL_HIGHLIGHT_SPELL / _UNHIGHLIGHT_SPELL.
+    // Without a tag the unhighlight is sent. The tag is a GlobalString KEY, not display text.
+    static bool HandleDebugSendTutorialSpellCommand(ChatHandler* handler, int32 spellId, Trinity::ChatCommands::Tail globalStringTag)
+    {
+        Player* player = handler->GetPlayer();
+        if (globalStringTag.empty())
+            player->SendTutorialUnhighlightSpell();
+        else
+            player->SendTutorialHighlightSpell(spellId, globalStringTag);
+        return true;
+    }
+
+    // SMSG_PLAYER_OPEN_SUBSCRIPTION_INTERSTITIAL. 0 = Standard, 1 = LeftNpeArea, 2 = MaxLevel.
+    // The Lua frame only loads for trial accounts; the C side consumer runs regardless.
+    static bool HandleDebugSendInterstitialCommand(ChatHandler* handler, Optional<uint8> type)
+    {
+        handler->GetPlayer()->SendSubscriptionInterstitial(WorldPackets::Misc::SubscriptionInterstitialType(type.value_or(0)));
+        return true;
+    }
+
+    // SMSG_CHALLENGE_MODE_SET_LEAVER_PENALTY_TIMER. 0 seconds ends the warning, > 0 starts it.
+    static bool HandleDebugSendLeaverTimerCommand(ChatHandler* handler, int32 seconds)
+    {
+        handler->GetPlayer()->SendChallengeModeLeaverPenaltyTimer(Seconds(seconds));
+        return true;
+    }
+
+    // SMSG_PLAYER_SKINNED.
+    static bool HandleDebugSendPlayerSkinnedCommand(ChatHandler* handler, Optional<bool> freeForAll)
+    {
+        handler->GetPlayer()->SendPlayerSkinned(freeForAll.value_or(false));
+        return true;
+    }
+
+    // SMSG_CHECK_ABANDON_NPE. Resets the once-per-session guard first so it can be retriggered.
+    static bool HandleDebugSendCheckAbandonNPECommand(ChatHandler* handler)
+    {
+        Player* player = handler->GetPlayer();
+        player->SetAbandonNPEPrompted(false);
+        player->SendCheckAbandonNPE();
+        return true;
+    }
+
+    // SMSG_FAILED_PLAYER_CONDITION. Only 7.314 of the 47.959 rows in 69382 carry a failure text. The
+    // rest are NOT silent in the client - they fall back to game error 527, a raid-group worded line -
+    // so Player::SendFailedPlayerCondition refuses to send them and this command says so.
+    static bool HandleDebugSendFailedConditionCommand(ChatHandler* handler, uint32 playerConditionId)
+    {
+        if (!handler->GetPlayer()->SendFailedPlayerCondition(playerConditionId))
+            handler->PSendSysMessage("PlayerCondition {} not sent: no row, or the row carries no Failure_description_lang. "
+                "Sending it would make the client print game error 527 instead.", playerConditionId);
+
+        return true;
+    }
+
+    // SMSG_GM_REQUEST_PLAYER_INFO, SMSG_GM_PLAYER_INFO and SMSG_PLAYER_CONDITION_RESULT all reach the
+    // same no-op stub in the retail client (hooks 0x462DF10 / 0x462DE70 / 0x462DE78), so nothing is
+    // visible - this exists to exercise the serializers against a sniffer or a custom client.
+    // SMSG_PLAYER_CONDITION_RESULT is sent with an empty body on purpose: its layout is undetermined
+    // (raw buffer, no reader, no JamType, no recording) and inventing fields would be a silent error.
+    static bool HandleDebugSendGMPlayerInfoCommand(ChatHandler* handler)
+    {
+        Player* player = handler->GetPlayer();
+
+        WorldPackets::Misc::GMRequestPlayerInfo gmRequestPlayerInfo;
+        gmRequestPlayerInfo.Name = player->GetName();
+        gmRequestPlayerInfo.Flag = true;
+        player->SendDirectMessage(gmRequestPlayerInfo.Write());
+
+        WorldPackets::Misc::GMPlayerInfo gmPlayerInfo;
+        gmPlayerInfo.Player = player->GetGUID();
+        gmPlayerInfo.Text1 = player->GetName();
+        player->SendDirectMessage(gmPlayerInfo.Write());
+
+        player->SendDirectMessage(WorldPackets::Misc::PlayerConditionResult().Write());
+        return true;
+    }
+
+    // SMSG_PLAYER_UPLOAD_SCREENSHOT / SMSG_PLAYER_DELAYED_UPLOAD_SCREENSHOT.
+    // Both are inert in the retail client - no registrar and no Lua surface - so this only proves the
+    // serializer. Every string is a JamDynamicString: the length includes the terminator and the
+    // client discards the whole message when a string does not end in 0x00.
+    static bool HandleDebugSendUploadScreenshotCommand(ChatHandler* handler, Trinity::ChatCommands::Tail url)
+    {
+        WorldPackets::Misc::UploadScreenshotHeader header;
+        header.Url = !url.empty() ? std::string(url) : std::string("https://localhost/screenshot");
+        header.Headers.push_back({ .Name = "Content-Type", .Value = "image/jpeg" });
+
+        handler->GetPlayer()->SendUploadScreenshot(header);
+        handler->GetPlayer()->SendUploadScreenshot(header, true);
         return true;
     }
 

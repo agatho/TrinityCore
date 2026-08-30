@@ -128,6 +128,8 @@ namespace WorldPackets
     namespace Misc
     {
         enum class LevelLinkingResultType : uint8;
+        enum class SubscriptionInterstitialType : uint8;
+        struct UploadScreenshotHeader;
     }
 
     namespace Movement
@@ -2991,8 +2993,54 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         }
 
         void SendPlayerChoice(ObjectGuid sender, int32 choiceId);
+        // Closes the player choice frame and drops the interaction. expectedChoiceId guards the
+        // reentrant case: a script hook that answers a choice by opening the next one has already
+        // replaced the interaction data by the time the caller gets to close the old choice, and
+        // closing then would shut the NEW frame and forget it server side.
+        void ClearPlayerChoice(Optional<uint32> expectedChoiceId = {});
+        void SendPlayerChoiceDisplayError() const;
 
         bool MeetPlayerCondition(uint32 conditionId) const;
+        // Returns false when the packet was suppressed because PlayerCondition.db2 carries no
+        // Failure_description_lang for the id - see the implementation for why that is not silent.
+        bool SendFailedPlayerCondition(uint32 conditionId) const;
+
+        // Client family 0x64 - player state and UI remote control (12.1.0.69382).
+        // These are remote control primitives: retail drives them from quest/scenario script logic,
+        // so on this side they are a script/command facing API. See MiscPackets.h for the wire layouts
+        // and for what the client requires of each id.
+        // Each of these checks the id against the store the client itself indexes and returns false
+        // instead of sending when the client would drop the packet. The stores are loaded for exactly
+        // this: without a reader the four .db2 files would be a start-up requirement with no payload.
+        static bool IsToastEventTypeShown(uint8 eventType);
+        bool SendUiEventToast(int32 uiEventToastId) const;
+        bool SendGenericWidgetDisplay(int32 uiGenericWidgetDisplayId) const;
+        bool SendShowArrowCallout(int32 arrowCalloutId) const;
+        bool SendHideArrowCallout(int32 arrowCalloutId) const;
+        bool SendAcknowledgeArrowCallout(int32 arrowCalloutId) const;
+        bool SendPartyPoseUI(int32 partyPoseId, bool victory) const;
+        void SendEndOfMatchDetails(int32 placement, int32 kills, int32 plunderAcquired, bool matchEnded) const;
+        void SendTutorialHighlightSpell(int32 spellId, std::string_view globalStringTag) const;
+        void SendTutorialUnhighlightSpell() const;
+        void SendSubscriptionInterstitial(WorldPackets::Misc::SubscriptionInterstitialType type) const;
+        void SendChallengeModeLeaverPenaltyTimer(Seconds timer) const;
+        void SendPlayerSkinned(bool freeForAll) const;
+        void SendUploadScreenshot(WorldPackets::Misc::UploadScreenshotHeader const& header, Optional<bool> delayed = { }) const;
+
+        // Exile's Reach / new player experience exit handshake:
+        // SMSG_CHECK_ABANDON_NPE -> client popup -> CMSG_ABANDON_NPE_RESPONSE.
+        // UpdateNPEExitState is the single decision point: it runs from Player::UpdateZone and decides
+        // per zone update whether the character is still inside the tutorial, has just left it, or has
+        // been outside it since login (in which case the tutorial mode is retired).
+        void UpdateNPEExitState();
+        void SendCheckAbandonNPE();
+        bool WasAbandonNPEPrompted() const { return m_npeAbandonPrompted; }
+        void SetAbandonNPEPrompted(bool prompted) { m_npeAbandonPrompted = prompted; }
+        // saveToDb writes characters.createMode straight away. The NPE exit is the only thing that
+        // ever changes the mode after character creation, and CHAR_UPD_CHARACTER does not carry the
+        // column - without the explicit write the decision would be gone after the next relog and
+        // UpdateZone would ask again (see WorldSession::HandleAbandonNPEResponse).
+        void SetCreateMode(PlayerCreateMode createMode, bool saveToDb = false);
 
         bool HasPlayerFlag(PlayerFlags flags) const { return (*m_playerData->PlayerFlags & flags) != 0; }
         void SetPlayerFlag(PlayerFlags flags) { SetUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::PlayerFlags), flags); }
@@ -3360,6 +3408,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         time_t m_createTime;
         PlayerCreateMode m_createMode;
+        bool m_npeAbandonPrompted;      // transient: SMSG_CHECK_ABANDON_NPE already sent this session
+        bool m_npeOnStartMap;           // transient: the character was seen on the NPE start map this session
         uint8 m_cinematic;
 
         uint32 m_movie;

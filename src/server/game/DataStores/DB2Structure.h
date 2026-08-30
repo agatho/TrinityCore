@@ -4852,6 +4852,64 @@ struct TransportRotationEntry
     uint32 GameObjectsID;
 };
 
+struct UIArrowCalloutEntry
+{
+    LocalizedString CalloutText;
+    char const* CalloutFrame;
+    uint32 ID;
+    uint8 Type;
+    uint8 Direction;
+    // named Field_10_1_0_48480_005 in WoWDBDefs - it really is a PlayerConditionID: client 0x2327730
+    // reads field 5 and hands it to the PlayerCondition evaluator 0x2FC4FD0, skipping the check when 0
+    int32 PlayerConditionID;
+    int32 UiWidgetSetID;
+    int32 OffsetX;
+    int32 OffsetY;
+};
+
+struct UIEventToastEntry
+{
+    LocalizedString Title;
+    LocalizedString Subtitle;
+    LocalizedString InstructionText;
+    LocalizedString SubIcon;
+    LocalizedString TitleTooltip;
+    LocalizedString SubtitleTooltip;
+    uint32 ID;                          // named EventToastID in WoWDBDefs
+    int32 PlayerConditionID;
+    int32 UiTextureAtlasMemberID;
+    int32 UiTextureKitID;
+    uint8 EventType;
+    uint8 DisplayType;
+    int32 EventAsset;
+    int32 Field_9_1_0_38312_011;
+    int32 IconFileID;
+    int32 UiWidgetSetID;
+    int32 ExtraUiWidgetSetID;
+    int32 TitleTooltipUiWidgetSetID;
+    int32 SubtitleTooltipUiWidgetSetID;
+    int32 ShowSoundKitID;
+    int32 HideSoundKitID;
+    int32 Field_10_2_5_52554_021;
+};
+
+struct UIGenericWidgetDisplayEntry
+{
+    LocalizedString Title;
+    // named Field_10_1_0_48480_001_lang in WoWDBDefs - named after the Lua push function 0xFB81A0
+    LocalizedString ExtraButtonText;
+    // named Field_10_1_0_48480_002_lang in WoWDBDefs - named after the same Lua push function 0xFB81A0
+    LocalizedString CloseButtonText;
+    uint32 ID;
+    int32 UiTextureKitID;
+    int32 UiWidgetSetID;
+    int32 FrameWidth;
+    int32 FrameHeight;
+    int32 Field_10_1_0_48480_008;
+    // named Field_10_1_0_48480_009 in WoWDBDefs - client 0x24907D0 evaluates field 9 as a PlayerCondition
+    int32 PlayerConditionID;
+};
+
 struct UiMapEntry
 {
     LocalizedString Name;
@@ -4908,6 +4966,22 @@ struct UiMapXMapArtEntry
     int32 PhaseID;
     int32 UiMapArtID;
     uint32 UiMapID;
+};
+
+struct UiPartyPoseEntry
+{
+    LocalizedString TitleText;
+    LocalizedString ExtraButtonText;
+    uint32 ID;
+    int32 UiWidgetSetID;
+    int32 VictoryUiModelSceneID;
+    int32 DefeatUiModelSceneID;
+    int32 VictorySoundKitID;
+    int32 DefeatSoundKitID;
+    int32 SpellID;
+    int32 UiTextureKitID;
+    int32 Flags;
+    uint32 MapID;
 };
 
 struct UISplashScreenEntry
