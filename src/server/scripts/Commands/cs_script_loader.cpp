@@ -27,6 +27,7 @@ void AddSC_bg_commandscript();
 void AddSC_cast_commandscript();
 void AddSC_character_commandscript();
 void AddSC_cheat_commandscript();
+void AddSC_conduit_commandscript();
 void AddSC_debug_commandscript();
 void AddSC_deserter_commandscript();
 void AddSC_disable_commandscript();
@@ -59,6 +60,7 @@ void AddSC_server_commandscript();
 void AddSC_tele_commandscript();
 void AddSC_ticket_commandscript();
 void AddSC_titles_commandscript();
+void AddSC_warfront_commandscript();
 void AddSC_wp_commandscript();
 
 // The name of this function should match:
@@ -76,6 +78,7 @@ void AddCommandsScripts()
     AddSC_cast_commandscript();
     AddSC_character_commandscript();
     AddSC_cheat_commandscript();
+    AddSC_conduit_commandscript();
     AddSC_debug_commandscript();
     AddSC_deserter_commandscript();
     AddSC_disable_commandscript();
@@ -108,5 +111,6 @@ void AddCommandsScripts()
     AddSC_tele_commandscript();
     AddSC_ticket_commandscript();
     AddSC_titles_commandscript();
+    AddSC_warfront_commandscript();
     AddSC_wp_commandscript();
 }

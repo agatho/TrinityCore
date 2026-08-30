@@ -43,6 +43,8 @@
 #include "CombatLogPackets.h"
 #include "CombatPackets.h"
 #include "ContentTrackingPackets.h"
+#include "ContributionPackets.h"
+#include "CovenantPackets.h"
 #include "DuelPackets.h"
 #include "EquipmentSetPackets.h"
 #include "GameObjectPackets.h"
@@ -91,6 +93,7 @@
 #include "VignettePackets.h"
 #include "VoidStoragePackets.h"
 #include "WeeklyRewardsPackets.h"
+#include "WarfrontPackets.h"
 #include "WhoPackets.h"
 #include "WorldStatePackets.h"
 

@@ -2293,6 +2293,214 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     // WorldStateExpression.db2
     PrepareStatement(HOTFIX_SEL_WORLD_STATE_EXPRESSION, "SELECT ID, Expression FROM world_state_expression WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_WORLD_STATE_EXPRESSION, "SELECT MAX(ID) + 1 FROM world_state_expression", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_BOUNTY, "SELECT ID, QuestID, FactionID, IconFileDataID, TurninPlayerConditionID, BountySetID FROM bounty"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_BOUNTY, "SELECT MAX(ID) + 1 FROM bounty", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_BOUNTY_SET, "SELECT ID, VisiblePlayerConditionID, LockedQuestID FROM bounty_set"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_BOUNTY_SET, "SELECT MAX(ID) + 1 FROM bounty_set", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_CHAR_SHIPMENT, "SELECT ID, ContainerID, TreasureID, DummyItemID, Duration, SpellID, OnCompleteSpellID,"
+        " MaxShipments, GarrFollowerID, Flags FROM char_shipment WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_CHAR_SHIPMENT, "SELECT MAX(ID) + 1 FROM char_shipment", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_CHAR_SHIPMENT_CONTAINER, "SELECT ID, Description, PendingText, UiTextureKitID, GarrTypeID, GarrBuildingType,"
+        " BaseCapacity, SmallDisplayInfoID, MediumDisplayInfoID, LargeDisplayInfoID, WorkingSpellVisualID, CompleteSpellVisualID,"
+        " WorkingDisplayInfoID, MediumThreshold, LargeThreshold, Faction, CrossFactionID FROM char_shipment_container"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_CHAR_SHIPMENT_CONTAINER, "SELECT MAX(ID) + 1 FROM char_shipment_container", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_CHAR_SHIPMENT_CONTAINER, "SELECT ID, Description_lang, PendingText_lang FROM char_shipment_container_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_CONTRIBUTION, "SELECT ID, Description, Name, ManagedWorldStateInputID, OrderIndex, ContributionStyleContainer,"
+        " UiTextureAtlasMemberID1, UiTextureAtlasMemberID2, UiTextureAtlasMemberID3, UiTextureAtlasMemberID4 FROM contribution"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_CONTRIBUTION, "SELECT MAX(ID) + 1 FROM contribution", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_CONTRIBUTION, "SELECT ID, Description_lang, Name_lang FROM contribution_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_CREATURE_X_CONTRIBUTION, "SELECT ID, ContributionID, CreatureID FROM creature_x_contribution"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_CREATURE_X_CONTRIBUTION, "SELECT MAX(ID) + 1 FROM creature_x_contribution", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_MANAGED_WORLD_STATE, "SELECT ID, CurrentStageWorldStateID, ProgressWorldStateID, UpTimeSecs, DownTimeSecs,"
+        " AccumulationStateTargetValue, DepletionStateTargetValue, AccumulationAmountPerMinute, DepletionAmountPerMinute, Field_8_1_5_29418_009,"
+        " OccurrencesWorldStateID1, OccurrencesWorldStateID2, OccurrencesWorldStateID3, OccurrencesWorldStateID4 FROM managed_world_state"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_MANAGED_WORLD_STATE, "SELECT MAX(ID) + 1 FROM managed_world_state", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_MANAGED_WORLD_STATE_INPUT, "SELECT ID, ManagedWorldStateID, QuestID, ValidInputConditionID FROM managed_world_state_input"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_MANAGED_WORLD_STATE_INPUT, "SELECT MAX(ID) + 1 FROM managed_world_state_input", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_MANAGED_WORLD_STATE_BUFF, "SELECT ID, BuffSpellID, PlayerConditionID, OccurrenceValue, ManagedWorldStateID FROM managed_world_state_buff"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_MANAGED_WORLD_STATE_BUFF, "SELECT MAX(ID) + 1 FROM managed_world_state_buff", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_ABILITY_CATEGORY, "SELECT ID, Name FROM garr_ability_category WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_ABILITY_CATEGORY, "SELECT MAX(ID) + 1 FROM garr_ability_category", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_GARR_ABILITY_CATEGORY, "SELECT ID, Name_lang FROM garr_ability_category_locale WHERE (`VerifiedBuild` > 0) = ?"
+        " AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_ABILITY_EFFECT, "SELECT ID, GarrAbilityID, EffectType, TargetMask, Amount, CombatWeightBase, "
+        "CombatWeightMax, ActionValueFlat, AbilityAction, MiscValueA, ActionHours, ActionRecordID FROM garr_ability_effect "
+        "WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_ABILITY_EFFECT, "SELECT MAX(ID) + 1 FROM garr_ability_effect", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_AUTO_COMBATANT, "SELECT ID, HealthBase, HealthGainPerLevel, AttackBase, AttackGainPerLevel, AttackSpellID, "
+        "AbilitySpellID, AbilitySpellID2, PassiveSpellID, Role FROM garr_auto_combatant WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_AUTO_COMBATANT, "SELECT MAX(ID) + 1 FROM garr_auto_combatant", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_AUTO_SPELL, "SELECT ID, Name, Description, Cooldown, Duration, Flags, SchoolMask, "
+        "IconFileDataID FROM garr_auto_spell WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_AUTO_SPELL, "SELECT MAX(ID) + 1 FROM garr_auto_spell", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_GARR_AUTO_SPELL, "SELECT ID, Name_lang, Description_lang FROM garr_auto_spell_locale WHERE (`VerifiedBuild` > 0) = ?"
+        " AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_AUTO_SPELL_EFFECT, "SELECT ID, GarrAutoSpellID, EffectIndex, Effect, Points, TargetType, Flags, "
+        "Period FROM garr_auto_spell_effect WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_AUTO_SPELL_EFFECT, "SELECT MAX(ID) + 1 FROM garr_auto_spell_effect", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_BUILDING_DOODAD_SET, "SELECT ID, GarrBuildingID, HordeDoodadSetID, AllianceDoodadSetID, HordeAltDoodadSetID, "
+        "AllianceAltDoodadSetID FROM garr_building_doodad_set WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_BUILDING_DOODAD_SET, "SELECT MAX(ID) + 1 FROM garr_building_doodad_set", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_CLASS_SPEC_PLAYER_COND, "SELECT ID, ClassSpec, OrderIndex, GarrClassSpecID, PlayerConditionID, GarrStringID, "
+        "Flags FROM garr_class_spec_player_cond WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_CLASS_SPEC_PLAYER_COND, "SELECT MAX(ID) + 1 FROM garr_class_spec_player_cond", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_GARR_CLASS_SPEC_PLAYER_COND, "SELECT ID, ClassSpec_lang FROM garr_class_spec_player_cond_locale WHERE (`VerifiedBuild` > 0) = ?"
+        " AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_ENCOUNTER, "SELECT ID, Name, CreatureID, PortraitFileDataID, UiTextureKitID, UiAnimScale, UiAnimHeight, "
+        "Flags, AutoCombatantID FROM garr_encounter WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_ENCOUNTER, "SELECT MAX(ID) + 1 FROM garr_encounter", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_GARR_ENCOUNTER, "SELECT ID, Name_lang FROM garr_encounter_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_ENCOUNTER_SET_X_ENCOUNTER, "SELECT ID, GarrEncounterID, GarrEncounterSetID"
+        " FROM garr_encounter_set_x_encounter WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_ENCOUNTER_SET_X_ENCOUNTER, "SELECT MAX(ID) + 1 FROM garr_encounter_set_x_encounter", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_ENCOUNTER_X_MECHANIC, "SELECT ID, GarrMechanicID, GarrMechanicSetID, GarrEncounterID"
+        " FROM garr_encounter_x_mechanic WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_ENCOUNTER_X_MECHANIC, "SELECT MAX(ID) + 1 FROM garr_encounter_x_mechanic", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_FOLL_ITEM_SET_MEMBER, "SELECT ID, GarrFollItemSetID, ItemSlot, ItemModifiedAppearanceID, GarrFollowerID"
+        " FROM garr_foll_item_set_member WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_FOLL_ITEM_SET_MEMBER, "SELECT MAX(ID) + 1 FROM garr_foll_item_set_member", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_FOLL_SUPPORT_SPELL, "SELECT ID, HordeSpellID, AllianceSpellID, OrderIndex, GarrFollowerID"
+        " FROM garr_foll_support_spell WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_FOLL_SUPPORT_SPELL, "SELECT MAX(ID) + 1 FROM garr_foll_support_spell", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_FOLLOWER_LEVEL_XP, "SELECT ID, FollowerLevel, GarrFollowerTypeID, XpToNextLevel, ShipmentXP"
+        " FROM garr_follower_level_xp WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_FOLLOWER_LEVEL_XP, "SELECT MAX(ID) + 1 FROM garr_follower_level_xp", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_FOLLOWER_QUALITY, "SELECT ID, XpThreshold, QualityItemID, Quality, AbilityCount, TraitCount, "
+        "GarrFollowerTypeID, ClassSpecID FROM garr_follower_quality WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_FOLLOWER_QUALITY, "SELECT MAX(ID) + 1 FROM garr_follower_quality", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_FOLLOWER_TYPE, "SELECT ID, GarrTypeID, MaxFollowers, MaxFollowerBuildingType, MaxItemLevel, LevelRangeBias, "
+        "ItemLevelRangeBias, Flags FROM garr_follower_type WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_FOLLOWER_TYPE, "SELECT MAX(ID) + 1 FROM garr_follower_type", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_FOLLOWER_SET_X_FOLLOWER, "SELECT ID, GarrFollowerID, GarrFollowerSetID"
+        " FROM garr_follower_set_x_follower WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_FOLLOWER_SET_X_FOLLOWER, "SELECT MAX(ID) + 1 FROM garr_follower_set_x_follower", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_FOLLOWER_UI_CREATURE, "SELECT ID, Race, Gender, CreatureID, Scale, FileDataID, GarrFollowerID"
+        " FROM garr_follower_ui_creature WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_FOLLOWER_UI_CREATURE, "SELECT MAX(ID) + 1 FROM garr_follower_ui_creature", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_ITEM_LEVEL_UPGRADE_DATA, "SELECT ID, Operation, MinItemLevel, MaxItemLevel, FollowerTypeID"
+        " FROM garr_item_level_upgrade_data WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_ITEM_LEVEL_UPGRADE_DATA, "SELECT MAX(ID) + 1 FROM garr_item_level_upgrade_data", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_MECHANIC, "SELECT ID, GarrMechanicTypeID, Factor, GarrAbilityID"
+        " FROM garr_mechanic WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_MECHANIC, "SELECT MAX(ID) + 1 FROM garr_mechanic", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_MECHANIC_SET_X_MECHANIC, "SELECT ID, GarrMechanicID, GarrMechanicSetID"
+        " FROM garr_mechanic_set_x_mechanic WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_MECHANIC_SET_X_MECHANIC, "SELECT MAX(ID) + 1 FROM garr_mechanic_set_x_mechanic", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_MECHANIC_TYPE, "SELECT ID, Name, Description, GarrAbilityCategoryID, Category"
+        " FROM garr_mechanic_type WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_MECHANIC_TYPE, "SELECT MAX(ID) + 1 FROM garr_mechanic_type", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_GARR_MECHANIC_TYPE, "SELECT ID, Name_lang, Description_lang FROM garr_mechanic_type_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_MISSION_SET, "SELECT ID, GarrTypeID, MissionCostCurrencyTypesID, ContentTuningID, MapID, Flags, Priority"
+        " FROM garr_mission_set WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_MISSION_SET, "SELECT MAX(ID) + 1 FROM garr_mission_set", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_MISSION_TEXTURE, "SELECT ID, PosX, PosY, UiTextureAtlasMemberID"
+        " FROM garr_mission_texture WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_MISSION_TEXTURE, "SELECT MAX(ID) + 1 FROM garr_mission_texture", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_MISSION_TYPE, "SELECT ID, Name, UiTextureAtlasMemberID, UiTextureKitID"
+        " FROM garr_mission_type WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_MISSION_TYPE, "SELECT MAX(ID) + 1 FROM garr_mission_type", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_GARR_MISSION_TYPE, "SELECT ID, Name_lang FROM garr_mission_type_locale WHERE (`VerifiedBuild` > 0) = ?"
+        " AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_MISSION_X_ENCOUNTER, "SELECT ID, GarrEncounterID, GarrEncounterSetID, OrderIndex, BoardIndex, "
+        "GarrMissionID FROM garr_mission_x_encounter WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_MISSION_X_ENCOUNTER, "SELECT MAX(ID) + 1 FROM garr_mission_x_encounter", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_MISSION_X_FOLLOWER, "SELECT ID, GarrFollowerID, GarrFollowerTypeID, BoardIndex, GarrMissionID"
+        " FROM garr_mission_x_follower WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_MISSION_X_FOLLOWER, "SELECT MAX(ID) + 1 FROM garr_mission_x_follower", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_MSSN_BONUS_ABILITY, "SELECT ID, GarrMssnBonusAbilityType, MssnSort, GarrAbilityID, Modifier, MissionSetID"
+        " FROM garr_mssn_bonus_ability WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_MSSN_BONUS_ABILITY, "SELECT MAX(ID) + 1 FROM garr_mssn_bonus_ability", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_PLOT_UI_CATEGORY, "SELECT ID, Name, PlotType FROM garr_plot_ui_category WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_PLOT_UI_CATEGORY, "SELECT MAX(ID) + 1 FROM garr_plot_ui_category", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_GARR_PLOT_UI_CATEGORY, "SELECT ID, Name_lang FROM garr_plot_ui_category_locale WHERE (`VerifiedBuild` > 0) = ?"
+        " AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_SPECIALIZATION, "SELECT ID, Name, Description, GarrTypeID, IconFileDataID, GarrFollowerTypeID, Param, Bonus1, "
+        "Bonus2 FROM garr_specialization WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_SPECIALIZATION, "SELECT MAX(ID) + 1 FROM garr_specialization", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_GARR_SPECIALIZATION, "SELECT ID, Name_lang, Description_lang FROM garr_specialization_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_STRING, "SELECT ID, Text FROM garr_string WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_STRING, "SELECT MAX(ID) + 1 FROM garr_string", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_GARR_STRING, "SELECT ID, Text_lang FROM garr_string_locale WHERE (`VerifiedBuild` > 0) = ?"
+        " AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_TALENT, "SELECT Name, Description, ID, GarrTalentTreeID, Tier, UiOrder, IconFileDataID, "
+        "PlayerConditionID, GarrAbilityID, Flags, TalentType, PrerequisiteTalentID, ResearchCostSource, "
+        "ActiveDurationSecs, GarrTalentSocketPropertiesID FROM garr_talent WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_TALENT, "SELECT MAX(ID) + 1 FROM garr_talent", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_GARR_TALENT, "SELECT ID, Name_lang, Description_lang FROM garr_talent_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_TALENT_RANK, "SELECT ID, `Rank`, PerkSpellID, PerkPlayerConditionID, Points, ResearchCost, "
+        "ResearchCostCurrencyTypesID, ResearchGoldCost, ResearchDurationSecs, RespecCost, RespecCostCurrencyTypesID, "
+        "RespecGoldCost, RespecDurationSecs, AlternateResearchCost, AlternateResearchCostCurrencyTypesID, "
+        "AlternateResearchGoldCost, AlternateResearchDurationSecs, GarrTalentID FROM garr_talent_rank"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_TALENT_RANK, "SELECT MAX(ID) + 1 FROM garr_talent_rank", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_TALENT_COST, "SELECT MoneyQuantity, ID, GarrTalentTreeID, GarrTalentID, RankIndex, "
+        "GarrTalentRankID, CostType, CurrencyTypesID, CurrencyQuantity FROM garr_talent_cost"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_TALENT_COST, "SELECT MAX(ID) + 1 FROM garr_talent_cost", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_TALENT_RESEARCH, "SELECT ID, GoldCost, CurrencyTypesID, CurrencyTypesCost, DurationSecs, "
+        "RespecGoldCost, RespecCurrencyTypesID, RespecCurrencyTypesCost, RespecDurationSecs FROM garr_talent_research"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_TALENT_RESEARCH, "SELECT MAX(ID) + 1 FROM garr_talent_research", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_TALENT_SOCKET_PROPERTIES, "SELECT ID, GarrTalentSocketType, GarrTalentSocketSubtype"
+        " FROM garr_talent_socket_properties WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_TALENT_SOCKET_PROPERTIES, "SELECT MAX(ID) + 1 FROM garr_talent_socket_properties", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_TALENT_MAP_POI, "SELECT ID, Position1, Position2, GarrTalentID FROM garr_talent_map_poi"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_TALENT_MAP_POI, "SELECT MAX(ID) + 1 FROM garr_talent_map_poi", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_TALENT_RANK_GROUP_ENTRY, "SELECT ID, GarrTalentRankGroupID, GarrTalentRankID"
+        " FROM garr_talent_rank_group_entry WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_TALENT_RANK_GROUP_ENTRY, "SELECT MAX(ID) + 1 FROM garr_talent_rank_group_entry", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_TALENT_RANK_GROUP_RESEARCH_MOD, "SELECT ID, ModifierType, PlayerConditionID, ModifierValue, "
+        "GarrTalentRankGroupID FROM garr_talent_rank_group_research_mod WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_TALENT_RANK_GROUP_RESEARCH_MOD, "SELECT MAX(ID) + 1 FROM garr_talent_rank_group_research_mod", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_TAL_TREE_X_GARR_TAL_RESEARCH, "SELECT ID, GarrTalentTreeID, GarrTalentResearchID, OrderIndex"
+        " FROM garr_tal_tree_x_garr_tal_research WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_TAL_TREE_X_GARR_TAL_RESEARCH, "SELECT MAX(ID) + 1 FROM garr_tal_tree_x_garr_tal_research", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_TYPE, "SELECT ID, PrimaryCurrencyTypeID, SecondaryCurrencyTypeID, ExpansionID, Flags, AutoFollowerHealRate, "
+        "MissionCostCurveID, AutoFollowerHealCostMult, MapIDs1, MapIDs2 FROM garr_type WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_TYPE, "SELECT MAX(ID) + 1 FROM garr_type", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_UI_ANIM_CLASS_INFO, "SELECT ID, ClassID, IsFemale, WalkSpeed, RunAnimID, WalkAnimID, IdleAnimID"
+        " FROM garr_ui_anim_class_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_UI_ANIM_CLASS_INFO, "SELECT MAX(ID) + 1 FROM garr_ui_anim_class_info", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GARR_UI_ANIM_RACE_INFO, "SELECT ID, RaceID, RunSpeedModifier, RunAnimSpeedModifier, WalkAnimSpeedModifier, "
+        "IdleAnimSpeedModifier, PortraitScale, PortraitHeight, PortraitFieldOfView, PortraitCameraPositionX, PortraitCameraPositionY, "
+        "PortraitCameraPositionZ, PortraitCameraTargetX, PortraitCameraTargetY"
+        " FROM garr_ui_anim_race_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GARR_UI_ANIM_RACE_INFO, "SELECT MAX(ID) + 1 FROM garr_ui_anim_race_info", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_GOSSIP_X_GARR_TALENT_TREES, "SELECT ID, GarrTalentTreeID, GossipID"
+        " FROM gossip_x_garr_talent_trees WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_GOSSIP_X_GARR_TALENT_TREES, "SELECT MAX(ID) + 1 FROM gossip_x_garr_talent_trees", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_SOULBIND, "SELECT ID, Name, CovenantID, GarrTalentTreeID, CreatureID, GarrFollowerID, "
+        "PlayerConditionID FROM soulbind WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_SOULBIND, "SELECT MAX(ID) + 1 FROM soulbind", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_SOULBIND, "SELECT ID, Name_lang FROM soulbind_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_SOULBIND_CONDUIT, "SELECT ID, ConduitType, CovenantID, SpecSetID, Flags FROM soulbind_conduit"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_SOULBIND_CONDUIT, "SELECT MAX(ID) + 1 FROM soulbind_conduit", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_SOULBIND_CONDUIT_ITEM, "SELECT ID, ItemID, ConduitID FROM soulbind_conduit_item"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_SOULBIND_CONDUIT_ITEM, "SELECT MAX(ID) + 1 FROM soulbind_conduit_item", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_SOULBIND_CONDUIT_RANK_PROPERTIES, "SELECT ID, `Rank`, ItemLevel, QualityID FROM soulbind_conduit_rank_properties"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_SOULBIND_CONDUIT_RANK_PROPERTIES, "SELECT MAX(ID) + 1 FROM soulbind_conduit_rank_properties", CONNECTION_SYNCH);
+    PrepareStatement(HOTFIX_SEL_TROPHY, "SELECT ID, Name, TrophyTypeID, GameObjectDisplayInfoID, PlayerConditionID FROM trophy"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_TROPHY, "SELECT MAX(ID) + 1 FROM trophy", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_TROPHY, "SELECT ID, Name_lang FROM trophy_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 }
 
 HotfixDatabaseConnection::HotfixDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

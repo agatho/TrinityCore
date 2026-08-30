@@ -57,6 +57,7 @@
 #include "ChallengeModeMgr.h"
 #include "ItemConversionMgr.h"
 #include "ItemUpgradeMgr.h"
+#include "Garrison.h"
 #include "GarrisonMgr.h"
 #include "GitRevision.h"
 #include "GridNotifiersImpl.h"
@@ -67,8 +68,10 @@
 #include "InstanceLockMgr.h"
 #include "ItemBonusMgr.h"
 #include "LFGListMgr.h"
+#include "ContributionMgr.h"
 #include "LFGMgr.h"
 #include "Language.h"
+#include "ManagedWorldStateMgr.h"
 #include "LanguageMgr.h"
 #include "Log.h"
 #include "LootItemStorage.h"
@@ -108,6 +111,7 @@
 #include "VMapFactory.h"
 #include "VMapManager.h"
 #include "WaypointManager.h"
+#include "WarfrontMgr.h"
 #include "WeatherMgr.h"
 #include "WhoListStorage.h"
 #include "WorldSession.h"
@@ -1646,6 +1650,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Quest Greetings...");
     sObjectMgr->LoadQuestGreetings();
 
+    TC_LOG_INFO("server.loading", "Loading Quest Garrison Follower Rewards...");
+    sObjectMgr->LoadQuestGarrisonFollowers();                     // must be after quest load
+
     if (m_bool_configs[CONFIG_LOAD_LOCALES])
         sObjectMgr->LoadQuestGreetingLocales();
 
@@ -1656,6 +1663,15 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading World State templates...");
     WorldStateMgr::LoadFromDB();                               // must be loaded before battleground, outdoor PvP, game events and conditions
+
+    TC_LOG_INFO("server.loading", "Loading Managed World States...");
+    sManagedWorldStateMgr->Load();                            // must be after world state values are available to restore persisted progress
+
+    TC_LOG_INFO("server.loading", "Loading Contribution collectors...");
+    sContributionMgr->Load();                                 // must be after ManagedWorldStateMgr::Load (builds the ManagedWorldState -> Contribution reverse index)
+
+    TC_LOG_INFO("server.loading", "Initializing Warfronts...");
+    sWarfrontMgr->Initialize();                               // BfA warfront cycle owner; after world states are restored and the contribution bars exist
 
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();
@@ -1701,6 +1717,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading AreaTrigger script names...");
     sObjectMgr->LoadAreaTriggerScripts();
+
+    TC_LOG_INFO("server.loading", "Loading Creature taxi node bindings..."); // must be after creature templates
+    sObjectMgr->LoadCreatureTaxiNodes();
 
     TC_LOG_INFO("server.loading", "Loading LFG entrance positions..."); // Must be after areatriggers
     sLFGMgr->LoadLFGDungeons();
@@ -2393,8 +2412,18 @@ void World::Update(uint32 diff)
     }
 
     {
+        TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update managed world states"));
+        sManagedWorldStateMgr->Update(diff);
+    }
+
+    {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update battlefields"));
         sBattlefieldMgr->Update(diff);
+    }
+
+    {
+        TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update warfronts"));
+        sWarfrontMgr->Update(diff);
     }
 
     ///- Delete all characters which have been deleted X days before
@@ -3150,6 +3179,15 @@ void World::DailyReset()
 
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_GARRISON_FOLLOWER_ACTIVATIONS);
     stmt->setUInt32(0, 1);
+    CharacterDatabase.Execute(stmt);
+
+    // Anima Conductor channels paid for with reservoir anima run until the daily reset. Online characters lose
+    // theirs through Player::DailyReset -> Garrison::ExpireTemporaryChannelAnima; this is the same expiry for
+    // everyone offline right now, so a channel cannot outlive its day by logging out. It must run BEFORE the
+    // in-memory pass below, whose owners rewrite their own rows on the next save.
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_GARRISON_TEMPORARY_TALENTS_BY_TYPE);
+    stmt->setUInt8(0, uint8(GARRISON_TYPE_COVENANT));
+    stmt->setInt32(1, Garrison::GARRISON_TALENT_FLAG_TEMPORARY);
     CharacterDatabase.Execute(stmt);
 
     // reset all quest status in memory

@@ -520,6 +520,10 @@ WorldPacket const* LFGSlotInvalid::Write()
     _worldPacket << uint32(Reason);
     _worldPacket << int32(SubReason1);
     _worldPacket << int32(SubReason2);
+WorldPacket const* OpenLfgDungeonFinder::Write()
+{
+    // INFERRED (needs sniff validation) - single uint32 LFGDungeons.db2 id. See the class comment in LFGPackets.h.
+    _worldPacket << uint32(DungeonID);
 
     return &_worldPacket;
 }
