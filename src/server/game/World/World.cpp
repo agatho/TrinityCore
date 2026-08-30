@@ -22,6 +22,7 @@
 #include "World.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
+#include "ArchaeologyMgr.h"
 #include "AreaTriggerDataStore.h"
 #include "ArenaTeamMgr.h"
 #include "AuctionHouseBot.h"
@@ -1591,11 +1592,19 @@ bool World::SetInitialWorldSettings()
     QuestMgr::Load();
     sObjectMgr->LoadQuests();                                    // must be loaded after DBCs, creature_template, items, gameobject tables
 
+    TC_LOG_INFO("server.loading", "Loading World Quests...");
+
     TC_LOG_INFO("server.loading", "Checking Quest Disables");
     DisableMgr::CheckQuestDisables();                           // must be after loading quests
 
     TC_LOG_INFO("server.loading", "Loading Quest POI");
     sObjectMgr->LoadQuestPOI();
+
+    TC_LOG_INFO("server.loading", "Loading Archaeology research data...");
+    sArchaeologyMgr->LoadResearchSites();                        // must be after DB2 stores load
+    sArchaeologyMgr->LoadDigSiteData();                          // must be after LoadResearchSites
+    sArchaeologyMgr->LoadResearchBranchData();                   // must be after gameobject templates load
+    sArchaeologyMgr->LoadDigSitePoints();                        // must be after LoadDigSiteData
 
     TC_LOG_INFO("server.loading", "Loading Quests Starters and Enders...");
     sObjectMgr->LoadQuestStartersAndEnders();                    // must be after quest load

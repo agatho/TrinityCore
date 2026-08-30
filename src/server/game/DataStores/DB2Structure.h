@@ -48,6 +48,39 @@ struct AchievementEntry
     int32 LegacyAfterTimeEvent;                                     // category changes clientside to Legacy after this TimeEvent is passed
 };
 
+struct ResearchSiteEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    int16 MapID;
+    int32 QuestPOIBlobID;
+    uint32 AreaPOIIconEnum;
+};
+
+struct ResearchProjectEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    LocalizedString Description;
+    uint8 Rarity;
+    int32 SpellID;
+    uint16 ResearchBranchID;
+    uint8 NumSockets;
+    int32 TextureFileID;
+    uint32 RequiredWeight;
+};
+
+struct ResearchBranchEntry
+{
+    uint32 ID;
+    LocalizedString Name;
+    uint8 ResearchFieldID;
+    uint16 CurrencyID;
+    int32 TextureFileID;
+    int32 BigTextureFileID;
+    int32 ItemID;
+};
+
 struct Achievement_CategoryEntry
 {
     LocalizedString Name;
