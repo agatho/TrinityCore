@@ -719,6 +719,7 @@ namespace WorldPackets
 
     namespace Misc
     {
+        class ChromieTimeSelectExpansion;
         class SetSelection;
         class ViolenceLevel;
         class GetCharacterCurrencyTransferLog;
