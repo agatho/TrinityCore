@@ -28662,19 +28662,6 @@ void Player::LearnQuestRewardedSpells(Quest const* quest)
     CastSpell(this, spell_id, true);
 }
 
-void Player::LearnQuestRewardedSpells()
-{
-    // learn spells received from quest completing
-    for (RewardedQuestSet::const_iterator itr = m_RewardedQuests.begin(); itr != m_RewardedQuests.end(); ++itr)
-    {
-        Quest const* quest = sObjectMgr->GetQuestTemplate(*itr);
-        if (!quest)
-            continue;
-
-        LearnQuestRewardedSpells(quest);
-    }
-}
-
 void Player::LearnSkillRewardedSpells(uint32 skillId, uint32 skillValue, Races race)
 {
     uint32 classMask = GetClassMask();
@@ -29121,11 +29108,6 @@ bool Player::GetBGAccessByLevel(BattlegroundTypeId bgTypeId) const
         return false;
 
     return true;
-}
-
-float Player::GetReputationPriceDiscount(Creature const* creature) const
-{
-    return GetReputationPriceDiscount(creature->GetFactionTemplateEntry());
 }
 
 float Player::GetReputationPriceDiscount(FactionTemplateEntry const* factionTemplate) const
@@ -30432,11 +30414,6 @@ bool Player::HasTitle(uint32 bitIndex) const
 
     uint64 flag = UI64LIT(1) << (bitIndex % 64);
     return (m_activePlayerData->KnownTitles[fieldIndexOffset] & flag) != 0;
-}
-
-bool Player::HasTitle(CharTitlesEntry const* title) const
-{
-    return HasTitle(title->MaskID);
 }
 
 void Player::SetTitle(CharTitlesEntry const* title, bool lost)
@@ -35241,12 +35218,6 @@ Guild* Player::GetGuild()
     return guildId ? sGuildMgr->GetGuildById(guildId) : nullptr;
 }
 
-Guild const* Player::GetGuild() const
-{
-    ObjectGuid::LowType guildId = GetGuildId();
-    return guildId ? sGuildMgr->GetGuildById(guildId) : nullptr;
-}
-
 Pet* Player::SummonPet(uint32 entry, Optional<PetSaveMode> slot, float x, float y, float z, float ang, uint32 duration, bool* isNew /*= nullptr*/)
 {
     PetStable& petStable = GetOrInitPetStable();
@@ -36575,19 +36546,6 @@ bool Player::CanExecutePendingSpellCastRequest()
         return false;
 
     return true;
-}
-
-void Player::UpdateDungeonScore()
-{
-    WorldPackets::MythicPlus::DungeonScoreSummary summary;
-    WorldPackets::MythicPlus::DungeonScoreData data;
-    if (MythicPlusData* mythicPlus = GetMythicPlusData())
-    {
-        mythicPlus->BuildDungeonScoreSummary(summary);
-        mythicPlus->BuildDungeonScoreData(data);
-    }
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::DungeonScore), std::move(summary));
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::DungeonScore), std::move(data));
 }
 
 void Player::SetDelveData(int32 mapId, int32 tier, uint64 instanceId, int32 entranceType,
