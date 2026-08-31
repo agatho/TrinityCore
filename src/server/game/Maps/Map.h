@@ -910,6 +910,8 @@ class TC_GAME_API InstanceMap : public Map
         ChallengeMode* GetChallengeMode() { return i_challengeMode.get(); }
         ChallengeMode const* GetChallengeMode() const { return i_challengeMode.get(); }
         void SetInstanceScenario(InstanceScenario* scenario);
+        ChallengeMode* GetChallengeMode() { return i_challengeMode.get(); }
+        ChallengeMode const* GetChallengeMode() const { return i_challengeMode.get(); }
         // Lift a live Mythic (23) dungeon to Mythic Keystone (8) and create its ChallengeMode.
         // The client can never enter at difficulty 8 (not DIFFICULTY_FLAG_CAN_SELECT), so the
         // keystone activation is the server-side writer that reaches DIFFICULTY_MYTHIC_KEYSTONE.
@@ -948,14 +950,20 @@ class TC_GAME_API BattlegroundMap : public Map
         BattlegroundMap(uint32 id, time_t, uint32 InstanceId, Difficulty spawnMode);
         ~BattlegroundMap();
 
+        bool AddPlayerToMap(Player* player, bool initPlayer = true) override;
+        void RemovePlayerFromMap(Player*, bool) override;
+        TransferAbortParams CannotEnter(Player* player) override;
         void SetUnload();
         //void UnloadAll(bool pForce);
         void RemoveAllPlayers() override;
         void Update(uint32 diff) override;
 
+        virtual void InitVisibilityDistance() override;
         Battleground* GetBG() const { return m_bg; }
         void SetBG(Battleground* bg) { m_bg = bg; }
 
+        uint32 GetScriptId() const { return _scriptId; }
+        std::string const& GetScriptName() const;
         BattlegroundScript* GetBattlegroundScript() { return _battlegroundScript.get(); }
         BattlegroundScript const* GetBattlegroundScript() const { return _battlegroundScript.get(); }
 
