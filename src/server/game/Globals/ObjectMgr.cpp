@@ -12467,3 +12467,8 @@ std::string ObjectMgr::GetPhaseName(uint32 phaseId) const
     PhaseNameContainer::const_iterator iter = _phaseNameStore.find(phaseId);
     return iter != _phaseNameStore.end() ? iter->second : "Unknown Name";
 }
+
+ObjectMgr::ScriptNameContainer::NameMap::const_iterator ObjectMgr::ScriptNameContainer::find(size_t index) const
+{
+    return index < IndexToName.size() ? IndexToName[index] : end();
+}

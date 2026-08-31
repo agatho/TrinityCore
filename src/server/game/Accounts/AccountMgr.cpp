@@ -593,3 +593,22 @@ rbac::RBACPermissionContainer const& AccountMgr::GetRBACDefaultPermissions(uint8
     TC_LOG_TRACE("rbac", "AccountMgr::GetRBACDefaultPermissions: secLevel {} - size: {}", secLevel, uint32(_defaultPermissions[secLevel].size()));
     return _defaultPermissions[secLevel];
 }
+
+bool AccountMgr::CheckPassword(std::string username, std::string password)
+{
+    Utf8ToUpperOnlyLatin(username);
+    Utf8ToUpperOnlyLatin(password);
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_CHECK_PASSWORD_BY_NAME);
+    stmt->setString(0, username);
+
+    if (PreparedQueryResult result = LoginDatabase.Query(stmt))
+    {
+        Trinity::Crypto::SRP::Salt salt = (*result)[0].GetBinary<Trinity::Crypto::SRP::SALT_LENGTH>();
+        Trinity::Crypto::SRP::Verifier verifier = (*result)[1].GetBinary();
+        if (AccountSRP6(username, salt, verifier).CheckCredentials(username, password))
+            return true;
+    }
+
+    return false;
+}

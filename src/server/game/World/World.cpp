@@ -3769,3 +3769,9 @@ CliCommandHolder::~CliCommandHolder()
 {
     free(m_command);
 }
+
+BanReturn World::BanAccount(BanMode mode, std::string const& nameOrIP, std::string const& duration, std::string const& reason, std::string const& author)
+{
+    uint32 duration_secs = TimeStringToSecs(duration);
+    return BanAccount(mode, nameOrIP, duration_secs, reason, author);
+}

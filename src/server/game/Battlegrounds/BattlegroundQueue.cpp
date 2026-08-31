@@ -1868,3 +1868,8 @@ void BGQueueRemoveEvent::Abort(uint64 /*e_time*/)
 {
     //do nothing
 }
+
+BattlegroundProposal* BattlegroundQueue::FindProposalFor(ObjectGuid guid)
+{
+    return const_cast<BattlegroundProposal*>(std::as_const(*this).FindProposalFor(guid));
+}

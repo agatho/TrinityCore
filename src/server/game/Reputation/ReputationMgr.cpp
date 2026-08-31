@@ -1024,3 +1024,24 @@ void ReputationMgr::SetVisible(FactionEntry const* factionEntry)
     SetVisible(&itr->second);
 }
 
+void ReputationMgr::SetAtWar(RepListID repListID, bool on)
+{
+    FactionStateList::iterator itr = _factions.find(repListID);
+    if (itr == _factions.end())
+        return;
+
+    // always invisible or hidden faction can't change war state
+    if (itr->second.Flags.HasFlag(ReputationFlags::Hidden | ReputationFlags::Header))
+        return;
+
+    SetAtWar(&itr->second, on);
+}
+
+void ReputationMgr::SetInactive(RepListID repListID, bool on)
+{
+    FactionStateList::iterator itr = _factions.find(repListID);
+    if (itr == _factions.end())
+        return;
+
+    SetInactive(&itr->second, on);
+}

@@ -2737,3 +2737,7 @@ void Aura::CallScriptEffectAfterAbsorbHandlers(AuraEffect* aurEff, AuraApplicati
     }
 }
 
+AuraApplication* Aura::GetApplicationOfTarget(ObjectGuid guid)
+{
+    return Trinity::Containers::MapGetValuePtr(m_applications, guid);
+}

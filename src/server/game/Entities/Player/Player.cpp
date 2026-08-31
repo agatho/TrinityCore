@@ -36963,3 +36963,13 @@ void Player::UpdateVisibilityOf(WorldObject* target)
     }
 }
 
+Guild const* Player::GetGuild() const
+{
+    ObjectGuid::LowType guildId = GetGuildId();
+    return guildId ? sGuildMgr->GetGuildById(guildId) : nullptr;
+}
+
+void Player::TextEmote(uint32 textId, WorldObject const* target /*= nullptr*/, bool /*isBossEmote = false*/)
+{
+    Talk(textId, CHAT_MSG_EMOTE, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_TEXTEMOTE), target);
+}

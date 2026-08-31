@@ -6194,3 +6194,30 @@ uint32 Garrison::GetSelectedTrophy(uint32 trophyInstanceID) const
     auto itr = _trophies.find(trophyInstanceID);
     return itr != _trophies.end() ? itr->second : 0;
 }
+
+Garrison::Plot const* Garrison::GetPlot(uint32 garrPlotInstanceId) const
+{
+    auto itr = _plots.find(garrPlotInstanceId);
+    if (itr != _plots.end())
+        return &itr->second;
+
+    return nullptr;
+}
+
+Garrison::Follower* Garrison::GetFollower(uint64 dbId)
+{
+    auto itr = _followers.find(dbId);
+    if (itr != _followers.end())
+        return &itr->second;
+
+    return nullptr;
+}
+
+Garrison::Mission const* Garrison::GetMissionByRecID(uint32 missionRecID) const
+{
+    for (auto const& p : _missions)
+        if (static_cast<uint32>(p.second.PacketInfo.MissionRecID) == missionRecID)
+            return &p.second;
+
+    return nullptr;
+}

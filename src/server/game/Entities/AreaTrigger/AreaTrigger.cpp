@@ -1649,3 +1649,10 @@ void AreaTrigger::InitHousingPlotVisuals()
             .ModifyValue(&UF::ScaleCurve::OverrideActive), true);
     }
 }
+
+void AreaTrigger::SetScaleCurve(UF::MutableFieldReference<UF::ScaleCurve, false> scaleCurveMutator, float constantValue)
+{
+    ScaleCurveData curveTemplate;
+    curveTemplate.Curve = constantValue;
+    SetScaleCurve(scaleCurveMutator, curveTemplate);
+}

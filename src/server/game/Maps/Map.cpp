@@ -4200,3 +4200,40 @@ void Map::SendZoneWeather(uint32 zoneId, Player* player) const
     }
 }
 
+template<>
+bool Map::AddToMap(Transport* obj)
+{
+    //TODO: Needs clean up. An object should not be added to map twice.
+    if (obj->IsInWorld())
+        return true;
+
+    CellCoord cellCoord = Trinity::ComputeCellCoord(obj->GetPositionX(), obj->GetPositionY());
+    if (!cellCoord.IsCoordValid())
+    {
+        TC_LOG_ERROR("maps", "Map::Add: Object {} has invalid coordinates X:{} Y:{} grid cell [{}:{}]", obj->GetGUID().ToString(), obj->GetPositionX(), obj->GetPositionY(), cellCoord.x_coord, cellCoord.y_coord);
+        return false; //Should delete object
+    }
+
+    _transports.insert(obj);
+
+    if (obj->GetExpectedMapId() == GetId())
+    {
+        obj->AddToWorld();
+
+        // Broadcast creation to players
+        for (Map::PlayerList::const_iterator itr = GetPlayers().begin(); itr != GetPlayers().end(); ++itr)
+        {
+            if (itr->GetSource()->GetTransport() != obj && itr->GetSource()->InSamePhase(obj))
+            {
+                UpdateData data(GetId());
+                obj->BuildCreateUpdateBlockForPlayer(&data, itr->GetSource());
+                itr->GetSource()->m_visibleTransports.insert(obj->GetGUID());
+                WorldPacket packet;
+                data.BuildPacket(&packet);
+                itr->GetSource()->SendDirectMessage(&packet);
+            }
+        }
+    }
+
+    return true;
+}

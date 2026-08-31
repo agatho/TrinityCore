@@ -15392,3 +15392,79 @@ void Unit::_UnapplyAura(AuraApplication* aurApp, AuraRemoveMode removeMode)
     ABORT();
 }
 
+AuraApplication* Unit::GetAuraApplication(uint32 spellId, std::function<bool(Aura const*)> const& predicate) const
+{
+    for (AuraApplicationMap::value_type const& pair : Trinity::Containers::MapEqualRange(m_appliedAuras, spellId))
+        if (predicate(pair.second->GetBase()))
+            return pair.second;
+
+    return nullptr;
+}
+
+AuraApplication* Unit::GetAuraApplication(std::function<bool(Aura const*)> const& predicate) const
+{
+    for (AuraApplicationMap::value_type const& pair : m_appliedAuras)
+        if (predicate(pair.second->GetBase()))
+            return pair.second;
+
+    return nullptr;
+}
+
+void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeRange speedType, bool clientUpdate, bool force /*= false*/)
+{
+    FlightCapabilityEntry const* flightCapabilityEntry = sFlightCapabilityStore.LookupEntry(GetFlightCapabilityID());
+    if (!flightCapabilityEntry)
+        flightCapabilityEntry = sFlightCapabilityStore.AssertEntry(1);
+
+    auto [opcode, min, max, rateAura] = [&]
+    {
+        switch (speedType)
+        {
+            case ADV_FLYING_BANKING_RATE:
+                return std::tuple(SMSG_MOVE_SET_ADV_FLYING_BANKING_RATE, flightCapabilityEntry->BankingRateMin, flightCapabilityEntry->BankingRateMax, SPELL_AURA_MOD_ADV_FLYING_BANKING_RATE);
+            case ADV_FLYING_PITCHING_RATE_DOWN:
+                return std::tuple(SMSG_MOVE_SET_ADV_FLYING_PITCHING_RATE_DOWN, flightCapabilityEntry->PitchingRateDownMin, flightCapabilityEntry->PitchingRateDownMax, SPELL_AURA_MOD_ADV_FLYING_PITCHING_RATE_DOWN);
+            case ADV_FLYING_PITCHING_RATE_UP:
+                return std::tuple(SMSG_MOVE_SET_ADV_FLYING_PITCHING_RATE_UP, flightCapabilityEntry->PitchingRateUpMin, flightCapabilityEntry->PitchingRateUpMax, SPELL_AURA_MOD_ADV_FLYING_PITCHING_RATE_UP);
+            case ADV_FLYING_TURN_VELOCITY_THRESHOLD:
+                return std::tuple(SMSG_MOVE_SET_ADV_FLYING_TURN_VELOCITY_THRESHOLD, flightCapabilityEntry->TurnVelocityThresholdMin, flightCapabilityEntry->TurnVelocityThresholdMax, SPELL_AURA_NONE);
+            default:
+                return std::tuple<OpcodeServer, float, float, AuraType>();
+        }
+    }();
+
+    if (rateAura != SPELL_AURA_NONE)
+    {
+        // take only lowest negative and highest positive auras - these effects do not stack
+        if (float neg = GetMaxNegativeAuraModifier(rateAura, [](AuraEffect const* mod) { return mod->GetAmount() > 0 && mod->GetAmount() < 100; }))
+        {
+            ApplyPct(min, neg);
+            ApplyPct(max, neg);
+        }
+
+        if (float pos = GetMaxPositiveAuraModifier(rateAura, [](AuraEffect const* mod) { return mod->GetAmount() > 100; }))
+        {
+            ApplyPct(min, pos);
+            ApplyPct(max, pos);
+        }
+    }
+
+    if (!force && m_advFlyingSpeed[speedType] == min && m_advFlyingSpeed[speedType + 1] == max)
+        return;
+
+    m_advFlyingSpeed[speedType] = min;
+    m_advFlyingSpeed[speedType + 1] = max;
+
+    if (!clientUpdate)
+        return;
+
+    if (Player* playerMover = Unit::ToPlayer(GetUnitBeingMoved()))
+    {
+        WorldPackets::Movement::SetAdvFlyingSpeedRange selfpacket(opcode);
+        selfpacket.MoverGUID = GetGUID();
+        selfpacket.SequenceIndex = m_movementCounter++;
+        selfpacket.SpeedMin = min;
+        selfpacket.SpeedMax = max;
+        playerMover->GetSession()->SendPacket(selfpacket.Write());
+    }
+}
