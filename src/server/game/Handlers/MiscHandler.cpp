@@ -2094,9 +2094,6 @@ void WorldSession::HandleChromieTimeSelectExpansion(WorldPackets::Misc::ChromieT
     if (player->GetLevel() < Player::ChromieTimeMinLevel || player->GetLevel() >= Player::ChromieTimeMaxEntryLevel)
         return;
 
-    UIChromieTimeExpansionInfoEntry const* entry = sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId));
-    if (!entry)
-        return;
 
     // Do NOT require ShowPlayerConditionID here: decoded @68887 each of those conditions is
     // ModifierTree { All -> PlayerIsInChromieTime(own id) } with PlayerCondition flags 0x21

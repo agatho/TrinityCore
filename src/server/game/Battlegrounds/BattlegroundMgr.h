@@ -92,6 +92,7 @@ class TC_GAME_API BattlegroundMgr
         ~BattlegroundMgr();
 
     public:
+        BattlegroundTypeId GetRandomBG(BattlegroundTypeId id, PVPDifficultyEntry const* queueBracket = nullptr);
         BattlegroundMgr(BattlegroundMgr const& right) = delete;
         BattlegroundMgr(BattlegroundMgr&& right) = delete;
         BattlegroundMgr& operator=(BattlegroundMgr const& right) = delete;
@@ -206,7 +207,6 @@ class TC_GAME_API BattlegroundMgr
         static bool IsArenaType(BattlegroundTypeId bgTypeId);
         // queueBracket, when given, restricts the draw to maps whose own PVPDifficulty ladder holds a single
         // bracket that fully contains the queue bracket's level range. See the definition for why.
-        BattlegroundTypeId GetRandomBG(BattlegroundTypeId id, PVPDifficultyEntry const* queueBracket = nullptr);
 
         typedef std::map<BattlegroundTypeId, BattlegroundData> BattlegroundDataContainer;
         BattlegroundDataContainer bgDataStore;

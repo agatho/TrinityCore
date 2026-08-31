@@ -199,8 +199,6 @@ void WorldSession::HandleCovenantRenownRequestCatchupState(WorldPackets::Covenan
     // The player's actual renown state is not carried by this packet at all - it reaches the client as
     // currency 1822, which Player::SyncCovenantRenownDisplayCurrency keeps equal to the active covenant's
     // renown currency (Covenant.db2 CurrencyTypesID).
-    WorldPackets::Covenant::CovenantRenownSendCatchupState response;
-    response.IsActive = player->IsCovenantRenownCatchupActive();
     // Core does not implement accelerated renown catch-up, so report it as inactive. Answers the client's query so
     // its renown UI stops waiting (mirrors the default-response pattern of the other covenant info handlers).
     WorldPackets::Covenant::CovenantRenownSendCatchupState response;

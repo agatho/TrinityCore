@@ -197,21 +197,21 @@ namespace WorldPackets
         class CurrencyTransferLog final : public ServerPacket
         {
         public:
-            struct Entry
+            struct CurrencyTransferLogEntry
             {
-                ObjectGuid Source;
-                ObjectGuid Dest;
-                int32 CurrencyID = 0;
-                int32 Quantity = 0;
-                int32 Field3 = 0;
-                uint64 TransferTime = 0;
+                ObjectGuid SourceCharacterGUID;
+                ObjectGuid DestCharacterGUID;
+                int32 CurrencyTypeID = 0;
+                int32 QuantityReceived = 0;
+                int32 QuantitySent = 0;
+                uint32 Timestamp = 0;
             };
 
-            explicit CurrencyTransferLog() : ServerPacket(SMSG_CURRENCY_TRANSFER_LOG, 4) { }
+            explicit CurrencyTransferLog() : ServerPacket(SMSG_CURRENCY_TRANSFER_LOG) { }
 
             WorldPacket const* Write() override;
 
-            std::vector<Entry> Entries;
+            std::vector<CurrencyTransferLogEntry> Entries;
         };
 
         // CMSG_REQUEST_CURRENCY_DATA_FOR_ACCOUNT_CHARACTERS (0x29001F... 0x29001E): empty body; the client asks for

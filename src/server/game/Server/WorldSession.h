@@ -2760,6 +2760,7 @@ class TC_GAME_API WorldSession
         void HandleSubscriptionInterstitialResponse(WorldPackets::Misc::SubscriptionInterstitialResponse& subscriptionInterstitialResponse);
         void HandleRequestScheduledAreaPoiUpdate(WorldPackets::Misc::RequestScheduledAreaPoiUpdate& requestScheduledAreaPoiUpdate);
         void HandleBonusRoll(WorldPackets::Misc::BonusRoll& bonusRoll);
+        void HandleChromieTimeSelectExpansion(WorldPackets::Misc::ChromieTimeSelectExpansion& chromieTimeSelectExpansion);
         // GM / Cheat / Debug (families 0x45 and 0x3D)
         void HandleKioskEnableGodMode(WorldPackets::Misc::KioskEnableGodMode& kioskEnableGodMode);
         void HandleSetGameEventDebugViewState(WorldPackets::Misc::SetGameEventDebugViewState& setGameEventDebugViewState);
