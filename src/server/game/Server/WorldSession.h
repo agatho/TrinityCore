@@ -2928,8 +2928,6 @@ class TC_GAME_API WorldSession
         void HandleUsedFollow(WorldPackets::Misc::UsedFollow& usedFollow);
         void HandleSeamlessTransferComplete(WorldPackets::Misc::SeamlessTransferComplete& seamlessTransferComplete);
         void HandleResetChallengeModeCheat(WorldPackets::Misc::ResetChallengeModeCheat& resetChallengeModeCheat);
-        void HandleClassTalentsNotifyEmptyConfig(WorldPackets::Misc::ClassTalentsNotifyEmptyConfig& classTalentsNotifyEmptyConfig);
-        void HandleClassTalentsNotifyValidationFailed(WorldPackets::Misc::ClassTalentsNotifyValidationFailed& classTalentsNotifyValidationFailed);
         void HandleTraitsTalentTestUnlearnSpells(WorldPackets::Misc::TraitsTalentTestUnlearnSpells& traitsTalentTestUnlearnSpells);
         void HandleAddAccountCosmetic(WorldPackets::Misc::AddAccountCosmetic& addAccountCosmetic);
         void HandleUpdateCraftingNpcRecipes(WorldPackets::Misc::UpdateCraftingNpcRecipes& updateCraftingNpcRecipes);

@@ -194,8 +194,9 @@ void Map::AddToGrid(T* obj, Cell const& cell)
         obj->SetCurrentCell(cell);
 }
 
-template<>
 template<class T>
+void Map::SwitchGridContainers(T* /*obj*/, bool /*on*/) { }
+
 template<>
 void Map::SwitchGridContainers(Creature* obj, bool on)
 {
@@ -242,6 +243,12 @@ void Map::SwitchGridContainers(Creature* obj, bool on)
 }
 
 template<class T>
+void Map::DeleteFromWorld(T* obj)
+{
+    // Note: In case resurrectable corpse and pet its removed from global lists in own destructor
+    delete obj;
+}
+
 template<>
 void Map::DeleteFromWorld(Player* player)
 {

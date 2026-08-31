@@ -1442,30 +1442,6 @@ void WorldSession::HandleTraitsTalentTestUnlearnSpells(WorldPackets::Misc::Trait
     TC_LOG_DEBUG("network.opcode", "CMSG_TRAITS_TALENT_TEST_UNLEARN_SPELLS from {}", GetPlayerInfo());
 }
 
-// 0x3D00C7 (Writer 0x6CD620) und 0x3D02C6 (Writer 0x6D2550), je ein uint32.
-// 0x3D02C6 ist am Draht belegt: 1 Paket, konstant 4 Byte.
-// Beides sind Rueckmeldungen des Talent-UI ueber Enum.LoadConfigResult (0 Error,
-// 1 NoChangesNecessary, 2 LoadInProgress, 3 Ready): der Client meldet, dass die zuletzt
-// geschickte Konfiguration leer war bzw. die Validierung nicht bestanden hat. Der Server haelt
-// die Konfiguration bereits.
-//
-// UNVERIFIED: dass Retail hier NICHTS tut, ist nicht belegt - Enum.LoadConfigResult benennt nur
-// den Wertebereich, es ist kein Konsument und keine RVA, aus der eine Serverwirkung folgte. Beide
-// Nachrichten bleiben deshalb bei D2 = offen, in derselben Beweislage wie CMSG_USED_FOLLOW: reine
-// CMSG-Notify ohne Gegenstueck, Serverwirkung aus dem Binary nicht ableitbar. Protokollieren ist
-// die ehrliche Untergrenze, nicht die belegte Vollstaendigkeit.
-void WorldSession::HandleClassTalentsNotifyEmptyConfig(WorldPackets::Misc::ClassTalentsNotifyEmptyConfig& classTalentsNotifyEmptyConfig)
-{
-    TC_LOG_DEBUG("network.opcode", "CMSG_CLASS_TALENTS_NOTIFY_EMPTY_CONFIG from {} for config {}",
-        GetPlayerInfo(), classTalentsNotifyEmptyConfig.ConfigID);
-}
-
-void WorldSession::HandleClassTalentsNotifyValidationFailed(WorldPackets::Misc::ClassTalentsNotifyValidationFailed& classTalentsNotifyValidationFailed)
-{
-    TC_LOG_DEBUG("network.opcode", "CMSG_CLASS_TALENTS_NOTIFY_VALIDATION_FAILED from {} for config {}",
-        GetPlayerInfo(), classTalentsNotifyValidationFailed.ConfigID);
-}
-
 // --- Track A: Eingangspruefung fuer Systeme, die der Baum nicht hat ------------------------------
 
 // 0x3D0171, Writer 0x6CEF70, gepackte ObjectGuid. Gegenstueck SMSG_ACCOUNT_COSMETIC_ADDED.
