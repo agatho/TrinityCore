@@ -34442,6 +34442,8 @@ void Player::UpdateDungeonScore()
 void Player::SetItemUpgradeWatermark(uint32 slot, float itemLevel)
 {
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ItemUpgradeHighWatermark, slot), itemLevel);
+}
+
 Garrison* Player::GetGarrison(GarrisonType type) const
 {
     auto itr = _garrisons.find(type);
@@ -36651,6 +36653,7 @@ void Player::SetDelveProgressData(int32 key, int32 lastSelectedMapId, int32 high
     SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::RestrictingRewardPlayers), uint8(0));
     SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::PlayersEligibleForRewards), std::vector<ObjectGuid>());
     SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::ActiveOptionalAffixIDs), std::move(weeklyCounters));
+}
 std::vector<Housing const*> Player::GetAllHousings() const
 {
     std::vector<Housing const*> result;
