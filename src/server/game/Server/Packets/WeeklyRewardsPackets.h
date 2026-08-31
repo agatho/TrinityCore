@@ -30,7 +30,7 @@ namespace WorldPackets
 {
 namespace WeeklyRewards
 {
-    // CMSG_REQUEST_WEEKLY_REWARDS (0x3A026C): empty request to open/refresh the vault (client sub_7FF72914B090).
+    // CMSG_REQUEST_WEEKLY_REWARDS (0x3D0268): empty request to open/refresh the vault (client sub_7FF72914B090).
     class RequestWeeklyRewards final : public ClientPacket
     {
     public:
@@ -39,7 +39,7 @@ namespace WeeklyRewards
         void Read() override { }
     };
 
-    // CMSG_CLAIM_WEEKLY_REWARD (0x3A026B): pick a reward slot (client sub_7FF72914B040 = one uint32).
+    // CMSG_CLAIM_WEEKLY_REWARD (0x3D0267): pick a reward slot (client sub_7FF72914B040 = one uint32).
     class ClaimWeeklyReward final : public ClientPacket
     {
     public:
@@ -68,7 +68,7 @@ namespace WeeklyRewards
         std::vector<WeeklyRewardItem> Rewards;
     };
 
-    // SMSG_WEEKLY_REWARDS_RESULT (0x420305, reader sub_7FF7290B6800): the reward choices in the vault.
+    // SMSG_WEEKLY_REWARDS_RESULT (0x450307, reader sub_7FF7290B6800): the reward choices in the vault.
     class WeeklyRewardsResult final : public ServerPacket
     {
     public:
@@ -80,7 +80,7 @@ namespace WeeklyRewards
         std::vector<WeeklyRewardThreshold> Thresholds;
     };
 
-    // SMSG_WEEKLY_REWARD_CLAIM_RESULT (0x420306, reader sub_7FF7290B6960): { uint8 Result }.
+    // SMSG_WEEKLY_REWARD_CLAIM_RESULT (0x450308, reader sub_7FF7290B6960): { uint8 Result }.
     class WeeklyRewardClaimResult final : public ServerPacket
     {
     public:
@@ -120,7 +120,7 @@ namespace WeeklyRewards
         Optional<Item::ItemInstance> UpgradeExampleItem;
     };
 
-    // SMSG_WEEKLY_REWARDS_PROGRESS_RESULT (0x420307, reader body sub_7FF7290B69B0): the vault progress bars.
+    // SMSG_WEEKLY_REWARDS_PROGRESS_RESULT (0x450309, reader body sub_7FF7290B69B0): the vault progress bars.
     class WeeklyRewardsProgressResult final : public ServerPacket
     {
     public:

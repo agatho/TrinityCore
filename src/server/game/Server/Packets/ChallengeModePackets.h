@@ -104,7 +104,7 @@ namespace WorldPackets
         };
 
         // CMSG_MYTHIC_PLUS_REQUEST_MAP_STATS -- client asks for the player's per-dungeon best-run scores (empty payload).
-        // SMSG_CHALLENGE_MODE_RESET (0x4200AF) — sent when a keystone run is reset. Wire (m+ run12.0.7.pkt, 4B): { uint32 MapID }.
+        // SMSG_CHALLENGE_MODE_RESET (0x4500B0) — sent when a keystone run is reset. Wire (m+ run12.0.7.pkt, 4B): { uint32 MapID }.
         class ChallengeModeReset final : public ServerPacket
         {
         public:
@@ -126,7 +126,7 @@ namespace WorldPackets
             uint32 DeathCount = 0;
         };
 
-        // SMSG_MYTHIC_PLUS_NEW_WEEK_RECORD (0x4200BA) / SMSG_CHALLENGE_MODE_NEW_PLAYER_RECORD (0x4200B1) — sent when a
+        // SMSG_MYTHIC_PLUS_NEW_WEEK_RECORD (0x4500BB) / SMSG_CHALLENGE_MODE_NEW_PLAYER_RECORD (0x4500B2) — sent when a
         // new weekly/personal best is set. Wire (m+ run12.0.7.pkt, 12B each): { uint32 MapChallengeModeID; uint32 CompletionMs; uint32 KeystoneLevel }.
         class MythicPlusNewWeekRecord final : public ServerPacket
         {
