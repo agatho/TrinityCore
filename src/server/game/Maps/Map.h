@@ -910,8 +910,6 @@ class TC_GAME_API InstanceMap : public Map
         ChallengeMode* GetChallengeMode() { return i_challengeMode.get(); }
         ChallengeMode const* GetChallengeMode() const { return i_challengeMode.get(); }
         void SetInstanceScenario(InstanceScenario* scenario);
-        ChallengeMode* GetChallengeMode() { return i_challengeMode.get(); }
-        ChallengeMode const* GetChallengeMode() const { return i_challengeMode.get(); }
         // Lift a live Mythic (23) dungeon to Mythic Keystone (8) and create its ChallengeMode.
         // The client can never enter at difficulty 8 (not DIFFICULTY_FLAG_CAN_SELECT), so the
         // keystone activation is the server-side writer that reaches DIFFICULTY_MYTHIC_KEYSTONE.
