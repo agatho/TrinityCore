@@ -840,7 +840,7 @@ void WorldSession::SendCharacterEnum()
 
     /// get all the data necessary for loading all characters (along with their pets) on the account
     std::shared_ptr<EnumCharactersQueryHolder> holder = std::make_shared<EnumCharactersQueryHolder>();
-    if (!holder->Initialize(GetAccountId(), sWorld->getBoolConfig(CONFIG_DECLINED_NAMES_USED), false))
+    if (!holder->Initialize(GetAccountId(), GetBattlenetAccountId(), sWorld->getBoolConfig(CONFIG_DECLINED_NAMES_USED), false))
     {
         HandleCharEnum(*holder);
         return;

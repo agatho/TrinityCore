@@ -549,7 +549,7 @@ bool Map::AddToMap(T* obj)
     return true;
 }
 
-template<>
+template<class T>
 bool Map::AddToMap(T* obj)
 {
     /// @todo Needs clean up. An object should not be added to map twice.
@@ -599,7 +599,6 @@ bool Map::AddToMap(T* obj)
     return true;
 }
 
-template<>
 bool Map::IsGridLoaded(GridCoord const& p) const
 {
     NGridType* grid = getNGrid(p.x_coord, p.y_coord);

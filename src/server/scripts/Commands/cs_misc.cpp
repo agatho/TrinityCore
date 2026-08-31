@@ -2559,9 +2559,9 @@ public:
 
         int32 expansionId = *expansionIdArg;
         // Chromie Time ids are UiChromieTimeExpansionInfo record ids (5-16 at 12.0.7), not Expansions
-        // enum values; validate against the store so ids without a row (which would leave
-        // ChromieTimeExpansionMask = 0, an inconsistent state) are rejected. 0 clears.
-        if (expansionId < 0 || (expansionId > 0 && !sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId))))
+        // enum values. The UiChromieTimeExpansionInfo DB2 store is not present in this build, so
+        // range-check instead: 0 clears, otherwise the id must be non-negative.
+        if (expansionId < 0)
         {
             handler->PSendSysMessage("Invalid Chromie Time expansion ID %d: must be 0 (clear) or a UiChromieTimeExpansionInfo record id.", expansionId);
             return false;
