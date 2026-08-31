@@ -1874,7 +1874,6 @@ class TC_GAME_API WorldSession
         // equivalent in HandlePlayerLogin(). Returns false (no-op) if the player is ineligible or
         // the map is unavailable.
         bool EnterArathiRpe(Player* player);
-        void HandleEncounterJournalStartArathiRpe(WorldPackets::Character::EncounterJournalStartArathiRpe& encounterJournalStartArathiRpe);
 
         void SendConnectToInstance(WorldPackets::Auth::ConnectToSerial serial);
         void HandleContinuePlayerLogin();
@@ -2928,7 +2927,6 @@ class TC_GAME_API WorldSession
         void HandleUsedFollow(WorldPackets::Misc::UsedFollow& usedFollow);
         void HandleSeamlessTransferComplete(WorldPackets::Misc::SeamlessTransferComplete& seamlessTransferComplete);
         void HandleResetChallengeModeCheat(WorldPackets::Misc::ResetChallengeModeCheat& resetChallengeModeCheat);
-        void HandleTraitsTalentTestUnlearnSpells(WorldPackets::Misc::TraitsTalentTestUnlearnSpells& traitsTalentTestUnlearnSpells);
         void HandleAddAccountCosmetic(WorldPackets::Misc::AddAccountCosmetic& addAccountCosmetic);
         void HandleUpdateCraftingNpcRecipes(WorldPackets::Misc::UpdateCraftingNpcRecipes& updateCraftingNpcRecipes);
         void HandleIslandQueue(WorldPackets::Misc::IslandQueue& islandQueue);
@@ -2946,7 +2944,6 @@ class TC_GAME_API WorldSession
         void HandleSpectateEnd(WorldPackets::Misc::SpectateEnd& spectateEnd);
         void HandleQuickJoinAutoAcceptRequests(WorldPackets::Misc::QuickJoinAutoAcceptRequests& quickJoinAutoAcceptRequests);
         void HandleQuickJoinSignalToastDisplayed(WorldPackets::Misc::QuickJoinSignalToastDisplayed& quickJoinSignalToastDisplayed);
-        void HandleQuickJoinRespondToInvite(WorldPackets::Misc::QuickJoinRespondToInvite& quickJoinRespondToInvite);
         void HandleQuickJoinRequestInvite(WorldPackets::Misc::QuickJoinRequestInvite& quickJoinRequestInvite);
         void HandleQuickJoinRequestInviteWithConfirmation(WorldPackets::Misc::QuickJoinRequestInviteWithConfirmation& quickJoinRequestInviteWithConfirmation);
 

@@ -1430,18 +1430,6 @@ void WorldSession::HandleResetChallengeModeCheat(WorldPackets::Misc::ResetChalle
     TC_LOG_DEBUG("network.opcode", "CMSG_RESET_CHALLENGE_MODE_CHEAT from {} - no challenge mode system in this tree", GetPlayerInfo());
 }
 
-// 0x3D02BA, Writer 0x6D21F0, leere Nutzlast. Test-Opcode des Talentbaums.
-void WorldSession::HandleTraitsTalentTestUnlearnSpells(WorldPackets::Misc::TraitsTalentTestUnlearnSpells& /*traitsTalentTestUnlearnSpells*/)
-{
-    if (!HasPermission(rbac::RBAC_PERM_COMMAND_DEBUG))
-    {
-        TC_LOG_INFO("entities.player.cheat", "{} tried to use the talent test unlearn path without permission", GetPlayerInfo());
-        return;
-    }
-
-    TC_LOG_DEBUG("network.opcode", "CMSG_TRAITS_TALENT_TEST_UNLEARN_SPELLS from {}", GetPlayerInfo());
-}
-
 // --- Track A: Eingangspruefung fuer Systeme, die der Baum nicht hat ------------------------------
 
 // 0x3D0171, Writer 0x6CEF70, gepackte ObjectGuid. Gegenstueck SMSG_ACCOUNT_COSMETIC_ADDED.
@@ -1595,13 +1583,6 @@ void WorldSession::HandleQuickJoinSignalToastDisplayed(WorldPackets::Misc::Quick
     TC_LOG_DEBUG("network.opcode", "CMSG_QUICK_JOIN_SIGNAL_TOAST_DISPLAYED from {} group {} priority {} members {}",
         GetPlayerInfo(), quickJoinSignalToastDisplayed.GroupGUID.ToString(),
         quickJoinSignalToastDisplayed.Priority, quickJoinSignalToastDisplayed.Members.size());
-}
-
-void WorldSession::HandleQuickJoinRespondToInvite(WorldPackets::Misc::QuickJoinRespondToInvite& quickJoinRespondToInvite)
-{
-    TC_LOG_DEBUG("network.opcode", "CMSG_QUICK_JOIN_RESPOND_TO_INVITE from {} queue {} applicant {} accept {} - round trip runs over Bnet presence",
-        GetPlayerInfo(), quickJoinRespondToInvite.QueueGUID.ToString(),
-        quickJoinRespondToInvite.ApplicantGUID.ToString(), quickJoinRespondToInvite.Accept);
 }
 
 void WorldSession::HandleQuickJoinRequestInvite(WorldPackets::Misc::QuickJoinRequestInvite& quickJoinRequestInvite)

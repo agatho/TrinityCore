@@ -2146,21 +2146,6 @@ bool WorldSession::EnterArathiRpe(Player* player)
         ARATHI_RPE_POSITION_Z, ARATHI_RPE_ORIENTATION);
 }
 
-void WorldSession::HandleEncounterJournalStartArathiRpe(WorldPackets::Character::EncounterJournalStartArathiRpe& /*encounterJournalStartArathiRpe*/)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    if (!EnterArathiRpe(player))
-        return;
-
-    // Quest 90882 is authored on the landing-pad questgivers on the content branch and is expected
-    // to auto-offer once the player is standing at the pad; nothing is force-granted here on
-    // purpose so that a questgiver-driven offer (gossip/greeting) is not double-added. If
-    // play-testing shows retail force-grants it instead, add player->AddQuest(...) here.
-}
-
 void WorldSession::SendFeatureSystemStatus()
 {
     WorldPackets::System::FeatureSystemStatus features;
