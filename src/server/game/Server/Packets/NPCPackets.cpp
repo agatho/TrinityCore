@@ -145,6 +145,10 @@ WorldPacket const* GossipQuestUpdate::Write()
 {
     _worldPacket << GossipGUID;
     _worldPacket << TextData;
+
+    return &_worldPacket;
+}
+
 WorldPacket const* GossipOptionsRefreshed::Write()
 {
     _worldPacket << Size<uint32>(GossipOptions);
