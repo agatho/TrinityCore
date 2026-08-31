@@ -234,7 +234,6 @@ ByteBuffer& operator<<(ByteBuffer& data, UiEventToast const& uiEventToast)
 
     return data;
 }
-}
 
 void ItemInstance::Initialize(UF::SocketedGem const* gem)
 {
@@ -250,3 +249,18 @@ void ItemInstance::Initialize(UF::SocketedGem const* gem)
         ItemBonus = bonus;
 }
 
+void ItemInstance::Initialize(::LootItem const& lootItem)
+{
+    ItemID = lootItem.itemid;
+
+    if (!lootItem.BonusListIDs.empty() || lootItem.randomBonusListId)
+    {
+        ItemBonus.emplace();
+        ItemBonus->BonusListIDs = lootItem.BonusListIDs;
+        ItemBonus->Context = lootItem.context;
+        if (lootItem.randomBonusListId)
+            ItemBonus->BonusListIDs.push_back(lootItem.randomBonusListId);
+    }
+}
+
+}
