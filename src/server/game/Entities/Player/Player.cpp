@@ -28363,6 +28363,7 @@ void Player::SendInitialPacketsAfterAddToMap()
         // flight - measured 13..1259 ms, median 154 ms for the sibling handshake above - would be
         // kicked for "Incorrect gravity modifier" after returning exactly what it was sent.
         ++m_gravityModifierChanges;
+    }
     if (int32 driveCapabilityId = m_unitData->DriveCapabilityID)
     {
         auto& stateChange = setCompoundState.StateChanges.emplace_back(SMSG_MOVE_SET_CAN_DRIVE, m_movementCounter++);
