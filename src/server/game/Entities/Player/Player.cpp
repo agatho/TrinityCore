@@ -15091,6 +15091,13 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
                 SendDirectMessage(npcInteraction.Write());
             }
         }
+
+        // The Trading Post is the one interaction the generic path cannot open: ShowPerksProgramFrame() has a
+        // single caller, the PERKS_PROGRAM_OPEN event handler, and that event is fired from exactly one site in
+        // the client -- the type 5 branch of SMSG_PERKS_PROGRAM_RESULT. Retail pushes it here, unprompted, right
+        // after the gossip select and before the client asks for anything.
+        if (interactionType == PlayerInteractionType::PerksProgramVendor)
+            GetSession()->SendPerksProgramVendorOpen(source->GetGUID());
     }
 
     ModifyMoney(-cost);

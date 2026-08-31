@@ -1092,6 +1092,9 @@ namespace WorldPackets
         class PerksProgramRequestCartCheckout;
         class PerksProgramItemsRefreshed;
         class PerksProgramRequestPendingRewards;
+        class PerksProgramDisabled;
+        class PerksProgramResult;
+        struct PerksRecentPurchase;
     }
 
     namespace Query
@@ -1297,6 +1300,7 @@ namespace WorldPackets
 
     namespace Transmogrification
     {
+        class ClearNewAppearance;
         class TransmogrifyItems;
         class TransmogOutfitNew;
         class TransmogOutfitUpdateInfo;
@@ -2269,6 +2273,13 @@ class TC_GAME_API WorldSession
         void HandlePerksProgramRequestPendingRewards(WorldPackets::PerksProgram::PerksProgramRequestPendingRewards& packet);
         void SendPerksProgramActivityUpdate();
         void SendPerksAnimToggleKillSwitch();
+        void SendPerksProgramDisabled(bool disabled);
+        void SendPerksProgramVendorOpen(ObjectGuid const& vendorGuid);
+        void SendPerksProgramVendorRefresh();
+        void SendPerksProgramPurchaseResult(int32 perksVendorItemId, bool refund);
+        void SendPerksProgramTenderAwarded(int32 amount);
+        void SendPerksProgramResultError();
+        std::vector<WorldPackets::PerksProgram::PerksRecentPurchase> BuildPerksRecentPurchases() const;
         void HandleGuildSetGuildMaster(WorldPackets::Guild::GuildSetGuildMaster& packet);
         void HandleGuildUpdateMotdText(WorldPackets::Guild::GuildUpdateMotdText& packet);
         void HandleGuildNewsUpdateSticky(WorldPackets::Guild::GuildNewsUpdateSticky& packet);
@@ -2715,6 +2726,7 @@ class TC_GAME_API WorldSession
 
         // Transmogrification
         void HandleTransmogrifyItems(WorldPackets::Transmogrification::TransmogrifyItems& transmogrifyItems);
+        void HandleClearNewAppearance(WorldPackets::Transmogrification::ClearNewAppearance& clearNewAppearance);
         void HandleTransmogOutfitNew(WorldPackets::Transmogrification::TransmogOutfitNew const& transmogOutfitNew);
         void HandleTransmogOutfitUpdateInfo(WorldPackets::Transmogrification::TransmogOutfitUpdateInfo const& transmogOutfitUpdateInfo);
         void HandleTransmogOutfitUpdateSituations(WorldPackets::Transmogrification::TransmogOutfitUpdateSituations const& transmogOutfitUpdateSituations);
@@ -3224,6 +3236,7 @@ class TC_GAME_API WorldSession
         std::map<ObjectGuid, time_t> _filterableWhispers;
         int64 _accountPerksTender = -1;   // cached account-wide Trader's Tender balance; -1 = not loaded / no row yet
         uint64 _accountPerksCacheGrantPeriod = 0;   // interval the base monthly Tender was last granted for this account
+        uint32 _perksVendorListingGeneration = 0;   // PerksProgramMgr listing generation this session last sent; 0 = none sent
 
         ConnectToKey _instanceConnectKey;
 

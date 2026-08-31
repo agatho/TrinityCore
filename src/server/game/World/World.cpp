@@ -708,6 +708,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Calculate.Creature.Zone.Area.Data"sv, .DefaultValue = false, .Index = CONFIG_CALCULATE_CREATURE_ZONE_AREA_DATA },
         { .Name = "Calculate.Gameoject.Zone.Area.Data"sv, .DefaultValue = false, .Index = CONFIG_CALCULATE_GAMEOBJECT_ZONE_AREA_DATA },
         { .Name = "BlackMarket.Enabled"sv, .DefaultValue = true, .Index = CONFIG_BLACKMARKET_ENABLED },
+        { .Name = "PerksProgram.Enabled"sv, .DefaultValue = true, .Index = CONFIG_PERKS_PROGRAM_ENABLED },
         { .Name = "HotSwap.Enabled"sv, .DefaultValue = true, .Index = CONFIG_HOTSWAP_ENABLED },
         { .Name = "HotSwap.EnableReCompiler"sv, .DefaultValue = true, .Index = CONFIG_HOTSWAP_RECOMPILER_ENABLED },
         { .Name = "HotSwap.EnableEarlyTermination"sv, .DefaultValue = true, .Index = CONFIG_HOTSWAP_EARLY_TERMINATION_ENABLED },
@@ -840,6 +841,7 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Battleground.Random.ResetHour"sv, .DefaultValue = 6, .Index = CONFIG_RANDOM_BG_RESET_HOUR, .Min = 0, .Max = 23 },
         { .Name = "Calendar.DeleteOldEventsHour"sv, .DefaultValue = 6, .Index = CONFIG_CALENDAR_DELETE_OLD_EVENTS_HOUR, .Min = 0, .Max = 23 },
         { .Name = "Guild.ResetHour"sv, .DefaultValue = 6, .Index = CONFIG_GUILD_RESET_HOUR, .Min = 0, .Max = 23 },
+        { .Name = "PerksProgram.ResetHour"sv, .DefaultValue = 4, .Index = CONFIG_PERKS_PROGRAM_RESET_HOUR, .Min = 0, .Max = 23 },
         { .Name = "TalentsInspecting"sv, .DefaultValue = 1, .Index = CONFIG_TALENTS_INSPECTING },
         { .Name = "ChatStrictLinkChecking.Severity"sv, .DefaultValue = 0, .Index = CONFIG_CHAT_STRICT_LINK_CHECKING_SEVERITY },
         { .Name = "ChatStrictLinkChecking.Kick"sv, .DefaultValue = 0, .Index = CONFIG_CHAT_STRICT_LINK_CHECKING_KICK },
@@ -1270,6 +1272,17 @@ void World::LoadConfigSettings(bool reload)
         { .Rule = ::GameRule::TransmogEnabled, .Value = true },
         { .Rule = ::GameRule::HousingEnabled, .Value = true }
     };
+
+    // Trading Post off: also state it in the SMSG_FEATURE_SYSTEM_STATUS game rules. The rule keeps Blizzard's
+    // own name and its own meaning -- with the Trading Post switched off PerksProgramActivityMgr stops taking
+    // criteria progress (CanUpdateCriteriaTree), so "activity tracking disabled" is literally true here.
+    // UNVERIFIED: what the 12.1 client DOES with rule 66. No file under Blizzard_PerksProgram/ or
+    // Blizzard_MonthlyActivities.lua reads a game rule at all (12.1.0.69382 UI source), and rule 66 appears in
+    // no generated enum in Blizzard_APIDocumentationGenerated/, so any claim about a UI effect would be a guess.
+    // Sending it is harmless and keeps the realm's own state consistent; it is not a substitute for the
+    // server-side refusal in PerksProgramHandler.cpp, which is what actually shuts the system down.
+    if (!m_bool_configs[CONFIG_PERKS_PROGRAM_ENABLED])
+        _gameRules.push_back({ .Rule = ::GameRule::PerksProgramActivityTrackingDisabled, .Value = true });
 
     if (reload)
     {

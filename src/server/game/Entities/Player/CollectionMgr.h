@@ -183,7 +183,7 @@ public:
 
     // Appearances
     void LoadItemAppearances();
-    void LoadAccountItemAppearances(PreparedQueryResult knownAppearances, PreparedQueryResult favoriteAppearances);
+    void LoadAccountItemAppearances(PreparedQueryResult knownAppearances, PreparedQueryResult favoriteAppearances, PreparedQueryResult newAppearances);
     void SaveAccountItemAppearances(LoginDatabaseTransaction trans);
     void AddItemAppearance(Item* item);
     void AddItemAppearance(uint32 itemId, uint32 appearanceModId = 0);
@@ -198,6 +198,10 @@ public:
 
     void SetAppearanceIsFavorite(uint32 itemModifiedAppearanceId, bool apply);
     void SendFavoriteAppearances() const;
+
+    // "New" appearances: the wardrobe NEW label + glow. Server-owned account state, cleared by
+    // CMSG_CLEAR_NEW_APPEARANCE when the player looks at the entry.
+    void ClearNewAppearance(uint32 itemModifiedAppearanceId);
 
     // Illusions
     void LoadTransmogIllusions();
@@ -227,6 +231,7 @@ private:
     bool CanAddAppearance(ItemModifiedAppearanceEntry const* itemModifiedAppearance) const;
     void AddItemAppearance(ItemModifiedAppearanceEntry const* itemModifiedAppearance);
     void AddTemporaryAppearance(ObjectGuid const& itemGuid, ItemModifiedAppearanceEntry const* itemModifiedAppearance);
+    void AddNewAppearance(uint32 itemModifiedAppearanceId);
 
     WorldSession* _owner;
 
@@ -236,6 +241,7 @@ private:
     std::unique_ptr<boost::dynamic_bitset<uint32>> _appearances;
     std::unordered_map<uint32, std::unordered_set<ObjectGuid>> _temporaryAppearances;
     std::unordered_map<uint32, CollectionItemState> _favoriteAppearances;
+    std::unordered_map<uint32, CollectionItemState> _newAppearances;   // itemModifiedAppearanceId -> pending "NEW" badge
     std::unique_ptr<boost::dynamic_bitset<uint32>> _transmogIllusions;
     Trinity::Containers::FlatSet<int32> _transmogOutfits;
     WarbandSceneCollectionContainer _warbandScenes;

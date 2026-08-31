@@ -28,6 +28,7 @@
 #include "PerksProgramPackets.h"
 #include "Player.h"
 #include "SharedDefines.h"
+#include "World.h"
 #include "WorldSession.h"
 #include <algorithm>
 
@@ -220,6 +221,13 @@ bool PerksProgramActivityMgr::CanUpdateCriteriaTree(Criteria const* criteria, Cr
     if (!activity)
         return false;
 
+    // Trading Post switched off for this realm: take no monthly activity progress at all. This is what makes
+    // the GameRule::PerksProgramActivityTrackingDisabled that World.cpp reports in SMSG_FEATURE_SYSTEM_STATUS
+    // a true statement, and it keeps the realm from silently accruing Trader's Tender for a system whose every
+    // request handler answers SMSG_PERKS_PROGRAM_DISABLED.
+    if (!sWorld->getBoolConfig(CONFIG_PERKS_PROGRAM_ENABLED))
+        return false;
+
     if (_completedActivities.contains(activity->ID))
         return false;
 
@@ -285,6 +293,21 @@ void PerksProgramActivityMgr::CompleteActivity(PerksActivityEntry const* activit
 // Awards Trader's Tender for every current-interval threshold newly crossed by moving the running
 // contribution from oldTotal to newTotal. Because completions only ever move the total upward and
 // LoadFromDB seeds the completed set without calling this, each threshold is granted exactly once.
+//
+// Each grant is ANNOUNCED with SMSG_PERKS_PROGRAM_RESULT type 8, which is the only thing that makes the
+// credit visible as an event: the client's consumer (RVA 0x253CFE0 case 6, amount at +240) fires
+// PERKS_PROGRAM_CURRENCY_AWARDED(value) when the amount is > 0, and AlertFrames.lua:624-629 is the sole
+// producer of the LootAlert toast with lootSource = LOOT_SOURCE_TRADING_POST. Without it the player
+// completes an activity out in the world and nothing tells them their Tender went up.
+//
+// Type 8 rather than type 4: both fire the same event through the same slot (12872, hash
+// 0xCC938319765BD2A9), but case 2 (= type 4) additionally calls the CMSG_PERKS_PROGRAM_REQUEST_PENDING_REWARDS
+// sender at RVA 0x253F230. This server pays every threshold in this very function, so its pending-reward set
+// is always empty (see HandlePerksProgramRequestPendingRewards) and that round trip would only ever fetch
+// Count = 0. Type 8 is the same announcement without the pointless request.
+// UNVERIFIED: WHEN retail sends type 8 -- no recording of this opcode exists at all, so the send site is
+// chosen from what the branch itself does (it credits Tender here) and from what the branch fires, not from
+// an observed retail order.
 void PerksProgramActivityMgr::AwardThresholds(int64 oldTotal, int64 newTotal)
 {
     // Current Trading Post interval = the threshold group(s) with the highest PerksMonth.
@@ -308,7 +331,12 @@ void PerksProgramActivityMgr::AwardThresholds(int64 oldTotal, int64 newTotal)
             continue;
 
         if (int64(threshold->Threshold) > oldTotal && int64(threshold->Threshold) <= newTotal)
+        {
             _owner->AddCurrency(CURRENCY_TYPE_TRADERS_TENDER, uint32(threshold->BonusTendies), CurrencyGainSource::Script);
+            // One announcement per threshold, mirroring the credit: the event carries a single amount, so two
+            // thresholds crossed by one completion are two toasts, not one summed toast.
+            _owner->GetSession()->SendPerksProgramTenderAwarded(threshold->BonusTendies);
+        }
     }
 }
 

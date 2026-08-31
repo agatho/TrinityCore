@@ -25,7 +25,7 @@ namespace WorldPackets::PerksProgram
 struct PerksVendorItem
 {
     int32 VendorItemID = 0;
-    int32 MountID = 0;
+    int32 MountID = 0;             // Mount.db2 row id (NOT the teaching spell) -- the client feeds it to C_MountJournal.GetMountInfoByID
     int32 BattlePetSpeciesID = 0;
     int32 TransmogSetID = 0;
     int32 ItemModifiedAppearanceID = 0;
@@ -42,6 +42,21 @@ struct PerksVendorItem
 };
 
 ByteBuffer& operator<<(ByteBuffer& data, PerksVendorItem const& perksVendorItem);
+
+// The client's PerksRecentPurchasesData. 13 bytes on the wire (the in-memory struct is 24 -- the allocator
+// stride is not the wire width). Read in two places by the 12.1.0.69382 client, byte for byte the same both
+// times: family dispatcher RVA 0x67A010 case 6488068 (SMSG_RESPONSE_PERK_RECENT_PURCHASES) and the type 2/3
+// branch of the SMSG_PERKS_PROGRAM_RESULT reader RVA 0x74CE10.
+struct PerksRecentPurchase
+{
+    int32 PerksVendorItemID = 0;   // key of the client's purchase hash map
+    uint64 PurchaseTime = 0;       // unix seconds of the purchase
+    bool Refundable = false;       // whether this purchase can still be refunded (cleanly-revocable reward)
+
+    friend bool operator==(PerksRecentPurchase const& left, PerksRecentPurchase const& right) = default;
+};
+
+ByteBuffer& operator<<(ByteBuffer& data, PerksRecentPurchase const& purchase);
 }
 
 #endif // TRINITYCORE_PERKS_PROGRAM_PACKETS_COMMON_H

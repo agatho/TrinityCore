@@ -193,6 +193,32 @@ namespace WorldPackets
             std::vector<uint32> FavoriteAppearances;
             std::vector<uint32> NewAppearances;
         };
+
+        // CMSG_CLEAR_NEW_APPEARANCE (12.1 value 0x2A0005) -- "I have seen this wardrobe entry, drop its NEW
+        // badge". Wire, from the 12.1.0.69382 client serializer RVA 0x746D30: it writes the opcode
+        // (2752517 = 0x2A0005) and then one Write<uint32>. Fixed 8 bytes on the wire, 4 in the body.
+        // No 12.1 or 12.0.x capture of this opcode exists in any of the 51 available recordings, so the
+        // structure is carried by the serializer, not by reference bytes -- but there is nothing in an
+        // 8-byte fixed message left to get wrong.
+        //
+        // The field is an ItemModifiedAppearance.ID ("source id"), NOT an ItemAppearance.ID ("visual id").
+        // C_TransmogCollection.ClearNewAppearance(visualID) (client RVA 0x9D5D80) resolves the visual to a
+        // VECTOR of source ids (RVA 0x22D4BD0) and sends ONE packet per element, erasing each from the client's
+        // "new" set at 0x43EEB98 first. The key space of that set is settled by the client itself and needs no
+        // inference from our field names: besides SMSG_ACCOUNT_TRANSMOG_UPDATE, the set is fed by the
+        // ActivePlayerData descriptor handler at RVA 0x22D7BD0, which watches the Transmog bit array and for
+        // every bit going 0 -> 1 inserts id = bitIndex + 32 * blockIndex. That is precisely the index
+        // TrinityCore writes in CollectionMgr::AddItemAppearance (AddTransmogFlag(ID / 32, 1 << (ID % 32)) with
+        // ID = ItemModifiedAppearance.ID), so both feeds of the set agree on ItemModifiedAppearance.ID.
+        class ClearNewAppearance final : public ClientPacket
+        {
+        public:
+            explicit ClearNewAppearance(WorldPacket&& packet) : ClientPacket(CMSG_CLEAR_NEW_APPEARANCE, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 ItemModifiedAppearanceID = 0;
+        };
     }
 }
 
