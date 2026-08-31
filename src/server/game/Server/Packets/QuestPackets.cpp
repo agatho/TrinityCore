@@ -1047,32 +1047,4 @@ WorldPacket const* QuestItemUsabilityResponse::Write()
 
     return &_worldPacket;
 }
-
-WorldPacket const* DisplayQuestPopup::Write()
-{
-    _worldPacket << int32(QuestID);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* ShowQuestCompletionText::Write()
-{
-    _worldPacket << int32(QuestID);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* ResetQuestPOI::Write()
-{
-    return &_worldPacket;
-}
-
-WorldPacket const* GossipQuestUpdate::Write()
-{
-    _worldPacket << QuestGiverGUID;
-    _worldPacket << int32(QuestID);
-    _worldPacket << int32(QuestFlags);
-
-    return &_worldPacket;
-}
 }

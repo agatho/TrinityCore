@@ -1038,47 +1038,6 @@ namespace WorldPackets
 
             std::vector<uint8> Usabilities;
         };
-
-
-        class DisplayQuestPopup final : public ServerPacket
-        {
-        public:
-            explicit DisplayQuestPopup() : ServerPacket(SMSG_DISPLAY_QUEST_POPUP, 4) { }
-
-            WorldPacket const* Write() override;
-
-            int32 QuestID = 0;
-        };
-
-        class ShowQuestCompletionText final : public ServerPacket
-        {
-        public:
-            explicit ShowQuestCompletionText() : ServerPacket(SMSG_SHOW_QUEST_COMPLETION_TEXT, 4) { }
-
-            WorldPacket const* Write() override;
-
-            int32 QuestID = 0;
-        };
-
-        class ResetQuestPOI final : public ServerPacket
-        {
-        public:
-            explicit ResetQuestPOI() : ServerPacket(SMSG_RESET_QUEST_POI, 0) { }
-
-            WorldPacket const* Write() override;
-        };
-
-        class GossipQuestUpdate final : public ServerPacket
-        {
-        public:
-            explicit GossipQuestUpdate() : ServerPacket(SMSG_GOSSIP_QUEST_UPDATE, 16 + 4 + 4) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid QuestGiverGUID;
-            int32 QuestID = 0;
-            int32 QuestFlags = 0;
-        };
     }
 }
 
