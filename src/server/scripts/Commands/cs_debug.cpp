@@ -530,6 +530,9 @@ public:
 
         handler->GetPlayer()->SendUploadScreenshot(header);
         handler->GetPlayer()->SendUploadScreenshot(header, true);
+        return true;
+    }
+
     // SMSG_IS_QUEST_COMPLETE_RESPONSE (0x650004). The only consumer in the retail client, 0x1E2B600, is a
     // console diagnostic that prints "Quest %d is%s complete"; there is no CMSG_IS_QUEST_COMPLETE in the
     // client's opcode table or in TrinityCore's, so the request half sits in the developer client. This
