@@ -578,6 +578,114 @@ namespace WorldPackets
             bool HideCreditMessage = false;
         };
 
+        // SMSG_IS_QUEST_COMPLETE_RESPONSE -- dispatcher case 0x685348 reads uint32 then a single embedded
+        // bit (Read<uint8> >> 7), 5 bytes total. Consumer 0x1E2B600 is a console diagnostic: it prints
+        // "Quest %d is[ NOT] complete". No Lua event and no UI reaction, hence no error codes to carry.
+        class IsQuestCompleteResponse final : public ServerPacket
+        {
+        public:
+            explicit IsQuestCompleteResponse() : ServerPacket(SMSG_IS_QUEST_COMPLETE_RESPONSE, 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            int32 QuestID = 0;
+            bool Complete = false;
+        };
+
+        // SMSG_QUEST_NON_LOG_UPDATE_COMPLETE -- consumer 0x1E22D80 reads exactly one uint32 from the raw
+        // payload, gates it on 0x2225680 (quest type filter) and fires WORLD_QUEST_COMPLETED_BY_SPELL(questID).
+        // The TrinityCore opcode name predates that event; the payload is a quest id either way.
+        // The subplan lists this opcode as "raw buffer, no handler found, content not determinable from the
+        // binary". That is wrong: hook slot 0x462DDC0 is not NULL in the image, it holds 0x1E22D80 outright,
+        // with two registrars (0x226993 in 0x1F5C80, 0x226DBA in 0x1F6D10) writing it.
+        // Dispatcher case 6619144 hands over the whole unread rest (0x35AF730), the consumer dereferences it
+        // twice and takes four bytes -- so four bytes is what the client consumes, and what we write.
+        class QuestNonLogUpdateComplete final : public ServerPacket
+        {
+        public:
+            explicit QuestNonLogUpdateComplete() : ServerPacket(SMSG_QUEST_NON_LOG_UPDATE_COMPLETE, 4) { }
+
+            WorldPacket const* Write() override;
+
+            int32 QuestID = 0;
+        };
+
+        // SMSG_QUEST_UPDATE_FAILED -- consumer 0x1E23050 reads exactly one uint32 from the raw payload, marks
+        // that quest dirty in the client's QuestCache and schedules a re-query. Mirror of
+        // SMSG_QUEST_UPDATE_COMPLETE (0x650009), whose consumer 0x1E22DD0 does the same cache lookup.
+        // Same correction as above: hook slot 0x462DDB0 is not NULL, it holds 0x1E23050 in the image.
+        // Both quest ids run through the identical murmur finalizer keyed DataCache<QuestCache> lookup.
+        // UNVERIFIED: the trigger, not the wire -- see Player::SendQuestUpdateFailed. The consumer cannot tell
+        // IncompleteQuest from FailQuest apart, so the server side event this hangs on is still a guess.
+        class QuestUpdateFailed final : public ServerPacket
+        {
+        public:
+            explicit QuestUpdateFailed() : ServerPacket(SMSG_QUEST_UPDATE_FAILED, 4) { }
+
+            WorldPacket const* Write() override;
+
+            int32 QuestID = 0;
+        };
+
+        // SMSG_SHOW_QUEST_COMPLETION_TEXT -- reader 0x6809B0. Consumer 0x1E24800 copies the six strings into
+        // the same UI globals that SMSG_QUEST_GIVER_QUEST_DETAILS uses and fires QUEST_COMPLETE.
+        // Field order matters: the ConditionalCompletionText array is written BEFORE the bit section, not
+        // after it -- see the comment on Write().
+        class ShowQuestCompletionText final : public ServerPacket
+        {
+        public:
+            explicit ShowQuestCompletionText() : ServerPacket(SMSG_SHOW_QUEST_COMPLETION_TEXT, 32) { }
+
+            WorldPacket const* Write() override;
+
+            int32 QuestID = 0;
+            int32 PortraitGiver = 0;
+            int32 PortraitGiverMount = 0;
+            int32 PortraitGiverModelSceneID = 0;
+            int32 PortraitTurnIn = 0;
+            int32 QuestGiverCreatureID = 0;         // selects the ConditionalCompletionText variant
+            std::vector<ConditionalQuestText> ConditionalCompletionText;
+            std::string_view QuestTitle;            // client buffer  512 -> bits<9>
+            std::string_view CompletionText;        // client buffer 3000 -> bits<12>
+            std::string_view PortraitGiverText;     // client buffer 1024 -> bits<10>
+            std::string_view PortraitGiverName;     // client buffer  256 -> bits<8>
+            std::string_view PortraitTurnInText;    // client buffer 1024 -> bits<10>
+            std::string_view PortraitTurnInName;    // client buffer  256 -> bits<8>
+        };
+
+        // SMSG_DISPLAY_QUEST_POPUP -- raw payload, consumer 0x221F090 reads one uint32 from its start and
+        // hands it to the auto quest popup list (0x2221810) plus the tracker refresh (0x2220E70).
+        class DisplayQuestPopup final : public ServerPacket
+        {
+        public:
+            explicit DisplayQuestPopup() : ServerPacket(SMSG_DISPLAY_QUEST_POPUP, 4) { }
+
+            WorldPacket const* Write() override;
+
+            int32 QuestID = 0;
+        };
+
+        // SMSG_RESET_QUEST_POI -- empty. Consumer 0x221F0C0 reads nothing and calls 0x2230180, which clears
+        // all 175 quest POI cache slots. A pure "drop every quest POI you hold" signal.
+        class ResetQuestPOI final : public ServerPacket
+        {
+        public:
+            explicit ResetQuestPOI() : ServerPacket(SMSG_RESET_QUEST_POI, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
+        // SMSG_CLEAR_TREASURE_PICKER_CACHE -- empty. Consumer 0x221F3C0 reads nothing and fires the Lua event
+        // TREASURE_PICKER_CACHE_FLUSH. Confirmed on the wire: 33 packets across the ten 12.1 recordings,
+        // every one of them exactly 0 bytes.
+        class ClearTreasurePickerCache final : public ServerPacket
+        {
+        public:
+            explicit ClearTreasurePickerCache() : ServerPacket(SMSG_CLEAR_TREASURE_PICKER_CACHE, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
         class QuestConfirmAcceptResponse final : public ServerPacket
         {
         public:
@@ -820,9 +928,15 @@ namespace WorldPackets
             bool IsReroll = false;
         };
 
-        // CMSG_CLOSE_QUEST_CHOICE -- the player dismisses the active PlayerChoice UI. Opcode-only (empty payload
-        // confirmed by client serializer 0x7FF729148D10, n=0). Server clears the active choice so a stale
-        // CMSG_CHOICE_RESPONSE cannot fire against a closed choice.
+        // CMSG_CLOSE_QUEST_CHOICE (0x3D017D) -- the player dismisses the active PlayerChoice UI.
+        // UNVERIFIED: empty payload. This opcode is not part of family 0x65 and no client serializer for it
+        // could be found -- no function in the 94012 entry cfunc cache of 12.1.0.69382 writes the constant
+        // 0x3D017D, and the opcodes table carries it with name_source 'tc_source', i.e. the name and the
+        // value come from TrinityCore's own catalogue, not from a decoded writer.
+        // Reviewed 2026-08-26: the handler stays -- it only resets a PlayerInteractionType::PlayerChoice
+        // interaction and that effect is proven through HandlePlayerChoiceResponse -- but the opcode does NOT
+        // count as accepted. Value and name have to be reconciled against a decoded writer by a unit for
+        // family 0x3D before this marker may be removed.
         class CloseQuestChoice final : public ClientPacket
         {
         public:

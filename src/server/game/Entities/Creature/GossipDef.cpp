@@ -36,6 +36,7 @@ GossipMenu::GossipMenu()
 {
     _menuId = 0;
     _locale = DEFAULT_LOCALE;
+    _recomputable = false;
 }
 
 GossipMenu::~GossipMenu() = default;
@@ -45,6 +46,10 @@ uint32 GossipMenu::AddMenuItem(int32 gossipOptionId, int32 orderIndex, GossipOpt
     std::string boxText, Optional<int32> spellId, Optional<int32> overrideIconId, uint32 sender, uint32 action)
 {
     ASSERT(_menuItems.size() <= GOSSIP_MAX_MENU_ITEMS);
+
+    // Every item that lands here makes the menu differ from what PrepareGossipMenu would rebuild; the one
+    // caller that may claim otherwise is PrepareGossipMenu itself, which sets the flag again when it is done.
+    _recomputable = false;
 
     // Find a free new id - script case
     if (orderIndex == -1)
@@ -201,6 +206,7 @@ bool GossipMenu::IsMenuItemCoded(uint32 orderIndex) const
 void GossipMenu::ClearMenu()
 {
     _menuItems.clear();
+    _recomputable = false;
 }
 
 PlayerMenu::PlayerMenu(WorldSession* session) : _session(session)
@@ -267,23 +273,7 @@ void PlayerMenu::SendGossipMenu(uint32 titleTextId, ObjectGuid objectGUID)
     if (NpcText const* text = sObjectMgr->GetNpcText(titleTextId))
         packet.BroadcastTextID = Trinity::Containers::SelectRandomWeightedContainerElement(text->Data, [](NpcTextData const& data) { return data.Probability; })->BroadcastTextID;
 
-    packet.GossipOptions.reserve(_gossipMenu.GetMenuItems().size());
-    for (GossipMenuItem const& item : _gossipMenu.GetMenuItems())
-    {
-        WorldPackets::NPC::ClientGossipOptions& opt = packet.GossipOptions.emplace_back();
-        opt.GossipOptionID = item.GossipOptionID;
-        opt.OptionNPC = item.OptionNpc;
-        opt.OptionFlags = item.BoxCoded;    // makes pop up box password
-        opt.OptionCost = item.BoxMoney;     // money required to open menu, 2.0.3
-        opt.OptionLanguage = item.Language;
-        opt.Flags = item.Flags;
-        opt.OrderIndex = item.OrderIndex;
-        opt.Text = item.OptionText;         // text for gossip item
-        opt.Confirm = item.BoxText;         // accept text (related to money) pop up box, 2.0.3
-        opt.Status = GossipOptionStatus::Available;
-        opt.SpellID = item.SpellID;
-        opt.OverrideIconID = item.OverrideIconID;
-    }
+    BuildGossipOptions(packet.GossipOptions);
 
     packet.GossipText.resize(_questMenu.GetMenuItemCount());
     uint32 count = 0;
@@ -300,6 +290,48 @@ void PlayerMenu::SendGossipMenu(uint32 titleTextId, ObjectGuid objectGUID)
 
     // Shrink to the real size
     packet.GossipText.resize(count);
+
+    _session->SendPacket(packet.Write());
+}
+
+void PlayerMenu::BuildGossipOptions(std::vector<WorldPackets::NPC::ClientGossipOptions>& options) const
+{
+    options.reserve(_gossipMenu.GetMenuItems().size());
+    for (GossipMenuItem const& item : _gossipMenu.GetMenuItems())
+    {
+        WorldPackets::NPC::ClientGossipOptions& opt = options.emplace_back();
+        opt.GossipOptionID = item.GossipOptionID;
+        opt.OptionNPC = item.OptionNpc;
+        opt.OptionFlags = item.BoxCoded;    // makes pop up box password
+        opt.OptionCost = item.BoxMoney;     // money required to open menu, 2.0.3
+        opt.OptionLanguage = item.Language;
+        opt.Flags = item.Flags;
+        opt.OrderIndex = item.OrderIndex;
+        opt.Text = item.OptionText;         // text for gossip item
+        opt.Confirm = item.BoxText;         // accept text (related to money) pop up box, 2.0.3
+        opt.Status = GossipOptionStatus::Available;
+        opt.SpellID = item.SpellID;
+        opt.OverrideIconID = item.OverrideIconID;
+    }
+}
+
+// Answer to CMSG_GOSSIP_REFRESH_OPTIONS (Lua: C_GossipInfo.RefreshOptions). Re-sends only the option list of
+// the gossip window the client already has open -- no GUID, no texts, no quest list. Consumer 0x249D870
+// swaps the list and fires GOSSIP_OPTIONS_REFRESHED; the frame is not rebuilt, so the interaction is left
+// untouched here on purpose.
+// Pre-existing limit of this server, not of this message: ClientGossipOptions::Status is a 2-bit field and
+// GossipOptionStatus has four values (Available, Unavailable, Locked, AlreadyComplete), but BuildGossipOptions
+// above is the only place in the whole tree that ever writes it, and it writes Available unconditionally. The
+// refresh can therefore only add or drop whole rows -- whichever gossip_menu_option row still passes its
+// conditions -- and can never report the status change of an option that stays in the list. That is exactly
+// what retail uses the opcode for first (Blizzard_TorghastLevelPicker refreshes on PARTY_LEADER_CHANGED,
+// GROUP_ROSTER_UPDATE, GROUP_FORMED, UNIT_AREA_CHANGED, UNIT_PHASE -- status changes on unchanged options).
+// Recorded under abweichungen_von_tc in status/quest_65.json; lifting it means giving GossipMenuItem a status
+// source, which is beyond this unit.
+void PlayerMenu::SendGossipRefreshOptions() const
+{
+    WorldPackets::NPC::GossipOptionsRefreshed packet;
+    BuildGossipOptions(packet.GossipOptions);
 
     _session->SendPacket(packet.Write());
 }
