@@ -79,10 +79,6 @@ void WorldSession::HandleStartChallengeMode(WorldPackets::ChallengeMode::StartCh
     Map* map = player->GetMap();
     InstanceMap* instanceMap = map->ToInstanceMap();
     if (!instanceMap || !(map->IsMythic() || map->IsMythicPlus()))
-    // The player must be standing in the matching Mythic Keystone instance for that dungeon.
-    Map* map = player->GetMap();
-    InstanceMap* instanceMap = map->ToInstanceMap();
-    if (!instanceMap || !map->IsMythicPlus())
         return;
 
     if (sChallengeModeMgr.GetMapIdForChallengeMode(mapChallengeModeId) != map->GetId())

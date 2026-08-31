@@ -918,13 +918,6 @@ WorldPacket const* StopElapsedTimer::Write()
 
 
 // Duration first, then the id - see the ElapsedTimer comment in MiscPackets.h.
-ByteBuffer& operator<<(ByteBuffer& data, ElapsedTimer const& timer)
-{
-    data << timer.CurrentDuration;
-    data << uint32(timer.TimerID);
-
-    return data;
-}
 
 void QueryCountdownTimer::Read()
 {

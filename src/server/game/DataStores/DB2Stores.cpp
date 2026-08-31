@@ -668,6 +668,7 @@ namespace
     std::unordered_map<uint32, std::set<FriendshipRepReactionEntry const*, DB2Manager::FriendshipRepReactionEntryComparator>> _friendshipRepReactions;
     HeirloomItemsContainer _heirlooms;
     std::unordered_map<uint32, DB2Manager::DelvesSeasonXSpellContainer> _delvesSeasonXSpellsBySeasonId;
+    std::unordered_map<int32, std::vector<WarbandScenePlacementEntry const*>> _warbandScenePlacementsByScene;
     std::unordered_map<uint32 /*gameobjectId*/, std::vector<int32>> _gameobjectLabels;
     GlyphBindableSpellsContainer _glyphBindableSpells;
     GlyphRequiredSpecsContainer _glyphRequiredSpecs;
@@ -1643,6 +1644,9 @@ void DB2Manager::IndexLoadedStores()
 
     for (DelvesSeasonXSpellEntry const* delvesSeasonXSpell : sDelvesSeasonXSpellStore)
         _delvesSeasonXSpellsBySeasonId[delvesSeasonXSpell->DelvesSeasonID].push_back(delvesSeasonXSpell);
+
+    for (WarbandScenePlacementEntry const* placement : sWarbandScenePlacementStore)
+        _warbandScenePlacementsByScene[placement->WarbandSceneID].push_back(placement);
 
     for (HeirloomEntry const* heirloom : sHeirloomStore)
         _heirlooms[heirloom->ItemID] = heirloom;
@@ -3867,4 +3871,9 @@ bool DB2Manager::MountTypeXCapabilityEntryComparator::Compare(MountTypeXCapabili
 DB2Manager::DelvesSeasonXSpellContainer const* DB2Manager::GetDelvesSeasonSpells(uint32 delvesSeasonId) const
 {
     return Trinity::Containers::MapGetValuePtr(_delvesSeasonXSpellsBySeasonId, delvesSeasonId);
+}
+
+std::vector<WarbandScenePlacementEntry const*> const* DB2Manager::GetWarbandScenePlacements(uint32 warbandSceneId) const
+{
+    return Trinity::Containers::MapGetValuePtr(_warbandScenePlacementsByScene, static_cast<int32>(warbandSceneId));
 }
