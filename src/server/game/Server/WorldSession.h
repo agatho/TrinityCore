@@ -2314,7 +2314,6 @@ class TC_GAME_API WorldSession
         void HandleGossipHelloOpcode(WorldPackets::NPC::Hello& packet);
         void HandleGossipRefreshOptions(WorldPackets::NPC::GossipRefreshOptions& packet);
         void HandleGossipSelectOptionOpcode(WorldPackets::NPC::GossipSelectOption& packet);
-        void HandleGossipRefreshOptions(WorldPackets::NPC::GossipRefreshOptions& packet);
         void HandleSpiritHealerActivate(WorldPackets::NPC::SpiritHealerActivate& packet);
         void HandleNpcTextQueryOpcode(WorldPackets::Query::QueryNPCText& packet);
         void HandleBinderActivateOpcode(WorldPackets::NPC::Hello& packet);
