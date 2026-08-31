@@ -331,7 +331,7 @@ namespace WorldPackets
             void Read() override;
 
             uint32 SerialNumber = 0;    ///< echoed back from SMSG_SUSPEND_COMMS
-            uint32 Timestamp = 0;       ///< client ticks in ms, same clock as CMSG_TIME_SYNC_RESPONSE
+            uint32 ClientTick = 0;       ///< client ticks in ms (ClientTick), same clock as CMSG_TIME_SYNC_RESPONSE
         };
 
         class ConnectToFailed final : public EarlyProcessClientPacket<ConnectToFailed>
