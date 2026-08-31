@@ -549,56 +549,6 @@ bool Map::AddToMap(T* obj)
     return true;
 }
 
-template<class T>
-bool Map::AddToMap(T* obj)
-{
-    /// @todo Needs clean up. An object should not be added to map twice.
-    if (obj->IsInWorld())
-    {
-        ASSERT(obj->IsInGrid());
-        obj->UpdateObjectVisibility(true);
-        return true;
-    }
-
-    CellCoord cellCoord = Trinity::ComputeCellCoord(obj->GetPositionX(), obj->GetPositionY());
-    //It will create many problems (including crashes) if an object is not added to grid after creation
-    //The correct way to fix it is to make AddToMap return false and delete the object if it is not added to grid
-    //But now AddToMap is used in too many places, I will just see how many ASSERT failures it will cause
-    ASSERT(cellCoord.IsCoordValid());
-    if (!cellCoord.IsCoordValid())
-    {
-        TC_LOG_ERROR("maps", "Map::Add: Object {} has invalid coordinates X:{} Y:{} grid cell [{}:{}]", obj->GetGUID().ToString(), obj->GetPositionX(), obj->GetPositionY(), cellCoord.x_coord, cellCoord.y_coord);
-        return false; //Should delete object
-    }
-
-    if (IsAlwaysActive())
-        obj->setActive(true);
-
-    Cell cell(cellCoord);
-    if (obj->isActiveObject())
-        EnsureGridLoadedForActiveObject(GridCoord(cell.GridX(), cell.GridY()), obj);
-    else
-        EnsureGridCreated(GridCoord(cell.GridX(), cell.GridY()));
-    AddToGrid(obj, cell);
-    TC_LOG_DEBUG("maps", "Object {} enters grid[{}, {}]", obj->GetGUID().ToString(), cell.GridX(), cell.GridY());
-
-    //Must already be set before AddToMap. Usually during obj->Create.
-    //obj->SetMap(this);
-    obj->AddToWorld();
-
-    InitializeObject(obj);
-
-    if (obj->isActiveObject())
-        AddToActive(obj);
-
-    //something, such as vehicle, needs to be update immediately
-    //also, trigger needs to cast spell, if not update, cannot see visual
-    obj->SetIsNewObject(true);
-    obj->UpdateObjectVisibilityOnCreate();
-    obj->SetIsNewObject(false);
-    return true;
-}
-
 bool Map::IsGridLoaded(GridCoord const& p) const
 {
     NGridType* grid = getNGrid(p.x_coord, p.y_coord);

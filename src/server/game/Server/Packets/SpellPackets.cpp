@@ -919,10 +919,10 @@ WorldPacket const* SpellChannelUpdate::Write()
 
 WorldPacket const* ResumeCast::Write()
 {
-    _worldPacket << CasterUnit;
+    _worldPacket << CasterGUID;
     _worldPacket << Visual;
     _worldPacket << CastID;
-    _worldPacket << Target;
+    _worldPacket << TargetGUID;
     _worldPacket << int32(SpellID);
 
     return &_worldPacket;
@@ -930,20 +930,17 @@ WorldPacket const* ResumeCast::Write()
 
 WorldPacket const* ResumeCastBar::Write()
 {
-    _worldPacket << CasterUnit;
-    _worldPacket << Target;
+    _worldPacket << CasterGUID;
+    _worldPacket << TargetGUID;
     _worldPacket << int32(SpellID);
     _worldPacket << Visual;
-    _worldPacket << int32(TimeElapsed);
-    _worldPacket << int32(TotalTime);
-    _worldPacket << OptionalInit(Unknown);
+    _worldPacket << TimeRemaining;
+    _worldPacket << CastTime;
+    _worldPacket << OptionalInit(InterruptImmunities);
     _worldPacket.FlushBits();
 
-    if (Unknown)
-    {
-        _worldPacket << int32(Unknown->Unknown1);
-        _worldPacket << int32(Unknown->Unknown2);
-    }
+    if (InterruptImmunities)
+        _worldPacket << *InterruptImmunities;
 
     return &_worldPacket;
 }

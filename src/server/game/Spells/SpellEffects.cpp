@@ -174,8 +174,6 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectUnused,                                   // 78 SPELL_EFFECT_ATTACK
     &Spell::EffectSanctuary,                                // 79 SPELL_EFFECT_SANCTUARY
     &Spell::EffectModifyFollowerItemLevel,                   // 80 SPELL_EFFECT_MODIFY_FOLLOWER_ITEM_LEVEL
-    &Spell::EffectNULL,                                     // 81 SPELL_EFFECT_PUSH_ABILITY_TO_ACTION_BAR
-    &Spell::EffectNULL,                                     // 80 SPELL_EFFECT_MODIFY_FOLLOWER_ITEM_LEVEL
     &Spell::EffectPushAbilityToActionBar,                   // 81 SPELL_EFFECT_PUSH_ABILITY_TO_ACTION_BAR
     &Spell::EffectNULL,                                     // 82 SPELL_EFFECT_BIND_SIGHT
     &Spell::EffectDuel,                                     // 83 SPELL_EFFECT_DUEL
@@ -6155,8 +6153,10 @@ void Spell::EffectSetChromieTime()
     // MiscValue is a UiChromieTimeExpansionInfo record id (row SpellIDs 325400..452212 map
     // 1:1 to rows); validate like the CMSG select path. 0 clears. No sniff shows
     // spell-driven toggles - semantics inferred from the effect/DB2 pairing (audit R9/i2).
+    // The UiChromieTimeExpansionInfo DB2 store is not present in this build, so accept any
+    // non-negative id (0 clears) rather than validating against the store.
     int32 expansionId = effectInfo->MiscValue;
-    if (expansionId != 0 && !sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId)))
+    if (expansionId < 0)
         return;
 
     target->SetChromieTime(expansionId);

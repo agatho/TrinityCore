@@ -883,41 +883,43 @@ namespace WorldPackets
         class ResumeCast final : public ServerPacket
         {
         public:
-            explicit ResumeCast() : ServerPacket(SMSG_RESUME_CAST, 18 + 4 + 4 + 18 + 18 + 4) { }
+            explicit ResumeCast() : ServerPacket(SMSG_RESUME_CAST, 18 + 8 + 18 + 18 + 4) { }
 
             WorldPacket const* Write() override;
 
-            ObjectGuid CasterUnit;
+            ObjectGuid CasterGUID;
             SpellCastVisual Visual;
-            ObjectGuid CastID;
-            ObjectGuid Target;
+            ObjectGuid CastID;                              ///< HighGuid::Cast (47)
+            ObjectGuid TargetGUID;
             int32 SpellID = 0;
         };
 
-        // The cast bar half of the pair above: carries how far the cast or channel has already
-        // progressed so the client draws a partially filled bar instead of restarting it.
+        // SMSG_RESUME_CAST_BAR (0x670031)
+        // Beleg: Case 0x7507B6 - RGUID 0x7507E8 (msg+0x20), RGUID 0x7507F4 (msg+0x30),
+        // R32 0x750809 (msg+0x40), Unterleser 0x6BF980 (SpellCastVisual, msg+0x44),
+        // R32 0x750833 (msg+0x4C), R32 0x750851 (msg+0x50), R8 0x750870 mit `shr al,7`
+        // (msg+0x54) und - nur wenn gesetzt - R32 0x750892 / 0x7508AA (msg+0x58 / msg+0x5C).
+        // Konsument 0x1D8AE20: SpellID gegen den Spell-Store geprueft (0x4DBFA0), Endzeit
+        // `now + TimeRemaining`, Startzeit `now + TimeRemaining - CastTime`; das optionale
+        // Paar landet in unit+972 / +976 - denselben Slots, die SMSG_SPELL_CHANNEL_START
+        // (Konsument 0x1D85B90) aus seinem InterruptImmunities-Paar fuellt und die
+        // SMSG_SPELL_START ueber 0x1D85110 aus JamSpellCastData+1704 (`immunities`) speist.
+        // Feuert UNIT_SPELLCAST_START / _CHANNEL_START / _EMPOWER_START.
+        // Draht: 364 Pakete, 32..53 B. Beispielpaket 32 B = 9 + 2 + 4 + 8 + 4 + 4 + 1.
         class ResumeCastBar final : public ServerPacket
         {
         public:
-            explicit ResumeCastBar() : ServerPacket(SMSG_RESUME_CAST_BAR, 18 + 18 + 4 + 4 + 4 + 4 + 4 + 1) { }
+            explicit ResumeCastBar() : ServerPacket(SMSG_RESUME_CAST_BAR, 18 + 18 + 4 + 8 + 4 + 4 + 1 + 8) { }
 
             WorldPacket const* Write() override;
 
-            ObjectGuid CasterUnit;
-            ObjectGuid Target;
+            ObjectGuid CasterGUID;
+            ObjectGuid TargetGUID;
             int32 SpellID = 0;
             SpellCastVisual Visual;
-            int32 TimeElapsed = 0;      ///< milliseconds already spent, -1 when the cast has no fixed duration
-            int32 TotalTime = 0;        ///< milliseconds the whole cast takes, -1 when it has no fixed duration
-            struct UnknownTrailer
-            {
-                int32 Unknown1 = 0;
-                int32 Unknown2 = 0;
-            };
-            /// One capture in 424 set the trailing bit and appended two int32 (0, 2), on an empowered
-            /// cast. A single sample cannot name those two fields, so nothing populates them here and
-            /// the bit is always written clear - see Unit::SendResumeCastTo, which skips empowers.
-            Optional<UnknownTrailer> Unknown;
+            Duration<Milliseconds, uint32> TimeRemaining;
+            Duration<Milliseconds, uint32> CastTime;
+            Optional<SpellChannelStartInterruptImmunities> InterruptImmunities;
         };
 
         class SpellEmpowerStart final : public ServerPacket

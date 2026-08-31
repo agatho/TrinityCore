@@ -161,8 +161,7 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _battlePetMgr(std::make_unique<BattlePets::BattlePetMgr>(this)),
     _collectionMgr(std::make_unique<CollectionMgr>(this)),
     _chatCautionMgr(std::make_unique<ChatCautionMgr>(this)),
-    _chatCautionAccepted(false)
-    _collectionMgr(std::make_unique<CollectionMgr>(this)),
+    _chatCautionAccepted(false),
     // Einheit w4_cmsg_43_3D - fluechtiger Sitzungszustand der Sammelfamilien 0x43 / 0x3D
     _excludedChatCensorSources(0),
     _quickJoinAutoAcceptRequests(false),
