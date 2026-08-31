@@ -15248,3 +15248,147 @@ DeclinedName::DeclinedName(UF::DeclinedNames const& uf)
     for (std::size_t i = 0; i < MAX_DECLINED_NAME_CASES; ++i)
         name[i] = uf.Name[i];
 }
+
+Pet* Unit::CreateTamedPetFrom(uint32 creatureEntry, uint32 spell_id)
+{
+    if (GetTypeId() != TYPEID_PLAYER)
+        return nullptr;
+
+    CreatureTemplate const* creatureInfo = sObjectMgr->GetCreatureTemplate(creatureEntry);
+    if (!creatureInfo)
+        return nullptr;
+
+    Pet* pet = new Pet(ToPlayer(), HUNTER_PET);
+
+    if (!pet->CreateBaseAtCreatureInfo(creatureInfo, this) || !InitTamedPet(pet, GetLevel(), spell_id))
+    {
+        delete pet;
+        return nullptr;
+    }
+
+    return pet;
+}
+
+void Unit::NearTeleportTo(Position const& pos, bool casting /*= false*/)
+{
+    NearTeleportTo(TeleportLocation{ .Location = { GetMapId(), pos } }, casting);
+}
+
+void Unit::RemoveAreaTrigger(AuraEffect const* aurEff)
+{
+    for (AreaTrigger* areaTrigger : m_areaTrigger)
+    {
+        if (areaTrigger->GetAuraEffect() == aurEff)
+        {
+            areaTrigger->Remove();
+            break; // There can only be one AreaTrigger per AuraEffect
+        }
+    }
+}
+
+void Unit::RemoveAura(AuraApplicationMap::iterator &i, AuraRemoveMode mode)
+{
+    AuraApplication * aurApp = i->second;
+    // Do not remove aura which is already being removed
+    if (aurApp->GetRemoveMode())
+        return;
+    Aura* aura = aurApp->GetBase();
+    _UnapplyAura(i, mode);
+    // Remove aura - for Area and Target auras
+    if (aura->GetOwner() == this)
+        aura->Remove(mode);
+}
+
+void Unit::RemoveAura(Aura* aura, AuraRemoveMode mode)
+{
+    if (aura->IsRemoved())
+        return;
+    if (AuraApplication * aurApp = aura->GetApplicationOfTarget(GetGUID()))
+        RemoveAura(aurApp, mode);
+}
+
+void Unit::RemoveGameObject(uint32 spellid, bool del)
+{
+    if (m_gameObj.empty())
+        return;
+    GameObjectList::iterator i, next;
+    for (i = m_gameObj.begin(); i != m_gameObj.end(); i = next)
+    {
+        next = i;
+        if (spellid == 0 || (*i)->GetSpellId() == spellid)
+        {
+            (*i)->SetOwnerGUID(ObjectGuid::Empty);
+            if (del)
+            {
+                (*i)->SetRespawnTime(0);
+                (*i)->Delete();
+            }
+
+            next = m_gameObj.erase(i);
+        }
+        else
+            ++next;
+    }
+}
+
+void Unit::RemoveOwnedAura(AuraMap::iterator& i, AuraRemoveMode removeMode)
+{
+    Aura* aura = i->second;
+    ASSERT(!aura->IsRemoved());
+
+    // if unit currently update aura list then make safe update iterator shift to next
+    if (m_auraUpdateIterator == i)
+        ++m_auraUpdateIterator;
+
+    m_ownedAuras.erase(i);
+    m_removedAuras.push_front(aura);
+
+    // Unregister single target aura
+    if (aura->IsSingleTarget())
+        aura->UnregisterSingleTarget();
+
+    aura->_Remove(removeMode);
+
+    i = m_ownedAuras.begin();
+}
+
+void Unit::SendPlaySpellVisual(Position const& targetPosition, uint32 spellVisualId, uint8 missReason, uint8 reflectStatus, float travelSpeed, bool speedAsTime /*= false*/, float launchDelay /*= 0.0f*/)
+{
+    WorldPackets::Spells::PlaySpellVisual playSpellVisual;
+    playSpellVisual.Source = GetGUID();
+    playSpellVisual.TargetPosition = targetPosition;
+    playSpellVisual.SpellVisualID = spellVisualId;
+    playSpellVisual.TravelSpeed = travelSpeed;
+    playSpellVisual.MissReason = missReason;
+    playSpellVisual.ReflectStatus = reflectStatus;
+    playSpellVisual.SpeedAsTime = speedAsTime;
+    playSpellVisual.LaunchDelay = launchDelay;
+    SendMessageToSet(playSpellVisual.Write(), true);
+}
+
+void Unit::TextEmote(uint32 textId, WorldObject const* target /*= nullptr*/, bool isBossEmote /*= false*/)
+{
+    Talk(textId, isBossEmote ? CHAT_MSG_RAID_BOSS_EMOTE : CHAT_MSG_MONSTER_EMOTE, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_TEXTEMOTE), target);
+}
+
+void Unit::_UnapplyAura(AuraApplication* aurApp, AuraRemoveMode removeMode)
+{
+    // aura can be removed from unit only if it's applied on it, shouldn't happen
+    ASSERT(aurApp->GetBase()->GetApplicationOfTarget(GetGUID()) == aurApp);
+
+    uint32 spellId = aurApp->GetBase()->GetId();
+    AuraApplicationMapBoundsNonConst range = m_appliedAuras.equal_range(spellId);
+
+    for (AuraApplicationMap::iterator iter = range.first; iter != range.second;)
+    {
+        if (iter->second == aurApp)
+        {
+            _UnapplyAura(iter, removeMode);
+            return;
+        }
+        else
+            ++iter;
+    }
+    ABORT();
+}
+

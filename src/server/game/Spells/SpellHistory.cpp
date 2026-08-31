@@ -1190,3 +1190,94 @@ template void SpellHistory::LoadFromDB<Player>(PreparedQueryResult cooldownsResu
 template void SpellHistory::LoadFromDB<Pet>(PreparedQueryResult cooldownsResult, PreparedQueryResult chargesResult);
 template void SpellHistory::SaveToDB<Player>(CharacterDatabaseTransaction trans);
 template void SpellHistory::SaveToDB<Pet>(CharacterDatabaseTransaction trans);
+
+SpellHistory::Duration SpellHistory::GetRemainingCategoryCooldown(SpellInfo const* spellInfo) const
+{
+    return GetRemainingCategoryCooldown(spellInfo->GetCategory());
+}
+
+bool SpellHistory::HasCooldown(uint32 spellId, uint32 itemId /*= 0*/) const
+{
+    return HasCooldown(sSpellMgr->AssertSpellInfo(spellId, _owner->GetMap()->GetDifficultyID()), itemId);
+}
+
+void SpellHistory::ModifyCooldown(uint32 spellId, Duration cooldownMod, bool withoutCategoryCooldown)
+{
+    if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId, _owner->GetMap()->GetDifficultyID()))
+        ModifyCooldown(spellInfo, cooldownMod, withoutCategoryCooldown);
+}
+
+void SpellHistory::ModifySpellCooldown(uint32 spellId, Duration cooldownMod, bool withoutCategoryCooldown)
+{
+    auto itr = _spellCooldowns.find(spellId);
+    if (itr == _spellCooldowns.end() || itr->second.OnHold)
+        return;
+
+    ModifySpellCooldown(itr, cooldownMod, withoutCategoryCooldown);
+}
+
+void SpellHistory::ResetCooldown(uint32 spellId, bool update /*= false*/)
+{
+    auto itr = _spellCooldowns.find(spellId);
+    if (itr == _spellCooldowns.end() || itr->second.OnHold)
+        return;
+
+    ResetCooldown(itr, update);
+}
+
+void SpellHistory::WritePacket(WorldPackets::Spells::SendSpellCharges* sendSpellCharges) const
+{
+    sendSpellCharges->Entries.reserve(_categoryCharges.size());
+
+    TimePoint now = time_point_cast<Duration>(GameTime::GetTime<Clock>());
+    for (auto const& [categoryId, consumedCharges] : _categoryCharges)
+    {
+        if (!consumedCharges.empty())
+        {
+            Milliseconds cooldownDuration = duration_cast<Milliseconds>(consumedCharges.front().RechargeEnd - now);
+            if (cooldownDuration.count() <= 0)
+                continue;
+
+            WorldPackets::Spells::SpellChargeEntry chargeEntry;
+            chargeEntry.Category = categoryId;
+            chargeEntry.NextRecoveryTime = uint32(cooldownDuration.count());
+            chargeEntry.ConsumedCharges = uint8(consumedCharges.size());
+            sendSpellCharges->Entries.push_back(chargeEntry);
+        }
+    }
+}
+
+void SpellHistory::WritePacket(WorldPackets::Spells::SendSpellHistory* sendSpellHistory) const
+{
+    sendSpellHistory->Entries.reserve(_spellCooldowns.size());
+
+    TimePoint now = time_point_cast<Duration>(GameTime::GetTime<Clock>());
+    for (auto const& [spellId, cooldown] : _spellCooldowns)
+    {
+        WorldPackets::Spells::SpellHistoryEntry historyEntry;
+        historyEntry.SpellID = spellId;
+        historyEntry.ItemID = cooldown.ItemId;
+
+        if (cooldown.OnHold)
+            historyEntry.OnHold = true;
+        else
+        {
+            Milliseconds cooldownDuration = duration_cast<Milliseconds>(cooldown.CooldownEnd - now);
+            if (cooldownDuration.count() <= 0)
+                continue;
+
+            Milliseconds categoryDuration = duration_cast<Milliseconds>(cooldown.CategoryEnd - now);
+            if (categoryDuration.count() > 0)
+            {
+                historyEntry.Category = cooldown.CategoryId;
+                historyEntry.CategoryRecoveryTime = uint32(categoryDuration.count());
+            }
+
+            if (cooldownDuration.count() > categoryDuration.count())
+                historyEntry.RecoveryTime = uint32(cooldownDuration.count());
+        }
+
+        sendSpellHistory->Entries.push_back(historyEntry);
+    }
+}
+

@@ -2156,3 +2156,32 @@ void WorldSession::SendSuspendComms(ConnectionType connection)
     _suspendCommsPendingSerial = suspendComms.SerialNumber;
     RegisterTimeSync(SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER);
 }
+
+void WorldSession::SendNotification(char const* format, ...)
+{
+    if (format)
+    {
+        va_list ap;
+        char szStr[1024];
+        szStr[0] = '\0';
+        va_start(ap, format);
+        vsnprintf(szStr, 1024, format, ap);
+        va_end(ap);
+
+        SendPacket(WorldPackets::Chat::PrintNotification(szStr).Write());
+    }
+}
+
+void WorldSession::SetPlayerDataElementAccount(uint32 dataElementId, int64 value)
+{
+    auto elementItr = std::ranges::find(_playerDataAccount.Elements, dataElementId, &PlayerDataAccount::Element::Id);
+    if (elementItr == _playerDataAccount.Elements.end())
+    {
+        elementItr = _playerDataAccount.Elements.emplace(_playerDataAccount.Elements.end());
+        elementItr->Id = dataElementId;
+    }
+
+    elementItr->NeedSave = true;
+    elementItr->Int64Value = value;
+}
+

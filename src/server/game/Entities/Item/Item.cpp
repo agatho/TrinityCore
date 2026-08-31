@@ -3218,3 +3218,17 @@ void BonusData::AddBonus(uint32 type, std::array<int32, 4> const& values)
             break;
     }
 }
+
+void BonusData::Initialize(WorldPackets::Item::ItemInstance const& itemInstance)
+{
+    ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemInstance.ItemID);
+    if (!proto)
+        return;
+
+    Initialize(proto);
+
+    if (itemInstance.ItemBonus)
+        for (uint32 bonusListID : itemInstance.ItemBonus->BonusListIDs)
+            AddBonusList(bonusListID);
+}
+

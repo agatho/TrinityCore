@@ -968,3 +968,59 @@ void ReputationMgr::MarkRenownRewardGranted(uint32 renownRewardId, bool accountW
 
     CharacterDatabase.CommitTransaction(trans);
 }
+
+ReputationRank const* ReputationMgr::GetForcedRankIfAny(uint32 factionId) const
+{
+    return Trinity::Containers::MapGetValuePtr(_forcedReactions, factionId);
+}
+
+int32 ReputationMgr::GetParagonLevel(uint32 paragonFactionId) const
+{
+    return GetParagonLevel(sFactionStore.LookupEntry(paragonFactionId));
+}
+
+int32 ReputationMgr::GetReputation(FactionEntry const* factionEntry) const
+{
+    // Faction without recorded reputation. Just ignore.
+    if (!factionEntry)
+        return 0;
+
+    if (FactionState const* state = GetState(factionEntry))
+        return GetBaseReputation(factionEntry) + state->Standing;
+
+    return 0;
+}
+
+bool ReputationMgr::IsAtWar(FactionEntry const* factionEntry) const
+{
+    if (!factionEntry)
+        return false;
+
+    if (FactionState const* factionState = GetState(factionEntry))
+        return factionState->Flags.HasFlag(ReputationFlags::AtWar);
+    return false;
+}
+
+void ReputationMgr::SetVisible(FactionTemplateEntry const* factionTemplateEntry)
+{
+    if (!factionTemplateEntry->Faction)
+        return;
+
+    if (FactionEntry const* factionEntry = sFactionStore.LookupEntry(factionTemplateEntry->Faction))
+        // Never show factions of the opposing team
+        if (!(factionEntry->ReputationRaceMask2.HasRace(_player->GetRace()) && factionEntry->ReputationBase[1] == Reputation_Bottom))
+            SetVisible(factionEntry);
+}
+
+void ReputationMgr::SetVisible(FactionEntry const* factionEntry)
+{
+    if (!factionEntry->CanHaveReputation())
+        return;
+
+    FactionStateList::iterator itr = _factions.find(factionEntry->ReputationIndex);
+    if (itr == _factions.end())
+        return;
+
+    SetVisible(&itr->second);
+}
+

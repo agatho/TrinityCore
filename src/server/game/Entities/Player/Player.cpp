@@ -36801,3 +36801,165 @@ void Player::UpdateInitiativeFavor(uint32 favor)
         h.PlotID = s.PlotID;
     }
 }
+
+InventoryResult Player::CanUseItem(Item* pItem, bool not_loading) const
+{
+    if (pItem)
+    {
+        TC_LOG_DEBUG("entities.player.items", "Player::CanUseItem: Player '{}' ({}),  Item: {}",
+            GetName(), GetGUID().ToString(), pItem->GetEntry());
+
+        if (!IsAlive() && not_loading)
+            return EQUIP_ERR_PLAYER_DEAD;
+
+        //if (isStunned())
+        //    return EQUIP_ERR_GENERIC_STUNNED;
+
+        ItemTemplate const* pProto = pItem->GetTemplate();
+        if (pProto)
+        {
+            if (pItem->IsBindedNotWith(this))
+                return EQUIP_ERR_NOT_OWNER;
+
+            if (GetLevel() < pItem->GetRequiredLevel())
+                return EQUIP_ERR_CANT_EQUIP_LEVEL_I;
+
+            InventoryResult res = CanUseItem(pProto, true);
+            if (res != EQUIP_ERR_OK)
+                return res;
+
+            if (pItem->GetSkill() != 0)
+            {
+                bool allowEquip = false;
+                uint32 itemSkill = pItem->GetSkill();
+                // Armor that is binded to account can "morph" from plate to mail, etc. if skill is not learned yet.
+                if (pProto->GetQuality() == ITEM_QUALITY_HEIRLOOM && pProto->GetClass() == ITEM_CLASS_ARMOR && !HasSkill(itemSkill))
+                {
+                    /// @todo when you right-click already equipped item it throws EQUIP_ERR_PROFICIENCY_NEEDED.
+                    // In fact it's a visual bug, everything works properly... I need sniffs of operations with
+                    // binded to account items from off server.
+
+                    switch (GetClass())
+                    {
+                        case CLASS_HUNTER:
+                        case CLASS_SHAMAN:
+                            allowEquip = (itemSkill == SKILL_MAIL);
+                            break;
+                        case CLASS_PALADIN:
+                        case CLASS_WARRIOR:
+                            allowEquip = (itemSkill == SKILL_PLATE_MAIL);
+                            break;
+                    }
+                }
+                if (!allowEquip && GetSkillValue(itemSkill) == 0)
+                    return EQUIP_ERR_PROFICIENCY_NEEDED;
+            }
+
+            return EQUIP_ERR_OK;
+        }
+    }
+    return EQUIP_ERR_ITEM_NOT_FOUND;
+}
+
+void Player::DeleteOldCharacters()
+{
+    uint32 keepDays = sWorld->getIntConfig(CONFIG_CHARDELETE_KEEP_DAYS);
+    if (!keepDays)
+        return;
+
+    Player::DeleteOldCharacters(keepDays);
+}
+
+uint32 Player::GetCurrencyWeeklyCap(CurrencyTypesEntry const* currency) const
+{
+    // TODO: CurrencyTypeFlags::ComputedWeeklyMaximum
+    return currency->MaxEarnablePerWeek;
+}
+
+int32 Player::GetQuestLevel(Quest const* quest) const
+{
+    if (!quest)
+        return 0;
+
+    return GetQuestLevel(quest->GetContentTuningId());
+}
+
+int32 Player::GetQuestMinLevel(Quest const* quest) const
+{
+    return GetQuestMinLevel(quest->GetContentTuningId());
+}
+
+float Player::GetReputationPriceDiscount(Creature const* creature) const
+{
+    return GetReputationPriceDiscount(creature->GetFactionTemplateEntry());
+}
+
+bool Player::HasTitle(CharTitlesEntry const* title) const
+{
+    return HasTitle(title->MaskID);
+}
+
+void Player::LearnQuestRewardedSpells()
+{
+    // learn spells received from quest completing
+    for (RewardedQuestSet::const_iterator itr = m_RewardedQuests.begin(); itr != m_RewardedQuests.end(); ++itr)
+    {
+        Quest const* quest = sObjectMgr->GetQuestTemplate(*itr);
+        if (!quest)
+            continue;
+
+        LearnQuestRewardedSpells(quest);
+    }
+}
+
+void Player::UpdateVisibilityOf(WorldObject* target)
+{
+    if (HaveAtClient(target))
+    {
+        if (!CanSeeOrDetect(target, { .DistanceCheck = true }))
+        {
+            switch (target->GetTypeId())
+            {
+                case TYPEID_UNIT:
+                    BeforeVisibilityDestroy<Creature>(target->ToCreature(), this);
+                    break;
+                case TYPEID_PLAYER:
+                    BeforeVisibilityDestroy<Player>(target->ToPlayer(), this);
+                    break;
+                case TYPEID_GAMEOBJECT:
+                    BeforeVisibilityDestroy<GameObject>(target->ToGameObject(), this);
+                    break;
+                default:
+                    break;
+            }
+
+            if (!target->IsDestroyedObject())
+                target->SendOutOfRangeForPlayer(this);
+            else
+                target->DestroyForPlayer(this);
+
+            m_clientGUIDs.erase(target->GetGUID());
+
+            #ifdef TRINITY_DEBUG
+                TC_LOG_DEBUG("maps", "Object {} out of range for player {}. Distance = {}", target->GetGUID().ToString(), GetGUID().ToString(), GetDistance(target));
+            #endif
+        }
+    }
+    else
+    {
+        if (CanSeeOrDetect(target, { .DistanceCheck = true }))
+        {
+            target->SendUpdateToPlayer(this);
+            m_clientGUIDs.insert(target->GetGUID());
+
+            #ifdef TRINITY_DEBUG
+                TC_LOG_DEBUG("maps", "Object {} is visible now for player {}. Distance = {}", target->GetGUID().ToString(), GetGUID().ToString(), GetDistance(target));
+            #endif
+
+            // target aura duration for caster show only if target exist at caster client
+            // send data at target visibility change (adding to client)
+            SendInitialVisiblePackets(target);
+        }
+    }
+}
+

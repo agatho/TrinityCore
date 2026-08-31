@@ -224,3 +224,15 @@ void WorldSession::HandleRequestChatLogin(WorldPackets::Misc::RequestChatLogin& 
     TC_LOG_DEBUG("network.opcode", "CMSG_REQUEST_CHAT_LOGIN from {} login {} - no world counterpart exists, state lives entirely in the client",
         GetPlayerInfo(), requestChatLogin.Login);
 }
+
+void WorldSession::SendBattlenetResponse(uint32 serviceHash, uint32 methodId, uint32 token, uint32 status)
+{
+    WorldPackets::Battlenet::Response bnetResponse;
+    bnetResponse.BnetStatus = BattlenetRpcErrorCode(status);
+    bnetResponse.Method.Type = MAKE_PAIR64(methodId, serviceHash);
+    bnetResponse.Method.ObjectId = 1;
+    bnetResponse.Method.Token = token;
+
+    SendPacket(bnetResponse.Write());
+}
+

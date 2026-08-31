@@ -1263,3 +1263,22 @@ void CollectionMgr::SendWarbandSceneCollectionData() const
 
     _owner->SendPacket(accountItemCollection.Write());
 }
+
+void CollectionMgr::AddItemAppearance(Item* item)
+{
+    if (!item->IsSoulBound())
+        return;
+
+    ItemModifiedAppearanceEntry const* itemModifiedAppearance = item->GetItemModifiedAppearance();
+    if (!CanAddAppearance(itemModifiedAppearance))
+        return;
+
+    if (item->IsBOPTradeable() || item->IsRefundable())
+    {
+        AddTemporaryAppearance(item->GetGUID(), itemModifiedAppearance);
+        return;
+    }
+
+    AddItemAppearance(itemModifiedAppearance);
+}
+

@@ -235,3 +235,18 @@ ByteBuffer& operator<<(ByteBuffer& data, UiEventToast const& uiEventToast)
     return data;
 }
 }
+
+void ItemInstance::Initialize(UF::SocketedGem const* gem)
+{
+    ItemID = gem->ItemID;
+
+    ItemBonuses bonus;
+    bonus.Context = ItemContext(*gem->Context);
+    for (uint16 bonusListId : gem->BonusListIDs)
+        if (bonusListId)
+            bonus.BonusListIDs.push_back(bonusListId);
+
+    if (bonus.Context != ItemContext::NONE || !bonus.BonusListIDs.empty())
+        ItemBonus = bonus;
+}
+

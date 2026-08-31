@@ -1117,3 +1117,39 @@ void Channel::SendToAllWithAddon(Builder& builder, std::string const& addonPrefi
             if (player->GetSession()->IsAddonRegistered(addonPrefix) && (guid.IsEmpty() || !player->GetSocial()->HasIgnore(guid, accountGuid)))
                 localizer(player);
 }
+
+void Channel::SetOwner(ObjectGuid const& guid, bool exclaim)
+{
+    if (!_ownerGuid.IsEmpty())
+    {
+        auto itr = _playersStore.find(_ownerGuid);
+        if (itr != _playersStore.end())
+            itr->second.SetOwner(false);
+    }
+
+    _ownerGuid = guid;
+    if (!_ownerGuid.IsEmpty())
+    {
+        auto itr = _playersStore.find(_ownerGuid);
+        if (itr == _playersStore.end())
+            return;
+
+        uint8 oldFlag = itr->second.GetFlags();
+        itr->second.SetModerator(true);
+        itr->second.SetOwner(true);
+
+        ModeChangeAppend appender(_ownerGuid, oldFlag, itr->second.GetFlags());
+        ChannelNameBuilder<ModeChangeAppend> builder(this, appender);
+        SendToAll(builder);
+
+        if (exclaim)
+        {
+            OwnerChangedAppend ownerAppender(_ownerGuid);
+            ChannelNameBuilder<OwnerChangedAppend> ownerBuilder(this, ownerAppender);
+            SendToAll(ownerBuilder);
+        }
+
+        _isDirty = true;
+    }
+}
+

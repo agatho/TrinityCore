@@ -6972,3 +6972,11 @@ template TC_GAME_API void AuraEffect::GetTargetList(std::vector<Unit*>&) const;
 template TC_GAME_API void AuraEffect::GetApplicationList(std::list<AuraApplication*>&) const;
 template TC_GAME_API void AuraEffect::GetApplicationList(std::deque<AuraApplication*>&) const;
 template TC_GAME_API void AuraEffect::GetApplicationList(std::vector<AuraApplication*>&) const;
+
+void AuraEffect::HandleEffect(Unit* target, uint8 mode, bool apply, AuraEffect const* triggeredBy /*= nullptr*/)
+{
+    AuraApplication* aurApp = GetBase()->GetApplicationOfTarget(target->GetGUID());
+    ASSERT(aurApp);
+    HandleEffect(aurApp, mode, apply, triggeredBy);
+}
+

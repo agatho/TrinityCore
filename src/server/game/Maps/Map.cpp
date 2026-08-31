@@ -4133,3 +4133,70 @@ std::string InstanceMap::GetDebugInfo() const
 }
 
 template struct TC_GAME_API TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation>;
+
+void InstanceMap::UpdateInstanceLock(UpdateAdditionalSaveDataEvent const& updateSaveDataEvent)
+{
+    if (i_instanceLock)
+    {
+        uint32 instanceCompletedEncounters = i_instanceLock->GetData()->CompletedEncountersMask;
+
+        MapDb2Entries entries{ GetEntry(), GetMapDifficulty() };
+
+        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
+        if (entries.IsInstanceIdBound())
+            sInstanceLockMgr.UpdateSharedInstanceLock(trans, InstanceLockUpdateEvent(GetInstanceId(), i_data->GetSaveData(),
+                instanceCompletedEncounters, nullptr, {}));
+
+        for (MapReference& mapReference : m_mapRefManager)
+        {
+            Player* player = mapReference.GetSource();
+            // never instance bind GMs with GM mode enabled
+            if (player->IsGameMaster())
+                continue;
+
+            InstanceLock const* playerLock = sInstanceLockMgr.FindActiveInstanceLock(player->GetGUID(), entries);
+            std::string const* oldData = nullptr;
+            if (playerLock)
+                oldData = &playerLock->GetData()->Data;
+
+            bool isNewLock = !playerLock || playerLock->IsNew() || playerLock->IsExpired();
+
+            InstanceLock const* newLock = sInstanceLockMgr.UpdateInstanceLockForPlayer(trans, player->GetGUID(), entries,
+                InstanceLockUpdateEvent(GetInstanceId(), i_data->UpdateAdditionalSaveData(oldData ? *oldData : "", updateSaveDataEvent),
+                    instanceCompletedEncounters, nullptr, {}));
+
+            if (isNewLock)
+            {
+                WorldPackets::Instance::InstanceSaveCreated data;
+                data.Gm = player->IsGameMaster();
+                player->SendDirectMessage(data.Write());
+
+                player->GetSession()->SendCalendarRaidLockoutAdded(newLock);
+            }
+        }
+
+        CharacterDatabase.CommitTransaction(trans);
+    }
+}
+
+void Map::GetRespawnInfo(std::vector<RespawnInfo const*>& respawnData, SpawnObjectTypeMask types) const
+{
+    if (types & SPAWN_TYPEMASK_CREATURE)
+        PushRespawnInfoFrom(respawnData, _creatureRespawnTimesBySpawnId);
+    if (types & SPAWN_TYPEMASK_GAMEOBJECT)
+        PushRespawnInfoFrom(respawnData, _gameObjectRespawnTimesBySpawnId);
+}
+
+void Map::SendZoneWeather(uint32 zoneId, Player* player) const
+{
+    if (!player->HasAuraType(SPELL_AURA_FORCE_WEATHER))
+    {
+        auto itr = _zoneDynamicInfo.find(zoneId);
+        if (itr == _zoneDynamicInfo.end())
+            return;
+
+        SendZoneWeather(itr->second, player);
+    }
+}
+

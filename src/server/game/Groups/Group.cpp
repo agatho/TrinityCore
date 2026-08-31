@@ -2338,3 +2338,14 @@ void Group::SetRestrictPingsTo(RestrictPingsTo restrictTo)
 
     SendUpdate();
 }
+
+void Group::SetMemberReadyCheck(ObjectGuid guid, bool ready)
+{
+    if (!m_readyCheckStarted)
+        return;
+
+    member_witerator slot = _getMemberWSlot(guid);
+    if (slot != m_memberSlots.end())
+        SetMemberReadyCheck(&(*slot), ready);
+}
+

@@ -5115,3 +5115,36 @@ bool SpellInfo::HasLabel(uint32 labelId) const
 {
     return Labels.contains(labelId);
 }
+
+bool SpellEffectInfo::IsAura(AuraType aura) const
+{
+    return IsAura() && ApplyAuraName == aura;
+}
+
+bool SpellEffectInfo::IsEffect(SpellEffects effectName) const
+{
+    return Effect == effectName;
+}
+
+Optional<SpellPowerCost> SpellInfo::CalcPowerCost(Powers powerType, bool optionalCost, WorldObject const* caster, SpellSchoolMask schoolMask, Spell* spell /*= nullptr*/) const
+{
+    // gameobject casts don't use power
+    Unit const* unitCaster = caster->ToUnit();
+    if (!unitCaster)
+        return {};
+
+    auto itr = std::find_if(PowerCosts.cbegin(), PowerCosts.cend(), [powerType](SpellPowerEntry const* spellPowerEntry)
+    {
+        return spellPowerEntry && spellPowerEntry->PowerType == powerType;
+    });
+    if (itr == PowerCosts.cend())
+        return {};
+
+    return CalcPowerCost(*itr, optionalCost, caster, schoolMask, spell);
+}
+
+uint32 SpellInfo::GetDispelMask() const
+{
+    return GetDispelMask(DispelType(Dispel));
+}
+
