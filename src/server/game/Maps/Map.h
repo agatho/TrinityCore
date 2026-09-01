@@ -471,7 +471,6 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         }
 
         MapStoredObjectTypesContainer& GetObjectsStore() { return _objectsStore; }
-        MeshObject* GetMeshObject(ObjectGuid const& guid);
 
         typedef std::unordered_multimap<ObjectGuid::LowType, Creature*> CreatureBySpawnIdContainer;
         CreatureBySpawnIdContainer& GetCreatureBySpawnIdStore() { return _creatureBySpawnIdStore; }

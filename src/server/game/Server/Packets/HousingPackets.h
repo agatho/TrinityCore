@@ -967,6 +967,12 @@ namespace WorldPackets::Housing
     // Housing Catalog State Sync (ClientMirrorSystem 0x56000E)
     // ============================================================
 
+    // TODO housing Stage 2 (protocol migration): opcode absent in 12.1 enum: SMSG_HOUSING_CATALOG_STATE_SYNC.
+    // No SMSG_HOUSING_CATALOG_STATE_SYNC (nor any CATALOG-named SMSG) exists in bare's 12.1 Opcodes.h;
+    // guessing a value would fabricate a wire opcode. Guarded out per reconcile rule 3/4 (2026-09-01),
+    // together with Housing::BuildCatalogStateSync (Housing.h/.cpp) which populates it — currently unused
+    // (no call site constructs/sends this packet), so guarding drops no live behavior. See orchestrator report.
+#if 0
     // Sent on every map entry to a housing-capable map (after SMSG_INIT_WORLD_STATES)
     // as the character's HousingCatalog ownership snapshot. Body:
     //   uint32 count
@@ -989,6 +995,7 @@ namespace WorldPackets::Housing
 
         std::vector<Entry> Entries;
     };
+#endif
 
     // ============================================================
     // House Exterior SMSG Responses (0x50xxxx)
@@ -1699,6 +1706,12 @@ namespace WorldPackets::Housing
         uint8 Result = 0;
     };
 
+    // TODO housing Stage 2 (protocol migration): opcode absent in 12.1 enum: SMSG_HOUSING_EXPORT_HOUSE_RESPONSE
+    // (the 12.0.7/68275 value 0x550003 is reassigned to SMSG_HOUSING_DECOR_PLACE_RESPONSE in bare's 12.1
+    // Opcodes.h — a classic opcode-rebase collision, not a rename; guessing a new value would fabricate a
+    // wire opcode). Already documented below as retired/orphaned (no client sender for the paired CMSG
+    // since build 67186), so guarding drops no live behavior. Guarded out per reconcile rule 3/4 (2026-09-01).
+#if 0
     // SMSG_HOUSING_EXPORT_HOUSE_RESPONSE (0x550003) — live 68275 handler (parser sub_7FF7291D7160).
     // Wire: PackedGUID HouseGuid + u8 Status + optional name string (presence byte, bit7 gates) +
     //       uint32 BlobLen + bytes[BlobLen]. RE feedback 0x550003.
@@ -1715,6 +1728,7 @@ namespace WorldPackets::Housing
         Optional<std::string> ExportName;
         std::vector<uint8> ExportBlob;
     };
+#endif
 
     // Retired 2026-05-12: HousingExportHouseResponse — orphaned after EXPORT_HOUSE CMSG retirement.
     // No client sender for CMSG_HOUSING_SYSTEM_EXPORT_HOUSE (0x350003) in build 67186, so the
@@ -2733,6 +2747,13 @@ namespace WorldPackets::Neighborhood
         ObjectGuid NeighborhoodGuid;
     };
 
+    // TODO housing Stage 2 (protocol migration): opcode absent in 12.1 enum: CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST.
+    // 12.0.7 (68275) family 0x38 was renumbered to 0x3A in bare's 12.1 Opcodes.h for the 3
+    // siblings that got real names (SERVICE_STATUS_CHECK=0x3A0000, GET_AVAILABLE_INITIATIVE_REQUEST=
+    // 0x3A0002, GET_INITIATIVE_ACTIVITY_LOG_REQUEST=0x3A0004) but this opcode (old 0x380003) has no
+    // confirmed 12.1 counterpart — guessing a renumbered value would fabricate a wire opcode. Guarded
+    // out per reconcile rule 3/4 (2026-09-01); see orchestrator report.
+#if 0
     // 12.0.5 sniff-verified opcode 0x380003. Sent by C_NeighborhoodInitiative.RequestNeighborhoodInitiativeInfo
     // Lua API. Body = packed NeighborhoodGuid only (7 bytes). Always paired with
     // ACTIVITY_LOG_REQUEST in observed traffic — same NeighborhoodGuid, fired together when
@@ -2746,6 +2767,7 @@ namespace WorldPackets::Neighborhood
         void Read() override;
         ObjectGuid NeighborhoodGuid;
     };
+#endif
 
     class InitiativeUpdateActiveNeighborhood final : public ClientPacket
     {
@@ -2760,8 +2782,13 @@ namespace WorldPackets::Neighborhood
     // (INITIATIVE_WIRE_FORMAT_AUTHORITATIVE_67186.md). The named opcodes 0x380000,
     // 0x380002-0x380004 are above. The remaining 12 are below — semantic naming
     // requires runtime sniff to bind 1:1 to Lua APIs (see methodology doc).
+    //
+    // TODO housing Stage 2 (protocol migration): none of these 12 CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_*
+    // placeholder identifiers exist in bare's 12.1 Opcodes.h (old 0x38 family only partially renumbered
+    // to 0x3A — see the 3 named siblings above). No confirmed 1:1 12.1 value for any of these 12; guessing
+    // would fabricate wire opcodes. Guarded out per reconcile rule 3/4 (2026-09-01); see orchestrator report.
     // ============================================================================
-
+#if 0
     class NeighborhoodInitiativeOp01 final : public ClientPacket
     {
     public:
@@ -2864,6 +2891,7 @@ namespace WorldPackets::Neighborhood
         struct Quad { uint32 A = 0, B = 0, C = 0, D = 0; };
         std::vector<Quad> Records;
     };
+#endif
 
 }
 

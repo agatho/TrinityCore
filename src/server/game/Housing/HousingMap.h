@@ -38,7 +38,7 @@ public:
     ~HousingMap();
 
     void InitVisibilityDistance() override;
-    void LoadGridObjects(NGridType* grid, Cell const& cell) override;
+    void LoadGridObjects(NGridType* grid) override;
     bool AddPlayerToMap(Player* player, bool initPlayer = true) override;
     void RemovePlayerFromMap(Player* player, bool remove) override;
 

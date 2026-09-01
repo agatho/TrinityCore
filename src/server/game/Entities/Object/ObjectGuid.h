@@ -53,7 +53,6 @@ enum TypeID : uint8
     TYPEID_AI_GROUP               = 15,
     TYPEID_SCENARIO               = 16,
     TYPEID_LOOT_OBJECT            = 17,
-    TYPEID_HOUSING_ENTITY         = 18,
 
     NUM_CLIENT_OBJECT_TYPES,
 

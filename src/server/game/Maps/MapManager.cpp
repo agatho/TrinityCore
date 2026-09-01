@@ -220,7 +220,11 @@ void MapManager::PreloadHousingMaps()
         // Load all grid cells so every entity (ATs, GOs, MeshObjects) is fully spawned.
         // This prevents crashes when other systems (GameEventMgr, etc.) iterate the map
         // and ensures all entities are ready before any player connects.
-        map->LoadAllCells();
+        // 12.1 API: the housing branch's custom Map::LoadAllCells() (cell-granularity, called
+        // LoadGrid(x,y) per TOTAL_NUMBER_OF_CELLS_PER_MAP^2 cell) was dropped by the 12.0.7->12.1
+        // merge; bare's upstream 12.1 Map already ships the equivalent Map::LoadAllGrids()
+        // (grid-granularity, EnsureGridLoaded per GridCoord) — same effect, adapted call site.
+        map->LoadAllGrids();
 
         ++count;
         TC_LOG_INFO("housing", "MapManager::PreloadHousingMaps: Pre-loaded neighborhood '{}' (map={} instanceId={}) with all cells",

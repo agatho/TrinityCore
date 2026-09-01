@@ -2124,6 +2124,9 @@ void WorldSession::HandleGetInitiativeActivityLogRequest(WorldPackets::Neighborh
         getInitiativeActivityLogRequest.NeighborhoodGuid.ToString(), player->GetGUID().ToString());
 }
 
+// TODO housing Stage 2 (protocol migration): guarded with WorldPackets::Neighborhood::GetNeighborhoodInitiativeInfoRequest
+// (HousingPackets.h) — opcode absent in 12.1 enum: CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST.
+#if 0
 void WorldSession::HandleGetNeighborhoodInitiativeInfoRequest(WorldPackets::Neighborhood::GetNeighborhoodInitiativeInfoRequest const& getNeighborhoodInitiativeInfoRequest)
 {
     // 12.0.5 sniff-verified opcode 0x380003. Lua entry point:
@@ -2154,6 +2157,7 @@ void WorldSession::HandleGetNeighborhoodInitiativeInfoRequest(WorldPackets::Neig
     TC_LOG_DEBUG("housing", "CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST NeighborhoodGuid: {}, Player: {}",
         getNeighborhoodInitiativeInfoRequest.NeighborhoodGuid.ToString(), player->GetGUID().ToString());
 }
+#endif
 
 void WorldSession::HandleInitiativeUpdateActiveNeighborhood(WorldPackets::Neighborhood::InitiativeUpdateActiveNeighborhood const& initiativeUpdateActiveNeighborhood)
 {
@@ -2212,7 +2216,11 @@ void WorldSession::HandleInitiativeUpdateActiveNeighborhood(WorldPackets::Neighb
 //   - logs the request for diagnostic capture
 //   - returns silently (no SMSG response)
 // This matches how the client's other "fire-and-forget" senders behave in retail.
-
+//
+// TODO housing Stage 2 (protocol migration): guarded with the 12 NeighborhoodInitiativeOpXX
+// classes (HousingPackets.h) — none of the CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_* placeholder
+// opcodes exist in bare's 12.1 Opcodes.h; guessing renumbered values would fabricate wire opcodes.
+#if 0
 void WorldSession::HandleNeighborhoodInitiativeOp01(WorldPackets::Neighborhood::NeighborhoodInitiativeOp01 const& packet)
 {
     if (!GetPlayer())
@@ -2312,6 +2320,7 @@ void WorldSession::HandleNeighborhoodInitiativeOp0F(WorldPackets::Neighborhood::
     for (auto const& r : packet.Records)
         TC_LOG_TRACE("housing", "  record: ({}, {}, {}, {})", r.A, r.B, r.C, r.D);
 }
+#endif
 
 // ============================================================
 // Phase 7 — Charter Handlers

@@ -900,4 +900,87 @@ static constexpr uint32 HOUSING_MIN_PLAYER_LEVEL = 10;
 // Required expansion for housing access (The War Within = 10)
 static constexpr uint32 HOUSING_REQUIRED_EXPANSION = 10;
 
+// ============================================================================
+// Patch 12.1.0 (build 69299) additions — RE spec:
+//   c:\dumps\tools\dump121\housing\housing_12_1_spec.md
+// Enum MEMBER NAMES are binary-verified (client reflection strings / auto_HOUSING_*
+// event + ERR_HOUSING_* error tables). Enum NUMERIC VALUES are inferred (string-order
+// ordinals) — the client enum-constant registrar tables are not cleanly recoverable
+// offline (spec §5). Flagged accordingly; confirm values against a 12.1 capture/DB.
+//
+// Restored 2026-09-01 (12.0.7->12.1 housing reconcile): this block existed in bare's
+// 12.1 WIP (commit 19eb4a2607) but was dropped when the 12.0.7 clone's HousingDefines.h
+// won the merge for this file wholesale. Recovered verbatim from that commit; no values
+// changed. HousingBlueprintMgr.h/.cpp depend on these identifiers.
+// ============================================================================
+
+// Blueprint category. Names from HOUSING_BLUEPRINT_COLLECTION_GROUP_{HOUSE,INTERIOR,
+// EXTERIOR,ROOM,BACKUP} client event strings [BIN]. Values = string order [INF].
+enum class HousingBlueprintType : uint32
+{
+    House    = 0,
+    Interior = 1,
+    Exterior = 2,
+    Room     = 3,
+    Backup   = 4,
+};
+
+// Content granularity of a blueprint's item list (JamBlueprintItemList carries decor/
+// dye/room/fixture ID sets). Mirrors HousingBlueprintType groups. Names [BIN] / values [INF].
+enum class HousingBlueprintContentType : uint32
+{
+    House    = 0,
+    Interior = 1,
+    Exterior = 2,
+    Room     = 3,
+    Backup   = 4,
+};
+
+// JamHousingBlueprint.flags bitmask. Client has HousingBlueprintFlag/Meta but the member
+// values were NOT recovered offline — kept opaque; do not assume a meaning. [INF]
+enum HousingBlueprintFlags : uint32
+{
+    HOUSING_BLUEPRINT_FLAG_NONE = 0x0,
+    // values unresolved offline (spec §5) — treat JamHousingBlueprint.flags as opaque uint32
+};
+
+// ImportBlueprint requirement gate. Bits from ERR_HOUSING_BLUEPRINT_REQUIREMENT_* [BIN];
+// bit positions = error-string order [INF]. Import is refused unless the target house
+// satisfies all set requirements (spec §6).
+enum HousingBlueprintUnmetRequirementFlags : uint32
+{
+    HOUSING_BLUEPRINT_REQ_NONE             = 0x0,
+    HOUSING_BLUEPRINT_REQ_EXTERIOR_FACTION = 0x1,
+    HOUSING_BLUEPRINT_REQ_HOUSE_TYPE       = 0x2,
+    HOUSING_BLUEPRINT_REQ_HOUSE_SIZE       = 0x4,
+};
+
+// JamHouseBudgetEntry.budgetType. Categories from the Lua budget accessors
+// Get{Max,Spent}PlacementBudget / Get{Max,Spent}PetPlacementBudget / GetRoomPlacementBudget
+// [BIN names] / values [INF]. Each is tracked separately within interior vs exterior.
+enum class HouseBudgetType : uint32
+{
+    Decor   = 0,
+    PetBed  = 1,
+    Room    = 2,
+    Fixture = 3,
+};
+
+// Pet beds (12.1): decor items with their own placement budget. Caps come from client
+// config globals housingMaxPetBedsInterior@0x127F60 / housingMaxPetBedsExterior@0x127FD0
+// [BIN symbols]. Default caps are placeholders until a value capture/DB confirms. [INF]
+static constexpr uint32 HOUSING_MAX_PET_BEDS_INTERIOR = 6;
+static constexpr uint32 HOUSING_MAX_PET_BEDS_EXTERIOR = 6;
+
+// Blueprint per-BNet-account caps. Client events HOUSING_BLUEPRINTS_MAX_PER_BNET_ACCOUNT
+// @0x13B993F and HOUSING_BLUEPRINTS_MAX_BACKUPS_PER_BNET_ACCOUNT@0x13B9968 exist [BIN];
+// the numeric caps are format-string args, not recovered offline — placeholders. [INF]
+static constexpr uint32 HOUSING_BLUEPRINTS_MAX_PER_BNET_ACCOUNT = 50;
+static constexpr uint32 HOUSING_BLUEPRINTS_MAX_BACKUPS_PER_BNET = 10;
+
+// 12.1 raised the displayed house level cap to 12 (patch notes). MAX_HOUSE_LEVEL above is
+// already 20 (headroom); levels 11-12 are HouseLevelData.db2 rows + larger budgets +
+// large-exterior unlock — a DATA change, not a code cap. [data]
+static constexpr uint32 HOUSING_DISPLAY_LEVEL_CAP_12_1 = 12;
+
 #endif // TRINITYCORE_HOUSING_DEFINES_H

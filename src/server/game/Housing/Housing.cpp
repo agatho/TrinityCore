@@ -2499,6 +2499,10 @@ void Housing::PopulateCatalogStorageEntries()
         uint32(_placedDecor.size()), totalStorageItems, uint32(_catalog.size()), _owner->GetGUID().ToString());
 }
 
+// TODO housing Stage 2 (protocol migration): guarded with WorldPackets::Housing::HousingCatalogStateSync
+// (HousingPackets.h) — opcode absent in 12.1 enum: SMSG_HOUSING_CATALOG_STATE_SYNC. Currently unused
+// (no call site constructs/sends this packet), so guarding drops no live behavior.
+#if 0
 void Housing::BuildCatalogStateSync(WorldPackets::Housing::HousingCatalogStateSync& packet) const
 {
     // Encoding reference (sniff-verified on dump_12.0.1.66838_2026-04-15):
@@ -2565,6 +2569,7 @@ void Housing::BuildCatalogStateSync(WorldPackets::Housing::HousingCatalogStateSy
         packet.Entries.push_back(e);
     }
 }
+#endif
 
 void Housing::SaveSettings(uint32 settingsFlags)
 {
