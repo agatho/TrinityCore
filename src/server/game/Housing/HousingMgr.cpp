@@ -173,7 +173,6 @@ void HousingMgr::LoadHouseDecorData()
         data.InitialRotation[0] = entry->InitialRotation.X;
         data.InitialRotation[1] = entry->InitialRotation.Y;
         data.InitialRotation[2] = entry->InitialRotation.Z;
-        data.Field_003 = entry->Field_003;
         data.GameObjectID = entry->GameObjectID;
         data.Flags = entry->Flags;
         data.Type = entry->Type;

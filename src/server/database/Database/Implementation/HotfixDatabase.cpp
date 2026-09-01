@@ -134,8 +134,8 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT_TYPE, "SELECT MAX(ID) + 1 FROM exterior_component_type", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT_TYPE, "SELECT ID, Name_lang FROM exterior_component_type_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
     PrepareStatement(HOTFIX_SEL_EXTERIOR_COMPONENT, "SELECT Name, PositionX, PositionY, PositionZ, ID, Size, "
-        "ParentComponentID, ModelFileDataID, Flags, Field_7, Type, Field_9, GameObjectID, Field_11, ItemID, "
-        "HouseExteriorWmoDataID FROM exterior_component"
+        "HouseExteriorWmoDataID, ParentComponentID, ModelFileDataID, Flags, Field_7, Type, Field_9, GameObjectID, Field_11, ItemID "
+        "FROM exterior_component"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT, "SELECT MAX(ID) + 1 FROM exterior_component", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT, "SELECT ID, Name_lang FROM exterior_component_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
