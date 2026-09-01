@@ -186,9 +186,11 @@ CREATE TABLE `neighborhoods` (
     `factionRestriction` INT NOT NULL DEFAULT 0 COMMENT 'NeighborhoodFactionRestriction: 0=None, 1=Horde, 2=Alliance',
     `isPublic` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Boolean: 1 = publicly listed and joinable',
     `createTime` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix timestamp of neighborhood creation',
+    `guildId` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'M8: owning guild id for guild neighborhoods (0 = not guild-linked)',
     PRIMARY KEY (`guid`),
     INDEX `idx_owner` (`ownerGuid`),
-    INDEX `idx_map` (`neighborhoodMapId`)
+    INDEX `idx_map` (`neighborhoodMapId`),
+    INDEX `idx_guild` (`guildId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------

@@ -140,6 +140,13 @@ public:
     bool IsInInterior() const { return _isInInterior; }
 
     // Decor operations — StartPlacingNewDecor creates a pending placement, PlaceDecorWithGuid commits it
+    // Mint a decor GUID from the global generator. Every decor GUID must come
+    // from here or from StartPlacingNewDecor/PlaceDecor, all of which draw the
+    // counter from s_nextDecorDbId, so ids stay unique across players and across
+    // a reload. The deferred-redeem path used to compute its own from
+    // (playerGuid * 100000 + entryId * 100 + index), which overflows its band
+    // into another character's range as soon as the entry id passes 999.
+    ObjectGuid GenerateDecorGuid(uint32 decorEntryId);
     ObjectGuid StartPlacingNewDecor(uint32 catalogEntryId, HousingResult& result);
     uint32 GetPendingPlacementEntryId(ObjectGuid decorGuid) const;
     void CancelPendingPlacement(ObjectGuid decorGuid);
@@ -150,6 +157,14 @@ public:
     HousingResult MoveDecor(ObjectGuid decorGuid, float x, float y, float z,
         float rotX, float rotY, float rotZ, float rotW, float scale = 1.0f);
     HousingResult RemoveDecor(ObjectGuid decorGuid);
+    // M2: single source of truth for exterior-vs-interior decor budget routing.
+    // A placement is exterior (charged to the yard budget) when it has no room
+    // (empty RoomGuid) OR its RoomGuid is the plot's base/exterior room identity
+    // (HighGuid::Housing subType==2 whose low arg2 == base room entry id). Every
+    // budget CHECK, CHARGE, refund and RecalculateBudgets classifies through this
+    // so they can never disagree (the old bug: CHECK counted exterior-plot rooms
+    // as exterior but CHARGE routed them to interior → exterior budget unlimited).
+    static bool IsExteriorDecorPlacement(ObjectGuid roomGuid);
     HousingResult CommitDecorDyes(ObjectGuid decorGuid, std::array<uint32, MAX_HOUSING_DYE_SLOTS> const& dyeSlots);
     HousingResult SetDecorLocked(ObjectGuid decorGuid, bool locked);
     PlacedDecor const* GetPlacedDecor(ObjectGuid decorGuid) const;
@@ -272,6 +287,14 @@ private:
 
     // Populate starter fixtures (Base + Roof) on house creation
     void PopulateStarterFixtures();
+
+    // #16 Outdoor Lighting (A4): enforce the 12.0.7 "two lights cannot overlap"
+    // rule. Only applies when placing/moving a Lighting-category decor on the
+    // exterior/plot scope; rejects with HOUSING_RESULT_INVALID_LIGHT_OVERLAP if
+    // another exterior light sits within HOUSING_LIGHT_OVERLAP_RADIUS. excludeGuid
+    // skips the decor being moved so an in-place move never collides with itself.
+    HousingResult CheckLightOverlap(uint32 decorEntryId, float x, float y, float z,
+        bool isExterior, ObjectGuid excludeGuid = ObjectGuid::Empty) const;
 
     Player* _owner;
     ObjectGuid _houseGuid;

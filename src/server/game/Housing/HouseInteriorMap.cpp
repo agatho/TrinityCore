@@ -658,11 +658,36 @@ void HouseInteriorMap::DespawnAllRoomMeshObjects()
     }
     _roomEntities.clear();
 
+    // Placed decor must go with the rooms. Its visuals hang off the room entities we just
+    // destroyed, and _decorGuidToObjGuid is what SpawnInteriorDecor consults to decide a decor
+    // item is "already spawned". Leaving it populated made every subsequent respawn skip all
+    // decor silently ("Spawned 0 decor entities (total=3, exteriorSkipped=0)"), so a house whose
+    // rooms were respawned came back completely empty.
+    uint32 decorDespawned = 0;
+    for (auto const& [decorGuid, objGuid] : _decorGuidToObjGuid)
+    {
+        if (objGuid.IsGameObject())
+        {
+            if (GameObject* go = GetGameObject(objGuid))
+            {
+                RemoveFromMap(go, true);
+                ++decorDespawned;
+            }
+        }
+        else if (MeshObject* mesh = GetMeshObject(objGuid))
+        {
+            RemoveFromMap(mesh, true);
+            ++decorDespawned;
+        }
+    }
+    _decorGuidToObjGuid.clear();
+    despawnCount += decorDespawned;
+
     _roomMeshObjects.clear();
     _roomsSpawned = false;
 
-    TC_LOG_DEBUG("housing", "HouseInteriorMap::DespawnAllRoomMeshObjects: Despawned {} objects (owner={})",
-        despawnCount, _owner.ToString());
+    TC_LOG_DEBUG("housing", "HouseInteriorMap::DespawnAllRoomMeshObjects: Despawned {} objects incl. {} decor (owner={})",
+        despawnCount, decorDespawned, _owner.ToString());
 }
 
 void HouseInteriorMap::DespawnRoomEntities(ObjectGuid roomGuid)
@@ -1096,22 +1121,35 @@ void HouseInteriorMap::SpawnInteriorDecorFromList(std::vector<Housing::PlacedDec
         ObjectGuid roomEntityGuid = decor.RoomGuid;
         Position roomWorldPos;
 
-        Housing* ownerHousing = GetOwnerHousing();
-        if (ownerHousing && !roomEntityGuid.IsEmpty())
+        // Resolve the room's world position from the room entity we just spawned. The old
+        // lookup went through GetOwnerHousing()->GetRooms(), which returns nothing on some
+        // passes (owner not loaded), and a miss silently left roomWorldPos at (0,0,0) - which
+        // is why the same decor item computed a different position on consecutive respawns.
+        bool roomResolved = false;
+        if (!roomEntityGuid.IsEmpty())
         {
-            for (Housing::Room const* rm : ownerHousing->GetRooms())
+            for (HousingRoomEntity const* re : _roomEntities)
             {
-                if (rm->Guid == roomEntityGuid)
+                if (re && re->GetGUID() == roomEntityGuid)
                 {
-                    static constexpr float FLOOR_HEIGHT = 12.0f;
-                    roomWorldPos = Position(_originX + static_cast<float>(rm->GridX),
-                                            _originY + static_cast<float>(rm->GridY),
-                                            _originZ + static_cast<float>(rm->FloorIndex) * FLOOR_HEIGHT, 0.0f);
+                    roomWorldPos = Position(re->GetPositionX(), re->GetPositionY(), re->GetPositionZ(), re->GetOrientation());
+                    roomResolved = true;
                     break;
                 }
             }
+
+            if (!roomResolved)
+            {
+                TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnInteriorDecor: room entity {} not spawned for decor entry {} - skipping",
+                    roomEntityGuid.ToString(), decor.DecorEntryId);
+                continue;
+            }
         }
 
+        // decor.Pos is a WORLD position in interior-map space - it is stored verbatim from the
+        // client's placement packet, and the client sends world coords (rows placed live read
+        // e.g. -980.4/-1005.2/0.07 for a room sitting at -985/-1000/0.1). PositionLocalSpace is
+        // therefore derived by subtracting the room origin, NOT the other way round.
         float worldX = decor.PosX;
         float worldY = decor.PosY;
         float worldZ = decor.PosZ;
@@ -1284,22 +1322,30 @@ void HouseInteriorMap::SpawnSingleInteriorDecor(Housing::PlacedDecor const& deco
         }
     }
 
-    // Find the room's world position from its grid coordinates
-    if (ownerHousing)
+    // Take the room's world position from the spawned room entity (authoritative, and unlike
+    // the GetRooms() walk it cannot silently miss and leave roomWorldPos at the origin).
+    if (!roomEntityGuid.IsEmpty())
     {
-        for (Housing::Room const* rm : ownerHousing->GetRooms())
+        bool roomResolved = false;
+        for (HousingRoomEntity const* re : _roomEntities)
         {
-            if (rm->Guid == roomEntityGuid)
+            if (re && re->GetGUID() == roomEntityGuid)
             {
-                static constexpr float FLOOR_HEIGHT = 7.0f;
-                roomWorldPos = Position(_originX + static_cast<float>(rm->GridX),
-                                        _originY + static_cast<float>(rm->GridY),
-                                        _originZ + static_cast<float>(rm->FloorIndex) * FLOOR_HEIGHT, 0.0f);
+                roomWorldPos = Position(re->GetPositionX(), re->GetPositionY(), re->GetPositionZ(), re->GetOrientation());
+                roomResolved = true;
                 break;
             }
         }
+
+        if (!roomResolved)
+        {
+            TC_LOG_ERROR("housing", "HouseInteriorMap::SpawnSingleInteriorDecor: room entity {} not spawned for decor {} - skipping",
+                roomEntityGuid.ToString(), decor.Guid.ToString());
+            return;
+        }
     }
 
+    // decor.Pos is a WORLD position in interior-map space - see SpawnInteriorDecorFromList.
     float worldX = decor.PosX, worldY = decor.PosY, worldZ = decor.PosZ;
     LoadGrid(worldX, worldY);
 
@@ -1601,22 +1647,52 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                 // may have stale fragment formats (e.g., root MeshObjects with FHousingRoom_C that
                 // no longer exist in the current code). DespawnAll is safe here because the player
                 // hasn't received any entities yet (no DESTROY goes to the client).
+                //
+                // H-18: that justification holds for the owner arriving, who has received
+                // nothing yet - but not for anyone already standing in the interior.
+                // _roomsSpawned can be set by a visitor who pre-spawned the rooms through
+                // the offline-owner path, and that visitor HAS received the MeshObjects.
+                // Despawning here sends them a DESTROY and the house dissolves around them
+                // until the respawn lands. The stale-fragment problem the rebuild exists for
+                // is only possible for entities spawned by a PREVIOUS process; if someone
+                // else is standing in the map, this binary spawned what they are looking at
+                // and it is already current-format. So: rebuild when alone, leave the rooms
+                // standing when not.
+                bool spawnRooms = true;
                 if (_roomsSpawned)
-                    DespawnAllRoomMeshObjects();
-
-                TC_LOG_ERROR("housing", "HouseInteriorMap::AddPlayerToMap: === SPAWNING ROOMS ===");
-
-                for (Housing::Room const* room : housing->GetRooms())
                 {
-                    TC_LOG_ERROR("housing", "  Room: guid={} entryId={} slot={} grid=({},{}) orientation={} mirrored={}",
-                        room->Guid.ToString(), room->RoomEntryId, room->SlotIndex,
-                        room->GridX, room->GridY, room->Orientation, room->Mirrored);
+                    bool otherPlayersPresent = false;
+                    for (MapReference const& ref : GetPlayers())
+                    {
+                        if (ref.GetSource() != player)
+                        {
+                            otherPlayersPresent = true;
+                            break;
+                        }
+                    }
+
+                    if (otherPlayersPresent)
+                        spawnRooms = false;
+                    else
+                        DespawnAllRoomMeshObjects();
                 }
 
-                int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
-                    ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
-                SpawnRoomMeshObjects(housing, faction);
-                _roomsSpawned = true;
+                if (spawnRooms)
+                {
+                    TC_LOG_ERROR("housing", "HouseInteriorMap::AddPlayerToMap: === SPAWNING ROOMS ===");
+
+                    for (Housing::Room const* room : housing->GetRooms())
+                    {
+                        TC_LOG_ERROR("housing", "  Room: guid={} entryId={} slot={} grid=({},{}) orientation={} mirrored={}",
+                            room->Guid.ToString(), room->RoomEntryId, room->SlotIndex,
+                            room->GridX, room->GridY, room->Orientation, room->Mirrored);
+                    }
+
+                    int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
+                        ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
+                    SpawnRoomMeshObjects(housing, faction);
+                    _roomsSpawned = true;
+                }
             }
 
             // Always spawn interior decor (handles both first entry and re-entry).
@@ -1683,6 +1759,15 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                     // ENTER_PLOT below. ENTER_PLOT resets editor state, so sending
                     // Status+Permissions before it is wasteful. The exterior AT handler
                     // (at_housing_plot.cpp) also sends Status+Permissions AFTER ENTER_PLOT.
+
+                    // 0) Drive the housing tutorial forward. The editor UI stays locked until
+                    // QUEST_HOUSING_TUTORIAL_COMPLETE ("Home at Last") is REWARDED, and that quest
+                    // is AUTO_ACCEPT|AUTO_COMPLETE with no quest-giver NPC on either end - retail
+                    // grants it by script and completes it with a kill credit the moment the player
+                    // first stands inside their house (both packet-attested in the starter captures).
+                    // Without this the chain is unenterable: no NPC ever offers it, so the player
+                    // reaches the end of the visible questline and the editor never unlocks.
+                    GrantHousingTutorialProgress(p);
 
                     // 1) PostTutorialAuras (slots 8, 9, 50)
                     SendPostTutorialAuras(p);
@@ -1875,7 +1960,7 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                             float fbX = _originX - 2.52f;
                             float fbY = _originY;
                             float fbZ = _originZ + 0.02f;
-                            if (GameObject* doorGo = p->SummonGameObject(575017,
+                            if (GameObject* doorGo = p->SummonGameObject(INTERIOR_DOOR_GO_ALLIANCE,
                                 Position(fbX, fbY, fbZ, 0.0f), QuaternionData(0, 0, 0, 1), 0s))
                             {
                                 doorGo->ReplaceAllFlags(GameObjectFlags(0x40000));
@@ -1885,11 +1970,11 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
                             return;
                         }
 
-                        uint32 doorGoEntry = 575017; // Alliance default
+                        uint32 doorGoEntry = INTERIOR_DOOR_GO_ALLIANCE; // Alliance default
                         Neighborhood* nbh = sNeighborhoodMgr.GetNeighborhood(ownerHousing->GetNeighborhoodGuid());
                         int32 faction = nbh ? nbh->GetFactionRestriction() : NEIGHBORHOOD_FACTION_ALLIANCE;
                         if (faction == NEIGHBORHOOD_FACTION_HORDE)
-                            doorGoEntry = 587318;
+                            doorGoEntry = INTERIOR_DOOR_GO_HORDE;
 
                         TC_LOG_INFO("housing", "InteriorDoor: faction={} doorGoEntry={}",
                             faction == NEIGHBORHOOD_FACTION_HORDE ? "Horde" : "Alliance", doorGoEntry);
@@ -2075,6 +2160,58 @@ void HouseInteriorMap::RemovePlayerFromMap(Player* player, bool remove)
         _roomsSpawned, uint32(_roomMeshObjects.size()), uint32(_decorGuidToObjGuid.size()), (void*)this);
 
     Map::RemovePlayerFromMap(player, remove);
+}
+
+void HouseInteriorMap::GrantHousingTutorialProgress(Player* player)
+{
+    if (!player)
+        return;
+
+    if (player->GetQuestRewardStatus(QUEST_HOUSING_TUTORIAL_COMPLETE))
+        return; // tutorial already finished - editor is unlocked
+
+    Quest const* quest = sObjectMgr->GetQuestTemplate(QUEST_HOUSING_TUTORIAL_COMPLETE);
+    if (!quest)
+    {
+        TC_LOG_ERROR("housing", "GrantHousingTutorialProgress: quest {} missing from quest_template - the housing "
+            "editor can never unlock", QUEST_HOUSING_TUTORIAL_COMPLETE);
+        return;
+    }
+
+    // Retail grants this by script, not through a quest chain: it is AUTO_ACCEPT and no NPC offers
+    // it, so unless we put it in the log the player can never obtain it.
+    if (player->GetQuestStatus(QUEST_HOUSING_TUTORIAL_COMPLETE) == QUEST_STATUS_NONE)
+    {
+        if (!player->CanTakeQuest(quest, false) || !player->CanAddQuest(quest, false))
+        {
+            TC_LOG_ERROR("housing", "GrantHousingTutorialProgress: player {} cannot take quest {} (log full or "
+                "requirements unmet) - housing editor stays locked",
+                player->GetGUID().ToString(), QUEST_HOUSING_TUTORIAL_COMPLETE);
+            return;
+        }
+
+        player->AddQuestAndCheckCompletion(quest, nullptr);
+        TC_LOG_INFO("housing", "GrantHousingTutorialProgress: granted quest {} to player {}",
+            QUEST_HOUSING_TUTORIAL_COMPLETE, player->GetGUID().ToString());
+    }
+
+    // Completing objective: retail credits this creature the moment the player stands in the house.
+    player->KilledMonsterCredit(NPC_HOUSING_TUTORIAL_HOUSE_ENTERED_CREDIT);
+
+    // AUTO_COMPLETE quests are submitted by the client with the PLAYER as the quest giver. Our editor
+    // gate reads GetQuestRewardStatus, so close the loop here rather than depending on that round trip.
+    if (player->GetQuestStatus(QUEST_HOUSING_TUTORIAL_COMPLETE) == QUEST_STATUS_COMPLETE
+        && quest->HasFlag(QUEST_FLAGS_AUTO_COMPLETE))
+    {
+        player->RewardQuest(quest, LootItemType::Item, 0, player, false);
+        TC_LOG_INFO("housing", "GrantHousingTutorialProgress: auto-completed quest {} for player {} - housing editor unlocked",
+            QUEST_HOUSING_TUTORIAL_COMPLETE, player->GetGUID().ToString());
+    }
+    else
+        TC_LOG_INFO("housing", "GrantHousingTutorialProgress: quest {} status for player {} is {} after credit {}",
+            QUEST_HOUSING_TUTORIAL_COMPLETE, player->GetGUID().ToString(),
+            uint32(player->GetQuestStatus(QUEST_HOUSING_TUTORIAL_COMPLETE)),
+            NPC_HOUSING_TUTORIAL_HOUSE_ENTERED_CREDIT);
 }
 
 void HouseInteriorMap::SendPostTutorialAuras(Player* player)

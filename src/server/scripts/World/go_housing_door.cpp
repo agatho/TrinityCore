@@ -36,7 +36,8 @@
 namespace
 {
     [[maybe_unused]] constexpr uint32 HOUSING_DOOR_ENTRY    = 586576;  // retail "Founder's Point Front Door"
-    constexpr uint32 HOUSE_INTERIOR_MAP_ID = 2783;     // "Home Interior" — InstanceType 7 (MAP_HOUSE_INTERIOR)
+    // HOUSE_INTERIOR_MAP_ID now comes from HousingDefines.h (merged from ADV e004d7a4bf) — removed
+    // the local duplicate that used to live here to avoid two independent copies of the same 2783.
 
     // Interior spawn position from NeighborhoodMap ID=7 (sniff-confirmed)
     constexpr float INTERIOR_SPAWN_X = -1000.0f;

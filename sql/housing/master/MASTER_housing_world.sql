@@ -3,7 +3,7 @@
 -- =============================================================================
 -- Trinity Housing — bundled installation master file
 -- Target database: world
--- Generated: 2026-04-23
+-- Generated: 2026-08-10
 --
 -- This file aggregates every housing-related SQL file from sql/housing/ in the
 -- correct install order. To install, run against the world database:

@@ -1059,6 +1059,28 @@ enum OpcodeClient : uint32
     CMSG_WORLD_LOOT_OBJECT_CLICK                                    = 0x3D02D7,
     CMSG_WORLD_PORT_RESPONSE                                        = 0x430025,
     CMSG_WRAP_ITEM                                                  = 0x400000,
+    // TC-CUSTOM housing/neighborhood-initiative CMSG opcodes merged from ADV (e004d7a4bf).
+    // Values are UNKNOWN_OPCODE: ADV's raw 68275-era suffixes collide with real 12.1 opcodes in
+    // their families (CMSG_HOUSING_BLUEPRINT_EXPORT_ROOM's 0x310008 collides with
+    // CMSG_HOUSING_BLUEPRINT_REQUEST_CONTENTS; CMSG_HOUSING_DECOR_SET_TRANSFORM_12_1's 0x320002
+    // collides with CMSG_HOUSING_DECOR_MOVE), and family 0x38 (neighborhood initiative) has no
+    // capacity reserved in GetOpcodeArrayIndex at all. Packet classes compile; IsValid() is false
+    // so nothing dispatches until each is re-derived from a verified 12.1 capture.
+    CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST                   = UNKNOWN_OPCODE, // wire: PackedGUID (Lua C_NeighborhoodInitiative.RequestNeighborhoodInitiativeInfo)
+    CMSG_HOUSING_BLUEPRINT_EXPORT_ROOM                              = UNKNOWN_OPCODE, // wire: bits<24> bits<1> u8 pguid Blob
+    CMSG_HOUSING_DECOR_SET_TRANSFORM_12_1                           = UNKNOWN_OPCODE, // wire: pguid f32x11 pguid pguid pguid u32 u8 u8 bits<1>; unreferenced elsewhere in the tree
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_01                          = UNKNOWN_OPCODE, // wire: PackedGUID
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_05                          = UNKNOWN_OPCODE, // wire: uint32 + PackedGUID
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_06                          = UNKNOWN_OPCODE, // wire: empty
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_07                          = UNKNOWN_OPCODE, // wire: uint32
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_08                          = UNKNOWN_OPCODE, // wire: empty
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_09                          = UNKNOWN_OPCODE, // wire: float
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0A                          = UNKNOWN_OPCODE, // wire: uint32
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0B                          = UNKNOWN_OPCODE, // wire: uint32
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0C                          = UNKNOWN_OPCODE, // wire: PackedGUID
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0D                          = UNKNOWN_OPCODE, // wire: uint32 + uint32 + (uint32,uint32)[N] + Bits<1>
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0E                          = UNKNOWN_OPCODE, // wire: uint32 + uint32[N]
+    CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0F                          = UNKNOWN_OPCODE, // wire: uint32 + (uint32×4)[N]
 
     CMSG_BATTLE_PET_DELETE_PET_CHEAT                                = CMSG_BATTLE_PET_DELETE_PET + 1,
     CMSG_PET_BATTLE_WILD_LOCATION_FAIL                              = CMSG_PET_BATTLE_REQUEST_WILD + 1,
@@ -1670,13 +1692,27 @@ enum OpcodeServer : uint32
     SMSG_HOTFIX_MESSAGE                                             = 0x490002,
     SMSG_HOUSE_EXTERIOR_LOCK_RESPONSE                               = 0x530000,
     SMSG_HOUSE_EXTERIOR_SET_HOUSE_POSITION_RESPONSE                 = 0x530001,
-    SMSG_HOUSING_BLUEPRINT_CHECK_RESPONSE                           = 0x540007,
+    // Merge 2026-09-01 (ADV e004d7a4bf): replaces 6 dead pre-ADV stub names that were never
+    // referenced by any packet class (STATUS_UNHANDLED, no Write()/Send() site) with ADV's real,
+    // actually-used blueprint response opcodes — HousingBlueprintPackets.h/.cpp construct these
+    // directly. Family 0x54 capacity is 8 (see GetOpcodeArrayIndex below); these 7 fit exactly.
+    SMSG_HOUSING_BLUEPRINT_COLLECTION                               = 0x540000, // u32 result + vector<JamHousingBlueprint>
+    SMSG_HOUSING_BLUEPRINT_CONTENTS                                 = 0x540001, // JamHousingBlueprint + JamBlueprintItemList + vector<JamBlueprintMissingItem>
+    SMSG_HOUSING_BLUEPRINT_EXPORT_RESULT                            = 0x540002, // u32 result + JamHousingBlueprint
+    SMSG_HOUSING_BLUEPRINT_IMPORT_RESULT                            = 0x540003, // u32 result + houseGUID + JamBlueprintItemList
+    SMSG_HOUSING_BLUEPRINT_DELETE_RESULT                            = 0x540004, // u32 result + blueprintID
+    SMSG_HOUSING_BLUEPRINT_RENAME_RESULT                            = 0x540005, // u32 result + blueprintID + name
     SMSG_HOUSING_CATALOG_STATE_SYNC                                = UNKNOWN_OPCODE, // fork-speculative; no confirmed 12.1 client opcode
-    SMSG_HOUSING_BLUEPRINT_DELETE_RESPONSE                          = 0x540003,
-    SMSG_HOUSING_BLUEPRINT_EXPORT_RESPONSE                          = 0x540000,
-    SMSG_HOUSING_BLUEPRINT_GET_RESPONSE                             = 0x540001,
-    SMSG_HOUSING_BLUEPRINT_IMPORT_RESPONSE                          = 0x540004,
-    SMSG_HOUSING_BLUEPRINT_RENAME_RESPONSE                          = 0x540002,
+    SMSG_HOUSING_BLUEPRINTS_AVAILABILITY_CHANGED                    = 0x540007, // bits<1> available + u32 maxPerBnet + u32 maxBackups
+    // HOUSE_BUDGETS_UPDATE: clean, family 0x62 has capacity 1 (sole slot) and is otherwise unused
+    // in the 12.1 numbering (12.1 moved the Spell family that occupied 0x62 in ADV's 68275
+    // numbering to family 0x67 instead) — no collision.
+    SMSG_HOUSING_HOUSE_BUDGETS_UPDATE                               = 0x620000, // JamHouseBudgets
+    // EXPORT_HOUSE_RESPONSE: ADV's raw value 0x550003 collides with SMSG_HOUSING_DECOR_PLACE_RESPONSE
+    // in our 12.1 family-0x55 numbering. Family 0x55 capacity is 13 (0-12); 0-11 are all taken by
+    // the Decor response block below, leaving exactly one free slot (0xC) — assigned deterministically,
+    // not guessed among options. Still pending real 12.1 verification of the low byte.
+    SMSG_HOUSING_EXPORT_HOUSE_RESPONSE                              = 0x55000C,
     SMSG_HOUSING_DECOR_ADD_TO_HOUSE_CHEST_RESPONSE                  = 0x550008,
     SMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_RESPONSE                 = 0x550006,
     SMSG_HOUSING_DECOR_DRAW_SERVER_LIGHTING_DEBUG_SPHERES_RESPONSE  = 0x550001,

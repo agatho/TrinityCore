@@ -180,7 +180,22 @@ void MapManager::PreloadHousingMaps()
 
     for (Neighborhood* neighborhood : sNeighborhoodMgr.GetAllNeighborhoods())
     {
-        uint32 mapId = neighborhood->GetNeighborhoodMapID();
+        // Neighborhood::GetNeighborhoodMapID() is a NeighborhoodMap.db2 id (1, 2, 4, 7), NOT a Map.db2 id -
+        // the world map lives in that row's MapID column (1 -> 2735, 2 -> 2736, 4 -> 2640, 7 -> 2783). Every
+        // other consumer resolves it through sHousingMgr.GetNeighborhoodMapData() first; this one used the raw
+        // id as a map id, so it looked up Map 1 "Kalimdor" and Map 2 "Outland", found InstanceType 0 instead of
+        // MAP_HOUSE_NEIGHBORHOOD, and skipped BOTH public neighborhoods at startup. With neither map preloaded
+        // a player could not be placed into a neighborhood at all - which presented as "cannot choose a
+        // neighborhood" even though the rows existed and the faction seed was correct.
+        NeighborhoodMapData const* nmData = sHousingMgr.GetNeighborhoodMapData(neighborhood->GetNeighborhoodMapID());
+        if (!nmData)
+        {
+            TC_LOG_ERROR("housing", "MapManager::PreloadHousingMaps: neighborhood '{}' references NeighborhoodMap id {} which is not in NeighborhoodMap.db2 - skipping",
+                neighborhood->GetName(), neighborhood->GetNeighborhoodMapID());
+            continue;
+        }
+
+        uint32 mapId = uint32(nmData->MapID);
         uint32 instanceId = static_cast<uint32>(neighborhood->GetGuid().GetCounter());
 
         if (FindMap_i(mapId, instanceId))
@@ -250,7 +265,13 @@ HouseInteriorMap* MapManager::CreateHouseInterior(uint32 mapId, uint32 instanceI
     // map, and that's where they need to teleport back to.
     uint32 sourceWorldMapId = 0;
     uint8 sourcePlotIndex = 0;
-    if (creator->GetMap() && creator->GetMap()->GetEntry()->IsNeighborhood())
+    // FindMap(), not GetMap(): the creator has no map yet when this runs from
+    // Player::LoadFromDB - logging in while saved inside a house interior reaches
+    // CreateMap -> CreateHouseInterior before the player is placed on any map. GetMap()
+    // ASSERTs on a null m_currMap rather than returning null, so the `&&` guard here
+    // never protected anything and the whole worldserver went down on that login.
+    Map const* creatorMap = creator->FindMap();
+    if (creatorMap && creatorMap->GetEntry()->IsNeighborhood())
         sourceWorldMapId = creator->GetMapId();
     if (sourceWorldMapId == 0)
     {
@@ -404,12 +425,20 @@ Map* MapManager::CreateMap(uint32 mapId, Player* player, Optional<uint32> lfgDun
         {
             // Update source info on reuse — the player may re-enter from a different
             // neighborhood or plot each time.
-            if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(map))
+            // H-13: only the OWNER may write this. The interior instance is shared with
+            // visitors, and the source map/plot is what HandleHouseInteriorLeaveHouse
+            // reads to decide where to put someone on the way out. A visitor writing
+            // their own plot here sent the owner out onto the visitor's plot, or onto a
+            // different neighborhood map entirely.
+            if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(map); interiorMap && !isVisit)
             {
                 if (Housing* housing = player->GetHousing())
                 {
+                    // FindMap(), not GetMap() - same reason as in CreateHouseInterior: this also
+                    // runs from Player::LoadFromDB, before the player is on any map.
+                    Map const* playerMap = player->FindMap();
                     uint32 sourceWorldMapId = 0;
-                    if (player->GetMap() && player->GetMap()->GetEntry()->IsNeighborhood())
+                    if (playerMap && playerMap->GetEntry()->IsNeighborhood())
                         sourceWorldMapId = player->GetMapId();
                     if (sourceWorldMapId == 0)
                     {

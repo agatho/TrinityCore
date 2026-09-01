@@ -117,8 +117,15 @@ The housing system implementation has progressed far beyond the Feb-12 gap analy
 8. Roster update broadcast to other neighborhood members
 
 #### Our Implementation
-- **NeighborhoodHandler.cpp:951-1158**: Complete `HandleNeighborhoodBuyHouse` flow:
-  1. Resolves canonical PlotIndex from cornerstone GO GUID (never trusts client)
+- **NeighborhoodHandler.cpp**: `HandleNeighborhoodBuyHouse` flow (line numbers removed - the
+  ones previously cited here had drifted onto a different handler entirely):
+  1. **Does NOT resolve a canonical PlotIndex.** This step used to be described as
+     "resolves canonical PlotIndex from cornerstone GO GUID (never trusts client)". That is
+     backwards. The handler assigns `resolvedPlotIndex = _lastClientPlotIndex` - a value the
+     client supplied during the preceding OpenCornerstoneUI - and calls
+     `sHousingMgr.ResolvePlotIndex()` purely to print `db2Resolved` in a log line. The
+     authoritative result is computed and then discarded; the client's number is what gets
+     bound to the house. Tracked as audit finding H-06.
   2. Auto-joins neighborhood if not member (line 991-1006)
   3. Validates no existing house in neighborhood (line 1008-1018)
   4. Calls `Neighborhood::PurchasePlot()` (line 1020)

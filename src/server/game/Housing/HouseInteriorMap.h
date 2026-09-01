@@ -125,6 +125,11 @@ public:
     /// and unlocks all editor modes (expert, cleanup, layout, customize).
     void SendPostTutorialAuras(Player* player);
 
+    // Puts QUEST_HOUSING_TUTORIAL_COMPLETE in the log and credits the house-entered kill credit.
+    // That quest is AUTO_ACCEPT|AUTO_COMPLETE with no quest-giver NPC at either end, so nothing in
+    // the world can hand it out - without this the housing editor stays locked forever.
+    void GrantHousingTutorialProgress(Player* player);
+
 private:
     ObjectGuid _owner;
     Player* _loadingPlayer; ///< @workaround Player not in ObjectAccessor during login

@@ -162,6 +162,12 @@ public:
     void UpdatePlotSettingsFlags(ObjectGuid ownerGuid, uint32 settingsFlags);
     HousingResult MoveHouse(ObjectGuid sourcePlotOwner, uint8 newPlotIndex);
     void SetPlotAreaTriggerGuid(uint8 plotIndex, ObjectGuid atGuid);
+    // m2/A5: free the plot owned by `ownerGuid` on house delete / kiosk reset so
+    // it becomes vacant (IsOccupied()==false) and re-purchasable, and clear the
+    // member's plot assignment in memory + DB. The player stays a member of the
+    // neighborhood — only the plot ownership is released. Returns true if a plot
+    // was actually freed.
+    bool ReleasePlot(ObjectGuid ownerGuid);
 
     PlotInfo const* GetPlotInfo(uint8 plotIndex) const
     {

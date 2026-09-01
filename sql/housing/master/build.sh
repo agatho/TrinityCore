@@ -56,6 +56,8 @@ emit_section "$CH" "$SRC/characters_housing_texture_migration.sql"
 emit_section "$CH" "$SRC/characters_housing_per_surface_theme.sql"
 emit_section "$CH" "$SRC/characters_housing_decor_placement_time.sql"
 emit_section "$CH" "$SRC/characters_housing_decor_scale.sql"
+emit_section "$CH" "$SRC/characters_neighborhood_guild_link.sql"
+emit_section "$CH" "$SRC/characters_neighborhood_map_faction_fix.sql"
 
 # -----------------------------------------------------------------------------
 # HOTFIXES — plot/map DB2 hotfixes + initiative tables

@@ -464,6 +464,20 @@ void WorldSession::HandleNeighborhoodCharterAddSignature(WorldPackets::Neighborh
     // CharterGuid counter maps to charter DB ID
     uint64 charterId = neighborhoodCharterAddSignature.CharterGuid.GetCounter();
 
+    // H-25: only sign a charter this session was invited to sign. Session-scoped, so a
+    // relog means the requester has to ask again - a signature request is an
+    // in-the-moment offer, and nothing about it is persisted.
+    if (!HasPendingCharterSignatureRequest(charterId))
+    {
+        WorldPackets::Neighborhood::NeighborhoodCharterAddSignatureResponse response;
+        response.Result = static_cast<uint8>(HOUSING_RESULT_PERMISSION_DENIED);
+        SendPacket(response.Write());
+
+        TC_LOG_DEBUG("housing", "HandleNeighborhoodCharterAddSignature: Player {} was never asked to sign charter {}",
+            player->GetGUID().ToString(), charterId);
+        return;
+    }
+
     // Load charter from DB
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_NEIGHBORHOOD_CHARTER);
     stmt->setUInt64(0, charterId);
@@ -508,6 +522,10 @@ void WorldSession::HandleNeighborhoodCharterAddSignature(WorldPackets::Neighborh
         return;
     }
 
+    // H-25: one invitation, one signature. Without consuming it, a signer whose
+    // signature is later dropped by a charter edit could re-sign unasked.
+    ClearPendingCharterSignatureRequest(charterId);
+
     WorldPackets::Neighborhood::NeighborhoodCharterAddSignatureResponse response;
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
     response.CharterGuid = neighborhoodCharterAddSignature.CharterGuid;
@@ -550,6 +568,13 @@ void WorldSession::HandleNeighborhoodCharterSendSignatureRequest(WorldPackets::N
     WorldPackets::Neighborhood::NeighborhoodCharterSignRequest signRequest;
     signRequest.CharterGuid = ObjectGuid::Create<HighGuid::Housing>(0, 0, 0, charterId);
     targetPlayer->SendDirectMessage(signRequest.Write());
+
+    // H-25: record that this player was actually asked. ADD_SIGNATURE takes the charter
+    // id straight from the client and charter ids are creator GUID counters, so without
+    // this the invite step is decorative and any charter can be signed by anyone who
+    // enumerates ids.
+    if (WorldSession* targetSession = targetPlayer->GetSession())
+        targetSession->AddPendingCharterSignatureRequest(charterId);
 
     // Acknowledge to the requester that the signature request was sent
     WorldPackets::Neighborhood::NeighborhoodCharterAddSignatureResponse ackResponse;
@@ -1231,6 +1256,23 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
         return;
     }
 
+    // m2/A5: enforce a configurable global house cap across ALL neighborhoods
+    // (retail allows 2 per account — one Alliance hub, one Horde hub). 0 = no
+    // limit. Prevents plot hoarding across the realm.
+    if (uint32 maxHouses = sWorld->getIntConfig(CONFIG_HOUSING_MAX_HOUSES_PER_ACCOUNT))
+    {
+        if (player->GetAllHousings().size() >= maxHouses)
+        {
+            WorldPackets::Neighborhood::NeighborhoodBuyHouseResponse response;
+            response.Result = static_cast<uint8>(HOUSING_RESULT_MORE_HOUSE_SLOTS_NEEDED);
+            SendPacket(response.Write());
+
+            TC_LOG_DEBUG("housing", "HandleNeighborhoodBuyHouse: Player {} at global house cap ({}/{})",
+                player->GetGUID().ToString(), player->GetAllHousings().size(), maxHouses);
+            return;
+        }
+    }
+
     // Deduct gold cost (sniff-verified: 1000g = 10,000,000 copper)
     if (!player->HasEnoughMoney(HOUSE_PURCHASE_COST_COPPER))
     {
@@ -1265,10 +1307,9 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
 
         // TODO: Replace with quest-driven tutorial progression when the housing tutorial
         // questline is implemented. See Player.cpp LoadFromDB for full explanation.
-        // Mark all server tutorial flags as seen (retail sniff: all 256 bits = 0xFF).
-        for (uint8 i = 0; i < MAX_ACCOUNT_TUTORIAL_VALUES; ++i)
-            SetTutorialInt(i, 0xFFFFFFFF);
-        SendTutorialsData();
+        // Deliberately NOT marking the 256 server tutorial flags as seen here (it used to set all of them).
+        // Buying a house is precisely when the housing tutorial should START, so suppressing every tutorial at
+        // that moment was backwards. The client tracks its own progress via CMSG_TUTORIAL.
 
         // Also inject FrameTutorialAccount CVars into GLOBAL_CONFIG_CACHE.
         // The client's housing UI checks closedInfoFramesAccountWide bit 38
@@ -1309,8 +1350,10 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
                 }
             };
 
-            ensureCVar("closedInfoFramesAccountWide", "4294967295 4294967295");
-            ensureCVar("housingTutorialsEnabled", "0");
+            // Editor modes only - see HOUSING_MODES_UNLOCKED_CVAR. housingTutorialsEnabled stays untouched.
+            ensureCVar("closedInfoFramesAccountWide", HOUSING_MODES_UNLOCKED_CVAR);
+            // Repair the persisted "0" written by the old code - see the login site for why.
+            ensureCVar("housingTutorialsEnabled", "1");
 
             if (modified)
             {
@@ -1441,6 +1484,13 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
             GameObject* houseGo = housingMap->SpawnHouseForPlot(resolvedPlotIndex, nullptr, buyExtCompID, buyWmoDataID);
             TC_LOG_ERROR("housing", "HandleNeighborhoodBuyHouse: SpawnHouseForPlot result: {}",
                 houseGo ? houseGo->GetGUID().ToString() : "FAILED/NULL");
+
+            // The house is made of MeshObjects, which ordinary grid visibility does NOT deliver -
+            // every other site in this system transmits them by hand. SpawnHouseForPlot sends
+            // nothing, so a house bought while the buyer is standing on the plot existed only on
+            // the server: the cornerstone flipped to owned (a GameObject, sent normally) and no
+            // house appeared until the player re-entered the map and AddPlayerToMap pushed them.
+            housingMap->SendPlotMeshObjectsToPlayers(resolvedPlotIndex);
         }
         else
         {

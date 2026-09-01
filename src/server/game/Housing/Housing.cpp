@@ -20,6 +20,7 @@
 #include "HousingPlayerHouseEntity.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
+#include "DBCEnums.h"
 #include "GameTime.h"
 #include "HousingMgr.h"
 #include "Neighborhood.h"
@@ -34,6 +35,29 @@
 #include <cmath>
 #include <queue>
 #include <unordered_set>
+
+namespace
+{
+    // M13: normalize a decor rotation quaternion to a unit quaternion before it
+    // is stored. The client sends Euler angles which the handler converts to a
+    // quaternion each place/move; normalizing removes any float drift so a decor
+    // item at a cardinal angle (0/90/180/270) round-trips through the FLOAT
+    // columns to the exact same orientation instead of subtly re-rotating on
+    // reload (the retail rotation bug we must not replicate). A degenerate
+    // (near-zero) quaternion falls back to identity.
+    void NormalizeDecorRotation(float& x, float& y, float& z, float& w)
+    {
+        float len = std::sqrt(x * x + y * y + z * z + w * w);
+        if (!std::isfinite(len) || len < 1e-6f)
+        {
+            x = y = z = 0.0f;
+            w = 1.0f;
+            return;
+        }
+        float inv = 1.0f / len;
+        x *= inv; y *= inv; z *= inv; w *= inv;
+    }
+}
 
 // Global DB ID generators — initialized from MAX(id) at server startup
 std::atomic<uint64> Housing::s_nextDecorDbId{1};
@@ -81,7 +105,15 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
     // Housing GUID counter must match HousingPlayerHouseEntity GUID (WorldSession.cpp), which uses battlenetAccountId.
     uint32 bnetAccountId = _owner->GetSession()->GetBattlenetAccountId();
     _houseGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 3, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 7, uint64(bnetAccountId));
-    _neighborhoodGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 4, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 0, fields[1].GetUInt64());
+    // Take the neighborhood's real GUID from the manager rather than rebuilding it: arg1 is its
+    // NeighborhoodMapID, and this GUID goes out to the client in house/neighborhood packets, so a wrong arg1
+    // reproduces the client-side NeighborhoodMap.db2 miss on the house path too.
+    _neighborhoodGuid.Clear();
+    if (Neighborhood const* neighborhood = sNeighborhoodMgr.GetNeighborhoodByCounter(fields[1].GetUInt64()))
+        _neighborhoodGuid = neighborhood->GetGuid();
+    else
+        TC_LOG_ERROR("housing", "Housing::LoadFromDB: house references neighborhood counter {} which is not loaded",
+            fields[1].GetUInt64());
     _plotIndex = fields[2].GetUInt8();
     _level = fields[3].GetUInt32();
     _favor = fields[4].GetUInt32();
@@ -700,6 +732,15 @@ void Housing::Delete()
     TC_LOG_DEBUG("housing", "Housing::Delete: Player {} (GUID {}) deleted house {}",
         _owner->GetName(), _owner->GetGUID().GetCounter(), _houseGuid.ToString());
 
+    // m2/A5: release the neighborhood plot so it becomes vacant and
+    // re-purchasable instead of being orphaned forever (the old bug: delete /
+    // kiosk-reset removed the character rows but never freed the PlotInfo).
+    if (!_neighborhoodGuid.IsEmpty())
+    {
+        if (Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(_neighborhoodGuid))
+            neighborhood->ReleasePlot(_owner->GetGUID());
+    }
+
     // Remove all decor storage entries from account UpdateField (only if storage is populated)
     if (_storagePopulated && _owner->GetSession() && !_placedDecor.empty())
     {
@@ -724,6 +765,13 @@ void Housing::Delete()
     _rooms.clear();
     _fixtures.clear();
     _catalog.clear();
+}
+
+ObjectGuid Housing::GenerateDecorGuid(uint32 decorEntryId)
+{
+    return ObjectGuid::Create<HighGuid::Housing>(
+        /*subType*/ 1, /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
+        /*arg2*/ decorEntryId, GenerateDecorDbId());
 }
 
 ObjectGuid Housing::StartPlacingNewDecor(uint32 catalogEntryId, HousingResult& result)
@@ -804,13 +852,15 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     // budget/skip the interior _rooms lookup, while preserving the RoomGuid
     // as-sent so downstream consumers (DB row, move/remove round-trips) still
     // see what retail sends.
-    bool const isExteriorPlotRoom = !roomGuid.IsEmpty()
-        && roomGuid.GetHigh() == HighGuid::Housing
-        && uint32((roomGuid.GetRawValue(1) >> 53) & 0x1F) == 2
-        && uint32(roomGuid.GetRawValue(1) & 0xFFFFFFFFULL) == sHousingMgr.GetBaseRoomEntryId();
+    bool const isExterior = IsExteriorDecorPlacement(roomGuid);
+
+    // A4: enforce the outdoor "two lights cannot overlap" rule before charging.
+    if (HousingResult overlap = CheckLightOverlap(decorEntryId, x, y, z, isExterior);
+        overlap != HOUSING_RESULT_SUCCESS)
+        return overlap;
 
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
-    if (roomGuid.IsEmpty() || isExteriorPlotRoom)
+    if (isExterior)
     {
         if (_exteriorDecorWeightUsed + weightCost > GetMaxExteriorDecorBudget())
             return HOUSING_RESULT_MAX_DECOR_REACHED;
@@ -821,7 +871,7 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
             return HOUSING_RESULT_MAX_DECOR_REACHED;
     }
 
-    if (!roomGuid.IsEmpty() && !isExteriorPlotRoom)
+    if (!isExterior)
     {
         auto roomItr = _rooms.find(roomGuid);
         if (roomItr == _rooms.end())
@@ -841,8 +891,31 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     if (catalogItr == _catalog.end() || catalogItr->second.Count == 0)
         return HOUSING_RESULT_DECOR_NOT_FOUND_IN_STORAGE;
 
+    // H-09: decorGuid arrives from the client on the fallback path (no matching pending
+    // placement), and used to be trusted as the map key and the DB row id without ever
+    // being checked. Two consequences, both closed here.
+    //
+    // 1. _placedDecor[decorGuid] overwrote an existing entry in place. Re-sending the GUID
+    //    of something already placed destroyed the old record: its weight was never
+    //    returned to the budget (so the budget inflated permanently), the catalog was
+    //    still decremented, and the player silently lost the item that had been there.
+    //    Placement onto an occupied GUID is now refused instead of overwriting.
+    if (_placedDecor.contains(decorGuid))
+        return HOUSING_RESULT_INVALID_DECOR_ITEM;
+
+    // 2. A client-chosen counter never advanced s_nextDecorDbId, so the generator would
+    //    later hand the same id to a legitimate placement. Bump past it, the same way the
+    //    load path reconciles ids it did not issue.
+    uint64 const clientDbId = decorGuid.GetCounter();
+    uint64 expectedDbId = s_nextDecorDbId.load();
+    while (clientDbId >= expectedDbId && !s_nextDecorDbId.compare_exchange_weak(expectedDbId, clientDbId + 1))
+        ;
+
     // Remove from pending placements
     _pendingPlacements.erase(decorGuid);
+
+    // M13: persist a normalized unit quaternion for a lossless cardinal round-trip.
+    NormalizeDecorRotation(rotX, rotY, rotZ, rotW);
 
     PlacedDecor& decor = _placedDecor[decorGuid];
     decor.Guid = decorGuid;
@@ -865,7 +938,9 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     if (catalogItr->second.Count == 0)
         _catalog.erase(catalogItr);
 
-    if (roomGuid.IsEmpty())
+    // M2: charge the SAME budget the CHECK validated (exterior-plot rooms count
+    // as exterior, not interior).
+    if (isExterior)
         _exteriorDecorWeightUsed += weightCost;
     else
         _interiorDecorWeightUsed += weightCost;
@@ -910,6 +985,10 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     TC_LOG_DEBUG("housing", "Housing::PlaceDecorWithGuid: Player {} placed decor entry {} (GUID: {}) at ({}, {}, {}) in house {}",
         _owner->GetName(), decorEntryId, decorGuid.ToString(), x, y, z, _houseGuid.ToString());
 
+    // CriteriaType::PlaceDecor (270, "Place any decor"). miscValue1 = HouseDecor entry so decor-scoped
+    // ModifierTree conditions can still discriminate; this is the single commit point for a placement.
+    _owner->UpdateCriteria(CriteriaType::PlaceDecor, decorEntryId);
+
     SyncUpdateFields();
     return HOUSING_RESULT_SUCCESS;
 }
@@ -935,9 +1014,16 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     if (GetDecorCount() >= maxDecor)
         return HOUSING_RESULT_MAX_DECOR_REACHED;
 
-    // Check WeightCost-based budget (exterior vs interior)
+    // Check WeightCost-based budget (exterior vs interior) — M2: classify once.
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
-    if (roomGuid.IsEmpty())
+    bool const isExterior = IsExteriorDecorPlacement(roomGuid);
+
+    // A4: enforce the outdoor "two lights cannot overlap" rule before charging.
+    if (HousingResult overlap = CheckLightOverlap(decorEntryId, x, y, z, isExterior);
+        overlap != HOUSING_RESULT_SUCCESS)
+        return overlap;
+
+    if (isExterior)
     {
         // Outdoor decor uses exterior budget
         if (_exteriorDecorWeightUsed + weightCost > GetMaxExteriorDecorBudget())
@@ -951,7 +1037,7 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     }
 
     // Validate room exists if specified, and check per-room decor limit
-    if (!roomGuid.IsEmpty())
+    if (!isExterior)
     {
         auto roomItr = _rooms.find(roomGuid);
         if (roomItr == _rooms.end())
@@ -980,6 +1066,9 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
         /*subType*/ 1, /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
         /*arg2*/ decorEntryId, newDbId);
 
+    // M13: persist a normalized unit quaternion for a lossless cardinal round-trip.
+    NormalizeDecorRotation(rotX, rotY, rotZ, rotW);
+
     PlacedDecor& decor = _placedDecor[decorGuid];
     decor.Guid = decorGuid;
     decor.DecorEntryId = decorEntryId;
@@ -1002,8 +1091,8 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     if (catalogItr->second.Count == 0)
         _catalog.erase(catalogItr);
 
-    // Update budget tracking (route to correct budget based on room)
-    if (roomGuid.IsEmpty())
+    // Update budget tracking (route to correct budget based on room) — M2.
+    if (isExterior)
         _exteriorDecorWeightUsed += weightCost;
     else
         _interiorDecorWeightUsed += weightCost;
@@ -1068,21 +1157,41 @@ uint32 Housing::PlaceStarterDecor()
 
     // Find the visual room (non-base room, typically Room 1)
     ObjectGuid visualRoomGuid;
+    Room const* visualRoom = nullptr;
     for (auto const& [guid, room] : _rooms)
     {
         if (!sHousingMgr.IsBaseRoom(room.RoomEntryId))
         {
             visualRoomGuid = guid;
+            visualRoom = &room;
             break;
         }
     }
 
-    if (visualRoomGuid.IsEmpty())
+    if (visualRoomGuid.IsEmpty() || !visualRoom)
     {
         TC_LOG_ERROR("housing", "Housing::PlaceStarterDecor: No visual room found for house {} — cannot place starter decor",
             _houseGuid.ToString());
         return 0;
     }
+
+    // PlaceDecor stores a WORLD position in interior-map space, because that is what the
+    // client's placement packet carries and it is the same field HouseInteriorMap reads back.
+    // The table below is room-local (sniff-derived), so convert it here - otherwise the five
+    // starter items are written in a second, incompatible convention and land about a
+    // kilometre outside the house, present in the DB but never visible. Proven by decor 726:
+    // starter-written as (9.844,-8.013,0.02), then rewritten by the client as
+    // (-985.787,-997.955,7.726) the moment the player moved that same item.
+    float roomOriginX = -1000.0f, roomOriginY = -1000.0f, roomOriginZ = 0.1f;
+    if (NeighborhoodMapData const* nmData = sHousingMgr.GetNeighborhoodMapDataForWorldMap(HOUSE_INTERIOR_MAP_ID))
+    {
+        roomOriginX = nmData->Origin[0];
+        roomOriginY = nmData->Origin[1];
+        roomOriginZ = nmData->Origin[2];
+    }
+    roomOriginX += static_cast<float>(visualRoom->GridX);
+    roomOriginY += static_cast<float>(visualRoom->GridY);
+    roomOriginZ += static_cast<float>(visualRoom->FloorIndex) * HOUSE_INTERIOR_FLOOR_HEIGHT;
 
     // Sniff-verified starter decor positions (room-local coordinates in the visual room).
     // Both factions use the same Room 1 geometry — only the DecorEntryIDs differ.
@@ -1130,7 +1239,8 @@ uint32 Housing::PlaceStarterDecor()
         if (catalogItr == _catalog.end() || catalogItr->second.Count == 0)
             continue;
 
-        HousingResult result = PlaceDecor(p.DecorEntryId, p.X, p.Y, p.Z,
+        HousingResult result = PlaceDecor(p.DecorEntryId,
+            roomOriginX + p.X, roomOriginY + p.Y, roomOriginZ + p.Z,
             p.RotX, p.RotY, p.RotZ, p.RotW, visualRoomGuid);
 
         if (result == HOUSING_RESULT_SUCCESS)
@@ -1168,6 +1278,23 @@ HousingResult Housing::MoveDecor(ObjectGuid decorGuid, float x, float y, float z
     auto itr = _placedDecor.find(decorGuid);
     if (itr == _placedDecor.end())
         return HOUSING_RESULT_DECOR_NOT_FOUND;
+
+    // M1: MoveDecor previously performed NO spatial validation. Route the move
+    // target through the same room/plot AABB check as placement so a moved item
+    // cannot be flung to arbitrary coordinates.
+    HousingResult validationResult = sHousingMgr.ValidateDecorPlacement(itr->second.DecorEntryId, Position(x, y, z), _level);
+    if (validationResult != HOUSING_RESULT_SUCCESS)
+        return validationResult;
+
+    // A4: a moved light must also honour the "two lights cannot overlap" rule.
+    // Exclude the decor being moved so an in-place nudge never collides with itself.
+    if (HousingResult overlap = CheckLightOverlap(itr->second.DecorEntryId, x, y, z,
+            IsExteriorDecorPlacement(itr->second.RoomGuid), decorGuid);
+        overlap != HOUSING_RESULT_SUCCESS)
+        return overlap;
+
+    // M13: normalize the rotation quaternion for a lossless cardinal round-trip.
+    NormalizeDecorRotation(rotX, rotY, rotZ, rotW);
 
     PlacedDecor& decor = itr->second;
     decor.PosX = x;
@@ -1216,7 +1343,7 @@ HousingResult Housing::RemoveDecor(ObjectGuid decorGuid)
     // Refund WeightCost budget (route to correct budget based on room)
     uint32 decorEntryId = itr->second.DecorEntryId;
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
-    if (itr->second.RoomGuid.IsEmpty())
+    if (IsExteriorDecorPlacement(itr->second.RoomGuid))
     {
         if (_exteriorDecorWeightUsed >= weightCost)
             _exteriorDecorWeightUsed -= weightCost;
@@ -1266,6 +1393,10 @@ HousingResult Housing::RemoveDecor(ObjectGuid decorGuid)
 
     TC_LOG_DEBUG("housing", "Housing::RemoveDecor: Player {} removed decor {} from house {}, returned to catalog",
         _owner->GetName(), decorGuid.ToString(), _houseGuid.ToString());
+
+    // CriteriaType::RemoveDecor (271, "Remove any decor"). miscValue1 = the HouseDecor entry removed
+    // (captured before the erase invalidated the iterator).
+    _owner->UpdateCriteria(CriteriaType::RemoveDecor, decorEntryId);
 
     SyncUpdateFields();
     return HOUSING_RESULT_SUCCESS;
@@ -2160,6 +2291,11 @@ HousingResult Housing::AddToCatalog(uint32 decorEntryId, uint8 sourceType, std::
     if (_houseGuid.IsEmpty())
         return HOUSING_RESULT_HOUSE_NOT_FOUND;
 
+    // A decor entry the player has never owned before is a NEW unique collection entry
+    // (CriteriaType::CollectUniqueDecor 272). The catalog is quantity-based, so "first time" is exactly
+    // "no row existed before this add"; a second copy of the same entry must NOT count again.
+    bool const firstTimeAcquired = !_catalog.contains(decorEntryId);
+
     CatalogEntry& entry = _catalog[decorEntryId];
     entry.DecorEntryId = decorEntryId;
     entry.Count++;
@@ -2183,6 +2319,41 @@ HousingResult Housing::AddToCatalog(uint32 decorEntryId, uint8 sourceType, std::
 
     TC_LOG_DEBUG("housing", "Housing::AddToCatalog: Player {} added decor entry {} to catalog (count: {}) in house {}",
         _owner->GetName(), decorEntryId, entry.Count, _houseGuid.ToString());
+
+    // CriteriaType::CollectUniqueDecor (272) - counted once per distinct HouseDecor entry ever acquired.
+    if (firstTimeAcquired)
+        _owner->UpdateCriteria(CriteriaType::CollectUniqueDecor, decorEntryId);
+
+    // SMSG_HOUSING_DECOR_ADD_TO_HOUSE_CHEST_RESPONSE (0x510008): retail emits this on EVERY
+    // decor acquisition, carrying the GUID of the freshly minted decor instance.
+    //
+    // Capture-verified against the 12.0.7 (68275/68453) sniffs:
+    //   "garrison and hall of class table quest.pkt" — SMSG_HOUSING_FIRST_TIME_DECOR_ACQUISITION
+    //   (decorID 0x1E8E) is immediately followed by 0x510008 whose PackedGUID decodes to
+    //   HighGuid::Housing with arg2 == 0x1E8E, i.e. the same decor entry.
+    //   "garrisonlevel2upgrade.pkt" — two more 0x510008 with NO preceding FIRST_TIME packet
+    //   (re-acquisition of already-known decor), which is why this lives here, at the
+    //   acquisition choke point, and not next to the first-time notification.
+    // Negative control: "housing12.0.7.pkt" carries 10 SMSG_HOUSING_DECOR_REMOVE_RESPONSE and
+    //   zero 0x510008, so this packet is NOT the decor-removal / return-to-storage response.
+    // Wire: uint8(0x80 = success) + uint32(count=1) + PackedGUID — all three captures parse to
+    //   exactly the packet length with no trailing bytes.
+    // GUID scheme matches PopulateCatalogStorageEntries()/EffectCollectHousingDecor():
+    //   subType=1, arg1=realm, arg2=decorEntryId, counter=ownerBase + entry*100 + instanceIndex.
+    if (_owner && _owner->GetSession())
+    {
+        uint64 uniqueId = _owner->GetGUID().GetCounter() * 100000 + uint64(decorEntryId) * 100
+            + (entry.Count > 0 ? entry.Count - 1 : 0);
+
+        WorldPackets::Housing::HousingDecorAddToHouseChestResponse chestResponse;
+        chestResponse.Success = true;
+        chestResponse.DecorGuids.push_back(ObjectGuid::Create<HighGuid::Housing>(
+            /*subType*/ 1,
+            /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
+            /*arg2*/ decorEntryId,
+            uniqueId));
+        _owner->SendDirectMessage(chestResponse.Write());
+    }
 
     SyncUpdateFields();
     return HOUSING_RESULT_SUCCESS;
@@ -2391,6 +2562,50 @@ uint32 Housing::GetMaxFixtureBudget() const
     return sHousingMgr.GetFixtureBudgetForLevel(_level);
 }
 
+bool Housing::IsExteriorDecorPlacement(ObjectGuid roomGuid)
+{
+    // No room → yard/exterior placement.
+    if (roomGuid.IsEmpty())
+        return true;
+
+    // The plot's base (exterior) room identity: HighGuid::Housing, subType==2,
+    // low 32 bits of the high word == the base room entry id. Retail always
+    // sends this RoomGuid for exterior decor even though it is "on a room".
+    return roomGuid.GetHigh() == HighGuid::Housing
+        && uint32((roomGuid.GetRawValue(1) >> 53) & 0x1F) == 2
+        && uint32(roomGuid.GetRawValue(1) & 0xFFFFFFFFULL) == sHousingMgr.GetBaseRoomEntryId();
+}
+
+HousingResult Housing::CheckLightOverlap(uint32 decorEntryId, float x, float y, float z,
+    bool isExterior, ObjectGuid excludeGuid /*= ObjectGuid::Empty*/) const
+{
+    // A4 / 12.0.7 "two lights cannot overlap". The rule is scoped to the exterior
+    // (outdoor-lighting) placement scope and only Lighting-category decor (cat 4)
+    // participates — non-lights and interior placements pass through untouched so
+    // ordinary decorating is never affected.
+    if (!isExterior || !sHousingMgr.IsLightingDecor(decorEntryId))
+        return HOUSING_RESULT_SUCCESS;
+
+    float const radiusSq = HOUSING_LIGHT_OVERLAP_RADIUS * HOUSING_LIGHT_OVERLAP_RADIUS;
+    for (auto const& [guid, decor] : _placedDecor)
+    {
+        if (guid == excludeGuid)
+            continue;
+        // Compare only against other EXTERIOR lights.
+        if (!IsExteriorDecorPlacement(decor.RoomGuid))
+            continue;
+        if (!sHousingMgr.IsLightingDecor(decor.DecorEntryId))
+            continue;
+
+        float const dx = decor.PosX - x;
+        float const dy = decor.PosY - y;
+        float const dz = decor.PosZ - z;
+        if ((dx * dx + dy * dy + dz * dz) < radiusSq)
+            return HOUSING_RESULT_INVALID_LIGHT_OVERLAP;
+    }
+    return HOUSING_RESULT_SUCCESS;
+}
+
 void Housing::RecalculateBudgets()
 {
     _interiorDecorWeightUsed = 0;
@@ -2402,7 +2617,7 @@ void Housing::RecalculateBudgets()
     for (auto const& [guid, decor] : _placedDecor)
     {
         uint32 weightCost = sHousingMgr.GetDecorWeightCost(decor.DecorEntryId);
-        if (decor.RoomGuid.IsEmpty())
+        if (IsExteriorDecorPlacement(decor.RoomGuid))
             _exteriorDecorWeightUsed += weightCost;
         else
             _interiorDecorWeightUsed += weightCost;
