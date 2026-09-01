@@ -24,6 +24,7 @@
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "SceneObject.h"
 #include "WorldSession.h"
 #include <algorithm>
 
@@ -600,6 +601,12 @@ PetBattle* PetBattleMgr::CreateWildBattle(Player* player, ObjectGuid wildCreatur
     battle->SetBattleID(battleID);
     battle->InitWildBattle(player, wildCreatureGUID);
 
+    // SceneObject wrapper for SMSG_SCENE_OBJECT_PET_BATTLE_* (see BEFUND/PLAN_B5): the 12.1 client
+    // only dispatches the round-broadcast packets when they carry the GUID of a SceneObject with
+    // SceneType::PetBattle. One participant (the wild fight is solo) -> private to that player.
+    if (SceneObject* sceneObject = SceneObject::CreatePetBattleSceneObject(player, player->GetPosition(), player->GetGUID()))
+        battle->SetSceneObjectGUID(sceneObject->GetGUID());
+
     PetBattle* ptr = battle.get();
     _activeBattles[battleID] = std::move(battle);
     _playerToBattle[player->GetGUID()] = battleID;
@@ -622,6 +629,16 @@ PetBattle* PetBattleMgr::CreatePvPBattle(Player* player1, Player* player2)
 
     if (battle->IsFinished())
         return nullptr; // Validation failed in InitPvPBattle
+
+    // SceneObject wrapper for SMSG_SCENE_OBJECT_PET_BATTLE_* (see BEFUND/PLAN_B5).
+    // UNVERIFIED: two independent participants who are not necessarily grouped both need to see this
+    // object. WorldObject::CheckPrivateObjectOwnerVisibility() (Object.cpp) only grants visibility to
+    // the private-object owner itself or to fellow group members of that owner - restricting to
+    // player1 would silently hide the object from an ungrouped player2. Left non-private
+    // (ObjectGuid::Empty) so both duel participants reliably receive it; Retail's exact visibility
+    // scoping for a PvP pet-battle scene is unconfirmed (no scene_template/phase asset to compare).
+    if (SceneObject* sceneObject = SceneObject::CreatePetBattleSceneObject(player1, player1->GetPosition(), ObjectGuid::Empty))
+        battle->SetSceneObjectGUID(sceneObject->GetGUID());
 
     PetBattle* ptr = battle.get();
     _activeBattles[battleID] = std::move(battle);
@@ -648,6 +665,10 @@ PetBattle* PetBattleMgr::CreateNPCBattle(Player* player, Creature* trainer)
     battle->SetBattleID(battleID);
     battle->InitNPCBattle(player, trainer, *npcTeam);
 
+    // SceneObject wrapper for SMSG_SCENE_OBJECT_PET_BATTLE_* (see BEFUND/PLAN_B5); single participant.
+    if (SceneObject* sceneObject = SceneObject::CreatePetBattleSceneObject(player, player->GetPosition(), player->GetGUID()))
+        battle->SetSceneObjectGUID(sceneObject->GetGUID());
+
     PetBattle* ptr = battle.get();
     _activeBattles[battleID] = std::move(battle);
     _playerToBattle[player->GetGUID()] = battleID;
@@ -665,6 +686,9 @@ void PetBattleMgr::RemoveBattle(uint32 battleID)
         return;
 
     PetBattle* battle = it->second.get();
+
+    // Despawn the SceneObject wrapper (see BEFUND/PLAN_B5) before tearing the battle down.
+    battle->DespawnSceneObject();
 
     // Remove player mappings
     for (uint8 i = 0; i < MAX_PET_BATTLE_PLAYERS; ++i)

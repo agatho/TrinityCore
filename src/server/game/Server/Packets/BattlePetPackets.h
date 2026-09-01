@@ -559,10 +559,15 @@ namespace WorldPackets
         class PetBattleInitialUpdate final : public ServerPacket
         {
         public:
-            PetBattleInitialUpdate() : ServerPacket(SMSG_PET_BATTLE_INITIAL_UPDATE) { }
+            // 12.1 (69382, PLAN_B5): the client only listens for the round-broadcast body on the
+            // SMSG_SCENE_OBJECT_PET_BATTLE_* family, wrapped with the GUID of a SceneObject
+            // (SceneType::PetBattle). SMSG_PET_BATTLE_INITIAL_UPDATE is dead (TC-declared STATUS_NEVER,
+            // no longer dispatched by the retail client) - this class now targets the live opcode.
+            PetBattleInitialUpdate() : ServerPacket(SMSG_SCENE_OBJECT_PET_BATTLE_INITIAL_UPDATE) { }
 
             WorldPacket const* Write() override;
 
+            ObjectGuid SceneObjectGUID;
             std::array<PetBattlePlayerUpdateInfo, 2> Players;
             std::array<PetBattleEnviroInfo, 3> Enviros;
             uint16 WaitingForFrontPetsMaxSecs = 30;
@@ -580,10 +585,14 @@ namespace WorldPackets
         class PetBattleFirstRound final : public ServerPacket
         {
         public:
-            PetBattleFirstRound() : ServerPacket(SMSG_PET_BATTLE_FIRST_ROUND) { }
+            // See PetBattleInitialUpdate above: FIRST_ROUND/ROUND_RESULT/REPLACEMENTS_MADE share one
+            // client parser (JamPetBattleRoundResult, PLAN_B5) and only differ by which
+            // SMSG_SCENE_OBJECT_PET_BATTLE_* opcode wraps the identical body.
+            PetBattleFirstRound() : ServerPacket(SMSG_SCENE_OBJECT_PET_BATTLE_FIRST_ROUND) { }
 
             WorldPacket const* Write() override;
 
+            ObjectGuid SceneObjectGUID;
             uint32 CurRound = 0;
             int8 NextPetBattleState = 0;
             std::array<PetBattleRoundPlayerData, 2> Players;
@@ -595,10 +604,11 @@ namespace WorldPackets
         class PetBattleRoundResult final : public ServerPacket
         {
         public:
-            PetBattleRoundResult() : ServerPacket(SMSG_PET_BATTLE_ROUND_RESULT) { }
+            PetBattleRoundResult() : ServerPacket(SMSG_SCENE_OBJECT_PET_BATTLE_ROUND_RESULT) { }
 
             WorldPacket const* Write() override;
 
+            ObjectGuid SceneObjectGUID;
             uint32 CurRound = 0;
             int8 NextPetBattleState = 0;
             std::array<PetBattleRoundPlayerData, 2> Players;
@@ -610,10 +620,11 @@ namespace WorldPackets
         class PetBattleReplacementsMade final : public ServerPacket
         {
         public:
-            PetBattleReplacementsMade() : ServerPacket(SMSG_PET_BATTLE_REPLACEMENTS_MADE) { }
+            PetBattleReplacementsMade() : ServerPacket(SMSG_SCENE_OBJECT_PET_BATTLE_REPLACEMENTS_MADE) { }
 
             WorldPacket const* Write() override;
 
+            ObjectGuid SceneObjectGUID;
             uint32 CurRound = 0;
             int8 NextPetBattleState = 0;
             std::array<PetBattleRoundPlayerData, 2> Players;
@@ -640,10 +651,17 @@ namespace WorldPackets
         class PetBattleFinalRound final : public ServerPacket
         {
         public:
-            PetBattleFinalRound() : ServerPacket(SMSG_PET_BATTLE_FINAL_ROUND) { }
+            // 12.1 (69382, PLAN_B5): live opcode is SMSG_SCENE_OBJECT_PET_BATTLE_FINAL_ROUND; the send
+            // site (PetBattle::SendFinalRoundPacket) and the body already existed, only the opcode +
+            // SceneObjectGUID wrapper were missing (rank #2, "lowest fruit" in the cluster).
+            PetBattleFinalRound() : ServerPacket(SMSG_SCENE_OBJECT_PET_BATTLE_FINAL_ROUND) { }
 
             WorldPacket const* Write() override;
 
+            // UNVERIFIED (PLAN_B5): whether FINAL_ROUND really carries a SceneObjectGUID prefix is only
+            // confirmed by pattern-matching against FIRST_ROUND/ROUND_RESULT (both sniff-verified); no
+            // direct sniff of FINAL_ROUND itself exists yet.
+            ObjectGuid SceneObjectGUID;
             bool Abandoned = false;
             bool PvpBattle = false;
             // 12.0.7 (68275) JamPetBattleFinalRound (sniff-verified vs b_pets, 5 battles): the winner is the
@@ -658,9 +676,14 @@ namespace WorldPackets
         class PetBattleFinished final : public ServerPacket
         {
         public:
-            PetBattleFinished() : ServerPacket(SMSG_PET_BATTLE_FINISHED, 0) { }
+            // 12.1 (69382, PLAN_B5): live opcode is SMSG_SCENE_OBJECT_PET_BATTLE_FINISHED; body is
+            // disasm-verified to be exactly one ObjectGuid (petbattle_wire_FULL_68275.json 0x42008a,
+            // read_count 1) - the best-belegte opcode in the whole cluster.
+            PetBattleFinished() : ServerPacket(SMSG_SCENE_OBJECT_PET_BATTLE_FINISHED, 20) { }
 
-            WorldPacket const* Write() override { return &_worldPacket; }
+            WorldPacket const* Write() override;
+
+            ObjectGuid SceneObjectGUID;
         };
 
         class PetBattleRequestFailed final : public ServerPacket

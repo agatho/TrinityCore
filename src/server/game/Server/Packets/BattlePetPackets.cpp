@@ -337,12 +337,17 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattleEnviroInfo const& enviro)
 
 ByteBuffer& operator<<(ByteBuffer& data, PetBattleEffectTargetInfo const& target)
 {
-    data << uint8(target.Type << 4); // Upper nibble (IDA-verified 12.0: client reads uint8 >> 4)
+    // Order + widths byte-verified 2026-09-01 against two independent WowPacketParser module
+    // generations (WowPacketParserModule.V8_0_1_27101 and .V5_5_0_61735, both
+    // Parsers/BattlePetHandler.cs::ReadPetBattleEffectTarget) AND against the raw FIRST_ROUND sniff
+    // bytes (s69299_ws3_parsed.txt:900802) reconstructed field-for-field: Type(nibble, 1 byte incl.
+    // flush), Petx(1 byte, NOT int32), THEN the type-specific payload. The previous order
+    // (EmbeddedPetUpdate before Petx) and width (Petx as int32) were wrong on both counts.
+    data << uint8(target.Type << 4); // Upper nibble (client reads uint8 >> 4)
+    data << uint8(target.Petx);
 
     if (target.Type == 8 && target.EmbeddedPetUpdate)
         data << *target.EmbeddedPetUpdate;
-
-    data << int32(target.Petx);
 
     for (int32 param : target.Params)
         data << int32(param);
@@ -352,12 +357,19 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattleEffectTargetInfo const& target
 
 ByteBuffer& operator<<(ByteBuffer& data, PetBattleEffectInfo const& effect)
 {
+    // Widths byte-verified 2026-09-01 the same way as PetBattleEffectTargetInfo above: Flags is
+    // uint16 (not int32), PetBattleEffectType is int8/SByte (not int32), CasterPBOID is uint8 (not
+    // int32). Confirmed by reconstructing the raw FIRST_ROUND sniff bytes (94-byte packet,
+    // s69299_ws3_parsed.txt:900802) with these exact widths: the header (GUID..petXDied-count byte)
+    // and both effect headers reproduce the WPP-reported field values byte-for-byte and land exactly
+    // on WPP's own "Current position: 68" checkpoint. The previous int32 widths here would have
+    // desynced the wire on every round carrying more than a trivial effect list.
     data << int32(effect.AbilityEffectID);
-    data << int32(effect.Flags);
+    data << uint16(effect.Flags);
     data << int16(effect.SourceAuraInstanceID);
     data << int16(effect.TurnInstanceID);
-    data << int32(effect.PetBattleEffectType);
-    data << int32(effect.CasterPBOID);
+    data << int8(effect.PetBattleEffectType);
+    data << uint8(effect.CasterPBOID);
     data << uint8(effect.StackDepth);
 
     data << uint32(effect.Targets.size());
@@ -378,7 +390,19 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattleCooldownInfo const& cd)
     return data;
 }
 
-// Writes the common round result wire format shared by FirstRound, RoundResult, and ReplacementsMade
+// Writes the common round result wire format shared by FirstRound, RoundResult, and ReplacementsMade.
+//
+// UNVERIFIED (2026-09-01): this function's header (CurRound..PetXDied-count byte) and the effect/
+// target field widths above are now byte-verified against the raw sniff (see comments on the two
+// operator<< above). But even with those fixes, reconstructing the exact 68275-derived FIRST_ROUND
+// sample (s69299_ws3_parsed.txt:900802, 94 bytes, CurRound=0/2 effects/0 targets each/0 cooldowns/
+// 0 deaths) accounts for only 68 of the 94 bytes - 26 trailing bytes remain structurally unexplained.
+// Two independent community WowPacketParser definitions (V8_0_1_27101 and V5_5_0_61735) stop at the
+// identical byte 68 for this sample, so this is not a parser bug on either side: SMSG_SCENE_OBJECT_
+// PET_BATTLE_FIRST_ROUND/_ROUND_RESULT very likely carry additional trailing content on 12.1/69382
+// that predates neither WPP module nor the 68275 wire-extraction JSON documents. Needs a fresh IDA
+// pass on the live 69382 body parser (0x7ff729194b00 per petbattle_wire_FULL_68275.json) or a new
+// capture with a target-carrying round to pin down. Left un-invented rather than padded.
 static void WriteRoundResult(ByteBuffer& data, uint32 curRound, int8 nextPetBattleState,
     std::array<PetBattleRoundPlayerData, 2> const& players,
     std::vector<PetBattleEffectInfo> const& effects,
@@ -507,6 +531,9 @@ WorldPacket const* PetBattleFinalizeLocation::Write()
 
 WorldPacket const* PetBattleInitialUpdate::Write()
 {
+    // SceneObjectGUID wrapper (see BEFUND/PLAN_B5) precedes the existing body, unchanged otherwise.
+    _worldPacket << SceneObjectGUID;
+
     // Wire format matches BaseEntity.cpp:494-588
     for (std::size_t i = 0; i < 2; ++i)
     {
@@ -544,6 +571,8 @@ WorldPacket const* PetBattleInitialUpdate::Write()
 
 WorldPacket const* PetBattleFirstRound::Write()
 {
+    // SceneObjectGUID wrapper (see BEFUND/PLAN_B5); body unchanged (shared JamPetBattleRoundResult).
+    _worldPacket << SceneObjectGUID;
     WriteRoundResult(_worldPacket, CurRound, NextPetBattleState, Players, Effects, Cooldowns, PetXDied);
 
     return &_worldPacket;
@@ -551,6 +580,7 @@ WorldPacket const* PetBattleFirstRound::Write()
 
 WorldPacket const* PetBattleRoundResult::Write()
 {
+    _worldPacket << SceneObjectGUID;
     WriteRoundResult(_worldPacket, CurRound, NextPetBattleState, Players, Effects, Cooldowns, PetXDied);
 
     return &_worldPacket;
@@ -558,6 +588,7 @@ WorldPacket const* PetBattleRoundResult::Write()
 
 WorldPacket const* PetBattleReplacementsMade::Write()
 {
+    _worldPacket << SceneObjectGUID;
     WriteRoundResult(_worldPacket, CurRound, NextPetBattleState, Players, Effects, Cooldowns, PetXDied);
 
     return &_worldPacket;
@@ -584,6 +615,9 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattleFinalPet const& pet)
 
 WorldPacket const* PetBattleFinalRound::Write()
 {
+    // SceneObjectGUID wrapper (see BEFUND/PLAN_B5, UNVERIFIED at the class declaration above).
+    _worldPacket << SceneObjectGUID;
+
     // 12.0.7 (68275) wire (sniff-verified vs b_pets, 5 battles): flags_byte, u32(=0), npcCreatureID(u32), pets.count, pets[].
     // flags_byte = MSB-first bitfield{4}: bit7=Abandoned, bit6=PvpBattle, bit5=Winners[0] (team0), bit4=Winners[1] (team1).
     _worldPacket << Bits<1>(Abandoned);
@@ -599,6 +633,15 @@ WorldPacket const* PetBattleFinalRound::Write()
 
     for (PetBattleFinalPet const& pet : Pets)
         _worldPacket << pet;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* PetBattleFinished::Write()
+{
+    // Body is disasm-verified to be exactly this one ObjectGuid (petbattle_wire_FULL_68275.json
+    // 0x42008a, read_count 1) - see BEFUND/PLAN_B5.
+    _worldPacket << SceneObjectGUID;
 
     return &_worldPacket;
 }

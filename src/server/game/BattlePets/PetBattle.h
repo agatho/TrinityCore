@@ -292,6 +292,13 @@ public:
     uint8 GetWinnerTeam() const { return _winnerTeam; }
     Player* GetPlayerForTeam(uint8 teamIdx) const;
 
+    // SceneObject wrapper GUID that SMSG_SCENE_OBJECT_PET_BATTLE_* packets are addressed to
+    // (see BEFUND/PLAN_B5). Set once by PetBattleMgr right after the battle is created; cleared
+    // by DespawnSceneObject() when the battle is torn down (PetBattleMgr::RemoveBattle).
+    ObjectGuid GetSceneObjectGUID() const { return _sceneObjectGUID; }
+    void SetSceneObjectGUID(ObjectGuid guid) { _sceneObjectGUID = guid; }
+    void DespawnSceneObject();
+
     // Trap validation
     uint8 GetTrapStatus(uint8 playerTeam) const;
 
@@ -377,6 +384,7 @@ private:
 
     ObjectGuid _wildCreatureGUID;
     ObjectGuid _npcTrainerGUID;
+    ObjectGuid _sceneObjectGUID;
 };
 
 } // namespace PetBattles

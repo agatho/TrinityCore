@@ -597,6 +597,7 @@ void WorldSession::HandlePetBattleRequestWild(WorldPackets::BattlePet::PetBattle
 
     // Build and send initial update
     WorldPackets::BattlePet::PetBattleInitialUpdate initialUpdate;
+    initialUpdate.SceneObjectGUID = battle->GetSceneObjectGUID();
 
     BuildPetBattlePlayerUpdate(initialUpdate.Players[0], battle->GetTeam(PetBattles::PET_BATTLE_TEAM_1), false, battle, PetBattles::PET_BATTLE_TEAM_1);
     BuildPetBattlePlayerUpdate(initialUpdate.Players[1], battle->GetTeam(PetBattles::PET_BATTLE_TEAM_2), true, battle, PetBattles::PET_BATTLE_TEAM_2);
@@ -649,6 +650,7 @@ void WorldSession::HandlePetBattleRequestWild(WorldPackets::BattlePet::PetBattle
     // we don't have intro animations. This packet tells the client abilities are available.
     {
         WorldPackets::BattlePet::PetBattleFirstRound firstRound;
+        firstRound.SceneObjectGUID = battle->GetSceneObjectGUID();
         firstRound.CurRound = 0;
         firstRound.NextPetBattleState = static_cast<int8>(PetBattles::PET_BATTLE_STATE_ROUND_IN_PROGRESS);
 
@@ -774,6 +776,7 @@ void WorldSession::StartNPCPetBattle(Creature* trainer)
 
     // Build and send initial update
     WorldPackets::BattlePet::PetBattleInitialUpdate initialUpdate;
+    initialUpdate.SceneObjectGUID = battle->GetSceneObjectGUID();
 
     BuildPetBattlePlayerUpdate(initialUpdate.Players[0], battle->GetTeam(PetBattles::PET_BATTLE_TEAM_1), false, battle, PetBattles::PET_BATTLE_TEAM_1);
     BuildPetBattlePlayerUpdate(initialUpdate.Players[1], battle->GetTeam(PetBattles::PET_BATTLE_TEAM_2), false, battle, PetBattles::PET_BATTLE_TEAM_2);
@@ -797,6 +800,7 @@ void WorldSession::StartNPCPetBattle(Creature* trainer)
     // Send first round to unlock abilities
     {
         WorldPackets::BattlePet::PetBattleFirstRound firstRound;
+        firstRound.SceneObjectGUID = battle->GetSceneObjectGUID();
         firstRound.CurRound = 0;
         firstRound.NextPetBattleState = static_cast<int8>(PetBattles::PET_BATTLE_STATE_ROUND_IN_PROGRESS);
 
@@ -864,6 +868,7 @@ void WorldSession::HandlePetBattleInput(WorldPackets::BattlePet::PetBattleInput&
         // after a delay by PetBattle::Update() when the battle is ending.
         {
             WorldPackets::BattlePet::PetBattleRoundResult roundResult;
+            roundResult.SceneObjectGUID = battle->GetSceneObjectGUID();
             roundResult.CurRound = battle->GetCurrentRound();
             roundResult.NextPetBattleState = static_cast<int8>(battle->GetBattleState());
             for (uint8 i = 0; i < PetBattles::MAX_PET_BATTLE_PLAYERS; ++i)
@@ -954,6 +959,7 @@ void WorldSession::HandlePetBattleReplaceFrontPet(WorldPackets::BattlePet::PetBa
 
     // Send REPLACEMENTS_MADE to acknowledge the swap
     WorldPackets::BattlePet::PetBattleReplacementsMade replacements;
+    replacements.SceneObjectGUID = battle->GetSceneObjectGUID();
     replacements.CurRound = battle->GetCurrentRound();
     replacements.NextPetBattleState = static_cast<int8>(PetBattles::PET_BATTLE_STATE_ROUND_IN_PROGRESS);
     for (uint8 i = 0; i < PetBattles::MAX_PET_BATTLE_PLAYERS; ++i)
@@ -1219,6 +1225,7 @@ void WorldSession::HandlePetBattleRequestUpdate(WorldPackets::BattlePet::PetBatt
 
         // Send initial update to both players
         WorldPackets::BattlePet::PetBattleInitialUpdate initialUpdate;
+        initialUpdate.SceneObjectGUID = battle->GetSceneObjectGUID();
         BuildPetBattlePlayerUpdate(initialUpdate.Players[0], battle->GetTeam(PetBattles::PET_BATTLE_TEAM_1), false, battle, PetBattles::PET_BATTLE_TEAM_1);
         BuildPetBattlePlayerUpdate(initialUpdate.Players[1], battle->GetTeam(PetBattles::PET_BATTLE_TEAM_2), false, battle, PetBattles::PET_BATTLE_TEAM_2);
         BuildPetBattleEnviros(initialUpdate.Enviros, battle);
