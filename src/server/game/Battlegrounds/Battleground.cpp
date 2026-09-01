@@ -468,10 +468,10 @@ inline void Battleground::_ProcessJoin(uint32 diff)
             // WorldPackets::Battleground::ArenaOpponentSpecialization in BattlegroundPackets.h. TC tracked
             // nothing about the enemy team's specs before this - the two lists below are built fresh right
             // here, the same door-open moment SMSG_PVP_MATCH_SET_STATE(Engaged) already announces, using
-            // Player::GetPrimarySpecialization() for the spec and GetPlayerQueueRole() - a cache
-            // BattlegroundMgr::PortPlayerToBattleground() fills from BattlegroundQueue::GetPlayerRole()
-            // (added for the unrelated 0x4B join-role field) at port time, because by door-open the queue
-            // entry that role lives on has long since been removed. See Battleground.h for why.
+            // Player::GetPrimarySpecialization() for the spec and that spec's ChrSpecialization.db2 Role
+            // for the role (Tank 0 / Healer 1 / Dps 2 - the order the client reads out of the role block),
+            // sourced straight from the character's current spec, matching this branch's own
+            // PlayerQueueInfo::Role convention (ResolveQueueRole) rather than a transient queue-role cache.
             // UNVERIFIED: send order (clear-then-populate is our inference from the two names, not observed)
             // and whether Retail restricts this to rated arenas - sent here for every isArena() match.
             std::array<std::vector<WorldPackets::Battleground::ArenaOpponentSpecialization>, 2> teamOpponents;
@@ -483,7 +483,8 @@ inline void Battleground::_ProcessJoin(uint32 diff)
 
                 WorldPackets::Battleground::ArenaOpponentSpecialization entry;
                 entry.SpecID = int32(teamMember->GetPrimarySpecialization());
-                entry.Role = int8(GetPlayerQueueRole(guid));
+                ChrSpecializationEntry const* specEntry = sChrSpecializationStore.LookupEntry(uint32(teamMember->GetPrimarySpecialization()));
+                entry.Role = int8(specEntry ? specEntry->GetRole() : ChrSpecializationRole::Dps);
                 entry.Guid = guid;
 
                 teamOpponents[battlegroundPlayer.Team == ALLIANCE ? 0 : 1].push_back(entry);

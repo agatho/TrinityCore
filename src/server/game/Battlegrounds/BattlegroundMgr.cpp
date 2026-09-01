@@ -311,12 +311,6 @@ void BattlegroundMgr::PortPlayerToBattleground(Player* player, Battleground* bg,
     BuildBattlegroundStatusActive(&battlefieldStatus, bg, player, ticketId, player->GetBattlegroundQueueJoinTime(queueId), queueId);
     player->SendDirectMessage(battlefieldStatus.Write());
 
-    // Capture the queued role before it is lost: RemovePlayer() below erases the PlayerQueueInfo that
-    // BattlegroundQueue::GetPlayerRole() reads, and this is the last point any code sees it for this
-    // player's trip through this queue. Consumed by SMSG_ARENA_PREP_OPPONENT_SPECIALIZATIONS at arena
-    // door-open (see Battleground::GetPlayerQueueRole()), long after the queue entry is gone.
-    bg->SetPlayerQueueRole(player->GetGUID(), sBattlegroundMgr->GetBattlegroundQueue(queueId).GetPlayerRole(player->GetGUID()));
-
     // remove battleground queue status from BGmgr
     sBattlegroundMgr->GetBattlegroundQueue(queueId).RemovePlayer(player->GetGUID(), false);
     // this is still needed here if battleground "jumping" shouldn't add deserter debuff

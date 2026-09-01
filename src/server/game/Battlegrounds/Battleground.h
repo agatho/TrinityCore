@@ -364,18 +364,6 @@ class TC_GAME_API Battleground
         void RemoveSpectator(ObjectGuid guid) { m_Spectators.erase(guid); }
         bool HasSpectator(ObjectGuid guid) const { return m_Spectators.find(guid) != m_Spectators.end(); }
         GuidUnorderedSet const& GetSpectators() const { return m_Spectators; }
-        // The role a player queued with, captured by BattlegroundMgr::PortPlayerToBattleground() the instant
-        // before it calls BattlegroundQueue::RemovePlayer() - which erases the PlayerQueueInfo that
-        // BattlegroundQueue::GetPlayerRole() reads. Without this cache every consumer downstream of the port
-        // (e.g. SMSG_ARENA_PREP_OPPONENT_SPECIALIZATIONS at door-open, well after all players have ported in)
-        // would see the queue's own post-removal fallback of Dps for every single player, silently, with
-        // nothing in the log. Same fallback here for a guid this cache never saw (e.g. a GM /appear).
-        void SetPlayerQueueRole(ObjectGuid guid, ChrSpecializationRole role) { _playerQueueRoles[guid] = role; }
-        ChrSpecializationRole GetPlayerQueueRole(ObjectGuid guid) const
-        {
-            auto itr = _playerQueueRoles.find(guid);
-            return itr != _playerQueueRoles.end() ? itr->second : ChrSpecializationRole::Dps;
-        }
 
         typedef std::map<ObjectGuid, BattlegroundScore*> BattlegroundScoreMap;
         uint32 GetPlayerScoresSize() const { return uint32(PlayerScores.size()); }
@@ -581,7 +569,6 @@ class TC_GAME_API Battleground
         // Player lists, those need to be accessible by inherited classes
         BattlegroundPlayerMap m_Players;
         GuidUnorderedSet m_Spectators;                          // commentators observing this match
-        std::map<ObjectGuid, ChrSpecializationRole> _playerQueueRoles; // see SetPlayerQueueRole()/GetPlayerQueueRole()
 
         // these are important variables used for starting messages
         uint8 m_Events;
