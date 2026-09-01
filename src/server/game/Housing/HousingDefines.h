@@ -342,18 +342,6 @@ enum NeighborhoodFactionRestriction : int32
     NEIGHBORHOOD_FACTION_ALLIANCE   = 2
 };
 
-// closedInfoFramesAccountWide is the client's FrameTutorialAccount bitfield, kept in the
-// GLOBAL_CONFIG_CACHE account data as two space-separated uint32 words (48 bits; word 0 = bits 0-31,
-// word 1 = bits 32-47). The housing editor keeps its expert/cleanup/layout/customize modes locked until
-// bit 38 "HousingModesUnlocked" is set: 38 - 32 = 6 within word 1, so 1 << 6 = 64 -> "0 64".
-//
-// Set ONLY that bit. Writing the whole field (the old "4294967295 4294967295") also marked every other
-// FrameTutorialAccount step as already seen and, together with housingTutorialsEnabled=0, told the client
-// the housing tutorial was already finished - so a first-time buyer was dropped straight into the House
-// Finder instead of being walked through it. Unlocking the editor modes was the only thing that change
-// was ever meant to do.
-constexpr char const* HOUSING_MODES_UNLOCKED_CVAR = "0 64";
-
 // HouseSettingFlags enum - 11 values (bitmask), verified against client binary
 // Two groups: HouseAccess (bits 0-4) for interior, PlotAccess (bits 5-9) for exterior
 enum HouseSettingFlags : uint32
@@ -743,42 +731,6 @@ enum HouseLevelRewardValueType : uint8
 };
 
 // Constants
-// M1/A4 spatial-validation bound. Decor positions are stored in local space
-// (relative to the room origin for interior placements, relative to the plot
-// origin for exterior). Legitimate placements sit well within a couple of dozen
-// units of the origin on every axis (a plot/interior is only a few tens of yards
-// across); the sniff-verified starter decor is all within ~15. This half-extent
-// is intentionally generous so it can never reject a legitimate placement, while
-// still slamming the door on arbitrary-coordinate GameObject spam that the old
-// Position::IsPositionValid() check (|coord| < ~64000) let straight through.
-static constexpr float HOUSING_MAX_DECOR_LOCAL_EXTENT  = 1024.0f;
-// #16 Outdoor Lighting (12.0.7): DecorCategory.db2 id 4 "Lighting" (subcategories
-// 16-21: Large/Wall/Ceiling/Small/Misc Lights). 12.0.7 lets Lighting decor be
-// placed outdoors on the plot; the placement path classifies a decor as Lighting
-// through DecorXDecorSubcategory -> DecorSubcategory.DecorCategoryID.
-static constexpr uint32 HOUSING_DECOR_CATEGORY_LIGHTING = 4;
-// A4 / RETAIL PARITY-OUTDOOR-LIGHT-RADIUS: 12.0.7 rule "two lights cannot overlap".
-// The exact light-to-light overlap radius is NOT datamineable from DB2 or any
-// capture we hold (CAPTURE-BLOCKED). This is a documented default minimum
-// separation between two exterior lights, in local decor space (yards) — replace
-// with the sniffed value once an outdoor-light placement capture exists.
-static constexpr float HOUSING_LIGHT_OVERLAP_RADIUS = 3.0f;
-
-// H-05 bound for CMSG_HOUSE_EXTERIOR_SET_HOUSE_POSITION. A player may nudge the
-// house around its own plot; they may not relocate it. The plot's placement
-// volume is the RoomWmoData geobox SpawnRoomForPlot uses (~+/-35 x +/-30 yards),
-// so these half-extents are deliberately a little wider than that - generous
-// enough never to reject a legitimate reposition, tight enough that the house
-// cannot be parked on a neighbour's plot or flung off the map. Before this the
-// handler validated std::isfinite() and nothing else, and the value was
-// persisted, so any finite coordinate survived a restart.
-static constexpr float HOUSING_MAX_HOUSE_PLOT_OFFSET_XY = 45.0f;
-static constexpr float HOUSING_MAX_HOUSE_PLOT_OFFSET_Z  = 50.0f;
-// m3/A6 decoration throttle: at most BURST place/move/remove ops per WINDOW_MS.
-// Generous enough for rapid legitimate redecorating, tight enough to cap the
-// AddToMap + synchronous-DB-write amplification a scripted client can drive.
-static constexpr uint32 HOUSING_DECOR_THROTTLE_WINDOW_MS = 10000;
-static constexpr uint32 HOUSING_DECOR_THROTTLE_BURST     = 40;
 static constexpr uint32 MAX_HOUSING_DECOR_PER_ROOM      = 50;
 static constexpr uint32 MAX_HOUSING_ROOMS_PER_HOUSE     = 20;
 static constexpr uint32 MAX_HOUSING_FIXTURES_PER_HOUSE  = 10;
@@ -796,27 +748,6 @@ static constexpr uint32 MAX_HOUSE_LEVEL                 = 20;
 // Starter favor granted on house purchase (sniff: ChangeAmount=910, NewFavorTotal=910 in the
 // post-purchase HousingSvcsUpdateHousesLevelFavor pair).
 static constexpr uint64 HOUSE_PURCHASE_STARTER_FAVOR    = 910;
-
-// Neighborhood initiative ("Endeavor" in the client UI) progress is reported to the client on a
-// 0..1000 point scale — sniff-verified: PlayerInitiativeInfo.ProgressRequired == 1000.
-// InitiativeTask.ProgressContributionAmount (12.0.7 DB2 values 10/25/50/75/100/150/300) is how
-// many of those points ONE completion of that task is worth.
-static constexpr float INITIATIVE_PROGRESS_REQUIRED     = 1000.0f;
-
-// InitiativeMilestone.RequiredContributionAmount is a PERCENTAGE of initiative completion, not a
-// 0..1 fraction: the 12.0.7 DB2 holds exactly 25/50/75/100 and only the 100.0 rows carry
-// INITIATIVE_MILESTONE_FLAG_FINAL. ActiveInitiative::Progress is a 0..1 fraction, so it has to be
-// scaled by this before being compared against a milestone threshold.
-static constexpr float INITIATIVE_MILESTONE_SCALE       = 100.0f;
-
-// Floating world-text shown when a player earns neighborhood contribution credit. Reproduced
-// byte-for-byte from the retail build-68275 housing capture (housing12.0.7.pkt, four
-// SMSG_DISPLAY_WORLD_TEXT records, each immediately followed by the SMSG_CRITERIA_UPDATE batch for
-// the deed that earned it): null anchor guid, Arg1 = Arg2 = 0, and this exact 34-byte string. The
-// colour token is resolved client-side; the "+Neighborly" wording matches the CriteriaTree strings
-// "Neighborly deeds performed" / "Good Neighbor Points". Only the enUS sample exists, so this is not
-// localized — retail presumably sends the client's locale here.
-constexpr char const HOUSING_WORLD_TEXT_NEIGHBORLY[] = "|cnYELLOW_FONT_COLOR:+Neighborly|r";
 
 // Quest 91863 objective 17 ("Acquire a house") kill credit, granted on successful purchase.
 static constexpr uint32 NPC_KILL_CREDIT_BUY_HOME        = 248858;
@@ -968,103 +899,5 @@ static constexpr uint32 HOUSING_MIN_PLAYER_LEVEL = 10;
 
 // Required expansion for housing access (The War Within = 10)
 static constexpr uint32 HOUSING_REQUIRED_EXPANSION = 10;
-
-// Kill credit that completes QUEST_HOUSING_TUTORIAL_COMPLETE. Packet-attested in the retail
-// Horde starter capture: creature "[DNT] Kill Credit: Housing - Tutorial - 01 - House Entered"
-// is credited the moment the player first stands inside their house, and the quest - which is
-// AUTO_ACCEPT|AUTO_COMPLETE and has no quest-giver NPC on either end - then auto-submits.
-static constexpr uint32 NPC_HOUSING_TUTORIAL_HOUSE_ENTERED_CREDIT = 257763;
-
-// House interior instance map (MAP_HOUSE_INTERIOR = 7)
-static constexpr uint32 HOUSE_INTERIOR_MAP_ID = 2783;
-
-// Vertical spacing between stacked interior rooms. Must match the value HouseInteriorMap
-// actually positions rooms with (roomZ = origin + FloorIndex * this) or anything deriving a
-// room origin from FloorIndex lands on the wrong floor.
-static constexpr float HOUSE_INTERIOR_FLOOR_HEIGHT = 12.0f;
-
-// Interior front-door GameObjects, picked by faction in HouseInteriorMap. Unlike the exterior
-// doors these are NOT reachable from ExteriorComponent (Type 11), so HousingMgr has to bind the
-// go_housing_door script to them explicitly - without it the door inside the house is inert.
-static constexpr uint32 INTERIOR_DOOR_GO_ALLIANCE = 575017; // displayId 113554
-static constexpr uint32 INTERIOR_DOOR_GO_HORDE    = 587318;
-
-// ============================================================================
-// Patch 12.1.0 (build 69299) additions — RE spec:
-//   c:\dumps\tools\dump121\housing\housing_12_1_spec.md
-// Enum MEMBER NAMES are binary-verified (client reflection strings / auto_HOUSING_*
-// event + ERR_HOUSING_* error tables). Enum NUMERIC VALUES are inferred (string-order
-// ordinals) — the client enum-constant registrar tables are not cleanly recoverable
-// offline (spec §5). Flagged accordingly; confirm values against a 12.1 capture/DB.
-// ============================================================================
-
-// Blueprint category. Names from HOUSING_BLUEPRINT_COLLECTION_GROUP_{HOUSE,INTERIOR,
-// EXTERIOR,ROOM,BACKUP} client event strings [BIN]. Values = string order [INF].
-enum class HousingBlueprintType : uint32
-{
-    House    = 0,
-    Interior = 1,
-    Exterior = 2,
-    Room     = 3,
-    Backup   = 4,
-};
-
-// Content granularity of a blueprint's item list (JamBlueprintItemList carries decor/
-// dye/room/fixture ID sets). Mirrors HousingBlueprintType groups. Names [BIN] / values [INF].
-enum class HousingBlueprintContentType : uint32
-{
-    House    = 0,
-    Interior = 1,
-    Exterior = 2,
-    Room     = 3,
-    Backup   = 4,
-};
-
-// JamHousingBlueprint.flags bitmask. Client has HousingBlueprintFlag/Meta but the member
-// values were NOT recovered offline — kept opaque; do not assume a meaning. [INF]
-enum HousingBlueprintFlags : uint32
-{
-    HOUSING_BLUEPRINT_FLAG_NONE = 0x0,
-    // values unresolved offline (spec §5) — treat JamHousingBlueprint.flags as opaque uint32
-};
-
-// ImportBlueprint requirement gate. Bits from ERR_HOUSING_BLUEPRINT_REQUIREMENT_* [BIN];
-// bit positions = error-string order [INF]. Import is refused unless the target house
-// satisfies all set requirements (spec §6).
-enum HousingBlueprintUnmetRequirementFlags : uint32
-{
-    HOUSING_BLUEPRINT_REQ_NONE             = 0x0,
-    HOUSING_BLUEPRINT_REQ_EXTERIOR_FACTION = 0x1,
-    HOUSING_BLUEPRINT_REQ_HOUSE_TYPE       = 0x2,
-    HOUSING_BLUEPRINT_REQ_HOUSE_SIZE       = 0x4,
-};
-
-// JamHouseBudgetEntry.budgetType. Categories from the Lua budget accessors
-// Get{Max,Spent}PlacementBudget / Get{Max,Spent}PetPlacementBudget / GetRoomPlacementBudget
-// [BIN names] / values [INF]. Each is tracked separately within interior vs exterior.
-enum class HouseBudgetType : uint32
-{
-    Decor   = 0,
-    PetBed  = 1,
-    Room    = 2,
-    Fixture = 3,
-};
-
-// Pet beds (12.1): decor items with their own placement budget. Caps come from client
-// config globals housingMaxPetBedsInterior@0x127F60 / housingMaxPetBedsExterior@0x127FD0
-// [BIN symbols]. Default caps are placeholders until a value capture/DB confirms. [INF]
-static constexpr uint32 HOUSING_MAX_PET_BEDS_INTERIOR = 6;
-static constexpr uint32 HOUSING_MAX_PET_BEDS_EXTERIOR = 6;
-
-// Blueprint per-BNet-account caps. Client events HOUSING_BLUEPRINTS_MAX_PER_BNET_ACCOUNT
-// @0x13B993F and HOUSING_BLUEPRINTS_MAX_BACKUPS_PER_BNET_ACCOUNT@0x13B9968 exist [BIN];
-// the numeric caps are format-string args, not recovered offline — placeholders. [INF]
-static constexpr uint32 HOUSING_BLUEPRINTS_MAX_PER_BNET_ACCOUNT = 50;
-static constexpr uint32 HOUSING_BLUEPRINTS_MAX_BACKUPS_PER_BNET = 10;
-
-// 12.1 raised the displayed house level cap to 12 (patch notes). MAX_HOUSE_LEVEL above is
-// already 20 (headroom); levels 11-12 are HouseLevelData.db2 rows + larger budgets +
-// large-exterior unlock — a DATA change, not a code cap. [data]
-static constexpr uint32 HOUSING_DISPLAY_LEVEL_CAP_12_1 = 12;
 
 #endif // TRINITYCORE_HOUSING_DEFINES_H

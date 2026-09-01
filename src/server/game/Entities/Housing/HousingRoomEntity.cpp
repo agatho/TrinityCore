@@ -141,7 +141,7 @@ void HousingRoomEntity::BuildValuesCreate(UF::UpdateFieldFlag /*flags*/, ByteBuf
     // Not used — BuildCreateUpdateBlockForPlayer handles everything via entity fragments.
 }
 
-void HousingRoomEntity::BuildValuesUpdate(UF::UpdateFieldFlag /*flags*/, ByteBuffer& /*data*/, Player const* /*target*/) const
+void HousingRoomEntity::BuildValuesUpdate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const
 {
     // VALUES updates use the standard fragment change mask system
 }
@@ -165,6 +165,8 @@ UF::UpdateFieldFlag HousingRoomEntity::GetUpdateFieldFlagsFor(Player const* /*ta
 
 void HousingRoomEntity::ClearValuesChangesMask()
 {
+    m_values.ClearChangesMask(&HousingRoomEntity::m_housingRoomData);
+    m_values.ClearChangesMask(&HousingRoomEntity::m_mirroredPositionData);
     Object::ClearValuesChangesMask();
 }
 
@@ -196,10 +198,7 @@ void HousingRoomEntity::SetFlags(int32 flags)
 
 void HousingRoomEntity::SetFloorIndex(int32 floorIndex)
 {
-    // Server-side only since 12.0.7 - the client no longer carries FloorIndex in
-    // the FHousingRoom_C fragment (see UF::HousingRoomData). Kept for the interior
-    // map's floor bookkeeping.
-    _floorIndex = floorIndex;
+    SetUpdateFieldValue(m_values.ModifyValue(&HousingRoomEntity::m_housingRoomData).ModifyValue(&UF::HousingRoomData::FloorIndex), floorIndex);
 }
 
 void HousingRoomEntity::AddMeshObject(ObjectGuid meshObjectGuid)

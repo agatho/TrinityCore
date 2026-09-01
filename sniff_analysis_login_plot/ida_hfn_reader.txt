@@ -1,0 +1,4 @@
+{
+  "addr": "0x7ff624fd01a0",
+  "code": "__int64 __fastcall sub_7FF624FD01A0(unsigned __int8 *storage, __int64 _vtable, __int64 a3)\n{\n  __int64 result; // rax\n  __int64 v6; // [rsp+30h] [rbp+8h] BYREF\n\n  sub_7FF624FCFED0(storage, _vtable, a3); /*0x7ff624fd01b0*/\n  v6 = 0; /*0x7ff624fd01ba*/\n  ai_Process_HousingDataPacket(_vtable, &v6); /*0x7ff624fd01c6*/\n  *((_QWORD *)storage + 15) = v6; /*0x7ff624fd01d8*/\n  ClientOpcode_helper_318EF90(_vtable, &v6); /*0x7ff624fd01dc*/\n  result = (unsigned __int8)v6; /*0x7ff624fd01e1*/\n  storage[128] = v6; /*0x7ff624fd01eb*/\n  return result; /*0x7ff624fd01e6*/\n}"
+}

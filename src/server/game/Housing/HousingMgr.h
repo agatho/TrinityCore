@@ -27,7 +27,6 @@
 #include <vector>
 
 class Neighborhood;
-class Player;
 struct ExteriorComponentEntry;
 struct ExteriorComponentExitPointEntry;
 struct ExteriorComponentHookEntry;
@@ -253,12 +252,6 @@ public:
     DecorCategoryData const* GetDecorCategoryData(uint32 id) const;
     DecorSubcategoryData const* GetDecorSubcategoryData(uint32 id) const;
 
-    // #16 Outdoor Lighting: classify a HouseDecor by its parent DecorCategory
-    // (via DecorXDecorSubcategory -> DecorSubcategory.DecorCategoryID). Returns 0
-    // when the decor has no category link. IsLightingDecor() == category 4.
-    uint32 GetDecorCategoryForDecor(uint32 decorId) const;
-    bool IsLightingDecor(uint32 decorId) const;
-
     // Indexed lookups
     std::vector<DecorSubcategoryData const*> GetSubcategoriesForCategory(uint32 categoryId) const;
     std::vector<uint32> GetDecorIdsForSubcategory(uint32 subcategoryId) const;
@@ -375,11 +368,7 @@ public:
 
     // Access control — checks if visitor can access a plot/house based on owner's settings
     // accessMask = HOUSE_SETTING_HOUSE_ACCESS_* for interior, HOUSE_SETTING_PLOT_ACCESS_* for exterior
-    // CanVisitorAccess(visitor, owner, ...) was removed (H-11): it returned false
-    // whenever `owner` was null, so every caller silently changed behaviour when the
-    // owner logged out - the door refused all visits, the plot AreaTrigger allowed
-    // all of them, and the permissions handler reported no access. Use
-    // CanVisitorAccessPlot, which answers the same question with the owner offline.
+    bool CanVisitorAccess(Player const* visitor, Player const* owner, uint32 settingsFlags, bool isInterior) const;
 
     // Same as CanVisitorAccess but works when owner is offline — uses CharacterCache + the
     // visitor's own social/group/guild/neighborhood data to resolve friend/party/guild/neighbor
@@ -432,7 +421,6 @@ private:
     std::unordered_map<uint32 /*houseLevelId*/, std::vector<HouseLevelRewardInfoData const*>> _rewardsByLevel;
     std::unordered_map<uint32 /*categoryId*/, std::vector<DecorSubcategoryData const*>> _subcategoriesByCategory;
     std::unordered_map<uint32 /*subcategoryId*/, std::vector<uint32 /*houseDecorId*/>> _decorsBySubcategory;
-    std::unordered_map<uint32 /*houseDecorId*/, uint32 /*categoryId*/> _categoryByDecor;
     std::unordered_map<uint32 /*houseDecorId*/, std::vector<DecorDyeSlotData const*>> _dyeSlotsByDecor;
 
     // Reverse lookup: world MapID -> NeighborhoodMap ID

@@ -19,6 +19,7 @@
 #include "Map.h"
 #include "Player.h"
 #include "StringFormat.h"
+#include "UpdateData.h"
 #include "WorldSession.h"
 
 namespace Battlenet
@@ -28,14 +29,19 @@ Account::Account(WorldSession* session, ObjectGuid guid, std::string&& name) : m
     _Create(guid);
 
     // Only FHousingStorage_C belongs on the BNetAccount entity.
-    // FHousingPlayerHouse_C â†’ Housing/3 entity (HousingPlayerHouseEntity)
-    // FNeighborhoodMirrorData_C â†’ Housing/4 entity (HousingNeighborhoodMirrorEntity)
+    // FHousingPlayerHouse_C → Housing/3 entity (HousingPlayerHouseEntity)
+    // FNeighborhoodMirrorData_C → Housing/4 entity (HousingNeighborhoodMirrorEntity)
     m_entityFragments.Add(WowCS::EntityFragment::FHousingStorage_C, false, WowCS::GetRawFragmentData(m_housingStorageData));
 
     // Default value
     SetUpdateFieldValue(m_values.ModifyValue(&Account::m_housingStorageData).ModifyValue(&UF::HousingStorageData::DecorMaxOwnedCount), 5000);
 }
 
+void Account::ClearUpdateMask(bool remove)
+{
+    m_values.ClearChangesMask(&Account::m_housingStorageData);
+    BaseEntity::ClearUpdateMask(remove);
+}
 
 
 std::string Account::GetNameForLocaleIdx(LocaleConstant /*locale*/) const

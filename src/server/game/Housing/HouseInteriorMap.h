@@ -25,7 +25,6 @@
 
 class HousingRoomEntity;
 class Player;
-struct QuaternionData;
 
 /// Map instance for a player's house interior (MAP_HOUSE_INTERIOR = 7, MapID 2783).
 /// Each player/account gets their own instance of this map. The interior is a
@@ -36,7 +35,7 @@ class TC_GAME_API HouseInteriorMap : public Map
 public:
     HouseInteriorMap(uint32 id, time_t expiry, uint32 instanceId, ObjectGuid const& owner);
 
-    void LoadGridObjects(NGridType* grid) override;
+    void LoadGridObjects(NGridType* grid, Cell const& cell) override;
     void InitVisibilityDistance() override;
     bool AddPlayerToMap(Player* player, bool initPlayer = true) override;
     void RemovePlayerFromMap(Player* player, bool remove) override;
@@ -125,11 +124,6 @@ public:
     /// Send post-tutorial aura packets so the client knows the tutorial is complete
     /// and unlocks all editor modes (expert, cleanup, layout, customize).
     void SendPostTutorialAuras(Player* player);
-
-    // Puts QUEST_HOUSING_TUTORIAL_COMPLETE in the log and credits the house-entered kill credit.
-    // That quest is AUTO_ACCEPT|AUTO_COMPLETE with no quest-giver NPC at either end, so nothing in
-    // the world can hand it out - without this the housing editor stays locked forever.
-    void GrantHousingTutorialProgress(Player* player);
 
 private:
     ObjectGuid _owner;

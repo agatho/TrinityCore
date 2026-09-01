@@ -20,7 +20,6 @@
 #include "Player.h"
 #include "StringFormat.h"
 #include "UpdateData.h"
-#include "WorldPacket.h"
 #include "WorldSession.h"
 
 HousingNeighborhoodMirrorEntity::HousingNeighborhoodMirrorEntity(WorldSession* session, ObjectGuid guid) : _session(session)
@@ -38,6 +37,11 @@ HousingNeighborhoodMirrorEntity::HousingNeighborhoodMirrorEntity(WorldSession* s
     m_entityFragments.Add(WowCS::EntityFragment::FNeighborhoodMirrorData_C, false, WowCS::GetRawFragmentData(m_neighborhoodMirrorData));
 }
 
+void HousingNeighborhoodMirrorEntity::ClearUpdateMask(bool remove)
+{
+    m_values.ClearChangesMask(&HousingNeighborhoodMirrorEntity::m_neighborhoodMirrorData);
+    BaseEntity::ClearUpdateMask(remove);
+}
 
 std::string HousingNeighborhoodMirrorEntity::GetNameForLocaleIdx(LocaleConstant /*locale*/) const
 {

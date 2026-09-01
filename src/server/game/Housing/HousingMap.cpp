@@ -35,7 +35,6 @@
 #include "Housing.h"
 #include "HousingDefines.h"
 #include "HousingMgr.h"
-#include "ScriptMgr.h"
 #include "HousingPackets.h"
 #include "Log.h"
 #include "MeshObject.h"
@@ -60,7 +59,7 @@
 
 namespace
 {
-    [[maybe_unused]] std::string HexDumpPacket(WorldPacket const* packet, size_t maxBytes = 128)
+    std::string HexDumpPacket(WorldPacket const* packet, size_t maxBytes = 128)
     {
         if (!packet || packet->size() == 0)
             return "(empty)";
@@ -183,9 +182,9 @@ void HousingMap::InitVisibilityDistance()
     m_VisibilityNotifyPeriod = sWorld->getIntConfig(CONFIG_VISIBILITY_NOTIFY_PERIOD_INSTANCE);
 }
 
-void HousingMap::LoadGridObjects(NGridType* grid)
+void HousingMap::LoadGridObjects(NGridType* grid, Cell const& cell)
 {
-    Map::LoadGridObjects(grid);
+    Map::LoadGridObjects(grid, cell);
 }
 
 void HousingMap::SpawnPlotGameObjects()
@@ -250,34 +249,9 @@ void HousingMap::SpawnPlotGameObjects()
             continue;
         }
 
-        // Cornerstone transform. GameObjects.db2 is the authority where it has a row for this entry: a
-        // WowPacketParser decode of the 65940 housing sniffs shows the wire position AND quaternion equal
-        // GameObjects.db2[CornerstoneGameObjectID].Pos/.Rot exactly for 55/55 plots on map 2735, while
-        // NeighborhoodPlot.CornerstonePosition/Rotation match 0/55 there (off by 1.5-18 yards, and rotation
-        // off by PI +/- 0.2..0.5 rad even where the position agrees) - i.e. that map's plot rows are simply
-        // wrong and no rotation offset can rescue them.
-        //
-        // Map 2736 is the opposite case: GameObjects.db2 has NO DisplayID-110660 rows for OwnerID 2736, and
-        // there the sniff shows wire_orientation == CornerstoneRotation.Z + PI for 48/55 plots (the 7 misses
-        // are plots whose position also drifted between builds). So the plot data plus a half turn is both the
-        // only available source and the correct one for that map.
-        float rotZ;
-        QuaternionData rot;
-        if (GameObjectsEntry const* goData = sGameObjectsStore.LookupEntry(goEntry))
-        {
-            x = goData->Pos.X;
-            y = goData->Pos.Y;
-            z = goData->Pos.Z;
-            LoadGrid(x, y);
-            rot = QuaternionData(goData->Rot[0], goData->Rot[1], goData->Rot[2], goData->Rot[3]);
-            float unusedY = 0.0f, unusedX = 0.0f;
-            rot.toEulerAnglesZYX(rotZ, unusedY, unusedX);
-        }
-        else
-        {
-            rotZ = plot->CornerstoneRotation[2] + float(M_PI);
-            rot = QuaternionData::fromEulerAnglesZYX(rotZ, plot->CornerstoneRotation[1], plot->CornerstoneRotation[0]);
-        }
+        // Build rotation from the stored euler angles
+        float rotZ = plot->CornerstoneRotation[2];
+        QuaternionData rot = QuaternionData::fromEulerAnglesZYX(rotZ, plot->CornerstoneRotation[1], plot->CornerstoneRotation[0]);
 
         // GOState 0 (ACTIVE) = Owned/Claimed cornerstone, GOState 1 (READY) = ForSale sign
         GOState plotState = isOwned ? GO_STATE_ACTIVE : GO_STATE_READY;
@@ -332,19 +306,6 @@ void HousingMap::SpawnPlotGameObjects()
         // Sniff-verified: Box shape 35x30x94, DecalPropertiesId=621 (plot boundary visual),
         // SpellForVisuals=1282351, FHousingPlotAreaTrigger_C entity fragment with owner data.
         // The AT is required for the client to show the edit menu and plot boundary decal.
-        //
-        // OWNED PLOTS ONLY. Retail never creates this AreaTrigger for an unsold plot: across four
-        // WowPacketParser-decoded housing sniffs (builds 65940 x2 and 11.2.7 x2, maps 2735 and 2736) there are
-        // 55 CreateObject1 blocks for entry 37358 and HouseGUID is non-zero in 55 of 55 - none for an unsold
-        // plot. The creation is caused by the purchase: CMSG_NEIGHBORHOOD_BUY_HOUSE -> worldstate 0->1 ->
-        // cornerstone State 1->0 -> the AT appears -> HousingRoom appears. It is not a visibility artifact
-        // either; the observed player was standing at the cornerstone, well inside the AT's 46 yd bounds.
-        //
-        // Spawning it unconditionally is what painted a 70x60 brown slab (DecalPropertiesId 621, half-extents
-        // 35x30) across every empty plot. The 70x60 marker a player SHOULD see on an unsold plot is drawn by
-        // the client itself from its own GameObjects.db2 row (PlotGameObjectID, DisplayID 113004, GeoBox
-        // 70x60x0), gated on the plot worldstate - the server neither sends nor spawns it.
-        if (isOwned)
         {
             float hx = plot->HousePosition[0];
             float hy = plot->HousePosition[1];
@@ -502,7 +463,7 @@ void HousingMap::SpawnPlotGameObjects()
                 if (optionId != 0)
                     continue;
                 ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(pointId);
-                if (comp && comp->ParentComponentID == 0 && comp->HouseExteriorWmoDataID == static_cast<uint32>(plotInfo->HouseType))
+                if (comp && comp->ParentComponentID == 0 && comp->HouseExteriorWmoDataID == static_cast<int32>(plotInfo->HouseType))
                 {
                     exteriorComponentID = static_cast<int32>(pointId);
                     break;
@@ -725,10 +686,8 @@ Housing* HousingMap::GetHousingForPlayer(ObjectGuid playerGuid) const
 
 void HousingMap::LoadNeighborhoodData()
 {
-    // Resolve by the persisted counter. Rebuilding the GUID here is not possible any more: arg1 is the
-    // neighborhood's NeighborhoodMapID (see NeighborhoodMgr::GenerateNeighborhoodGuid), which this code does not
-    // know, and guessing it wrong silently yields nullptr.
-    _neighborhood = sNeighborhoodMgr.GetNeighborhoodByCounter(static_cast<uint64>(_neighborhoodId));
+    ObjectGuid neighborhoodGuid = ObjectGuid::Create<HighGuid::Housing>(/*subType*/ 4, /*arg1*/ sRealmList->GetCurrentRealmId().Realm, /*arg2*/ 0, static_cast<uint64>(_neighborhoodId));
+    _neighborhood = sNeighborhoodMgr.GetNeighborhood(neighborhoodGuid);
 
     if (!_neighborhood)
         TC_LOG_ERROR("housing", "HousingMap::LoadNeighborhoodData: Failed to load neighborhood {} for map {} instanceId {}",
@@ -989,8 +948,10 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
         SetPlayerCurrentPlot(player->GetGUID(), plotIndex);
 
         ObjectGuid playerGuid = player->GetGUID();
+        ObjectGuid houseGuid = housing->GetHouseGuid();
+        ObjectGuid neighborhoodGuid = housing->GetNeighborhoodGuid();
         uint8 deferredPlotIndex = plotIndex;
-        player->m_Events.AddEventAtOffset([playerGuid, deferredPlotIndex]()
+        player->m_Events.AddEventAtOffset([playerGuid, deferredPlotIndex, houseGuid, neighborhoodGuid]()
         {
             Player* p = ObjectAccessor::FindPlayer(playerGuid);
             if (!p || !p->IsInWorld())
@@ -1338,18 +1299,14 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
 void HousingMap::RemovePlayerFromMap(Player* player, bool remove)
 {
     // Remove plot auras before removing housing data.
-    if (GetHousingForPlayer(player->GetGUID()))
+    if (Housing const* housing = GetHousingForPlayer(player->GetGUID()))
     {
         // Remove all plot enter/presence auras (manual packets — spells not in DB2)
         SendPlotLeaveAuraRemoval(player);
-    }
 
-    // H-20: plot tracking is cleared for EVERY player leaving, not just those who own
-    // a house here. It used to sit inside the branch above, so a visitor's entry
-    // survived their visit and lived as long as the map instance - which, since
-    // housing maps never unload, means forever. It also fed a stale plot index to the
-    // go_housing_door fallback on a later visit.
-    ClearPlayerCurrentPlot(player->GetGUID());
+        // Clear plot tracking
+        ClearPlayerCurrentPlot(player->GetGUID());
+    }
 
     RemovePlayerHousing(player->GetGUID());
 
@@ -2949,11 +2906,6 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
                 if (AddToMap(doorGo))
                 {
                     _houseGameObjects[plotIndex] = doorGo->GetGUID();
-                    // Door interaction lives entirely in go_housing_door::OnGossipHello, so a GO that
-                    // spawns without that AI is silently inert (click -> goober animation, no teleport).
-                    TC_LOG_INFO("housing", "SpawnExtCompTree: Door GO {} scriptId={} templateScriptId={} scriptedAI={}",
-                        doorGoEntry, doorGo->GetScriptId(), doorGo->GetGOInfo()->ScriptId,
-                        sScriptMgr->CanCreateGameObjectAI(doorGo->GetScriptId()));
                     TC_LOG_INFO("housing", "SpawnExtCompTree: Door GO spawned blizzlike — entry={} guid={} "
                         "at ({:.1f},{:.1f},{:.1f}) for comp={} (hook local: {:.1f},{:.1f},{:.1f}) exitPt=({:.1f},{:.1f},{:.1f}) plot={}",
                         doorGoEntry, doorGo->GetGUID().ToString(),
@@ -3050,53 +3002,6 @@ uint32 HousingMap::SpawnExtCompTree(uint8 plotIndex, uint32 extCompID,
     // which variant is used, handled via GetRootComponentOverrides() / fixture overrides.
 
     return count;
-}
-
-void HousingMap::SendPlotMeshObjectsToPlayers(uint8 plotIndex)
-{
-    auto meshItr = _meshObjects.find(plotIndex);
-    if (meshItr == _meshObjects.end() || meshItr->second.empty())
-    {
-        TC_LOG_ERROR("housing", "HousingMap::SendPlotMeshObjectsToPlayers: plot {} has no MeshObjects to send", plotIndex);
-        return;
-    }
-
-    for (MapReference const& ref : GetPlayers())
-    {
-        Player* p = ref.GetSource();
-        if (!p || !p->IsInWorld())
-            continue;
-
-        UpdateData updateData(GetId());
-        uint32 created = 0;
-        for (ObjectGuid const& meshGuid : meshItr->second)
-        {
-            MeshObject* meshObj = GetMeshObject(meshGuid);
-            if (!meshObj || !meshObj->IsInWorld())
-                continue;
-
-            // Re-CREATEing a GUID the client already holds crashes it - refresh instead.
-            if (p->HaveAtClient(meshObj))
-            {
-                meshObj->BuildValuesUpdateBlockForPlayer(&updateData, p);
-                continue;
-            }
-
-            meshObj->BuildCreateUpdateBlockForPlayer(&updateData, p);
-            p->m_clientGUIDs.insert(meshGuid);
-            ++created;
-        }
-
-        if (!updateData.HasData())
-            continue;
-
-        WorldPacket packet;
-        updateData.BuildPacket(&packet);
-        p->SendDirectMessage(&packet);
-
-        TC_LOG_INFO("housing", "HousingMap::SendPlotMeshObjectsToPlayers: plot {} -> player {} ({} CREATE of {} meshes)",
-            plotIndex, p->GetGUID().ToString(), created, uint32(meshItr->second.size()));
-    }
 }
 
 void HousingMap::DespawnAllMeshObjectsForPlot(uint8 plotIndex)

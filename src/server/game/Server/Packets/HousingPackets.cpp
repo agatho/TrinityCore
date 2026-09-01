@@ -282,7 +282,7 @@ void HousingRoomMoveRoom::Read()
 void HousingRoomSetComponentTheme::Read()
 {
     _worldPacket >> RoomGuid;
-    _worldPacket >> BoundedSize<uint32>(OptionIDs); // NOT Size<> — an unbounded count here is a world-thread bad_alloc
+    _worldPacket >> Size<uint32>(OptionIDs);
     _worldPacket >> HouseThemeID;
     for (uint32& optionID : OptionIDs)
         _worldPacket >> optionID;
@@ -299,7 +299,7 @@ void HousingRoomApplyComponentMaterials::Read()
     // The byte sits BEFORE the array, not after — earlier guess parsed it as a
     // trailing Bits<1> which misaligned OptionIDs[0] one byte forward.
     _worldPacket >> RoomGuid;
-    _worldPacket >> BoundedSize<uint32>(OptionIDs); // NOT Size<> — an unbounded count here is a world-thread bad_alloc
+    _worldPacket >> Size<uint32>(OptionIDs);
     _worldPacket >> ColorOverride;
     _worldPacket >> RoomComponentTextureID;
     _worldPacket >> ComponentSlot;
@@ -1504,16 +1504,8 @@ WorldPacket const* HousingExportHouseResponse::Write()
     // bit-packed length encoding of the present path is unconfirmed — flagged in the header.
     if (ExportName)
     {
-        // H-24: the length field carries 7 bits, so a name longer than 127 bytes used to
-        // write a masked-down length next to the full string - the client would then read
-        // the tail of the name as the start of BlobLen, desyncing every field after it.
-        // The encoding above 127 is not pinned by RE, so this does not invent a long form;
-        // it truncates the payload to match the length actually written, which keeps the
-        // stream parseable. If a capture ever shows the long form, encode it here.
-        std::string_view name = *ExportName;
-        name = name.substr(0, 0x7F);
-        _worldPacket << uint8(0x80 | static_cast<uint8>(name.size()));
-        _worldPacket.append(name.data(), name.size());
+        _worldPacket << uint8(0x80 | static_cast<uint8>(ExportName->size() & 0x7F));
+        _worldPacket.WriteString(*ExportName);
     }
     else
         _worldPacket << uint8(0);
@@ -1527,6 +1519,7 @@ WorldPacket const* HousingExportHouseResponse::Write()
     return &_worldPacket;
 }
 
+// Retired 2026-05-12: HousingExportHouseResponse::Write — orphaned after EXPORT_HOUSE CMSG retirement.
 // Retired 2026-05-11: HousingSystemHouseSnapshotResponse Write() deleted (no C_HouseSnapshot in retail).
 
 WorldPacket const* HousingGetPlayerPermissionsResponse::Write()
@@ -1879,18 +1872,17 @@ WorldPacket const* HousingPhotoSharingAuthorizationClearedResult::Write()
 
 WorldPacket const* CraftingHouseHelloResponse::Write()
 {
-    // IDA-verified wire, unchanged 67186 -> 68275 (68275 deserializer sub_7FF7290B9C90):
-    //   PackedGUID Guid (the clerk creature)
-    //   uint8 Flags  — bit 0x80 = Field0, bit 0x40 = OpenForBusiness
-    // The client reads the flags with a whole-byte ReadUInt8, so a plain uint8 is byte-exact.
-    _worldPacket << Guid;
+    // IDA-verified wire (build 67186, sub_7FF75C0ED150):
+    //   PackedGUID HouseGuid
+    //   uint8 Flags  — bit 7 = Field0, bit 6 = Field1
+    _worldPacket << HouseGuid;
     uint8 flags = 0;
     if (Field0) flags |= 0x80;
-    if (OpenForBusiness) flags |= 0x40;
+    if (Field1) flags |= 0x40;
     _worldPacket << uint8(flags);
 
-    TC_LOG_DEBUG("network.opcode", "SMSG_CRAFTING_HOUSE_HELLO_RESPONSE Guid: {} Field0: {} OpenForBusiness: {}",
-        Guid.ToString(), Field0, OpenForBusiness);
+    TC_LOG_DEBUG("network.opcode", "SMSG_CRAFTING_HOUSE_HELLO_RESPONSE HouseGuid: {} Field0: {} Field1: {}",
+        HouseGuid.ToString(), Field0, Field1);
 
     return &_worldPacket;
 }
@@ -2101,14 +2093,8 @@ WorldPacket const* NeighborhoodCharterUpdateResponse::Write()
     _worldPacket << uint32(Unknown);
     for (ObjectGuid const& signer : Signers)
         _worldPacket << signer;
-    // M5: charter name is length-prefixed size+1 with a trailing NUL
-    // (retail rec 14982 = 09 'Colombia' 00), matching the Roster/HouseFinder
-    // writers. The old uint8(size)+WriteString dropped the terminator.
-    {
-        uint8 charterNameLen = static_cast<uint8>(std::min<size_t>(NeighborhoodName.size() + 1, 255));
-        _worldPacket << uint8(charterNameLen);
-        _worldPacket.append(NeighborhoodName.c_str(), charterNameLen);
-    }
+    _worldPacket << uint8(NeighborhoodName.size());
+    _worldPacket.WriteString(NeighborhoodName);
 
     TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_UPDATE_RESPONSE Result: {} (error_bit={}) CharterGuid: {} MapID: {} SigCount: {} Signers: {} Name: '{}'",
         Result, Result != 0, CharterGuid.ToString(), MapID, SignatureCount, Signers.size(), NeighborhoodName);
@@ -2128,14 +2114,8 @@ WorldPacket const* NeighborhoodCharterOpenUIResponse::Write()
     _worldPacket << uint32(Unknown);
     for (ObjectGuid const& signer : Signers)
         _worldPacket << signer;
-    // M5: charter name is length-prefixed size+1 with a trailing NUL
-    // (retail rec 14982 = 09 'Colombia' 00), matching the Roster/HouseFinder
-    // writers. The old uint8(size)+WriteString dropped the terminator.
-    {
-        uint8 charterNameLen = static_cast<uint8>(std::min<size_t>(NeighborhoodName.size() + 1, 255));
-        _worldPacket << uint8(charterNameLen);
-        _worldPacket.append(NeighborhoodName.c_str(), charterNameLen);
-    }
+    _worldPacket << uint8(NeighborhoodName.size());
+    _worldPacket.WriteString(NeighborhoodName);
 
     TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_OPEN_UI_RESPONSE Result: {} (error_bit={}) CharterGuid: {} MapID: {} SigCount: {} Signers: {} Name: '{}'",
         Result, Result != 0, CharterGuid.ToString(), MapID, SignatureCount, Signers.size(), NeighborhoodName);
@@ -2150,14 +2130,8 @@ WorldPacket const* NeighborhoodCharterSignRequest::Write()
     _worldPacket << CharterGuid;
     _worldPacket << uint32(MapID);
     _worldPacket << uint32(Unknown);
-    // M5: charter name is length-prefixed size+1 with a trailing NUL
-    // (retail rec 14982 = 09 'Colombia' 00), matching the Roster/HouseFinder
-    // writers. The old uint8(size)+WriteString dropped the terminator.
-    {
-        uint8 charterNameLen = static_cast<uint8>(std::min<size_t>(NeighborhoodName.size() + 1, 255));
-        _worldPacket << uint8(charterNameLen);
-        _worldPacket.append(NeighborhoodName.c_str(), charterNameLen);
-    }
+    _worldPacket << uint8(NeighborhoodName.size());
+    _worldPacket.WriteString(NeighborhoodName);
 
     TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_SIGN_REQUEST Result: {} CharterGuid: {} MapID: {} Name: '{}'",
         Result, CharterGuid.ToString(), MapID, NeighborhoodName);
@@ -2183,14 +2157,8 @@ WorldPacket const* NeighborhoodCharterOpenConfirmationUIResponse::Write()
     _worldPacket << uint8(Result);
     _worldPacket << uint32(Field1);
     _worldPacket << uint32(Field2);
-    // M5: charter name is length-prefixed size+1 with a trailing NUL
-    // (retail rec 14982 = 09 'Colombia' 00), matching the Roster/HouseFinder
-    // writers. The old uint8(size)+WriteString dropped the terminator.
-    {
-        uint8 charterNameLen = static_cast<uint8>(std::min<size_t>(NeighborhoodName.size() + 1, 255));
-        _worldPacket << uint8(charterNameLen);
-        _worldPacket.append(NeighborhoodName.c_str(), charterNameLen);
-    }
+    _worldPacket << uint8(NeighborhoodName.size());
+    _worldPacket.WriteString(NeighborhoodName);
 
     TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_CHARTER_OPEN_CONFIRMATION_UI_RESPONSE Result: {} Field1: {} Field2: {} Name: '{}'",
         Result, Field1, Field2, NeighborhoodName);
@@ -2612,7 +2580,6 @@ void NeighborhoodInitiativeOp0D::Read()
     _worldPacket >> Header;
     uint32 count = 0;
     _worldPacket >> count;
-    count = std::min<uint32>(count, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
     Pairs.resize(count);
     for (uint32 i = 0; i < count; ++i)
     {
@@ -2627,7 +2594,6 @@ void NeighborhoodInitiativeOp0E::Read()
 {
     uint32 count = 0;
     _worldPacket >> count;
-    count = std::min<uint32>(count, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
     TaskIDs.resize(count);
     for (uint32 i = 0; i < count; ++i)
         _worldPacket >> TaskIDs[i];
@@ -2638,7 +2604,6 @@ void NeighborhoodInitiativeOp0F::Read()
 {
     uint32 count = 0;
     _worldPacket >> count;
-    count = std::min<uint32>(count, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
     Records.resize(count);
     for (uint32 i = 0; i < count; ++i)
     {

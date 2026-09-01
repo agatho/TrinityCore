@@ -55,7 +55,6 @@ public:
     void SetHouseRoomID(int32 roomId);
     void SetFlags(int32 flags);
     void SetFloorIndex(int32 floorIndex);
-    int32 GetFloorIndex() const { return _floorIndex; }
     void AddMeshObject(ObjectGuid meshObjectGuid);
     void ReplaceMeshObjects(std::vector<ObjectGuid> const& newGuids);
     void AddDoor(int32 roomComponentID, Position const& offset, uint8 connectionType, ObjectGuid attachedRoomGuid = ObjectGuid::Empty);
@@ -73,10 +72,6 @@ protected:
     void ClearValuesChangesMask() override;
     bool AddToObjectUpdate() override;
     void RemoveFromObjectUpdate() override;
-
-private:
-    // Not a wire field since 12.0.7 - see UF::HousingRoomData.
-    int32 _floorIndex = 0;
 };
 
 #endif // TRINITYCORE_HOUSING_ROOM_ENTITY_H

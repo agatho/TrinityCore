@@ -248,8 +248,8 @@ namespace WorldPackets::Housing
         // (Field_61 u8 + Field_62 u8 + Field_63 s32 + speculative tail) — bytes
         // happened to total correctly only for the empty-anchor case.
         ObjectGuid DecorGuid;
-        TaggedPosition<::Position::XYZ> Position;
-        TaggedPosition<::Position::XYZ> Rotation;
+        TaggedPosition<Position::XYZ> Position;
+        TaggedPosition<Position::XYZ> Rotation;
         float Scale = 1.0f;
         ObjectGuid AttachParentGuid;
         ObjectGuid RoomGuid;
@@ -265,8 +265,8 @@ namespace WorldPackets::Housing
         void Read() override;
 
         ObjectGuid DecorGuid;
-        TaggedPosition<::Position::XYZ> Position;
-        TaggedPosition<::Position::XYZ> Rotation;
+        TaggedPosition<Position::XYZ> Position;
+        TaggedPosition<Position::XYZ> Rotation;
         float Scale = 1.0f;
         ObjectGuid AttachParentGuid;
         ObjectGuid RoomGuid;
@@ -1716,11 +1716,9 @@ namespace WorldPackets::Housing
         std::vector<uint8> ExportBlob;
     };
 
-    // Status 2026-06-30: NOT retired. Upstream re-added SMSG_HOUSING_EXPORT_HOUSE_RESPONSE
-    // at 0x550003 in the 12.0.7 sync, so the note that used to sit here (claiming the packet
-    // was orphaned and could never be emitted) described a state that no longer holds. There
-    // is still no server-side sender, so nothing emits it today - but it is live wire surface,
-    // not dead code, and Write() is maintained accordingly.
+    // Retired 2026-05-12: HousingExportHouseResponse — orphaned after EXPORT_HOUSE CMSG retirement.
+    // No client sender for CMSG_HOUSING_SYSTEM_EXPORT_HOUSE (0x350003) in build 67186, so the
+    // SMSG can never be emitted in practice.
 
     // Retired 2026-05-11: HousingSystemHouseSnapshotResponse deleted (fake opcode 0xF1000011).
     // No `C_HouseSnapshot` Lua namespace exists in retail 12.0.5; feature does not exist.
@@ -2105,33 +2103,18 @@ namespace WorldPackets::Housing
     };
 
     // SMSG_CRAFTING_HOUSE_HELLO_RESPONSE (0x42033C)
-    // Despite the name and this file, it is NOT a housing packet: "Crafting House" is Blizzard's own
-    // term for the crafting-order house, and CRAFTING_HOUSE_DISABLED is a registered Lua event in the
-    // 68275 client sitting right before the CRAFTINGORDERS_* block. The opcode lives inside the
-    // crafting-order block (0x420332..0x42033F). It is the exact structural twin of
-    // SMSG_AUCTION_HELLO_RESPONSE: greeting for the crafting-order clerk NPC.
-    //
-    // IDA-verified wire, unchanged 67186 -> 68275 (68275 deserializer sub_7FF7290B9C90):
-    //   PackedGUID Guid    — the CLERK CREATURE's guid (the old "HouseGuid" name was wrong; the
-    //                        capture guid decodes to HighGuid type 8 / Creature, entry 243279, and is
-    //                        byte-identical to the guid in the preceding CMSG_GOSSIP_SELECT_OPTION)
-    //   uint8      Flags   — bit 0x80 -> Field0, bit 0x40 -> OpenForBusiness
-    //
-    // Client handler sub_7FF72ACDB8D0 reads only the guid and the 0x40 bit, opens
-    // PlayerInteractionType 60 (ProfessionsCustomerOrder), then fires CRAFTINGORDERS_SHOW_CUSTOMER
-    // when the bit is set and CRAFTING_HOUSE_DISABLED when it is clear — the positional analogue of
-    // AuctionHelloResponse::OpenForBusiness. Bit 0x80 is stored by the deserializer and read by
-    // nothing in the 68275 client; retail sent it clear. Capture: 3 samples, body a7e7 <13-byte
-    // packed guid> 40.
+    // IDA-verified wire (build 67186, sub_7FF75C0ED150):
+    //   PackedGUID HouseGuid
+    //   uint8 Flags     (bit 7 -> Field0, bit 6 -> Field1)
     class CraftingHouseHelloResponse final : public ServerPacket
     {
     public:
         CraftingHouseHelloResponse() : ServerPacket(SMSG_CRAFTING_HOUSE_HELLO_RESPONSE) { }
         WorldPacket const* Write() override;
 
-        ObjectGuid Guid;
-        bool Field0 = false;            // bit 0x80 — dead in the 68275 client, meaning unrecovered
-        bool OpenForBusiness = false;   // bit 0x40 — false raises CRAFTING_HOUSE_DISABLED instead
+        ObjectGuid HouseGuid;
+        bool Field0 = false; // bit 7 of Flags byte
+        bool Field1 = false; // bit 6 of Flags byte
     };
 
     // SMSG_GUILD_OTHERS_OWNED_HOUSES_RESULT (0x4E0047)

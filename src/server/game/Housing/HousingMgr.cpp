@@ -23,7 +23,6 @@
 #include "Group.h"
 #include "Guild.h"
 #include "Housing.h"
-#include "HousingDefines.h"
 #include "Log.h"
 #include "Neighborhood.h"
 #include "NeighborhoodMgr.h"
@@ -37,7 +36,6 @@
 #include "StringFormat.h"
 #include "Timer.h"
 #include "World.h"
-#include "WorldPacket.h"
 #include <algorithm>
 #include <unordered_set>
 
@@ -702,14 +700,6 @@ uint32 HousingMgr::GetFavorThresholdForLevel(uint32 level) const
 // Levels above 7 extrapolated linearly until a sniff covers higher tiers.
 // The HouseLevelData DB2 (hotfixes.house_level_data) only carries
 // ID/Level/QuestID — no budget columns — so this fallback is the hot path.
-//
-// #16 Outdoor Lighting (A3): 12.0.7 raised the EXTERIOR decor limit alongside
-// outdoor light placement — houses level 5-6 -> 300, levels 7+ -> 350 (per the
-// small-activities blueprint; the 66838 dump predates 12.0.7 so these two tiers
-// are DOCUMENTED-not-DB2-confirmed and flagged CAPTURE-BLOCKED until a 12.0.7
-// CREATE block is sniffed). Interior/room/fixture values are unchanged. The
-// exterior budget is now genuinely CHARGED on placement (see Housing.cpp M2), so
-// these caps are enforced rather than cosmetic.
 namespace {
     struct RetailBudget { uint32 interior, exterior, room, fixture; };
     static constexpr RetailBudget RetailBudgetByLevel[] = {
@@ -718,9 +708,9 @@ namespace {
         /* 2 */ {1155, 200, 2000, 24 },
         /* 3 */ {1450, 250, 3000, 30 },
         /* 4 */ {1745, 250, 4000, 36 },
-        /* 5 */ {2050, 300, 5000, 43 },  // exterior 250->300 (12.0.7 #16, DOCUMENTED)
-        /* 6 */ {2360, 300, 5000, 50 },  // exterior 250->300 (12.0.7 #16, DOCUMENTED)
-        /* 7 */ {3180, 350, 5000, 68 },  // exterior 250->350 (12.0.7 #16, DOCUMENTED)
+        /* 5 */ {2050, 250, 5000, 43 },
+        /* 6 */ {2360, 250, 5000, 50 },
+        /* 7 */ {3180, 250, 5000, 68 },
     };
     constexpr uint32 MAX_VERIFIED_LEVEL = 7;
 
@@ -910,6 +900,56 @@ bool HousingMgr::CanVisitorAccessPlot(Player const* visitor, ObjectGuid ownerGui
     return false;
 }
 
+bool HousingMgr::CanVisitorAccess(Player const* visitor, Player const* owner, uint32 settingsFlags, bool isInterior) const
+{
+    if (!visitor || !owner)
+        return false;
+
+    // Owner always has access
+    if (visitor->GetGUID() == owner->GetGUID())
+        return true;
+
+    // Select the correct flag group based on access type
+    uint32 anyoneFlag    = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_ANYONE    : HOUSE_SETTING_PLOT_ACCESS_ANYONE;
+    uint32 neighborsFlag = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_NEIGHBORS : HOUSE_SETTING_PLOT_ACCESS_NEIGHBORS;
+    uint32 guildFlag     = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_GUILD     : HOUSE_SETTING_PLOT_ACCESS_GUILD;
+    uint32 friendsFlag   = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_FRIENDS   : HOUSE_SETTING_PLOT_ACCESS_FRIENDS;
+    uint32 partyFlag     = isInterior ? HOUSE_SETTING_HOUSE_ACCESS_PARTY     : HOUSE_SETTING_PLOT_ACCESS_PARTY;
+
+    // If no flags are set at all, default to open access (sniff behavior: plots are public by default)
+    uint32 accessMask = isInterior
+        ? (HOUSE_SETTING_HOUSE_ACCESS_ANYONE | HOUSE_SETTING_HOUSE_ACCESS_NEIGHBORS |
+           HOUSE_SETTING_HOUSE_ACCESS_GUILD | HOUSE_SETTING_HOUSE_ACCESS_FRIENDS | HOUSE_SETTING_HOUSE_ACCESS_PARTY)
+        : (HOUSE_SETTING_PLOT_ACCESS_ANYONE | HOUSE_SETTING_PLOT_ACCESS_NEIGHBORS |
+           HOUSE_SETTING_PLOT_ACCESS_GUILD | HOUSE_SETTING_PLOT_ACCESS_FRIENDS | HOUSE_SETTING_PLOT_ACCESS_PARTY);
+
+    if ((settingsFlags & accessMask) == 0)
+        return true; // No restrictions configured — open to all
+
+    if (settingsFlags & anyoneFlag)
+        return true;
+
+    if ((settingsFlags & partyFlag) && visitor->GetGroup() && visitor->GetGroup() == owner->GetGroup())
+        return true;
+
+    if ((settingsFlags & guildFlag) && visitor->GetGuildId() != 0 && visitor->GetGuildId() == owner->GetGuildId())
+        return true;
+
+    if ((settingsFlags & friendsFlag) && owner->GetSocial() && owner->GetSocial()->HasFriend(visitor->GetGUID()))
+        return true;
+
+    if ((settingsFlags & neighborsFlag))
+    {
+        // Check if both players are in the same neighborhood
+        Housing const* ownerHousing = owner->GetHousing();
+        Housing const* visitorHousing = visitor->GetHousing();
+        if (ownerHousing && visitorHousing &&
+            ownerHousing->GetNeighborhoodGuid() == visitorHousing->GetNeighborhoodGuid())
+            return true;
+    }
+
+    return false;
+}
 
 HousingResult HousingMgr::ValidateDecorPlacement(uint32 decorId, Position const& pos, uint32 houseLevel) const
 {
@@ -917,31 +957,13 @@ HousingResult HousingMgr::ValidateDecorPlacement(uint32 decorId, Position const&
     if (!decorEntry)
         return HOUSING_RESULT_DECOR_NOT_FOUND;
 
-    // Validate position is finite / not obviously corrupt.
+    // Validate position is within reasonable bounds
     if (!pos.IsPositionValid())
         return HOUSING_RESULT_BOUNDS_FAILURE_ROOM;
-
-    // M1/A4: reject placements outside the plausible room/plot AABB. Decor
-    // coordinates are local-space (room- or plot-relative), so a legitimate
-    // target is always close to the origin; anything beyond HOUSING_MAX_DECOR_
-    // LOCAL_EXTENT on any axis is arbitrary-coordinate GameObject spam and is
-    // refused with a bounds-failure the client renders as "out of bounds".
-    if (std::fabs(pos.GetPositionX()) > HOUSING_MAX_DECOR_LOCAL_EXTENT ||
-        std::fabs(pos.GetPositionY()) > HOUSING_MAX_DECOR_LOCAL_EXTENT ||
-        std::fabs(pos.GetPositionZ()) > HOUSING_MAX_DECOR_LOCAL_EXTENT)
-        return HOUSING_RESULT_BOUNDS_FAILURE_PLOT;
 
     // Validate house level meets decor requirements (if any level restriction exists)
     // For now, all decor is available at any level; future DB2 fields may add restrictions
     (void)houseLevel;
-
-    // #16 Outdoor Lighting: there is intentionally NO category gate here — 12.0.7
-    // permits DecorCategory 4 "Lighting" decor in the exterior/plot scope, so it
-    // flows through the same exterior placement path as any other yard decor. The
-    // light-specific "two lights cannot overlap" rule (A4) is enforced with the
-    // placed-decor context in Housing::CheckLightOverlap, not here (this validator
-    // is per-decor and stateless). Client-side indoor/outdoor gating via
-    // HouseDecor.Flags is tracked separately as audit item M10.
 
     return HOUSING_RESULT_SUCCESS;
 }
@@ -1289,12 +1311,6 @@ void HousingMgr::LoadDecorXDecorSubcategoryData()
     for (DecorXDecorSubcategoryEntry const* entry : sDecorXDecorSubcategoryStore)
     {
         _decorsBySubcategory[entry->DecorSubcategoryID].push_back(entry->HouseDecorID);
-        // #16 Outdoor Lighting: build a decor -> parent-category reverse index so
-        // the placement path can classify a decor (Lighting = category 4) in O(1)
-        // without walking subcategories. DecorSubcategory rows are already loaded
-        // (LoadDecorSubcategoryData runs before this pass).
-        if (DecorSubcategoryData const* sub = GetDecorSubcategoryData(entry->DecorSubcategoryID))
-            _categoryByDecor[entry->HouseDecorID] = uint32(sub->DecorCategoryID);
         ++count;
     }
 
@@ -1412,21 +1428,9 @@ void HousingMgr::EnsureDoorGameObjectTemplates()
     // clickable entrance GO. If the template doesn't exist, create one based on
     // the known working template (entry 586576, type 10/GOOBER).
     uint32 created = 0;
-    uint32 scripted = 0;
 
     GameObjectTemplate const* referenceTemplate = sObjectMgr->GetGameObjectTemplate(586576);
     uint32 referenceDisplayId = referenceTemplate ? referenceTemplate->displayId : 116973;
-
-    // Every door - whether it comes from the world DB or is synthesised below - must carry
-    // go_housing_door, because that script's OnGossipHello IS the "enter the house" handler.
-    // GameObject::Use() calls AI()->OnGossipHello() for every GO type, so with no ScriptName
-    // the click reaches the default AI, falls through to the GOOBER branch, plays the open
-    // animation and does nothing else: the door looked interactive (gear cursor, client sends
-    // CMSG_GAME_OBJ_USE) but never teleported anyone. The goober.spell fallback (1271876,
-    // spell_housing_door_open) cannot cover for it either - GO_JUST_DEACTIVATED self-casts it
-    // player->player, so the script's GetExplTargetWorldObject() is the player and its
-    // ToGameObject() is null, and it bails before re-entering Use().
-    uint32 const doorScriptId = sObjectMgr->GetScriptId("go_housing_door", false);
 
     for (ExteriorComponentEntry const* entry : sExteriorComponentStore)
     {
@@ -1434,22 +1438,8 @@ void HousingMgr::EnsureDoorGameObjectTemplates()
             continue;
 
         uint32 goEntry = static_cast<uint32>(entry->GameObjectID);
-        if (GameObjectTemplate const* existing = sObjectMgr->GetGameObjectTemplate(goEntry))
-        {
-            // Present already (world DB). Attach the door script unless something
-            // deliberate is bound there - never clobber an explicit ScriptName.
-            if (!existing->ScriptId)
-            {
-                sObjectMgr->GetGameObjectTemplateStoreForHotfix()[goEntry].ScriptId = doorScriptId;
-                ++scripted;
-                TC_LOG_INFO("housing", "EnsureDoorGameObjectTemplates: bound go_housing_door (scriptId={}) to existing GO {} ('{}') comp {}",
-                    doorScriptId, goEntry, existing->name, entry->ID);
-            }
-            else
-                TC_LOG_INFO("housing", "EnsureDoorGameObjectTemplates: GO {} ('{}') already has scriptId={} - left alone",
-                    goEntry, existing->name, existing->ScriptId);
-            continue;
-        }
+        if (sObjectMgr->GetGameObjectTemplate(goEntry))
+            continue; // already exists
 
         // Create a GOOBER template (type=10) — clickable interaction object for house entry
         std::string name = entry->Name[DEFAULT_LOCALE] ? entry->Name[DEFAULT_LOCALE] : "Housing Door";
@@ -1465,7 +1455,6 @@ void HousingMgr::EnsureDoorGameObjectTemplates()
         goTemplate.goober.open = 4296;          // Lock_ ID for "Opening" cast bar
         goTemplate.goober.autoClose = 3000;     // 3 seconds auto-close
         goTemplate.goober.startOpen = 1;        // start in open state
-        goTemplate.ScriptId = doorScriptId;
         goTemplate.InitializeQueryData();
 
         ++created;
@@ -1473,32 +1462,8 @@ void HousingMgr::EnsureDoorGameObjectTemplates()
             goEntry, name, entry->ID);
     }
 
-    // The INTERIOR doors are not reachable from ExteriorComponent - HouseInteriorMap picks them
-    // by faction in code (Alliance 575017 / Horde 587318), so the DB2 walk above never sees them
-    // and they stayed unscripted after the exterior doors were fixed: the front door worked, the
-    // one inside the house did nothing. Keep this list in step with HouseInteriorMap.
-    for (uint32 goEntry : { INTERIOR_DOOR_GO_ALLIANCE, INTERIOR_DOOR_GO_HORDE })
-    {
-        GameObjectTemplate const* existing = sObjectMgr->GetGameObjectTemplate(goEntry);
-        if (!existing)
-        {
-            TC_LOG_ERROR("housing", "EnsureDoorGameObjectTemplates: interior door GO {} has no template - the interior door will not work", goEntry);
-            continue;
-        }
-
-        if (!existing->ScriptId)
-        {
-            sObjectMgr->GetGameObjectTemplateStoreForHotfix()[goEntry].ScriptId = doorScriptId;
-            ++scripted;
-            TC_LOG_INFO("housing", "EnsureDoorGameObjectTemplates: bound go_housing_door (scriptId={}) to interior door GO {} ('{}')",
-                doorScriptId, goEntry, existing->name);
-        }
-    }
-
     if (created)
         TC_LOG_INFO("server.loading", ">> Auto-created {} missing door GO templates from ExteriorComponent DB2", created);
-    if (scripted)
-        TC_LOG_INFO("server.loading", ">> Bound go_housing_door to {} door GO templates", scripted);
 }
 
 void HousingMgr::BuildExteriorComponentIndexes()
@@ -1821,17 +1786,6 @@ DecorSubcategoryData const* HousingMgr::GetDecorSubcategoryData(uint32 id) const
 {
     auto itr = _decorSubcategoryStore.find(id);
     return itr != _decorSubcategoryStore.end() ? &itr->second : nullptr;
-}
-
-uint32 HousingMgr::GetDecorCategoryForDecor(uint32 decorId) const
-{
-    auto itr = _categoryByDecor.find(decorId);
-    return itr != _categoryByDecor.end() ? itr->second : 0;
-}
-
-bool HousingMgr::IsLightingDecor(uint32 decorId) const
-{
-    return GetDecorCategoryForDecor(decorId) == HOUSING_DECOR_CATEGORY_LIGHTING;
 }
 
 std::vector<DecorSubcategoryData const*> HousingMgr::GetSubcategoriesForCategory(uint32 categoryId) const
