@@ -829,6 +829,13 @@ WorldPacket const* DisplayToast::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* NotifyMoney::Write()
+{
+    _worldPacket << uint64(Money);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* AccountWarbandSceneUpdate::Write()
 {
     _worldPacket << Bits<1>(IsFullUpdate);
