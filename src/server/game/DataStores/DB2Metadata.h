@@ -11844,7 +11844,10 @@ struct ItemContextPickerEntryMeta
 
 struct ItemConversionMeta
 {
-    static constexpr DB2MetaField Fields[7] =
+    // Flags reverted (see DB2Structure.h::ItemConversionEntry comment) - physical .db2 on disk
+    // (build-tagged 68914) has TotalFieldCount=6. IndexField=0 fix (matching the working
+    // HouseRoom pattern) is kept.
+    static constexpr DB2MetaField Fields[6] =
     {
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },   // ID (IndexField)
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
@@ -11852,7 +11855,6 @@ struct ItemConversionMeta
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
-        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },   // Flags, NEW in 12.1.0 (layout 0x538B2B37)
     };
 
     static constexpr DB2Meta Instance =
@@ -11860,8 +11862,8 @@ struct ItemConversionMeta
         .FileDataId         = 4337196,
         .IndexField         = 0,
         .ParentIndexField   = -1,
-        .FieldCount         = 7,
-        .FileFieldCount     = 7,
+        .FieldCount         = 6,
+        .FileFieldCount     = 6,
         .LayoutHash         = 0x538B2B37,
         .Fields             = Fields
     };

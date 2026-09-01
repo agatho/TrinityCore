@@ -840,7 +840,7 @@ struct BountyLoadInfo
         { .IsSigned = false, .Type = FT_SHORT, .Name = "FactionID" },
         { .IsSigned = false, .Type = FT_INT, .Name = "IconFileDataID" },
         { .IsSigned = false, .Type = FT_INT, .Name = "TurninPlayerConditionID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "BountySetID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "BountySetID" }, // ParentIndexField - must be unsigned
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 6, &BountyMeta::Instance, HOTFIX_SEL_BOUNTY };
@@ -2015,7 +2015,7 @@ struct DriveCapabilityTierLoadInfo
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = false, .Type = FT_FLOAT, .Name = "Acceleration" },
         { .IsSigned = false, .Type = FT_FLOAT, .Name = "MaxSpeed" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "DriveCapabilityID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "DriveCapabilityID" }, // ParentIndexField - must be unsigned
         { .IsSigned = true, .Type = FT_INT, .Name = "OrderIndex" },
     };
 
@@ -2081,7 +2081,7 @@ struct EncounterEventLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "Unknown1200_2" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
         { .IsSigned = true, .Type = FT_INT, .Name = "IconFileDataID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "DungeonEncounterID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "DungeonEncounterID" }, // ParentIndexField - must be unsigned
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 9, &EncounterEventMeta::Instance, HOTFIX_SEL_ENCOUNTER_EVENT };
@@ -2732,8 +2732,8 @@ struct GroupFinderActivityLoadInfo
     static constexpr DB2FieldMeta Fields[21] =
     {
         { .IsSigned = false, .Type = FT_INT,    .Name = "ID" },
-        { .IsSigned = true,  .Type = FT_STRING, .Name = "FullName" },
-        { .IsSigned = true,  .Type = FT_STRING, .Name = "ShortName" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "FullName" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "ShortName" },
         { .IsSigned = false, .Type = FT_BYTE,   .Name = "GroupFinderCategoryID" },
         { .IsSigned = true,  .Type = FT_BYTE,   .Name = "OrderIndex" },
         { .IsSigned = false, .Type = FT_SHORT,  .Name = "GroupFinderActivityGrpID" },
@@ -3189,7 +3189,10 @@ struct ItemContextPickerEntryLoadInfo
 
 struct ItemConversionLoadInfo
 {
-    static constexpr DB2FieldMeta Fields[7] =
+    // Flags reverted (see DB2Structure.h::ItemConversionEntry comment) - physical .db2 on disk
+    // (build-tagged 68914) has TotalFieldCount=6, contradicting WoWDBDefs layout 538B2B37's
+    // claimed build coverage. IndexField=0 fix (below, in Meta) is kept.
+    static constexpr DB2FieldMeta Fields[6] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Unknown920" },
@@ -3197,10 +3200,9 @@ struct ItemConversionLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "ItemLogicalCostGroupID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "AlternateItemLogicalCostGroupID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },     // NEW in 12.1.0 (layout 0x538B2B37)
     };
 
-    static constexpr DB2LoadInfo Instance{ Fields, 7, &ItemConversionMeta::Instance, HOTFIX_SEL_ITEM_CONVERSION };
+    static constexpr DB2LoadInfo Instance{ Fields, 6, &ItemConversionMeta::Instance, HOTFIX_SEL_ITEM_CONVERSION };
 };
 
 struct ItemConversionEntryLoadInfo
@@ -8026,7 +8028,7 @@ struct GarrFollowerLevelXPLoadInfo
     static constexpr DB2FieldMeta Fields[5] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_BYTE, .Name = "GarrFollowerTypeID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "GarrFollowerTypeID" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "FollowerLevel" },
         { .IsSigned = false, .Type = FT_SHORT, .Name = "XpToNextLevel" },
         { .IsSigned = false, .Type = FT_SHORT, .Name = "ShipmentXP" },
@@ -8042,7 +8044,7 @@ struct GarrFollowerQualityLoadInfo
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "XpThreshold" },
         { .IsSigned = false, .Type = FT_INT, .Name = "QualityItemID" },
-        { .IsSigned = true, .Type = FT_BYTE, .Name = "Quality" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "Quality" }, // must be unsigned per client meta
         { .IsSigned = false, .Type = FT_BYTE, .Name = "AbilityCount" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "TraitCount" },
         { .IsSigned = false, .Type = FT_SHORT, .Name = "GarrFollowerTypeID" },
@@ -8093,7 +8095,7 @@ struct GarrItemLevelUpgradeDataLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "Operation" },
         { .IsSigned = true, .Type = FT_INT, .Name = "MinItemLevel" },
         { .IsSigned = true, .Type = FT_INT, .Name = "MaxItemLevel" },
-        { .IsSigned = true, .Type = FT_BYTE, .Name = "FollowerTypeID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "FollowerTypeID" },
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 5, &GarrItemLevelUpgradeDataMeta::Instance, HOTFIX_SEL_GARR_ITEM_LEVEL_UPGRADE_DATA };
@@ -8567,10 +8569,11 @@ struct DelvesSeasonXSpellLoadInfo
 
 struct PlayerCompanionInfoLoadInfo
 {
-    // PlayerCompanionInfo.dbd LAYOUT F61B5AA1 (build 12.0.5.67186)
-    static constexpr DB2FieldMeta Fields[15] =
+    // PlayerCompanionInfo.dbd LAYOUT 55DA5E60 (12.1.0, builds 68209-69587, includes 69404)
+    static constexpr DB2FieldMeta Fields[17] =
     {
         { .IsSigned = false, .Type = FT_STRING, .Name = "UnlockDescription" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Field_12_1_0_68209_001" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "DelvesSeasonID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "TraitTreeID" },
@@ -8582,11 +8585,12 @@ struct PlayerCompanionInfoLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "FactionID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "CreatureDisplayInfoID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "UiModelSceneID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_011" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerDataElementCharacterID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_012" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FlavorNodeID" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ParentID" },
     };
-    static constexpr DB2LoadInfo Instance{ Fields, 15, &PlayerCompanionInfoMeta::Instance, HOTFIX_SEL_PLAYER_COMPANION_INFO };
+    static constexpr DB2LoadInfo Instance{ Fields, 17, &PlayerCompanionInfoMeta::Instance, HOTFIX_SEL_PLAYER_COMPANION_INFO };
 };
 
 struct DelvesSeasonLoadInfo

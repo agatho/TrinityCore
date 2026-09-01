@@ -597,7 +597,7 @@ struct BountyEntry
     uint16 FactionID;
     uint32 IconFileDataID;
     uint32 TurninPlayerConditionID;
-    int32 BountySetID;
+    uint32 BountySetID;                     // ParentIndexField - must be unsigned
 };
 
 struct BountySetEntry
@@ -1714,7 +1714,7 @@ struct DriveCapabilityTierEntry
     uint32 ID;
     float Acceleration;                     // Tier acceleration rate
     float MaxSpeed;                         // Tier max speed threshold
-    int32 DriveCapabilityID;                // Parent DriveCapability
+    uint32 DriveCapabilityID;               // Parent DriveCapability (ParentIndexField - must be unsigned)
     int32 OrderIndex;                       // Tier order
 };
 
@@ -1767,7 +1767,7 @@ struct EncounterEventEntry
     int32 Unknown1200_2;            // bit 0 is evaluated inverted by the client reader at 0x2411DA0
     int32 Flags;                    // Enum.EncounterEventIconmask
     int32 IconFileDataID;           // 0 is legal, the client then falls back to the spell icon
-    int32 DungeonEncounterID;
+    uint32 DungeonEncounterID;      // ParentIndexField - must be unsigned
 };
 
 struct ExpectedStatEntry
@@ -2545,7 +2545,13 @@ struct ItemConversionEntry
     int32 ItemLogicalCostGroupID;
     int32 AlternateItemLogicalCostGroupID;
     int32 PlayerConditionID;
-    int32 Flags;                            // NEW in 12.1.0 (layout 0x538B2B37, per WoWDBDefs ItemConversion 12.1.0)
+    // Flags NOT added: WoWDBDefs layout 538B2B37 claims coverage back to build 68209, but the
+    // physical ItemConversion.db2 on disk is WDC5-header-tagged WOWSTATIC_12_1_0_68914 (a build
+    // within that claimed range) and its own header reports TotalFieldCount=6, not 7 - i.e. the
+    // real client data for that build has no Flags column. LayoutHash 0x538B2B37 is unchanged
+    // whether Flags is present or absent, so it cannot arbitrate this by itself. Reverted the
+    // Flags addition (kept the IndexField=0 fix, which is independently confirmed correct) until
+    // a genuine 69404-tagged file/dump can confirm Flags one way or the other. See DB2Metadata.h.
 };
 
 struct ItemConversionEntryEntry
@@ -5738,7 +5744,7 @@ struct GarrFollowerLevelXPEntry
     // These were previously declared in the reverse order, so every row loaded with the two bytes
     // swapped (FollowerLevel held the type value, GarrFollowerTypeID held the level) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¯ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â½ GetFollowerLevelXP
     // then missed for every real (type, level) pair and follower mission XP was silently discarded.
-    int8 GarrFollowerTypeID;
+    uint8 GarrFollowerTypeID;
     uint8 FollowerLevel;
     uint16 XpToNextLevel;
     uint16 ShipmentXP;
@@ -5749,7 +5755,11 @@ struct GarrFollowerQualityEntry
     uint32 ID;
     int32 XpThreshold;
     uint32 QualityItemID;
-    int8 Quality;
+    uint8 Quality;                          // sign fixed for 12.1.0 (byte, must be unsigned per client meta);
+                                             // NOTE: WoWDBDefs 12.1.0 layout 5DE27929 names this column-position
+                                             // "GarrFollowerTypeID" (Quality/XpThreshold/QualityItemID/GarrFollowerTypeID(u16)
+                                             // appear column-shifted vs current names) - kept as-is to avoid breaking
+                                             // call sites outside DB2 scope; re-verify semantics before relying on values.
     uint8 AbilityCount;
     uint8 TraitCount;
     uint16 GarrFollowerTypeID;
@@ -5809,7 +5819,7 @@ struct GarrItemLevelUpgradeDataEntry
     int32 Operation;
     int32 MinItemLevel;
     int32 MaxItemLevel;
-    int8 FollowerTypeID;
+    uint8 FollowerTypeID;
 };
 
 struct GarrMissionSetEntry
@@ -6100,7 +6110,11 @@ struct DelvesSeasonXSpellEntry
 
 struct PlayerCompanionInfoEntry
 {
+    // 69404 (12.1.0) client meta = "ssiiiiiiiiiiiiiii" (WoWDBDefs layout 55DA5E60, builds 68209-69587):
+    // adds a second localized string (Field_12_1_0_68209_001) and a new FlavorNodeID field;
+    // Field_12_0_0_64499_011 is confirmed = PlayerDataElementCharacterID.
     LocalizedString UnlockDescription;
+    LocalizedString Field_12_1_0_68209_001;                                           // NEW in 12.1.0
     uint32 ID;
     int32 DelvesSeasonID;
     int32 TraitTreeID;
@@ -6112,8 +6126,9 @@ struct PlayerCompanionInfoEntry
     int32 FactionID;
     int32 CreatureDisplayInfoID;
     int32 UiModelSceneID;
-    int32 Field_12_0_0_64499_011;
+    int32 PlayerDataElementCharacterID;                                               // was Field_12_0_0_64499_011
     int32 Field_12_0_0_64499_012;
+    int32 FlavorNodeID;                                                               // NEW in 12.1.0
     int32 ParentID;                                                                   // Field_12_0_1_64889_014, parent relation
 };
 
