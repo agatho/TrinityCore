@@ -9151,6 +9151,26 @@ void Unit::SetSpeedRate(UnitMoveType mtype, float rate)
         packet.MoverGUID = GetGUID();
         packet.Speed = GetSpeed(mtype);
         SendMessageToSet(packet.Write(), true);
+
+        // SMSG_ADJUST_SPLINE_DURATION (0x450074): sniff (s69273_a, 172 instances) always bundles
+        // this notify with the MoveSplineSetSpeed packet above for the same GUID whenever the
+        // unit has an active spline in flight - it tells observers to rescale the *remaining*
+        // duration of that spline instead of waiting for a new one. Restricted to IsSplineEnabled()
+        // because that's the only state this scaling factor is meaningful for.
+        // UNVERIFIED: exact scale formula. The spline's own baked-in Velocity() is the only stored
+        // reference for "the speed this spline was built to run at"; scaling it against the speed
+        // just applied is the most direct way to keep the client's remaining animation time
+        // consistent with the new rate. Sniff shows 0.4549 and 1.0045 for two back-to-back changes
+        // on the same pet, i.e. both a shrink and a near-unity case - consistent with a ratio, not
+        // independently confirmed against a client reader (family 0x45 dispatch is degraded to a
+        // single reflection collector, see BEFUND PLAN_A3 §0.4).
+        if (IsSplineEnabled())
+        {
+            WorldPackets::Movement::AdjustSplineDuration durationPacket;
+            durationPacket.Unit = GetGUID();
+            durationPacket.Scale = movespline->Velocity() / std::max(GetSpeed(mtype), 0.01f);
+            SendMessageToSet(durationPacket.Write(), true);
+        }
     }
 }
 

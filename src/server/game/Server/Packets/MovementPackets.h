@@ -185,6 +185,23 @@ namespace WorldPackets
             float SplineDist = 0.0f;
         };
 
+        // Wire (sniff-decoded, s69273_a_parsed.txt, 172 instances, lengths 19/21):
+        // PackedGuid Unit + float32 Scale. Always sent alongside a MoveSplineSetSpeed sibling
+        // for the same GUID whenever that unit has an active spline (Unit::IsSplineEnabled()) -
+        // it tells the client to rescale the *remaining* duration of the in-flight spline instead
+        // of waiting for the spline to be rebuilt from scratch. Sniff Scale values: ~0.4549 and
+        // ~1.0045 for the same pet across two back-to-back speed changes.
+        class AdjustSplineDuration final : public ServerPacket
+        {
+        public:
+            explicit AdjustSplineDuration() : ServerPacket(SMSG_ADJUST_SPLINE_DURATION, 16 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Unit;
+            float Scale = 1.0f;
+        };
+
         class MoveSplineSetSpeed : public ServerPacket
         {
         public:
