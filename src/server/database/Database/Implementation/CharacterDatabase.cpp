@@ -20,6 +20,9 @@
 
 void CharacterDatabaseConnection::DoPrepareStatements()
 {
+    if (!m_reconnecting)
+        m_stmts.resize(MAX_CHARACTERDATABASE_STATEMENTS);
+
     PrepareStatement(CHAR_SEL_AUCTIONHOUSE_COUNT_ITEM,"SELECT COUNT(*) FROM auction_items ai INNER JOIN item_instance ii ON ii.guid = ai.itemGuid WHERE ii.itemEntry = ?", CONNECTION_SYNCH);
     PrepareStatement(CHAR_SEL_AUCTIONHOUSE_ITEM_BY_ENTRY, "SELECT ai.itemGuid, c.guid, c.account, c.name FROM auctionhouse ah INNER JOIN auction_items ai ON ah.id = ai.auctionId INNER JOIN characters c ON c.guid = ah.owner INNER JOIN item_instance ii ON ii.guid = ai.itemGuid WHERE ii.itemEntry = ? LIMIT ?", CONNECTION_SYNCH);
     PrepareStatement(CHAR_SEL_CHARACTER_HOUSING, "SELECT houseId, neighborhoodGuid, plotIndex, houseLevel, favor, settingsFlags, exteriorLocked, houseSize, houseType, createTime, posX, posY, posZ, facing, houseName, houseDescription FROM character_housing WHERE guid = ?", CONNECTION_ASYNC);
@@ -116,8 +119,6 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_SEL_PLAYER_INITIATIVE_FAVOR,
         "SELECT COALESCE(SUM(amount), 0) FROM neighborhood_initiative_contributions WHERE initiativeDbId = ? AND playerGuid = ?",
         CONNECTION_SYNCH);
-    if (!m_reconnecting)
-        m_stmts.resize(MAX_CHARACTERDATABASE_STATEMENTS);
 
 #define SelectItemInstanceContent "ii.guid, ii.itemEntry, ii.creatorGuid, ii.giftCreatorGuid, ii.count, ii.duration, ii.charges, ii.flags, ii.enchantments, ii.randomBonusListId, " \
         "ii.durability, ii.playedTime, ii.createTime, ii.text, ii.battlePetSpeciesId, ii.battlePetBreedData, ii.battlePetLevel, ii.battlePetDisplayId, ii.context, ii.bonusListIDs, " \
