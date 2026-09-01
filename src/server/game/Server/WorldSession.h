@@ -177,6 +177,7 @@ namespace WorldPackets
     {
         enum class ConnectToSerial : uint32;
         class LatencyReport;
+        class LatencyReportPing;
         class LogStreamingError;
         class QueuedMessagesEnd;
         class SuspendCommsAck;
@@ -2007,6 +2008,12 @@ class TC_GAME_API WorldSession
         void RegisterTimeSync(uint32 counter);
         uint32 AdjustClientMovementTime(uint32 time) const;
 
+        // SMSG_LATENCY_REPORT_PING (PLAN_A1 2.3) - periodic heartbeat, self-rescheduled from
+        // WorldSession::Update() exactly like SendTimeSync()/_timeSyncTimer above. See
+        // WorldPackets::Auth::LatencyReportPing (AuthenticationPackets.h) for the wire sourcing and
+        // WorldSession::SendLatencyReportPing for what is and is not verified about the interval.
+        void SendLatencyReportPing();
+
         // SMSG_SUSPEND_COMMS - the sending half of the suspend/ack pair, and the ONLY place a suspend serial is
         // minted. Read the preconditions on WorldPackets::Auth::SuspendComms before adding a call: the client
         // answers a suspend sent to the wrong socket with CMSG_LOG_DISCONNECT(3) and closes it, and the socket
@@ -3633,6 +3640,11 @@ class TC_GAME_API WorldSession
         TimePoint _movementForceRepairWindowStart;
         uint32 _movementForceRepairCount;
         bool _movementForceRepairThrottleLogged;
+
+        // SMSG_LATENCY_REPORT_PING (PLAN_A1 2.3). Same shape as _timeSyncTimer: 0 means "not started yet",
+        // WorldSession::Update() counts it down and calls SendLatencyReportPing() when it reaches 0, which
+        // reloads it. UNVERIFIED: the real interval - see SendLatencyReportPing for the reasoning behind 30s.
+        uint32 _latencyReportPingTimer;
 
         // Packets cooldown
         time_t _calendarEventCreationCooldown;

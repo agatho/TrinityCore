@@ -28961,6 +28961,12 @@ void Player::SendInitialPacketsBeforeAddToMap()
 
     GetSession()->SendTimeSync();
 
+    // SMSG_LATENCY_REPORT_PING (PLAN_A1 2.3). UNVERIFIED: this call site is a guess - the client binary gives
+    // no trigger for this exchange (conn_44_4C: no reply, no Lua surface), so it is hung on the one call site
+    // every login and every teleport already funnels through, right next to the one periodic per-session
+    // heartbeat TC already starts here (SendTimeSync above). See WorldSession::SendLatencyReportPing.
+    GetSession()->SendLatencyReportPing();
+
     /// Pass 'this' as argument because we're not stored in ObjectAccessor yet
     GetSocial()->SendSocialList(this, SOCIAL_FLAG_ALL);
 

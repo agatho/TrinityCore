@@ -429,6 +429,28 @@ void LatencyReport::Read()
         _worldPacket >> entry;
 }
 
+// Mirror of operator>> above, field for field - see the comment there for the source of the layout.
+ByteBuffer& operator<<(ByteBuffer& data, LatencyReportEntry const& entry)
+{
+    data << uint32(entry.Server);
+    data << uint32(entry.Unknown4);
+    data << uint8(entry.Unknown8);
+    data << uint64(entry.TimestampMS);
+    data << uint32(entry.Frame);
+
+    return data;
+}
+
+WorldPacket const* LatencyReportPing::Write()
+{
+    _worldPacket << uint32(Kind);
+    _worldPacket << Size<uint32>(Entries);
+    for (LatencyReportEntry const& entry : Entries)
+        _worldPacket << entry;
+
+    return &_worldPacket;
+}
+
 void LogStreamingError::Read()
 {
     // bits<MessageLengthBits> length, then the raw bytes. The bit width IS the length bound - 9 bits cannot
