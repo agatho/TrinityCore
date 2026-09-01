@@ -1813,6 +1813,49 @@ struct CurvePointLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 7, &CurvePointMeta::Instance, HOTFIX_SEL_CURVE_POINT };
 };
 
+struct DataTagXHouseDecorRecordLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DataTagID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "HouseDecorID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &DataTagXHouseDecorRecordMeta::Instance, HOTFIX_SEL_DATA_TAG_X_HOUSE_DECOR_RECORD };
+};
+
+struct DyeColorLoadInfo
+{
+    // DyeColorCategoryID is the client's ParentIndexField (DB2Meta::IsSignedField forces
+    // ParentIndexField/IndexField to unsigned regardless of the raw Meta flag) - must be
+    // unsigned here or DB2FileLoader's sign validation aborts DB2 loading for this locale.
+    static constexpr DB2FieldMeta Fields[8] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "DyeColorCategoryID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "GradientTextureIndex" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SwatchColorStart" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SwatchColorEnd" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SortOrder" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 8, &DyeColorMeta::Instance, HOTFIX_SEL_DYE_COLOR };
+};
+
+struct DyeColorCategoryLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[2] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 2, &DyeColorCategoryMeta::Instance, HOTFIX_SEL_DYE_COLOR_CATEGORY };
+};
+
 struct DestructibleModelDataLoadInfo
 {
     static constexpr DB2FieldMeta Fields[23] =
@@ -2857,6 +2900,20 @@ struct HolidaysLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 57, &HolidaysMeta::Instance, HOTFIX_SEL_HOLIDAYS };
+};
+
+struct HouseLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[5] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "InternalName" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "HouseTypeID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "MapID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &HouseMeta::Instance, HOTFIX_SEL_HOUSE };
 };
 
 struct ImportPriceArmorLoadInfo
@@ -8828,22 +8885,24 @@ struct HouseThemeLoadInfo
 
 struct HouseRoomLoadInfo
 {
-    // 12.0.5.66330 added Field_007 (int32). WoWDBDefs layout 0xFC6C2118 shows it as
-    // Field_12_0_5_66330_007 with no confirmed semantic name yet.
-    static constexpr DB2FieldMeta Fields[9] =
+    // 69404 (12.1.0) client meta = "sibiiiiiii": Name now precedes ID, and a trailing
+    // SortPriority field was added; Field_007 (12.0.5.66330) is confirmed = ItemID via
+    // wago.tools HouseRoom@12.1.0.69404.
+    static constexpr DB2FieldMeta Fields[10] =
     {
-        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_BYTE, .Name = "Size" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_002" },
         { .IsSigned = true, .Type = FT_INT, .Name = "RoomWmoDataID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "UiTextureAtlasElementID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "WeightCost" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_007" },  // NEW in 12.0.5.66330
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },       // was Field_007
+        { .IsSigned = true, .Type = FT_INT, .Name = "SortPriority" }, // NEW in 69404
     };
 
-    static constexpr DB2LoadInfo Instance{ Fields, 9, &HouseRoomMeta::Instance, HOTFIX_SEL_HOUSE_ROOM };
+    static constexpr DB2LoadInfo Instance{ Fields, 10, &HouseRoomMeta::Instance, HOTFIX_SEL_HOUSE_ROOM };
 };
 
 struct HouseLevelRewardInfoLoadInfo
@@ -8905,14 +8964,15 @@ struct HouseDecorThemeSetLoadInfo
 
 struct HouseDecorLoadInfo
 {
-    static constexpr DB2FieldMeta Fields[20] =
+    // 69404 (12.1.0) client meta dropped Field_12_0_0_63534_003 (confirmed absent via
+    // wago.tools HouseDecor@12.1.0.69404 column list): 19 fields, was 20.
+    static constexpr DB2FieldMeta Fields[19] =
     {
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
         { .IsSigned = false, .Type = FT_FLOAT, .Name = "InitialRotationX" },
         { .IsSigned = false, .Type = FT_FLOAT, .Name = "InitialRotationY" },
         { .IsSigned = false, .Type = FT_FLOAT, .Name = "InitialRotationZ" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_003" },
         { .IsSigned = true, .Type = FT_INT, .Name = "GameObjectID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "Type" },
@@ -8929,7 +8989,7 @@ struct HouseDecorLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "UiModelSceneID" },
     };
 
-    static constexpr DB2LoadInfo Instance{ Fields, 20, &HouseDecorMeta::Instance, HOTFIX_SEL_HOUSE_DECOR };
+    static constexpr DB2LoadInfo Instance{ Fields, 19, &HouseDecorMeta::Instance, HOTFIX_SEL_HOUSE_DECOR };
 };
 
 struct HouseDecorMaterialLoadInfo
@@ -8974,9 +9034,12 @@ struct ExteriorComponentTypeLoadInfo
 
 struct ExteriorComponentLoadInfo
 {
-    // Field order must match metadata (IndexField=2, ID is 3rd meta field).
-    // 12.0.5 added Field_12 (signed INT) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½ Meta grew from 13 to 14 entries,
-    // FileFieldCount 12ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢13, ParentIndexField 12ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢13, LayoutHash 0x027A2F44ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢0x53EA0925.
+    // Field order must match metadata (IndexField=2, ID is 3rd meta field; ParentIndexField=4).
+    // 12.0.5 added Field_12 (signed INT) -- Meta grew from 13 to 14 entries,
+    // FileFieldCount 12->13, ParentIndexField 12->13, LayoutHash 0x027A2F44->0x53EA0925.
+    // 69404 (12.1.0): confirmed via wago.tools ExteriorComponent@12.1.0.69404 that
+    // HouseExteriorWmoDataID (ParentIndexField) is inline at Meta[4] right after Size,
+    // NOT trailing after ItemID as previously assumed.
     static constexpr DB2FieldMeta Fields[16] =
     {
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
@@ -8985,6 +9048,7 @@ struct ExteriorComponentLoadInfo
         { .IsSigned = false, .Type = FT_FLOAT, .Name = "PositionZ" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "Size" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "HouseExteriorWmoDataID" }, // ParentIndexField - must be unsigned; MOVED here for 69404
         { .IsSigned = true, .Type = FT_INT, .Name = "ParentComponentID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "ModelFileDataID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
@@ -8993,8 +9057,7 @@ struct ExteriorComponentLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_9" },
         { .IsSigned = true, .Type = FT_INT, .Name = "GameObjectID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_11" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },                   // NEW in 12.0.5 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½ per WoWDBDefs: references Item.ID
-        { .IsSigned = false, .Type = FT_INT, .Name = "HouseExteriorWmoDataID" },  // ParentIndexField - must be unsigned
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },                   // NEW in 12.0.5 -- per WoWDBDefs: references Item.ID
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 16, &ExteriorComponentMeta::Instance, HOTFIX_SEL_EXTERIOR_COMPONENT };
@@ -9062,23 +9125,6 @@ struct ExteriorComponentExitPointLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 8, &ExteriorComponentExitPointMeta::Instance, HOTFIX_SEL_EXTERIOR_COMPONENT_EXIT_POINT };
-};
-
-struct DyeColorLoadInfo
-{
-    static constexpr DB2FieldMeta Fields[8] =
-    {
-        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
-        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = false, .Type = FT_INT, .Name = "DyeColorCategoryID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "GradientTextureIndex" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "SwatchColorStart" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "SwatchColorEnd" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "SortOrder" },
-    };
-
-    static constexpr DB2LoadInfo Instance{ Fields, 8, &DyeColorMeta::Instance, HOTFIX_SEL_DYE_COLOR };
 };
 
 struct DecorXDecorSubcategoryLoadInfo

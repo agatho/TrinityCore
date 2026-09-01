@@ -1014,7 +1014,7 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     if (GetDecorCount() >= maxDecor)
         return HOUSING_RESULT_MAX_DECOR_REACHED;
 
-    // Check WeightCost-based budget (exterior vs interior) - same classification as the reload recompute.
+    // Check WeightCost-based budget (exterior vs interior) — M2: classify once.
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
     bool const isExterior = IsExteriorDecorPlacement(roomGuid);
 
@@ -1025,7 +1025,7 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
 
     if (isExterior)
     {
-        // Outdoor / exterior-plot decor uses exterior budget
+        // Outdoor decor uses exterior budget
         if (_exteriorDecorWeightUsed + weightCost > GetMaxExteriorDecorBudget())
             return HOUSING_RESULT_MAX_DECOR_REACHED;
     }
@@ -2505,6 +2505,7 @@ void Housing::OnQuestCompleted(uint32 questId)
     uint32 nextLevelQuestId = sHousingMgr.GetQuestForLevel(_level + 1);
     if (nextLevelQuestId > 0 && nextLevelQuestId == questId)
     {
+        uint32 previousLevel = _level;
         _level++;
         TC_LOG_DEBUG("housing", "Housing::OnQuestCompleted: Player {} house leveled up to {} (quest {}) in house {}",
             _owner->GetName(), _level, questId, _houseGuid.ToString());
@@ -2561,12 +2562,16 @@ uint32 Housing::GetMaxFixtureBudget() const
     return sHousingMgr.GetFixtureBudgetForLevel(_level);
 }
 
-bool Housing::IsExteriorPlotRoomGuid(ObjectGuid const& roomGuid) const
+bool Housing::IsExteriorDecorPlacement(ObjectGuid roomGuid)
 {
-    // The plot's exterior "room": a Housing-high GUID whose type nibble (bits 53-57 of the high qword) is 2 and
-    // whose low 32 bits are the base-room entry id. Retail sends this as the RoomGuid for exterior placements.
-    return !roomGuid.IsEmpty()
-        && roomGuid.GetHigh() == HighGuid::Housing
+    // No room → yard/exterior placement.
+    if (roomGuid.IsEmpty())
+        return true;
+
+    // The plot's base (exterior) room identity: HighGuid::Housing, subType==2,
+    // low 32 bits of the high word == the base room entry id. Retail always
+    // sends this RoomGuid for exterior decor even though it is "on a room".
+    return roomGuid.GetHigh() == HighGuid::Housing
         && uint32((roomGuid.GetRawValue(1) >> 53) & 0x1F) == 2
         && uint32(roomGuid.GetRawValue(1) & 0xFFFFFFFFULL) == sHousingMgr.GetBaseRoomEntryId();
 }
@@ -2608,8 +2613,7 @@ void Housing::RecalculateBudgets()
     _roomWeightUsed = 0;
     _fixtureWeightUsed = 0;
 
-    // Sum WeightCost of all placed decor, routing to interior or exterior budget. Must use the SAME classification
-    // as PlaceDecor (IsExteriorDecorPlacement) so a reload does not reclassify exterior-plot decor as interior.
+    // Sum WeightCost of all placed decor, routing to interior or exterior budget
     for (auto const& [guid, decor] : _placedDecor)
     {
         uint32 weightCost = sHousingMgr.GetDecorWeightCost(decor.DecorEntryId);
@@ -2710,6 +2714,10 @@ void Housing::PopulateCatalogStorageEntries()
         uint32(_placedDecor.size()), totalStorageItems, uint32(_catalog.size()), _owner->GetGUID().ToString());
 }
 
+// TODO housing Stage 2 (protocol migration): guarded with WorldPackets::Housing::HousingCatalogStateSync
+// (HousingPackets.h) — opcode absent in 12.1 enum: SMSG_HOUSING_CATALOG_STATE_SYNC. Currently unused
+// (no call site constructs/sends this packet), so guarding drops no live behavior.
+#if 0
 void Housing::BuildCatalogStateSync(WorldPackets::Housing::HousingCatalogStateSync& packet) const
 {
     // Encoding reference (sniff-verified on dump_12.0.1.66838_2026-04-15):
@@ -2776,6 +2784,7 @@ void Housing::BuildCatalogStateSync(WorldPackets::Housing::HousingCatalogStateSy
         packet.Entries.push_back(e);
     }
 }
+#endif
 
 void Housing::SaveSettings(uint32 settingsFlags)
 {

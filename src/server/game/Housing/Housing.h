@@ -164,7 +164,7 @@ public:
     // budget CHECK, CHARGE, refund and RecalculateBudgets classifies through this
     // so they can never disagree (the old bug: CHECK counted exterior-plot rooms
     // as exterior but CHARGE routed them to interior → exterior budget unlimited).
-    // (declared below, next to IsExteriorPlotRoomGuid, which it is defined in terms of)
+    static bool IsExteriorDecorPlacement(ObjectGuid roomGuid);
     HousingResult CommitDecorDyes(ObjectGuid decorGuid, std::array<uint32, MAX_HOUSING_DYE_SLOTS> const& dyeSlots);
     HousingResult SetDecorLocked(ObjectGuid decorGuid, bool locked);
     PlacedDecor const* GetPlacedDecor(ObjectGuid decorGuid) const;
@@ -280,12 +280,6 @@ private:
     // Room connectivity helpers
     ObjectGuid FindBaseRoomGuid() const;
     bool IsRoomGraphConnectedWithout(ObjectGuid excludeRoomGuid) const;
-
-    // A placement is charged to the EXTERIOR decor budget when it has no room (empty RoomGuid) OR its RoomGuid is
-    // the plot's exterior base-room identity. Single source of truth so the budget check, increment and reload
-    // recompute all classify identically (a mismatch let exterior decor bypass its cap and starved interior decor).
-    bool IsExteriorPlotRoomGuid(ObjectGuid const& roomGuid) const;
-    bool IsExteriorDecorPlacement(ObjectGuid const& roomGuid) const { return roomGuid.IsEmpty() || IsExteriorPlotRoomGuid(roomGuid); }
 
     // Immediate DB persistence helpers
     void PersistRoomToDB(ObjectGuid roomGuid, Room const& room);

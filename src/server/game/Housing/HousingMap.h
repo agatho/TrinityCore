@@ -30,7 +30,6 @@ class HousingRoomEntity;
 class MeshObject;
 class Neighborhood;
 class Player;
-struct QuaternionData;
 
 class TC_GAME_API HousingMap : public Map
 {

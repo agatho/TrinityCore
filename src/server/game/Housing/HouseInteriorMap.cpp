@@ -21,7 +21,6 @@
 #include "HousingPlayerHouseEntity.h"
 #include "DB2Stores.h"
 #include "DBCEnums.h"
-#include "GameObject.h"
 #include "GameObjectData.h"
 #include "Housing.h"
 #include "HousingDefines.h"
@@ -42,7 +41,6 @@
 #include "SpellAuraDefines.h"
 #include "SpellPackets.h"
 #include "RealmList.h"
-#include "UpdateData.h"
 #include "World.h"
 #include "WorldSession.h"
 
@@ -729,7 +727,7 @@ void HouseInteriorMap::DespawnRoomEntities(ObjectGuid roomGuid)
 }
 
 void HouseInteriorMap::ReplaceWallWithDoorway(ObjectGuid roomGuid, uint32 doorComponentID,
-    int32 factionRestriction, Housing::Room const& room, ObjectGuid /*newRoomGuid*/)
+    int32 factionRestriction, Housing::Room const& room, ObjectGuid newRoomGuid)
 {
     // The parent room keeps its Cosmetic wall (Type=0) to fill the full wall width.
     // The child room's DoorwayWall+Doorway renders over it to create the door opening.
@@ -827,7 +825,7 @@ void HouseInteriorMap::ReplaceWallWithDoorway(ObjectGuid roomGuid, uint32 doorCo
         roomGuid.ToString(), doorComponentID);
 }
 
-void HouseInteriorMap::UpdateRoomComponentTextures(ObjectGuid roomGuid, Housing::Room const& /*room*/,
+void HouseInteriorMap::UpdateRoomComponentTextures(ObjectGuid roomGuid, Housing::Room const& room,
     std::vector<uint32> const* componentIDs, int32 textureID)
 {
     // Material/texture-only change: update existing MeshObjects in-place via UPDATE_OBJECT.
@@ -1735,8 +1733,13 @@ bool HouseInteriorMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/
             // client silently drops the Status/Permissions packets.
             {
                 ObjectGuid playerGuid = player->GetGUID();
+                ObjectGuid houseGuid = housing->GetHouseGuid();
+                ObjectGuid neighborhoodGuid = housing->GetNeighborhoodGuid();
+                ObjectGuid accountGuid = player->GetSession()->GetBattlenetAccountGUID();
+                uint8 plotIndex = housing->GetPlotIndex();
+                uint32 settingsFlags = housing->GetSettingsFlags();
 
-                player->m_Events.AddEventAtOffset([this, playerGuid]()
+                player->m_Events.AddEventAtOffset([this, playerGuid, houseGuid, neighborhoodGuid, accountGuid, plotIndex, settingsFlags]()
                 {
                     Player* p = ObjectAccessor::FindPlayer(playerGuid);
                     if (!p || !p->IsInWorld())

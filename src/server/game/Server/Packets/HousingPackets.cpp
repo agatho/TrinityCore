@@ -525,6 +525,9 @@ WorldPacket const* InvalidateNeighborhoodName::Write()
 // Housing Catalog State Sync (ClientMirrorSystem 0x56000E)
 // ============================================================
 
+// TODO housing Stage 2 (protocol migration): guarded with the HousingCatalogStateSync class
+// declaration in HousingPackets.h — opcode absent in 12.1 enum: SMSG_HOUSING_CATALOG_STATE_SYNC.
+#if 0
 WorldPacket const* HousingCatalogStateSync::Write()
 {
     _worldPacket << uint32(Entries.size());
@@ -539,6 +542,7 @@ WorldPacket const* HousingCatalogStateSync::Write()
 
     return &_worldPacket;
 }
+#endif
 
 // ============================================================
 // House Exterior SMSG Responses (0x50xxxx)
@@ -1495,6 +1499,10 @@ WorldPacket const* HousingGetCurrentHouseInfoResponse::Write()
     return &_worldPacket;
 }
 
+// TODO housing Stage 2 (protocol migration): guarded with WorldPackets::Housing::HousingExportHouseResponse
+// (HousingPackets.h) — opcode absent in 12.1 enum: SMSG_HOUSING_EXPORT_HOUSE_RESPONSE (already documented
+// as retired/orphaned below; no live caller).
+#if 0
 WorldPacket const* HousingExportHouseResponse::Write()
 {
     // 12.0.7 (build 68275), parser sub_7FF7291D7160. RE feedback 0x550003.
@@ -1526,6 +1534,7 @@ WorldPacket const* HousingExportHouseResponse::Write()
 
     return &_worldPacket;
 }
+#endif
 
 // Retired 2026-05-11: HousingSystemHouseSnapshotResponse Write() deleted (no C_HouseSnapshot in retail).
 
@@ -2546,12 +2555,16 @@ void GetInitiativeActivityLogRequest::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
+// TODO housing Stage 2 (protocol migration): guarded with the class declaration in HousingPackets.h —
+// opcode absent in 12.1 enum: CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST.
+#if 0
 void GetNeighborhoodInitiativeInfoRequest::Read()
 {
     _worldPacket >> NeighborhoodGuid;
 
     TC_LOG_DEBUG("network.opcode", "CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
+#endif
 
 void InitiativeUpdateActiveNeighborhood::Read()
 {
@@ -2563,56 +2576,28 @@ void InitiativeUpdateActiveNeighborhood::Read()
 // ============================================================================
 // 0x38xxxx NeighborhoodInitiative Ã¢â‚¬â€� generic Op-XX read implementations
 // ============================================================================
-
+//
+// TODO housing Stage 2 (protocol migration): guarded with the 12 NeighborhoodInitiativeOpXX
+// class declarations in HousingPackets.h — none of the CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_*
+// placeholder opcodes exist in bare's 12.1 Opcodes.h.
+#if 0
 void NeighborhoodInitiativeOp01::Read()
 {
     _worldPacket >> NeighborhoodGuid;
     TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_01 NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
-void NeighborhoodInitiativeOp05::Read()
-{
-    _worldPacket >> Field1;
-    _worldPacket >> NeighborhoodGuid;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_05 Field1: {} NeighborhoodGuid: {}", Field1, NeighborhoodGuid.ToString());
-}
 
-void NeighborhoodInitiativeOp07::Read()
-{
-    _worldPacket >> Value;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_07 Value: {}", Value);
-}
 
-void NeighborhoodInitiativeOp09::Read()
-{
-    _worldPacket >> Value;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_09 Value: {}", Value);
-}
 
-void NeighborhoodInitiativeOp0A::Read()
-{
-    _worldPacket >> Value;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0A Value: {}", Value);
-}
 
-void NeighborhoodInitiativeOp0B::Read()
-{
-    _worldPacket >> Value;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0B Value: {}", Value);
-}
 
-void NeighborhoodInitiativeOp0C::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0C NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
-}
 
 void NeighborhoodInitiativeOp0D::Read()
 {
     _worldPacket >> Header;
     uint32 count = 0;
     _worldPacket >> count;
-    count = std::min<uint32>(count, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
     Pairs.resize(count);
     for (uint32 i = 0; i < count; ++i)
     {
@@ -2627,7 +2612,6 @@ void NeighborhoodInitiativeOp0E::Read()
 {
     uint32 count = 0;
     _worldPacket >> count;
-    count = std::min<uint32>(count, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
     TaskIDs.resize(count);
     for (uint32 i = 0; i < count; ++i)
         _worldPacket >> TaskIDs[i];
@@ -2638,7 +2622,6 @@ void NeighborhoodInitiativeOp0F::Read()
 {
     uint32 count = 0;
     _worldPacket >> count;
-    count = std::min<uint32>(count, _worldPacket.size()); // cap before resize (uncapped -> std::bad_alloc -> world-thread crash)
     Records.resize(count);
     for (uint32 i = 0; i < count; ++i)
     {
@@ -2649,5 +2632,6 @@ void NeighborhoodInitiativeOp0F::Read()
     }
     TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0F count: {}", count);
 }
+#endif
 
 } // namespace WorldPackets::Neighborhood

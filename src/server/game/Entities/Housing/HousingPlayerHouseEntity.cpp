@@ -16,12 +16,10 @@
 */
 
 #include "HousingPlayerHouseEntity.h"
-#include "Log.h"
 #include "Map.h"
 #include "Player.h"
 #include "StringFormat.h"
 #include "UpdateData.h"
-#include "WorldPacket.h"
 #include "WorldSession.h"
 
 HousingPlayerHouseEntity::HousingPlayerHouseEntity(WorldSession* session, ObjectGuid guid) : _session(session)
@@ -40,6 +38,11 @@ HousingPlayerHouseEntity::HousingPlayerHouseEntity(WorldSession* session, Object
     m_entityFragments.Add(WowCS::EntityFragment::FHousingPlayerHouse_C, false, WowCS::GetRawFragmentData(m_housingPlayerHouseData));
 }
 
+void HousingPlayerHouseEntity::ClearUpdateMask(bool remove)
+{
+    m_values.ClearChangesMask(&HousingPlayerHouseEntity::m_housingPlayerHouseData);
+    BaseEntity::ClearUpdateMask(remove);
+}
 
 void HousingPlayerHouseEntity::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) const
 {

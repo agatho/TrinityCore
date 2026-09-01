@@ -53,9 +53,14 @@ enum TypeID : uint8
     TYPEID_AI_GROUP               = 15,
     TYPEID_SCENARIO               = 16,
     TYPEID_LOOT_OBJECT            = 17,
-    TYPEID_HOUSING_ENTITY         = 18,
 
-    NUM_CLIENT_OBJECT_TYPES
+    NUM_CLIENT_OBJECT_TYPES,
+
+    // Housing entities use objectType=18 in retail but this MUST NOT increase
+    // NUM_CLIENT_OBJECT_TYPES because BaseEntity::m_objectTypeId defaults to
+    // NUM_CLIENT_OBJECT_TYPES as a sentinel. Changing the sentinel breaks all
+    // entity serialization.
+    TYPEID_HOUSING_ENTITY         = 18
 };
 
 enum TypeMask

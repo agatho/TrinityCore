@@ -996,6 +996,11 @@ static constexpr uint32 INTERIOR_DOOR_GO_HORDE    = 587318;
 // event + ERR_HOUSING_* error tables). Enum NUMERIC VALUES are inferred (string-order
 // ordinals) — the client enum-constant registrar tables are not cleanly recoverable
 // offline (spec §5). Flagged accordingly; confirm values against a 12.1 capture/DB.
+//
+// Restored 2026-09-01 (12.0.7->12.1 housing reconcile): this block existed in bare's
+// 12.1 WIP (commit 19eb4a2607) but was dropped when the 12.0.7 clone's HousingDefines.h
+// won the merge for this file wholesale. Recovered verbatim from that commit; no values
+// changed. HousingBlueprintMgr.h/.cpp depend on these identifiers.
 // ============================================================================
 
 // Blueprint category. Names from HOUSING_BLUEPRINT_COLLECTION_GROUP_{HOUSE,INTERIOR,

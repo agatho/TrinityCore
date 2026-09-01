@@ -27,7 +27,6 @@
 #include <vector>
 
 class Neighborhood;
-class Player;
 struct ExteriorComponentEntry;
 struct ExteriorComponentExitPointEntry;
 struct ExteriorComponentHookEntry;
@@ -39,7 +38,6 @@ struct HouseDecorData
     uint32 ID = 0;
     std::string Name;
     float InitialRotation[3] = {};
-    int32 Field_003 = 0;
     int32 GameObjectID = 0;
     int32 Flags = 0;
     uint8 Type = 0;

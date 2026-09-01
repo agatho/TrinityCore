@@ -56,6 +56,11 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_COVENANT, "SELECT MAX(ID) + 1 FROM covenant", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_COVENANT, "SELECT ID, Name_lang, Description_lang FROM covenant_locale"
         " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+    // NOTE: the full house_theme/house_room/.../decor_category block that feature/housing-system
+    // added here is a byte-for-byte duplicate of statements already declared later in this file
+    // (from an earlier housing merge pass); not re-added to avoid duplicate PrepareStatement calls.
+    // The one substantive difference (EXTERIOR_COMPONENT column order, 69404 layout) is fixed at
+    // its existing declaration below.
     PREPARE_LOCALE_STMT(HOTFIX_SEL_ACHIEVEMENT, "SELECT ID, Description_lang, Title_lang, Reward_lang FROM achievement_locale"
         " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 
@@ -609,6 +614,17 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_CURVE_POINT, "SELECT MAX(ID) + 1 FROM curve_point", CONNECTION_SYNCH);
 
+    // DataTagXHouseDecorRecord.db2
+    PrepareStatement(HOTFIX_SEL_DATA_TAG_X_HOUSE_DECOR_RECORD, "SELECT ID, DataTagID, HouseDecorID FROM data_tag_x_house_decor_record"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_DATA_TAG_X_HOUSE_DECOR_RECORD, "SELECT MAX(ID) + 1 FROM data_tag_x_house_decor_record", CONNECTION_SYNCH);
+
+    // DyeColorCategory.db2
+    PrepareStatement(HOTFIX_SEL_DYE_COLOR_CATEGORY, "SELECT Name, ID FROM dye_color_category"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_DYE_COLOR_CATEGORY, "SELECT MAX(ID) + 1 FROM dye_color_category", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_DYE_COLOR_CATEGORY, "SELECT ID, Name_lang FROM dye_color_category_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
     // DestructibleModelData.db2
     PrepareStatement(HOTFIX_SEL_DESTRUCTIBLE_MODEL_DATA, "SELECT ID, State0ImpactEffectDoodadSet, State0AmbientDoodadSet, State1Wmo, "
         "State1DestructionDoodadSet, State1ImpactEffectDoodadSet, State1AmbientDoodadSet, State2Wmo, State2DestructionDoodadSet, "
@@ -897,6 +913,11 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         "CalendarFlags7, CalendarFlags8, CalendarFlags9, CalendarFlags10, TextureFileDataID1, TextureFileDataID2, TextureFileDataID3 FROM holidays"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_HOLIDAYS, "SELECT MAX(ID) + 1 FROM holidays", CONNECTION_SYNCH);
+
+    // House.db2
+    PrepareStatement(HOTFIX_SEL_HOUSE, "SELECT ID, InternalName, HouseTypeID, MapID, Flags FROM house"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_HOUSE, "SELECT MAX(ID) + 1 FROM house", CONNECTION_SYNCH);
 
     // ImportPriceArmor.db2
     PrepareStatement(HOTFIX_SEL_IMPORT_PRICE_ARMOR, "SELECT ID, ClothModifier, LeatherModifier, ChainModifier, PlateModifier FROM import_price_armor"
@@ -2634,8 +2655,8 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT_TYPE, "SELECT MAX(ID) + 1 FROM exterior_component_type", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT_TYPE, "SELECT ID, Name_lang FROM exterior_component_type_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
     PrepareStatement(HOTFIX_SEL_EXTERIOR_COMPONENT, "SELECT Name, PositionX, PositionY, PositionZ, ID, Size, "
-        "ParentComponentID, ModelFileDataID, Flags, Field_7, Type, Field_9, GameObjectID, Field_11, ItemID, "
-        "HouseExteriorWmoDataID FROM exterior_component"
+        "HouseExteriorWmoDataID, ParentComponentID, ModelFileDataID, Flags, Field_7, Type, Field_9, GameObjectID, Field_11, ItemID "
+        "FROM exterior_component"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT, "SELECT MAX(ID) + 1 FROM exterior_component", CONNECTION_SYNCH);
     PREPARE_LOCALE_STMT(HOTFIX_SEL_EXTERIOR_COMPONENT, "SELECT ID, Name_lang FROM exterior_component_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);

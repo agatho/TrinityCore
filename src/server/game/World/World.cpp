@@ -63,6 +63,11 @@
 #include "ItemUpgradeMgr.h"
 #include "GarrisonMgr.h"
 #include "GitRevision.h"
+#include "DecorDuelMgr.h"
+#include "GoingPostalMgr.h"
+#include "HousingMgr.h"
+#include "InitiativeManager.h"
+#include "NeighborhoodMgr.h"
 #include "GridNotifiersImpl.h"
 #include "GroupMgr.h"
 #include "DiscordBridge.h"
@@ -724,6 +729,12 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "AllowLoggingIPAddressesInDatabase"sv, .DefaultValue = true, .Index = CONFIG_ALLOW_LOGGING_IP_ADDRESSES_IN_DATABASE },
         { .Name = "Loot.EnableAELoot"sv, .DefaultValue = true, .Index = CONFIG_ENABLE_AE_LOOT },
         { .Name = "Load.Locales"sv, .DefaultValue = true, .Index = CONFIG_LOAD_LOCALES },
+        { .Name = "Housing.EnableBuyHouse"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_ENABLE_BUY_HOUSE },
+        { .Name = "Housing.EnableDeleteHouse"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_ENABLE_DELETE_HOUSE },
+        { .Name = "Housing.EnableMoveHouse"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_ENABLE_MOVE_HOUSE },
+        { .Name = "Housing.EnableCreateCharterNeighborhood"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_ENABLE_CREATE_CHARTER_NEIGHBORHOOD },
+        { .Name = "Housing.EnableCreateGuildNeighborhood"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_ENABLE_CREATE_GUILD_NEIGHBORHOOD },
+        { .Name = "Housing.TutorialsEnabled"sv, .DefaultValue = true, .Index = CONFIG_HOUSING_TUTORIALS_ENABLED },
     } };
 
     static constexpr ConfigOptionLoadDefinitionArray<uint32, INT_CONFIG_VALUE_COUNT> ints =
@@ -883,6 +894,7 @@ void World::LoadConfigSettings(bool reload)
         // Client selbst einsetzt, wenn ein Feld <= 0 ist.
         { .Name = "CombatLog.File.MaxFileSize"sv, .DefaultValue = 262144, .Index = CONFIG_COMBAT_LOG_FILE_MAX_FILE_SIZE },
         { .Name = "CombatLog.File.MaxSeconds"sv, .DefaultValue = 300, .Index = CONFIG_COMBAT_LOG_FILE_MAX_SECONDS },
+        { .Name = "Housing.MaxHousesPerAccount"sv, .DefaultValue = 2, .Index = CONFIG_HOUSING_MAX_HOUSES_PER_ACCOUNT },
         { .Name = "CharDelete.Method"sv, .DefaultValue = 0, .Index = CONFIG_CHARDELETE_METHOD },
         { .Name = "CharDelete.MinLevel"sv, .DefaultValue = 0, .Index = CONFIG_CHARDELETE_MIN_LEVEL },
         { .Name = "CharDelete.DeathKnight.MinLevel"sv, .DefaultValue = 0, .Index = CONFIG_CHARDELETE_DEATH_KNIGHT_MIN_LEVEL },
@@ -1270,7 +1282,7 @@ void World::LoadConfigSettings(bool reload)
     _gameRules =
     {
         { .Rule = ::GameRule::TransmogEnabled, .Value = true },
-        { .Rule = ::GameRule::HousingEnabled, .Value = true }
+        { .Rule = ::GameRule::HousingEnabled, .Value = int32(EXPANSION_MIDNIGHT) }
     };
 
     // Trading Post off: also state it in the SMSG_FEATURE_SYSTEM_STATUS game rules. The rule keeps Blizzard's
@@ -2046,6 +2058,21 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading item upgrade tracks...");
     sItemUpgradeMgr.Initialize();
 
+    TC_LOG_INFO("server.loading", "Loading housing info...");
+    sHousingMgr.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading neighborhood info...");
+    sNeighborhoodMgr.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading initiative info...");
+    sInitiativeManager.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading Decor Duels (housing minigame) seam...");
+    sDecorDuelMgr.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading Going Postal (housing mail-race) minigame...");
+    sGoingPostalMgr.Initialize();
+
     ///- Handle outdated emails (delete/return)
     TC_LOG_INFO("server.loading", "Returning old mails...");
     sObjectMgr->ReturnOrDeleteOldMails(false);
@@ -2074,6 +2101,19 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Initializing Scripts...");
     sScriptMgr->Initialize();
     sScriptMgr->OnConfigLoad(false);                                // must be done after the ScriptMgr has been properly initialized
+
+    ///- MUST run after sScriptMgr->Initialize(). The preload spawns every occupied plot's
+    /// house: the front-door GameObject and the plot AreaTrigger (entry 37358) are created
+    /// here, and both pick their AI once, at construction, via AIM_Initialize(). Run before
+    /// the scripts are registered and the registry lookup misses, so both silently get the
+    /// default AI and are never revisited - go_housing_door::OnGossipHello (the whole "enter
+    /// the house" path) and at_housing_plot::OnUnitEnter (which calls SetCurrentHouse, the
+    /// value the client's C_Housing.IsInsidePlot reads) never run. Symptoms were a door that
+    /// showed the gear cursor but did nothing, and "out of plot bounds" on decor placement.
+    /// Only bites when a house already exists at startup; houses bought mid-session spawn
+    /// on demand, after this point, and worked - which is what made it look intermittent.
+    TC_LOG_INFO("server.loading", "Pre-loading housing neighborhood maps...");
+    sMapMgr->PreloadHousingMaps();
 
     TC_LOG_INFO("server.loading", "Validating spell scripts...");
     sObjectMgr->ValidateSpellScripts();
@@ -2514,6 +2554,9 @@ void World::Update(uint32 diff)
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update warfronts"));
         sWarfrontMgr->Update(diff);
     }
+
+    sInitiativeManager.Update(diff);
+    sNeighborhoodMgr.Update(diff);
 
     ///- Delete all characters which have been deleted X days before
     if (m_timers[WUPDATE_DELETECHARS].Passed())

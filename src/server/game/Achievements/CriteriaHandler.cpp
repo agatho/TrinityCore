@@ -17,6 +17,7 @@
 
 #include "CriteriaHandler.h"
 #include "ArenaTeamMgr.h"
+#include "InitiativeManager.h"
 #include "AzeriteItem.h"
 #include "BattlePetMgr.h"
 #include "Battleground.h"
@@ -29,6 +30,7 @@
 #include "GameTime.h"
 #include "Garrison.h"
 #include "Group.h"
+#include "Housing.h"
 #include "InstanceScript.h"
 #include "Item.h"
 #include "ItemBonusMgr.h"
@@ -510,6 +512,10 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         if (!data->Meets(referencePlayer, ref, uint32(miscValue1), uint32(miscValue2)))
             return;
 
+    // Housing initiative hook: notify InitiativeManager when validated criteria fires
+    if (referencePlayer)
+        sInitiativeManager.OnCriteriaProgress(referencePlayer, criteria->ID);
+
     switch (CriteriaType(criteria->Entry->Type))
     {
         // std. case: increment at 1
@@ -598,6 +604,10 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::StartResearchAnyGarrisonTalent:
         case CriteriaType::CompleteResearchAnyGarrisonTalent:
         case CriteriaType::SocketAnySoulbindConduit:
+        // --- housing
+        case CriteriaType::PlaceDecor:
+        case CriteriaType::RemoveDecor:
+        case CriteriaType::CollectUniqueDecor:
             SetCriteriaProgress(criteria, 1, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         // std case: increment at miscValue1
@@ -1795,8 +1805,11 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
         case CriteriaType::StartResearchAnyGarrisonTalent:
         case CriteriaType::CompleteResearchAnyGarrisonTalent:
         case CriteriaType::SocketAnySoulbindConduit:
+        case CriteriaType::PlaceDecor:
+        case CriteriaType::RemoveDecor:
+        case CriteriaType::CollectUniqueDecor:
             // No asset - the ModifierTree does the discriminating, but it needs a real subject id in
-            // miscValue1 (GarrFollower / GarrTalent / SoulbindConduit / GarrBuilding).
+            // miscValue1 (GarrFollower / GarrTalent / SoulbindConduit / GarrBuilding / HouseDecor).
             if (!miscValue1)
                 return false;
             break;
@@ -4444,6 +4457,10 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
             break;
         case ModifierTreeType::PlayerIsInGuild: // 404
             if (!referencePlayer->GetGuildId())
+                return false;
+            break;
+        case ModifierTreeType::PlayerHousesCountEqualOrGreaterThan: // 419
+            if (referencePlayer->GetAllHousings().size() < reqValue)
                 return false;
             break;
         case ModifierTreeType::PlayerMoneyIsRelOp: // 417

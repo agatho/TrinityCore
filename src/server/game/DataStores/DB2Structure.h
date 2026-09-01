@@ -1607,6 +1607,19 @@ struct CurvePointEntry
     uint32 OrderIndex;
 };
 
+struct DataTagXHouseDecorRecordEntry
+{
+    uint32 ID;
+    int32 DataTagID;
+    int32 HouseDecorID;
+};
+
+struct DyeColorCategoryEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+};
+
 struct DestructibleModelDataEntry
 {
     uint32 ID;
@@ -2332,6 +2345,15 @@ struct HolidaysEntry
     std::array<uint32, MAX_HOLIDAY_DATES> Date;                     // dates in unix time starting at January, 1, 2000
     std::array<uint8, MAX_HOLIDAY_DURATIONS> CalendarFlags;
     std::array<int32, 3> TextureFileDataID;
+};
+
+struct HouseEntry
+{
+    uint32 ID;
+    char const* InternalName;
+    int32 HouseTypeID;
+    int32 MapID;
+    int32 Flags;
 };
 
 struct ImportPriceArmorEntry
@@ -3133,7 +3155,7 @@ struct MapEntry
 
     bool IsDungeon() const { return (InstanceType == MAP_INSTANCE || InstanceType == MAP_RAID || InstanceType == MAP_SCENARIO) && !IsGarrison(); }
     bool IsNonRaidDungeon() const { return InstanceType == MAP_INSTANCE; }
-    bool Instanceable() const { return InstanceType == MAP_INSTANCE || InstanceType == MAP_RAID || InstanceType == MAP_BATTLEGROUND || InstanceType == MAP_ARENA || InstanceType == MAP_SCENARIO; }
+    bool Instanceable() const { return InstanceType == MAP_INSTANCE || InstanceType == MAP_RAID || InstanceType == MAP_BATTLEGROUND || InstanceType == MAP_ARENA || InstanceType == MAP_SCENARIO || InstanceType == MAP_HOUSE_INTERIOR || InstanceType == MAP_HOUSE_NEIGHBORHOOD; }
     bool IsRaid() const { return InstanceType == MAP_RAID; }
     bool IsBattleground() const { return InstanceType == MAP_BATTLEGROUND; }
     bool IsBattleArena() const { return InstanceType == MAP_ARENA; }
@@ -3177,6 +3199,8 @@ struct MapEntry
     bool IsDynamicDifficultyMap() const { return GetFlags().HasFlag(MapFlags::DynamicDifficulty); }
     bool IsFlexLocking() const { return GetFlags().HasFlag(MapFlags::FlexibleRaidLocking); }
     bool IsGarrison() const { return GetFlags().HasFlag(MapFlags::Garrison); }
+    bool IsNeighborhood() const { return InstanceType == MAP_HOUSE_NEIGHBORHOOD; }
+    bool IsHouseInterior() const { return InstanceType == MAP_HOUSE_INTERIOR; }
     bool IsSplitByFaction() const
     {
         return ID == 609 || // Acherus (DeathKnight Start)
@@ -3189,7 +3213,6 @@ struct MapEntry
     EnumFlag<MapFlags> GetFlags() const { return static_cast<MapFlags>(Flags[0]); }
     EnumFlag<MapFlags2> GetFlags2() const { return static_cast<MapFlags2>(Flags[1]); }
     EnumFlag<MapFlags3> GetFlags3() const { return static_cast<MapFlags3>(Flags[2]); }
-    bool IsNeighborhood() const { return InstanceType == MAP_HOUSE_NEIGHBORHOOD; }
 };
 
 struct MapChallengeModeEntry
@@ -6287,15 +6310,18 @@ struct HouseThemeEntry
 
 struct HouseRoomEntry
 {
-    uint32 ID;
+    // 69404 (12.1.0) client meta reorders Name before ID and adds a trailing SortPriority field
+    // (confirmed via wago.tools HouseRoom@12.1.0.69404); Field_007 is confirmed = ItemID there.
     LocalizedString Name;
+    uint32 ID;
     int8 Size;
     int32 Flags;
     int32 Field_002;
     int32 RoomWmoDataID;
     int32 UiTextureAtlasElementID;
     int32 WeightCost;
-    int32 Field_007;                         // NEW in 12.0.5.66330 (per WoWDBDefs layout 0xFC6C2118)
+    int32 ItemID;                            // was Field_007 (12.0.5.66330); confirmed ItemID via wago.tools 69404
+    int32 SortPriority;                      // NEW in 69404 (per wago.tools HouseRoom@12.1.0.69404)
 };
 
 struct HouseLevelRewardInfoEntry
@@ -6335,10 +6361,11 @@ struct HouseDecorThemeSetEntry
 
 struct HouseDecorEntry
 {
+    // 69404 (12.1.0) client meta dropped Field_12_0_0_63534_003 entirely (confirmed absent
+    // via wago.tools HouseDecor@12.1.0.69404 column list).
     LocalizedString Name;                    // Meta field 0: FT_STRING
     DBCPosition3D InitialRotation;           // Meta field 1: FT_FLOAT[3]
     uint32 ID;                               // Meta field 2: IndexField
-    int32 Field_003;
     int32 GameObjectID;
     int32 Flags;
     uint8 Type;
@@ -6381,20 +6408,24 @@ struct ExteriorComponentTypeEntry
 
 struct ExteriorComponentEntry
 {
+    // 69404 (12.1.0) client meta = "sfffibiiiibbiiii": ParentIndexField (HouseExteriorWmoDataID)
+    // sits at Meta[4], right after Size, NOT trailing after ItemID (confirmed via wago.tools
+    // ExteriorComponent@12.1.0.69404 column order: Name,Position,ID,Size,HouseExteriorWmoDataID,
+    // ParentComponentID,ModelFileDataID,Flags,Field_007,Type,Field_009,GameObjectID,Field_011,ItemID).
     LocalizedString Name;
     std::array<float, 3> Position;
     uint32 ID;
     uint8 Size;                             // Meta[3] BYTE: WoWDBDefs "Size"
-    int32 ParentComponentID;                // Meta[4] INT: references another ExteriorComponent (0 for defaults)
-    int32 ModelFileDataID;                  // Meta[5] INT: model FileDataID
-    int32 Flags;                            // Meta[6] INT: 0x1=IsDefaultFixture, 0x2=UnlockedByDefault
-    uint8 Field_7;                          // Meta[7] BYTE: unknown (always 1)
-    uint8 Type;                             // Meta[8] BYTE: references ExteriorComponentType
-    int32 Field_9;                          // Meta[9] INT: unknown
-    int32 GameObjectID;                     // Meta[10] INT: references GameObjects
-    int32 Field_11;                         // Meta[11] INT: unknown (WoWDBDefs name: Field_11_2_7_64044_011)
-    int32 ItemID;                           // Meta[12] INT: NEW in 12.0.5 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½ references Item.ID (allows the exterior component to be sold/earned as an item, like HouseDecor.ItemID)
-    uint32 HouseExteriorWmoDataID;          // ParentIndexField - must be unsigned
+    uint32 HouseExteriorWmoDataID;          // Meta[4] ParentIndexField - must be unsigned
+    int32 ParentComponentID;                // Meta[5] INT: references another ExteriorComponent (0 for defaults)
+    int32 ModelFileDataID;                  // Meta[6] INT: model FileDataID
+    int32 Flags;                            // Meta[7] INT: 0x1=IsDefaultFixture, 0x2=UnlockedByDefault
+    uint8 Field_7;                          // Meta[8] BYTE: unknown (always 1)
+    uint8 Type;                             // Meta[9] BYTE: references ExteriorComponentType
+    int32 Field_9;                          // Meta[10] INT: unknown
+    int32 GameObjectID;                     // Meta[11] INT: references GameObjects
+    int32 Field_11;                         // Meta[12] INT: unknown (WoWDBDefs name: Field_11_2_7_64044_011)
+    int32 ItemID;                           // Meta[13] INT: NEW in 12.0.5 -- references Item.ID (allows the exterior component to be sold/earned as an item, like HouseDecor.ItemID)
 };
 
 struct ExteriorComponentHookEntry
@@ -6433,7 +6464,7 @@ struct DyeColorEntry
 {
     LocalizedString Name;
     uint32 ID;
-    int32 DyeColorCategoryID;                // Meta[2] INT: WoWDBDefs FK->DyeColorCategory ($relation$)
+    uint32 DyeColorCategoryID;               // Meta[2] ParentIndexField - must be unsigned. WoWDBDefs FK->DyeColorCategory ($relation$)
     int32 GradientTextureIndex;              // Meta[3] INT: WoWDBDefs "GradientTextureIndex"
     int32 ItemID;                            // Meta[4] INT: WoWDBDefs FK->Item
     int32 SwatchColorStart;                  // Meta[5] INT: WoWDBDefs "SwatchColorStart"

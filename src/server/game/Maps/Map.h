@@ -61,6 +61,9 @@ class InstanceMap;
 class InstanceScript;
 class ChallengeMode;
 class InstanceScenario;
+class HousingDecorEntity;
+class HousingRoomEntity;
+class MeshObject;
 class Object;
 class PhaseShift;
 class Player;
@@ -392,6 +395,7 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         bool IsBattlegroundOrArena() const;
         bool IsScenario() const;
         bool IsGarrison() const;
+        bool IsHouseInterior() const;
         // Currently, this means that every entity added to this map will be marked as active
         bool IsAlwaysActive() const;
         bool GetEntrancePos(int32& mapid, float& x, float& y);
@@ -450,6 +454,8 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         Creature* GetCreature(ObjectGuid const& guid);
         DynamicObject* GetDynamicObject(ObjectGuid const& guid);
         GameObject* GetGameObject(ObjectGuid const& guid);
+        MeshObject* GetMeshObject(ObjectGuid const& guid);
+        HousingRoomEntity* GetHousingRoomEntity(ObjectGuid const& guid);
         Pet* GetPet(ObjectGuid const& guid);
         Transport* GetTransport(ObjectGuid const& guid);
         Creature* GetCreatureBySpawnId(ObjectGuid::LowType spawnId) const;
@@ -471,7 +477,6 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         }
 
         MapStoredObjectTypesContainer& GetObjectsStore() { return _objectsStore; }
-        MeshObject* GetMeshObject(ObjectGuid const& guid);
 
         typedef std::unordered_multimap<ObjectGuid::LowType, Creature*> CreatureBySpawnIdContainer;
         CreatureBySpawnIdContainer& GetCreatureBySpawnIdStore() { return _creatureBySpawnIdStore; }

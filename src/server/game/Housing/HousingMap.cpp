@@ -60,7 +60,7 @@
 
 namespace
 {
-    [[maybe_unused]] std::string HexDumpPacket(WorldPacket const* packet, size_t maxBytes = 128)
+    std::string HexDumpPacket(WorldPacket const* packet, size_t maxBytes = 128)
     {
         if (!packet || packet->size() == 0)
             return "(empty)";
@@ -502,7 +502,7 @@ void HousingMap::SpawnPlotGameObjects()
                 if (optionId != 0)
                     continue;
                 ExteriorComponentEntry const* comp = sExteriorComponentStore.LookupEntry(pointId);
-                if (comp && comp->ParentComponentID == 0 && comp->HouseExteriorWmoDataID == static_cast<uint32>(plotInfo->HouseType))
+                if (comp && comp->ParentComponentID == 0 && comp->HouseExteriorWmoDataID == static_cast<int32>(plotInfo->HouseType))
                 {
                     exteriorComponentID = static_cast<int32>(pointId);
                     break;
@@ -989,8 +989,10 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
         SetPlayerCurrentPlot(player->GetGUID(), plotIndex);
 
         ObjectGuid playerGuid = player->GetGUID();
+        ObjectGuid houseGuid = housing->GetHouseGuid();
+        ObjectGuid neighborhoodGuid = housing->GetNeighborhoodGuid();
         uint8 deferredPlotIndex = plotIndex;
-        player->m_Events.AddEventAtOffset([playerGuid, deferredPlotIndex]()
+        player->m_Events.AddEventAtOffset([playerGuid, deferredPlotIndex, houseGuid, neighborhoodGuid]()
         {
             Player* p = ObjectAccessor::FindPlayer(playerGuid);
             if (!p || !p->IsInWorld())
@@ -1338,7 +1340,7 @@ bool HousingMap::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
 void HousingMap::RemovePlayerFromMap(Player* player, bool remove)
 {
     // Remove plot auras before removing housing data.
-    if (GetHousingForPlayer(player->GetGUID()))
+    if (Housing const* housing = GetHousingForPlayer(player->GetGUID()))
     {
         // Remove all plot enter/presence auras (manual packets — spells not in DB2)
         SendPlotLeaveAuraRemoval(player);

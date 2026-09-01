@@ -1,0 +1,14 @@
+-- ============================================================================
+-- Initiative DB2 Data Population
+-- Apply to: tc_hotfixes database
+-- ============================================================================
+-- REMOVED: All fake initiative data (IDs 1-5) that was overwriting real Blizzard
+-- DB2 records loaded from .db2 files. The real data from NeighborhoodInitiative.db2,
+-- InitiativeTask.db2, InitiativeXTask.db2, InitiativeCycle.db2, etc. contains
+-- 14 initiatives, 168 tasks, 232 x-tasks which the client references directly.
+-- Custom SQL hotfix data overwrote records with matching IDs, breaking cross-refs.
+-- ============================================================================
+-- No custom initiative hotfix data is needed - the DB2 files provide all data.
+-- If custom overrides are needed in the future, use IDs that don't conflict
+-- with real DB2 record IDs (e.g., IDs > 1000).
+-- ============================================================================
