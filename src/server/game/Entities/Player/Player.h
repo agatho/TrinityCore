@@ -1951,6 +1951,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         bool RemoveMItem(ObjectGuid::LowType id);
 
         void SendOnCancelExpectedVehicleRideAura() const;
+        void SendPetGUIDs() const;
         void PetSpellInitialize();
         void CharmSpellInitialize();
         void PossessSpellInitialize();

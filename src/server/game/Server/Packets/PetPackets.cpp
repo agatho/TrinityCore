@@ -82,6 +82,15 @@ WorldPacket const* PetUnlearnedSpells::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* Guids::Write()
+{
+    _worldPacket << Size<uint32>(PetGUIDs);
+    for (ObjectGuid const& guid : PetGUIDs)
+        _worldPacket << guid;
+
+    return &_worldPacket;
+}
+
 WorldPacket const* PetNameInvalid::Write()
 {
     _worldPacket << uint32(Result);

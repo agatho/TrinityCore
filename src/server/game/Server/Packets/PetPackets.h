@@ -174,6 +174,21 @@ namespace WorldPackets
             std::vector<uint32> Spells;
         };
 
+        // Wire (sniff-decoded, s69273_a/prey1/prey2, 127 instances, lengths 4/19/34):
+        // uint32 Count (full DWORD, proven by the Count==0 case measuring exactly 4 bytes -
+        // no bit-packed length prefix), followed by Count PackedGuid entries (15 bytes observed
+        // for a single-segment pet GUID: 19 = 4 + 15, 34 = 4 + 2*15). Matches LegionCore
+        // `Guids() : ServerPacket(SMSG_PET_GUIDS, 4) { } GuidVector PetGUIDs;`.
+        class Guids final : public ServerPacket
+        {
+        public:
+            explicit Guids() : ServerPacket(SMSG_PET_GUIDS, 4) { }
+
+            WorldPacket const* Write() override;
+
+            GuidVector PetGUIDs;
+        };
+
         struct PetRenameData
         {
             ObjectGuid PetGUID;

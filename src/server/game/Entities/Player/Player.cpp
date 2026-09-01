@@ -22139,6 +22139,12 @@ void Player::RemovePet(Pet* pet, PetSaveMode mode, bool returnreagent)
         WorldPackets::Pet::PetSpells petSpellsPacket;
         SendDirectMessage(petSpellsPacket.Write());
 
+        // SMSG_PET_GUIDS Count=0: sniff-confirmed (s69273_a Number 14440/14445/14448, three
+        // independent dismiss/clear moments) - the client clears its pet GUID list the same way
+        // it clears the pet action bar above. GetPet() is already cleared at this point
+        // (SetMinion(pet, false) ran above), so SendPetGUIDs() naturally yields an empty list.
+        SendPetGUIDs();
+
         if (GetGroup())
             SetGroupUpdateFlag(GROUP_UPDATE_FLAG_PET);
     }
@@ -22434,6 +22440,24 @@ bool Player::RemoveMItem(ObjectGuid::LowType id)
 void Player::SendOnCancelExpectedVehicleRideAura() const
 {
     SendDirectMessage(WorldPackets::Vehicle::OnCancelExpectedRideVehicleAura().Write());
+}
+
+// SMSG_PET_GUIDS (0x4501AF): list of the player's currently active pet GUIDs. Wire byte-exact
+// from sniff (s69273_a/prey1/prey2, 127 instances): uint32 Count + Count PackedGuid. Sniff shows
+// Count 0 right after a pet dismiss and Count 1 right after a pet finishes loading in. Sniff also
+// shows one Count 2 instance for two simultaneous same-template creature GUIDs (Player.cpp,
+// PetPackets.h "Guids") - TC only models a single active combat-pet slot per player
+// (PetStable::CurrentPetIndex / GetPet()), so this always reports 0 or 1 entries; the Count-2
+// case has no TC-side equivalent state to source a second GUID from.
+// UNVERIFIED: exact client consumer / Lua event (dispatch table for family 0x45 is a single
+// reflection-driven collector, no per-opcode reader recoverable statically - BEFUND PLAN_A3 §0.4).
+void Player::SendPetGUIDs() const
+{
+    WorldPackets::Pet::Guids packet;
+    if (Pet const* pet = GetPet())
+        packet.PetGUIDs.push_back(pet->GetGUID());
+
+    SendDirectMessage(packet.Write());
 }
 
 void Player::PetSpellInitialize()
