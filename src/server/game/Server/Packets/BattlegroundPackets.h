@@ -19,6 +19,7 @@
 #define TRINITYCORE_BATTLEGROUND_PACKETS_H
 
 #include "Packet.h"
+#include "DBCEnums.h"
 #include "LFGPacketsCommon.h"
 #include "ObjectGuid.h"
 #include "Optional.h"
@@ -1284,6 +1285,72 @@ namespace WorldPackets
         //                of zero and this packet carries no per-player payload.
         //   StartTime    1783169973, seven seconds after SMSG_PVP_MATCH_INITIALIZE's StartTime and 29 ms
         //                after SMSG_PVP_MATCH_SET_STATE(Engaged) - i.e. the moment the gates open.
+        // SMSG_ARENA_PREP_OPPONENT_SPECIALIZATIONS (0x4500F1) and its counterpart SMSG_ARENA_CLEAR_OPPONENTS
+        // (0x4500F2). No sniff exists for either (PLAN_A4, Sniff 0) - the wire below comes from the client's
+        // own deserializer, decompiled from the cfunc cache (wow_dump.bin.69382.tc_wow.db), not from a
+        // capture:
+        //
+        //   PREP_OPPONENT_SPECIALIZATIONS deserializer sub_7FF7815BB3E0 (dispatch case 4522225 = 0x4500F1):
+        //     reads one uint32 Count, then resizes a JamClientOpponentSpecData[Count] array (element stride
+        //     confirmed 24 bytes in client memory via the array-resize helper's
+        //     WowGetRawTypeName<JamClientOpponentSpecData> tag) and, per element, reads in this order:
+        //       uint32  -> element offset 0   (read via the generic ReadUInt32 primitive)
+        //       uint8   -> element offset 4   (read via the generic ReadUInt8 primitive)
+        //       Guid    -> element offset 8   (read via a dedicated function in the client's WowGuid code
+        //                  region, called with no explicit length argument - consistent with this codebase's
+        //                  own PackedGuid convention, see ObjectGuid::operator<<, rather than a fixed-size
+        //                  raw copy; not decompiled byte-for-byte, so this is a pattern match, not a proof)
+        //     The array-resize helper default-initializes new elements' offset-4 byte to the constant 2
+        //     before the wire read overwrites it. 2 is exactly ChrSpecializationRole::Dps in this codebase's
+        //     own enum (DBCEnums.h) - the same enum BattlegroundQueue::GetPlayerRole already returns for the
+        //     unrelated 0x4B "role" field on Battleground join. That match is what turns the offset-4 byte
+        //     from "some uint8" into "Role", and turns offset-0 from "some uint32" into "SpecID" by
+        //     elimination and by the JAM type name itself (JamClientOpponentSpecData - a specialization
+        //     record). UNVERIFIED: this is the client's read order and the type identity of the role byte,
+        //     not a confirmed Retail wire capture - no aufnahme exists for an arena match start.
+        //
+        //   CLEAR_OPPONENTS deserializer sub_7FF7815BB4E0 (dispatch case 4522226 = 0x4500F2) does not extract
+        //   any typed field at all: it copies whatever bytes remain in the message into an opaque buffer
+        //   (length = message end - current read cursor) and never reads a discrete value from it. That is
+        //   the client's generic passthrough for a message with no reflected fields, not a sized read of a
+        //   real payload - it is what you would also see if the payload is empty. Combined with the name
+        //   (clears the frames PREP_OPPONENT_SPECIALIZATIONS populates) this supports PLAN_A4's own guess of
+        //   a bare, 0-byte notify. UNVERIFIED: no sniff confirms the body is empty; there could be a payload
+        //   this reader ignores. Written here with a 0-byte body per the DoD's "declare it, mark it" rule.
+        struct ArenaOpponentSpecialization
+        {
+            int32 SpecID = 0;
+            // UNVERIFIED type identity: byte at wire offset 4, see comment above. Written as int8 to match
+            // ChrSpecializationRole's underlying type (DBCEnums.h).
+            int8 Role = int8(ChrSpecializationRole::Dps);
+            ObjectGuid Guid;
+        };
+
+        ByteBuffer& operator<<(ByteBuffer& data, ArenaOpponentSpecialization const& opponent);
+
+        class ArenaPrepOpponentSpecializations final : public ServerPacket
+        {
+        public:
+            explicit ArenaPrepOpponentSpecializations() : ServerPacket(SMSG_ARENA_PREP_OPPONENT_SPECIALIZATIONS, 4) { }
+
+            WorldPacket const* Write() override;
+
+            // Sent per-recipient: each player's Opponents list holds only the enemy team's
+            // {SpecID, Role, Guid} tuples, derived at arena start from Player::GetPrimarySpecialization()
+            // and Battleground::GetPlayerQueueRole() (see Battleground::StartBattleground). D4: flüchtig
+            // (recomputed every match start, nothing persisted).
+            std::vector<ArenaOpponentSpecialization> Opponents;
+        };
+
+        class ArenaClearOpponents final : public ServerPacket
+        {
+        public:
+            // UNVERIFIED body length (see comment above) - modeled as the observed pattern: a bare opcode
+            // header, no payload.
+            explicit ArenaClearOpponents() : ServerPacket(SMSG_ARENA_CLEAR_OPPONENTS, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
 
         enum class BattlegroundCapturePointState : uint8
         {

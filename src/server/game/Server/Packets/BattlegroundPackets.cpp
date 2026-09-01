@@ -671,6 +671,24 @@ WorldPacket const* PVPMatchStart::Write()
     return &_worldPacket;
 }
 
+ByteBuffer& operator<<(ByteBuffer& data, ArenaOpponentSpecialization const& opponent)
+{
+    data << int32(opponent.SpecID);
+    data << int8(opponent.Role);
+    data << opponent.Guid;
+
+    return data;
+}
+
+WorldPacket const* ArenaPrepOpponentSpecializations::Write()
+{
+    _worldPacket << Size<uint32>(Opponents);
+    for (ArenaOpponentSpecialization const& opponent : Opponents)
+        _worldPacket << opponent;
+
+    return &_worldPacket;
+}
+
 ByteBuffer& operator<<(ByteBuffer& data, BattlegroundCapturePointInfo const& battlegroundCapturePointInfo)
 {
     data << battlegroundCapturePointInfo.Guid;

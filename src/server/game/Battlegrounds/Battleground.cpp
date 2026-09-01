@@ -51,6 +51,7 @@
 #include "Util.h"
 #include "WorldStateMgr.h"
 #include <algorithm>
+#include <array>
 #include <cstdarg>
 #include <limits>
 
@@ -460,6 +461,47 @@ inline void Battleground::_ProcessJoin(uint32 diff)
         if (isArena())
         {
             /// @todo add arena sound PlaySoundToAll(SOUND_ARENA_START);
+
+            // SMSG_ARENA_CLEAR_OPPONENTS / SMSG_ARENA_PREP_OPPONENT_SPECIALIZATIONS - the opponent-frame
+            // spec preview. No sniff exists for either opcode (PLAN_A4, Sniff 0); the field list and its
+            // {SpecID, Role, Guid} identity come from the client's own deserializer, see the comment on
+            // WorldPackets::Battleground::ArenaOpponentSpecialization in BattlegroundPackets.h. TC tracked
+            // nothing about the enemy team's specs before this - the two lists below are built fresh right
+            // here, the same door-open moment SMSG_PVP_MATCH_SET_STATE(Engaged) already announces, using
+            // Player::GetPrimarySpecialization() for the spec and GetPlayerQueueRole() - a cache
+            // BattlegroundMgr::PortPlayerToBattleground() fills from BattlegroundQueue::GetPlayerRole()
+            // (added for the unrelated 0x4B join-role field) at port time, because by door-open the queue
+            // entry that role lives on has long since been removed. See Battleground.h for why.
+            // UNVERIFIED: send order (clear-then-populate is our inference from the two names, not observed)
+            // and whether Retail restricts this to rated arenas - sent here for every isArena() match.
+            std::array<std::vector<WorldPackets::Battleground::ArenaOpponentSpecialization>, 2> teamOpponents;
+            for (auto const& [guid, battlegroundPlayer] : GetPlayers())
+            {
+                Player* teamMember = ObjectAccessor::FindPlayer(guid);
+                if (!teamMember)
+                    continue;
+
+                WorldPackets::Battleground::ArenaOpponentSpecialization entry;
+                entry.SpecID = int32(teamMember->GetPrimarySpecialization());
+                entry.Role = int8(GetPlayerQueueRole(guid));
+                entry.Guid = guid;
+
+                teamOpponents[battlegroundPlayer.Team == ALLIANCE ? 0 : 1].push_back(entry);
+            }
+
+            for (auto const& [guid, battlegroundPlayer] : GetPlayers())
+            {
+                Player* recipient = ObjectAccessor::FindPlayer(guid);
+                if (!recipient)
+                    continue;
+
+                recipient->SendDirectMessage(WorldPackets::Battleground::ArenaClearOpponents().Write());
+
+                WorldPackets::Battleground::ArenaPrepOpponentSpecializations prepOpponents;
+                prepOpponents.Opponents = teamOpponents[battlegroundPlayer.Team == ALLIANCE ? 1 : 0];
+                recipient->SendDirectMessage(prepOpponents.Write());
+            }
+
             for (BattlegroundPlayerMap::const_iterator itr = GetPlayers().begin(); itr != GetPlayers().end(); ++itr)
             {
                 if (Player* player = ObjectAccessor::FindPlayer(itr->first))
