@@ -16,6 +16,7 @@
  */
 
 #include "ScriptMgr.h"
+#include "Creature.h"
 #include "CreatureAI.h"
 #include "GossipDef.h"
 #include "Log.h"

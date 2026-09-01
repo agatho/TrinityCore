@@ -38,6 +38,7 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "GameTime.h"
+#include "UpdateData.h"
 #include "World.h"
 
 namespace
@@ -81,6 +82,55 @@ void WorldSession::HandleNeighborhoodCharterOpenConfirmationUI(WorldPackets::Nei
 
     TC_LOG_INFO("housing", "CMSG_NEIGHBORHOOD_CHARTER_OPEN_CONFIRMATION_UI received for player {}",
         player->GetGUID().ToString());
+
+    // If the player already has a charter in flight, push its full state first.
+    // SMSG_NEIGHBORHOOD_CHARTER_OPEN_UI_RESPONSE (0x5B0001) carries the same body as
+    // SMSG_NEIGHBORHOOD_CHARTER_UPDATE_RESPONSE (0x5B0000) — Result + CharterGuid + MapID +
+    // SignatureCount + Signers + required-signature count + name — i.e. everything the charter
+    // panel renders. Today that state is only ever sent as the reply to CHARTER_CREATE/EDIT, so
+    // a player who relogs (or reopens the panel) with a pending charter gets an empty panel and
+    // no charter GUID, which also makes the follow-up CHARTER_FINALIZE unreachable from the UI.
+    // Only sent when a charter actually exists; the no-charter case is unchanged.
+    uint64 charterId = static_cast<uint64>(player->GetGUID().GetCounter());
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_NEIGHBORHOOD_CHARTER);
+    stmt->setUInt64(0, charterId);
+    PreparedQueryResult charterResult = CharacterDatabase.Query(stmt);
+    if (charterResult)
+    {
+        stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_NEIGHBORHOOD_CHARTER_SIGNATURES);
+        stmt->setUInt64(0, charterId);
+        PreparedQueryResult sigResult = CharacterDatabase.Query(stmt);
+
+        NeighborhoodCharter charter(charterId, ObjectGuid::Empty);
+        if (charter.LoadFromDB(charterResult, sigResult))
+        {
+            WorldPackets::Neighborhood::NeighborhoodCharterOpenUIResponse openUI;
+            openUI.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+            openUI.CharterGuid = ObjectGuid::Create<HighGuid::Housing>(0, 0, 0, charterId);
+            openUI.MapID = charter.GetNeighborhoodMapID();
+            openUI.SignatureCount = charter.GetSignatureCount();
+            openUI.Signers = charter.GetSignatures();
+            openUI.Unknown = MIN_CHARTER_SIGNATURES;
+            openUI.NeighborhoodName = charter.GetName();
+            SendPacket(openUI.Write());
+
+            TC_LOG_DEBUG("housing", "Sent NeighborhoodCharterOpenUIResponse for charter {} ('{}', {}/{} signatures) to player {}",
+                charterId, charter.GetName(), charter.GetSignatureCount(), MIN_CHARTER_SIGNATURES,
+                player->GetGUID().ToString());
+        }
+        else
+        {
+            // A charter row exists but will not load — report the failure instead of pretending
+            // the panel is empty, so the client shows an error rather than a blank charter.
+            WorldPackets::Neighborhood::NeighborhoodCharterOpenUIResponse openUI;
+            openUI.Result = static_cast<uint8>(HOUSING_RESULT_DB_ERROR);
+            SendPacket(openUI.Write());
+
+            TC_LOG_ERROR("housing", "HandleNeighborhoodCharterOpenConfirmationUI: charter {} exists but failed to load for player {}",
+                charterId, player->GetGUID().ToString());
+        }
+    }
 
     // Client requests to open the charter creation confirmation UI
     // The client handles UI display; server acknowledges readiness
@@ -141,16 +191,36 @@ void WorldSession::HandleNeighborhoodCharterCreate(WorldPackets::Neighborhood::N
     charter.SetFactionFlags(neighborhoodCharterCreate.FactionFlags);
     charter.SetIsGuild(false);
 
-    // Creator auto-signs
-    charter.AddSignature(player->GetGUID());
+    // H-17: the creator does NOT count toward MIN_CHARTER_SIGNATURES. This used to
+    // call AddSignature(player->GetGUID()) under a "Creator auto-signs" comment, but
+    // AddSignature opens with a self-sign guard and returns false, so the call always
+    // failed and its result was discarded - the comment described behaviour that never
+    // happened. Stating the rule instead of pretending; whether the creator should
+    // count is a design decision, and the code now matches whichever way it is read
+    // today rather than claiming the opposite.
 
     // Persist to DB
     CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
     charter.SaveToDB(trans);
     CharacterDatabase.CommitTransaction(trans);
 
+    // M4: populate the success response so the client charter panel renders the
+    // charter GUID + name + signature progress (previously only Result was set,
+    // leaving CharterGuid/MapID/SignatureCount/Name default → blank panel, and
+    // the client never learned the charter GUID). CharterGuid is built the same
+    // way as the sign-request path. `Unknown` carries the required signature
+    // count (server policy MIN_CHARTER_SIGNATURES; retail rec 14982 shows 0x0a).
+    // NOTE: leadByte/Result semantics left as documented (uint8 Result, client
+    // tests != 0 for error); the sniff's 0x42 leadByte is unverified for the
+    // success path and intentionally not hardcoded here.
     WorldPackets::Neighborhood::NeighborhoodCharterUpdateResponse response;
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+    response.CharterGuid = ObjectGuid::Create<HighGuid::Housing>(0, 0, 0, charterId);
+    response.MapID = neighborhoodCharterCreate.NeighborhoodMapID;
+    response.SignatureCount = charter.GetSignatureCount();
+    response.Signers = charter.GetSignatures();
+    response.Unknown = MIN_CHARTER_SIGNATURES;
+    response.NeighborhoodName = neighborhoodCharterCreate.Name;
     SendPacket(response.Write());
 
     TC_LOG_DEBUG("housing", "Player {} created neighborhood charter '{}' (ID: {}, MapID: {})",
@@ -201,14 +271,48 @@ void WorldSession::HandleNeighborhoodCharterEdit(WorldPackets::Neighborhood::Nei
 
     // Edit updates the charter with new parameters (same charter ID, re-saved)
     uint64 charterId = static_cast<uint64>(player->GetGUID().GetCounter());
+    ObjectGuid charterGuid = ObjectGuid::Create<HighGuid::Housing>(0, 0, 0, charterId);
+
+    // Capture the signatures the edit is about to discard. DeleteFromDB drops every signature
+    // row and the re-save only re-adds the creator's, so every co-signer silently loses their
+    // signature here. Their clients still believe they have signed this charter until told
+    // otherwise — that notification is SMSG_NEIGHBORHOOD_CHARTER_SIGNATURE_REMOVED (0x5B0005).
+    std::vector<ObjectGuid> droppedSigners;
+    {
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_NEIGHBORHOOD_CHARTER);
+        stmt->setUInt64(0, charterId);
+        PreparedQueryResult oldCharterResult = CharacterDatabase.Query(stmt);
+        if (oldCharterResult)
+        {
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_NEIGHBORHOOD_CHARTER_SIGNATURES);
+            stmt->setUInt64(0, charterId);
+            PreparedQueryResult oldSigResult = CharacterDatabase.Query(stmt);
+
+            NeighborhoodCharter oldCharter(charterId, ObjectGuid::Empty);
+            if (oldCharter.LoadFromDB(oldCharterResult, oldSigResult))
+            {
+                for (ObjectGuid const& signer : oldCharter.GetSignatures())
+                {
+                    if (signer != player->GetGUID())
+                        droppedSigners.push_back(signer);
+                }
+            }
+        }
+    }
+
     NeighborhoodCharter charter(charterId, player->GetGUID());
     charter.SetName(neighborhoodCharterEdit.Name);
     charter.SetNeighborhoodMapID(neighborhoodCharterEdit.NeighborhoodMapID);
     charter.SetFactionFlags(neighborhoodCharterEdit.FactionFlags);
     charter.SetIsGuild(false);
 
-    // Creator auto-signs
-    charter.AddSignature(player->GetGUID());
+    // H-17: the creator does NOT count toward MIN_CHARTER_SIGNATURES. This used to
+    // call AddSignature(player->GetGUID()) under a "Creator auto-signs" comment, but
+    // AddSignature opens with a self-sign guard and returns false, so the call always
+    // failed and its result was discarded - the comment described behaviour that never
+    // happened. Stating the rule instead of pretending; whether the creator should
+    // count is a design decision, and the code now matches whichever way it is read
+    // today rather than claiming the opposite.
 
     // Re-persist
     CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
@@ -216,13 +320,31 @@ void WorldSession::HandleNeighborhoodCharterEdit(WorldPackets::Neighborhood::Nei
     charter.SaveToDB(trans);
     CharacterDatabase.CommitTransaction(trans);
 
+    // Tell every co-signer whose signature the edit just wiped, so their charter panel drops
+    // the stale "signed" state instead of holding it until relog.
+    for (ObjectGuid const& signer : droppedSigners)
+    {
+        if (Player* signerPlayer = ObjectAccessor::FindPlayer(signer))
+        {
+            WorldPackets::Neighborhood::NeighborhoodCharterSignatureRemovedNotification removed;
+            removed.CharterGuid = charterGuid;
+            signerPlayer->SendDirectMessage(removed.Write());
+        }
+    }
+
     WorldPackets::Neighborhood::NeighborhoodCharterUpdateResponse response;
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+    response.CharterGuid = charterGuid;
+    response.MapID = neighborhoodCharterEdit.NeighborhoodMapID;
+    response.SignatureCount = charter.GetSignatureCount();
+    response.Signers = charter.GetSignatures();
+    response.Unknown = MIN_CHARTER_SIGNATURES;
+    response.NeighborhoodName = neighborhoodCharterEdit.Name;
     SendPacket(response.Write());
 
-    TC_LOG_DEBUG("housing", "Player {} edited neighborhood charter '{}' (ID: {}, MapID: {})",
+    TC_LOG_DEBUG("housing", "Player {} edited neighborhood charter '{}' (ID: {}, MapID: {}), dropped {} co-signature(s)",
         player->GetGUID().ToString(), neighborhoodCharterEdit.Name, charterId,
-        neighborhoodCharterEdit.NeighborhoodMapID);
+        neighborhoodCharterEdit.NeighborhoodMapID, uint32(droppedSigners.size()));
 }
 
 void WorldSession::HandleNeighborhoodCharterFinalize(WorldPackets::Neighborhood::NeighborhoodCharterFinalize const& /*neighborhoodCharterFinalize*/)
@@ -527,6 +649,19 @@ void WorldSession::HandleNeighborhoodUpdateName(WorldPackets::Neighborhood::Neig
             memberPlayer->SendDirectMessage(nameNotification.Write());
         }
     }
+
+    // SMSG_INVALIDATE_NEIGHBORHOOD (0x5F0008) is the neighborhood twin of SMSG_INVALIDATE_PLAYER
+    // (0x5F0007): the 12.0.7 dispatcher handles both in the same switch with the same shape —
+    // read one PackedGUID, then call a registered nullary C++ callback (no Lua event). It is a
+    // pure "drop your cached record for this GUID" signal, so it must reach cache holders who are
+    // NOT members (house-finder browsers, visitors), not just the members handled above.
+    // Sent realm-wide exactly as CharacterCache::UpdateCharacterData sends InvalidatePlayer on a
+    // character rename; the client's follow-up CMSG_QUERY_NEIGHBORHOOD_INFO is already answered
+    // by HandleQueryNeighborhoodInfo. Renames are rare and explicitly operator-driven, so this
+    // does not put the realm-wide send on a hot path.
+    WorldPackets::Housing::InvalidateNeighborhood invalidateRecord;
+    invalidateRecord.NeighborhoodGuid = neighborhoodGuid;
+    sWorld->SendGlobalMessage(invalidateRecord.Write());
 
     WorldPackets::Neighborhood::NeighborhoodUpdateNameResponse response;
     response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
@@ -1032,6 +1167,43 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
     // Auto-join neighborhood if not already a member — buying a plot implies joining
     if (!neighborhood->IsMember(player->GetGUID()))
     {
+        // M9/A2: enforce faction restriction + private-neighborhood invite gating
+        // BEFORE auto-join. AddResident itself performs no such checks (unlike
+        // InviteResident), so a wrong-faction or uninvited player could otherwise
+        // join a private/faction-locked neighborhood simply by buying a plot.
+        int32 faction = neighborhood->GetFactionRestriction();
+        if (faction != NEIGHBORHOOD_FACTION_NONE)
+        {
+            uint32 team = player->GetTeam();
+            if ((faction == NEIGHBORHOOD_FACTION_HORDE && team != HORDE) ||
+                (faction == NEIGHBORHOOD_FACTION_ALLIANCE && team != ALLIANCE))
+            {
+                WorldPackets::Neighborhood::NeighborhoodBuyHouseResponse response;
+                response.Result = static_cast<uint8>(HOUSING_RESULT_INCORRECT_FACTION);
+                SendPacket(response.Write());
+
+                TC_LOG_DEBUG("housing", "HandleNeighborhoodBuyHouse: Player {} faction mismatch for neighborhood '{}'",
+                    player->GetGUID().ToString(), neighborhood->GetName());
+                return;
+            }
+        }
+
+        // Private (non-public) neighborhoods require a matching pending invite,
+        // unless the player is already an owner/manager of that neighborhood.
+        if (!neighborhood->IsPublic()
+            && !neighborhood->HasPendingInvite(player->GetGUID())
+            && !neighborhood->IsManager(player->GetGUID())
+            && !neighborhood->IsOwner(player->GetGUID()))
+        {
+            WorldPackets::Neighborhood::NeighborhoodBuyHouseResponse response;
+            response.Result = static_cast<uint8>(HOUSING_RESULT_MISSING_PRIVATE_NEIGHBORHOOD_INVITE);
+            SendPacket(response.Write());
+
+            TC_LOG_DEBUG("housing", "HandleNeighborhoodBuyHouse: Player {} has no pending invite to private neighborhood '{}'",
+                player->GetGUID().ToString(), neighborhood->GetName());
+            return;
+        }
+
         HousingResult joinResult = neighborhood->AddResident(player->GetGUID());
         if (joinResult != HOUSING_RESULT_SUCCESS)
         {
@@ -1276,7 +1448,7 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
         }
 
         // Notify client that the basic house was created
-        if (Housing const* h = player->GetHousing())
+        if (player->GetHousing())
         {
             WorldPackets::Housing::HousingFixtureCreateBasicHouseResponse houseResponse;
             houseResponse.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
@@ -1722,7 +1894,7 @@ void WorldSession::HandleNeighborhoodOpenCornerstoneUI(WorldPackets::Neighborhoo
     WorldPacket const* pkt = response.Write();
     SendPacket(pkt);
 
-    TC_LOG_ERROR("housing", "=== SMSG_NEIGHBORHOOD_OPEN_CORNERSTONE_UI_RESPONSE (0x5C000A) ===\n"
+    TC_LOG_DEBUG("housing", "=== SMSG_NEIGHBORHOOD_OPEN_CORNERSTONE_UI_RESPONSE (0x5C000A) ===\n"
         "  PlotIndex={}, Cost={}, PurchaseStatus={}, CanPurchase={}, IsPlotOwned={}\n"
         "  PlotOwnerGuid: {} ({})\n"
         "  NeighborhoodGuid: {} ({})\n"
@@ -1925,7 +2097,7 @@ void WorldSession::HandleNeighborhoodGetRoster(WorldPackets::Neighborhood::Neigh
         }
     }
 
-    TC_LOG_ERROR("housing", "=== SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE (0x5C000F) [handler] ===\n"
+    TC_LOG_DEBUG("housing", "=== SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE (0x5C000F) [handler] ===\n"
         "  Result={}, Members={}, NeighborhoodName='{}'\n"
         "  GroupNeighborhoodGuid: {} ({})\n"
         "  GroupOwnerGuid: {} ({})\n"
@@ -2024,10 +2196,18 @@ void WorldSession::HandleNeighborhoodEvictPlot(WorldPackets::Neighborhood::Neigh
             }
             else
             {
-                // Offline: delete housing directly from DB
-                CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_HOUSING);
-                stmt->setUInt64(0, evictedPlayerGuid.GetCounter());
-                CharacterDatabase.Execute(stmt);
+                // Offline: delete housing directly from DB.
+                //
+                // H-12: this used to run CHAR_DEL_CHARACTER_HOUSING alone, clearing one
+                // of the five tables and orphaning character_housing_decor, _rooms,
+                // _fixtures and _catalog. Those are selected by ownerGuid, not by house,
+                // so the rows were picked up again by the player's NEXT house - decor at
+                // the old coordinates, against a room layout that no longer existed.
+                // Housing::DeleteFromDB is the same clearing the online branch performs
+                // via DeleteHousing().
+                CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+                Housing::DeleteFromDB(evictedPlayerGuid.GetCounter(), trans);
+                CharacterDatabase.CommitTransaction(trans);
             }
         }
 
@@ -2035,6 +2215,22 @@ void WorldSession::HandleNeighborhoodEvictPlot(WorldPackets::Neighborhood::Neigh
         WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
         rosterUpdate.Residents.push_back({ evictedPlayerGuid, 2 /*Removed*/, false });
         neighborhood->BroadcastPacket(rosterUpdate.Write(), player->GetGUID());
+
+        // SMSG_NEIGHBORHOOD_EVICT_PLAYER (0x5C0000). The 12.0.7 client handler (case 6029312)
+        // does not decode any field — it consumes the remaining bytes as a blob and then fires
+        // three neighborhood-view refreshes (codes 2, 3, 1). It is a "the roster you are showing
+        // is stale, rebuild it" notification, which is exactly the state after an eviction, so it
+        // goes to everyone whose view just changed: the remaining members and the evicted player.
+        if (!evictedPlayerGuid.IsEmpty())
+        {
+            WorldPackets::Neighborhood::NeighborhoodEvictPlayerResponse evictNotification;
+            evictNotification.PlayerGuid = evictedPlayerGuid;
+            WorldPacket const* evictPkt = evictNotification.Write();
+
+            neighborhood->BroadcastPacket(evictPkt);
+            if (Player* evictedPlayer = ObjectAccessor::FindPlayer(evictedPlayerGuid))
+                evictedPlayer->SendDirectMessage(evictPkt);
+        }
 
         // Refresh NeighborhoodMirrorData (Houses[] changed)
         neighborhood->RefreshMirrorDataForOnlineMembers();

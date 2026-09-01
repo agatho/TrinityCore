@@ -2889,6 +2889,11 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void CreateGarrison(uint32 garrSiteId);
         void DeleteGarrison();
         Garrison* GetGarrison() const { return _garrison.get(); }
+        // House-visit teleport target: set by the door GO script, read+cleared by MapManager so a visitor is
+        // routed to the OWNER's HouseInteriorMap instance. Empty = enter own interior (per feature/housing-system).
+        void SetHouseVisitTarget(ObjectGuid ownerGuid) { _houseVisitTargetOwner = ownerGuid; }
+        ObjectGuid GetHouseVisitTarget() const { return _houseVisitTargetOwner; }
+        void ClearHouseVisitTarget() { _houseVisitTargetOwner = ObjectGuid::Empty; }
 
         void CreateHousing(ObjectGuid neighborhoodGuid, uint8 plotIndex);
         void DeleteHousing(ObjectGuid neighborhoodGuid);
@@ -2905,14 +2910,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         // removed SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT / LEAVE_PLOT opcodes and the
         // per-AT FHousingPlotAreaTrigger_C fragment that were deleted in 12.0.5.
         void SetCurrentHouse(ObjectGuid houseGuid);
-
-        // Transient — set by the door GO script before a visit teleport so
-        // MapManager routes the visitor to the owner's HouseInteriorMap
-        // instance (instanceId = owner's GUID counter). Empty means "enter my
-        // own interior" (the default case). Cleared by MapManager once read.
-        void SetHouseVisitTarget(ObjectGuid ownerGuid) { _houseVisitTargetOwner = ownerGuid; }
-        ObjectGuid GetHouseVisitTarget() const { return _houseVisitTargetOwner; }
-        void ClearHouseVisitTarget() { _houseVisitTargetOwner = ObjectGuid::Empty; }
 
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }

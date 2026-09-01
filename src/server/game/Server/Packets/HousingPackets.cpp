@@ -2555,42 +2555,11 @@ void NeighborhoodInitiativeOp01::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_01 NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
 }
 
-void NeighborhoodInitiativeOp05::Read()
-{
-    _worldPacket >> Field1;
-    _worldPacket >> NeighborhoodGuid;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_05 Field1: {} NeighborhoodGuid: {}", Field1, NeighborhoodGuid.ToString());
-}
 
-void NeighborhoodInitiativeOp07::Read()
-{
-    _worldPacket >> Value;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_07 Value: {}", Value);
-}
 
-void NeighborhoodInitiativeOp09::Read()
-{
-    _worldPacket >> Value;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_09 Value: {}", Value);
-}
 
-void NeighborhoodInitiativeOp0A::Read()
-{
-    _worldPacket >> Value;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0A Value: {}", Value);
-}
 
-void NeighborhoodInitiativeOp0B::Read()
-{
-    _worldPacket >> Value;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0B Value: {}", Value);
-}
 
-void NeighborhoodInitiativeOp0C::Read()
-{
-    _worldPacket >> NeighborhoodGuid;
-    TC_LOG_DEBUG("network.opcode", "CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_0C NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
-}
 
 void NeighborhoodInitiativeOp0D::Read()
 {
