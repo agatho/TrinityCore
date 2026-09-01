@@ -1707,7 +1707,7 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_SOULBIND_CONDUIT_ITEM, "SELECT MAX(ID) + 1 FROM soulbind_conduit_item", CONNECTION_SYNCH);
 
     // SoulbindConduitRankProperties.db2
-    PrepareStatement(HOTFIX_SEL_SOULBIND_CONDUIT_RANK_PROPERTIES, "SELECT ID, Rank, ItemLevel, QualityID FROM soulbind_conduit_rank_properties"
+    PrepareStatement(HOTFIX_SEL_SOULBIND_CONDUIT_RANK_PROPERTIES, "SELECT ID, `Rank`, ItemLevel, QualityID FROM soulbind_conduit_rank_properties"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_SOULBIND_CONDUIT_RANK_PROPERTIES, "SELECT MAX(ID) + 1 FROM soulbind_conduit_rank_properties", CONNECTION_SYNCH);
 
