@@ -2545,6 +2545,7 @@ struct ItemConversionEntry
     int32 ItemLogicalCostGroupID;
     int32 AlternateItemLogicalCostGroupID;
     int32 PlayerConditionID;
+    int32 Flags;                            // NEW in 12.1.0 (layout 0x538B2B37, per WoWDBDefs ItemConversion 12.1.0)
 };
 
 struct ItemConversionEntryEntry

@@ -11844,23 +11844,24 @@ struct ItemContextPickerEntryMeta
 
 struct ItemConversionMeta
 {
-    static constexpr DB2MetaField Fields[6] =
+    static constexpr DB2MetaField Fields[7] =
     {
+        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned = false },   // ID (IndexField)
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
         { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
-        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },
+        { .Type = FT_INT,                  .ArraySize =  1, .IsSigned =  true },   // Flags, NEW in 12.1.0 (layout 0x538B2B37)
     };
 
     static constexpr DB2Meta Instance =
     {
         .FileDataId         = 4337196,
-        .IndexField         = -1,
+        .IndexField         = 0,
         .ParentIndexField   = -1,
-        .FieldCount         = 6,
-        .FileFieldCount     = 6,
+        .FieldCount         = 7,
+        .FileFieldCount     = 7,
         .LayoutHash         = 0x538B2B37,
         .Fields             = Fields
     };
