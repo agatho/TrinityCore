@@ -658,6 +658,14 @@ WorldPacket const* FlightSplineSync::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* AdjustSplineDuration::Write()
+{
+    _worldPacket << Unit;
+    _worldPacket << float(Scale);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* MoveSplineSetSpeed::Write()
 {
     _worldPacket << MoverGUID;
