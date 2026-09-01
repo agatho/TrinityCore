@@ -109,6 +109,20 @@ SceneObject* SceneObject::CreateSceneObject(uint32 sceneId, Unit* creator, Posit
     return sceneObject;
 }
 
+SceneObject* SceneObject::CreatePetBattleSceneObject(Unit* creator, Position const& pos, ObjectGuid privateObjectOwner)
+{
+    ObjectGuid::LowType lowGuid = creator->GetMap()->GenerateLowGuid<HighGuid::SceneObject>();
+
+    SceneObject* sceneObject = new SceneObject();
+    if (!sceneObject->Create(lowGuid, SceneType::PetBattle, /*sceneId*/ 0, /*scriptPackageId*/ 0, creator->GetMap(), creator, pos, privateObjectOwner))
+    {
+        delete sceneObject;
+        return nullptr;
+    }
+
+    return sceneObject;
+}
+
 bool SceneObject::Create(ObjectGuid::LowType lowGuid, SceneType type, uint32 sceneId, uint32 scriptPackageId, Map* map, Unit* creator,
     Position const& pos, ObjectGuid privateObjectOwner)
 {

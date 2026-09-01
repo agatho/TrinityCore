@@ -63,6 +63,15 @@ public:
     void Remove();
 
     static SceneObject* CreateSceneObject(uint32 sceneId, Unit* creator, Position const& pos, ObjectGuid privateObjectOwner);
+
+    // Pet battles route their round-broadcast opcodes (SMSG_SCENE_OBJECT_PET_BATTLE_*) through the
+    // GUID of a SceneObject with SceneType::PetBattle (client-observed, PLAN_B5/69382). Unlike
+    // CreateSceneObject(), there is no scene_template/ScriptPackage asset behind a pet battle - the
+    // object exists purely as an addressable network entity for the opcode wrapper - so this bypasses
+    // the SceneTemplate lookup entirely (sceneId=0, scriptPackageId=0). sceneId=0 also matches the
+    // embedded id on the real client's SceneObjectGUID seen in the 69299 sniff ("SceneObject/0").
+    static SceneObject* CreatePetBattleSceneObject(Unit* creator, Position const& pos, ObjectGuid privateObjectOwner);
+
     bool Create(ObjectGuid::LowType lowGuid, SceneType type, uint32 sceneId, uint32 scriptPackageId, Map* map, Unit* creator,
         Position const& pos, ObjectGuid privateObjectOwner);
 
