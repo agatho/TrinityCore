@@ -1584,12 +1584,34 @@ void WorldSession::SendFeatureSystemStatus()
 
 void WorldSession::HandleSetFactionAtWar(WorldPackets::Character::SetFactionAtWar& packet)
 {
-    GetPlayer()->GetReputationMgr().SetAtWar(packet.FactionIndex, true);
+    ReputationMgr& reputationMgr = GetPlayer()->GetReputationMgr();
+    reputationMgr.SetAtWar(packet.FactionIndex, true);
+
+    // Read back the state SetAtWar() actually produced (it silently no-ops on an unknown RepListID or a
+    // Peaceful faction that isn't allowed to declare war - see ReputationMgr::SetAtWar), rather than
+    // echoing the client's request, so a rejected toggle is reported honestly.
+    if (FactionState const* factionState = reputationMgr.GetState(packet.FactionIndex))
+    {
+        WorldPackets::Character::SetFactionAtWarResult result;
+        result.FactionIndex = factionState->ReputationListID;
+        result.Flags = factionState->Flags.AsUnderlyingType();
+        SendPacket(result.Write());
+    }
 }
 
 void WorldSession::HandleSetFactionNotAtWar(WorldPackets::Character::SetFactionNotAtWar& packet)
 {
-    GetPlayer()->GetReputationMgr().SetAtWar(packet.FactionIndex, false);
+    ReputationMgr& reputationMgr = GetPlayer()->GetReputationMgr();
+    reputationMgr.SetAtWar(packet.FactionIndex, false);
+
+    // See HandleSetFactionAtWar: report the resulting state, not the request.
+    if (FactionState const* factionState = reputationMgr.GetState(packet.FactionIndex))
+    {
+        WorldPackets::Character::SetFactionAtWarResult result;
+        result.FactionIndex = factionState->ReputationListID;
+        result.Flags = factionState->Flags.AsUnderlyingType();
+        SendPacket(result.Write());
+    }
 }
 
 void WorldSession::HandleTutorialFlag(WorldPackets::Misc::TutorialSetFlag& packet)

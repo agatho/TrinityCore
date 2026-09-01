@@ -841,6 +841,29 @@ namespace WorldPackets
             uint16 FactionIndex = 0;
         };
 
+        // SMSG_SET_FACTION_AT_WAR (12.1 0x4501AB) - client deserializer read order is u32, u16 (RdSz 107;
+        // implementierungsplan_69382/12_1_all_neu/plans/PLAN_A4.md). FactionIndex is written as a full u32
+        // here even though it plays the same RepListID role as CMSG_SET_FACTION_AT_WAR/CMSG_SET_FACTION_NOT_AT_WAR's
+        // uint16 FactionIndex (confirmed independently via WowPacketParser's CMSG_SET_FACTION_AT_WAR parser
+        // across V3_4/V4_4/V5_5, all ReadUInt16) - CMSG and SMSG evidently use different wire widths for the
+        // same logical field, which the reflection-based JAM serializer allows.
+        // UNVERIFIED: the trailing u16 ("Flags"). No sniff exists for this opcode (0 hits) and WowPacketParser
+        // has no SMSG_SET_FACTION_AT_WAR parser at all in any build, so there is no independent cross-check.
+        // Leading hypothesis: it mirrors the resulting ReputationFlags bitmask (ReputationMgr.h) - that enum's
+        // underlying type is uint16, an exact width match with this field - but no bitfield/bit-order evidence
+        // confirms it, so it is populated best-effort from FactionState::Flags and must be re-verified against
+        // a real sniff before being treated as ground truth.
+        class SetFactionAtWarResult final : public ServerPacket
+        {
+        public:
+            explicit SetFactionAtWarResult() : ServerPacket(SMSG_SET_FACTION_AT_WAR, 4 + 2) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 FactionIndex = 0; // RepListID, see comment above
+            uint16 Flags = 0;        // UNVERIFIED, see comment above
+        };
+
         class SetFactionInactive final : public ClientPacket
         {
         public:

@@ -849,6 +849,14 @@ void SetFactionNotAtWar::Read()
     _worldPacket >> FactionIndex;
 }
 
+WorldPacket const* SetFactionAtWarResult::Write()
+{
+    _worldPacket << uint32(FactionIndex);
+    _worldPacket << uint16(Flags);
+
+    return &_worldPacket;
+}
+
 void SetFactionInactive::Read()
 {
     _worldPacket >> Index;
