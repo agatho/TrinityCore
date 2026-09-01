@@ -147,6 +147,22 @@ namespace WorldPackets
 
     [[noreturn]] void OnInvalidArraySize(std::size_t requestedSize, std::size_t sizeLimit);
 
+    // Canonical wire helpers for JamDynamicString (client reflection type behind the JAM
+    // serializer's "dynamic string" field kind, client reader ReadDynString @ 0x347D750).
+    // A JamDynamicString is a bit-packed 24-bit length written IN the bit section of the
+    // packet, with the string bytes written AFTER FlushBits - length and data therefore live
+    // in different parts of a bit-packed packet and MUST stay a split pair, never merged into
+    // a single ReadDynString/WriteDynString call. The length is value.empty() ? 0 : length()+1
+    // (includes the NUL; the empty case is 0, NOT 1). Data: if non-empty, WriteString(value)
+    // then a trailing uint8(0). Verified byte-exact against BleepPackets.cpp (BleepToken.ProxyId,
+    // SMSG 0x450384 / CMSG 0x4301A2 / 0x4301A3) - see that file's header comment for the sniff
+    // evidence. Existing per-file copies in BleepPackets.cpp and VoiceChatPackets.cpp are left
+    // as-is (VoiceChatPackets uses a templated bit-width variant); new consumers should use these.
+    void WriteDynStringLength(ByteBuffer& data, std::string const& value);
+    void WriteDynStringData(ByteBuffer& data, std::string const& value);
+    uint32 ReadDynStringLength(ByteBuffer& data);
+    void ReadDynStringData(ByteBuffer& data, std::string& value, uint32 length);
+
     template <typename T, std::size_t N, bool IsLarge>
     struct ArrayAllocatorTraits
     {
