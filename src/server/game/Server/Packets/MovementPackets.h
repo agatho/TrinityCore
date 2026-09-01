@@ -778,6 +778,28 @@ namespace WorldPackets
             bool SkipStartingArea = false;
         };
 
+        // opcode-unit-notify, PLAN_A3 §3.1 (0x45015C). Counterpart of SummonRequest above: closes
+        // the "do you want to be summoned?" dialog server-side without a player response. Wire:
+        // empty (0 bytes), matching the historical reference core (STATUS_NEVER, comment-only
+        // body). No client reader recovered (degraded collector dispatcher) and no sniff. TC's own
+        // computed trigger for "this pending summon is no longer valid without having been
+        // answered" is Player::SummonIfPossible's lazy-expiry branch (Player.cpp): the player tries
+        // to accept, but m_summon_expire (set in SendSummonRequestFrom, MAX_PLAYER_SUMMON_DELAY =
+        // 2 minutes) has already passed - TC discovers the timeout there, since nothing proactively
+        // ticks it. The explicit-decline branch is deliberately NOT wired to this: the client
+        // itself closes its own dialog on the button click that produces that branch, so echoing a
+        // cancel back would be pure redundancy, not a Retail-observed behaviour.
+        // UNVERIFIED: whether Retail also sends this for the explicit-decline case; whether a
+        // GUID/reason field exists. aufnahme_noetig: request a summon, let the 2-minute dialog run
+        // out with no click, then click "Accept" once more to force TC's lazy-expiry branch.
+        class SummonCancel final : public ServerPacket
+        {
+        public:
+            explicit SummonCancel() : ServerPacket(SMSG_SUMMON_CANCEL, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
         class SuspendToken final : public ServerPacket
         {
         public:

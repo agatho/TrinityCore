@@ -608,6 +608,21 @@ namespace WorldPackets
             ObjectGuid PlayerGUID;
         };
 
+        // opcode-unit-notify, PLAN_A3 §2.1 (0x450180). Wire: empty (0 bytes) - modeled on the
+        // historical reference core, which sends this as a body-less "NullSMsg". No client reader
+        // could be recovered here (opcode_handler_recovery: all 16 SMSG of this family resolve to
+        // the same degraded collector dispatcher, no per-opcode deserializer). Forces the client
+        // into the death/release state; TC already computes this exact transition in
+        // Player::BuildPlayerRepop (Player.cpp) - dead, corpse created, DEAD state set.
+        // UNVERIFIED: that 12.1 kept the body empty (no capture exists to confirm byte-for-byte).
+        class ForcedDeathUpdate final : public ServerPacket
+        {
+        public:
+            explicit ForcedDeathUpdate() : ServerPacket(SMSG_FORCED_DEATH_UPDATE, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
         class ReclaimCorpse final : public ClientPacket
         {
         public:

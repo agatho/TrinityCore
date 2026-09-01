@@ -22,6 +22,7 @@
 #include "BattlegroundPackets.h"
 #include "CellImpl.h"
 #include "CharmInfo.h"
+#include "CombatPackets.h"
 #include "Common.h"
 #include "Containers.h"
 #include "DB2Stores.h"
@@ -2548,9 +2549,23 @@ void AuraEffect::HandleFeignDeath(AuraApplication const* aurApp, uint8 mode, boo
                         unit->InterruptSpell(i, false);
         }
 
+        // opcode-unit-notify, PLAN_A3 §3.2 (SMSG_FEIGN_DEATH_RESISTED, 0x4501EE): TC already
+        // partitions the threat list below by isAffectedByFeignDeath - anything false here is a
+        // creature with CREATURE_FLAG_EXTRA_IGNORE_FEIGN_DEATH that is not fooled. Tell the
+        // feigning player once if at least one attacker resisted. See
+        // WorldPackets::Combat::FeignDeathResisted for the UNVERIFIED trigger caveat.
+        bool feignDeathResisted = false;
         for (auto const& [guid, ref] : target->GetThreatManager().GetThreatenedByMeList())
+        {
             if (isAffectedByFeignDeath(ref->GetOwner()))
                 ref->ScaleThreat(0.0f);
+            else
+                feignDeathResisted = true;
+        }
+
+        if (feignDeathResisted)
+            if (Player* targetPlayer = target->ToPlayer())
+                targetPlayer->SendDirectMessage(WorldPackets::Combat::FeignDeathResisted().Write());
 
         if (target->GetMap()->IsDungeon()) // feign death does not remove combat in dungeons
         {

@@ -4684,6 +4684,11 @@ void Player::BuildPlayerRepop()
 
     StopMirrorTimers();                                     //disable timers(bars)
 
+    // opcode-unit-notify, PLAN_A3 §2.1 (SMSG_FORCED_DEATH_UPDATE, 0x450180): forces the client
+    // into the death/release UI state now that the repop transition above is complete (dead,
+    // corpse created, health=1). Empty body - see WorldPackets::Misc::ForcedDeathUpdate.
+    SendDirectMessage(WorldPackets::Misc::ForcedDeathUpdate().Write());
+
     // OnPlayerRepop hook
     sScriptMgr->OnPlayerRepop(this);
 }
@@ -30541,6 +30546,11 @@ void Player::SummonIfPossible(bool agree)
     // expire and auto declined
     if (m_summon_expire < GameTime::GetGameTime())
     {
+        // opcode-unit-notify, PLAN_A3 §3.1 (SMSG_SUMMON_CANCEL, 0x45015C): this is the one place
+        // TC discovers on its own that a pending summon dialog is now stale (the player tried to
+        // accept after MAX_PLAYER_SUMMON_DELAY). Tell the client to close it. See
+        // WorldPackets::Movement::SummonCancel for the UNVERIFIED trigger caveat.
+        SendDirectMessage(WorldPackets::Movement::SummonCancel().Write());
         broadcastSummonResponse(false);
         return;
     }
