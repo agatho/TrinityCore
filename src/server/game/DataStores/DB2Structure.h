@@ -5538,9 +5538,6 @@ struct WorldStateExpressionEntry
     char const* Expression;
 };
 
-#pragma pack(pop)
-
-
 struct CharShipmentEntry
 {
     // Field order matches the 12.0.7 client db2 layout 0x91BEA68A (byte-decoded from the client
@@ -6663,5 +6660,7 @@ struct BattlePetAbilityEffectEntry
     uint16 BattlePetVisualID;
     std::array<int16, 6> Param;
 };
+
+#pragma pack(pop)
 
 #endif
