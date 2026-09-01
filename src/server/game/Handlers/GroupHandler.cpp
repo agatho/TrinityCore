@@ -733,19 +733,38 @@ void WorldSession::HandleLeaveGroupOpcode(WorldPackets::Party::LeaveGroup& packe
     }
 }
 
-void WorldSession::HandleSetLootMethodOpcode(WorldPackets::Party::SetLootMethod& /*packet*/)
+void WorldSession::HandleSetLootMethodOpcode(WorldPackets::Party::SetLootMethod& packet)
 {
-    // not allowed to change
-    /*
+    // Reactivated (was a fully-written, commented-out "not allowed to change" stub - see
+    // PLAN_A4.md Cluster A). The 6 early-return validation cases now each report the failure via
+    // SMSG_SET_LOOT_METHOD_FAILED instead of silently doing nothing. The LootMethodFailure ordinal
+    // values are UNVERIFIED - no sniff evidence for this opcode exists, they are guessed in the
+    // order the validation runs.
+    auto sendFailed = [this](WorldPackets::Party::LootMethodFailure reason)
+    {
+        WorldPackets::Party::SetLootMethodFailed setLootMethodFailed;
+        setLootMethodFailed.Reason = reason;
+        SendPacket(setLootMethodFailed.Write());
+    };
+
     Group* group = GetPlayer()->GetGroup(packet.PartyIndex);
     if (!group)
+    {
+        sendFailed(WorldPackets::Party::LootMethodFailure::NotInGroup);
         return;
+    }
 
     if (!group->IsLeader(GetPlayer()->GetGUID()))
+    {
+        sendFailed(WorldPackets::Party::LootMethodFailure::NotLeader);
         return;
+    }
 
     if (group->isLFGGroup())
+    {
+        sendFailed(WorldPackets::Party::LootMethodFailure::LfgGroup);
         return;
+    }
 
     switch (packet.LootMethod)
     {
@@ -755,21 +774,27 @@ void WorldSession::HandleSetLootMethodOpcode(WorldPackets::Party::SetLootMethod&
         case PERSONAL_LOOT:
             break;
         default:
+            sendFailed(WorldPackets::Party::LootMethodFailure::InvalidLootMethod);
             return;
     }
 
     if (packet.LootThreshold < ITEM_QUALITY_UNCOMMON || packet.LootThreshold > ITEM_QUALITY_ARTIFACT)
+    {
+        sendFailed(WorldPackets::Party::LootMethodFailure::InvalidThreshold);
         return;
+    }
 
     if (packet.LootMethod == MASTER_LOOT && !group->IsMember(packet.LootMasterGUID))
+    {
+        sendFailed(WorldPackets::Party::LootMethodFailure::InvalidMasterLooter);
         return;
+    }
 
     // everything's fine, do it
     group->SetLootMethod(static_cast<LootMethod>(packet.LootMethod));
     group->SetMasterLooterGuid(packet.LootMasterGUID);
     group->SetLootThreshold(static_cast<ItemQualities>(packet.LootThreshold));
     group->SendUpdate();
-    */
 }
 
 void WorldSession::HandleMinimapPingOpcode(WorldPackets::Party::MinimapPingClient& packet)

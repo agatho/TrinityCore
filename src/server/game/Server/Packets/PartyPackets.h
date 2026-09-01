@@ -501,6 +501,29 @@ namespace WorldPackets
             uint32 LootThreshold = 0u;
         };
 
+        // UNVERIFIED: no sniff evidence for SMSG_SET_LOOT_METHOD_FAILED (0x45027A). Ordinal values are
+        // a guess matching the validation order of the reactivated WorldSession::HandleSetLootMethodOpcode
+        // - see PLAN_A4.md Cluster A / DEFINITION_OF_DONE_pro_opcode.md.
+        enum class LootMethodFailure : uint8
+        {
+            NotInGroup          = 0,
+            NotLeader           = 1,
+            LfgGroup            = 2,
+            InvalidLootMethod   = 3,
+            InvalidThreshold    = 4,
+            InvalidMasterLooter = 5
+        };
+
+        class SetLootMethodFailed final : public ServerPacket
+        {
+        public:
+            explicit SetLootMethodFailed() : ServerPacket(SMSG_SET_LOOT_METHOD_FAILED, 1) { }
+
+            WorldPacket const* Write() override;
+
+            LootMethodFailure Reason = LootMethodFailure::NotInGroup;
+        };
+
         class MinimapPingClient final : public ClientPacket
         {
         public:

@@ -639,6 +639,21 @@ namespace WorldPackets
             uint32 Reason = 0;
         };
 
+        // Byte-exact from 69382 sniff (wpp_work/in/s69382_ws6_parsed.txt, 5 hits, all False). Sent
+        // immediately after SMSG_LOGIN_VERIFY_WORLD on every map/instance entry (login AND later
+        // teleports - the sniff shows repeat hits well after the initial login). UNVERIFIED: the
+        // condition under which retail would send True - no True sample exists in any available
+        // capture, so this core always sends False (see PLAN_A4.md Cluster A).
+        class LegacyLootRules final : public ServerPacket
+        {
+        public:
+            explicit LegacyLootRules() : ServerPacket(SMSG_LEGACY_LOOT_RULES, 1) { }
+
+            WorldPacket const* Write() override;
+
+            bool LegacyRulesActive = false;
+        };
+
         enum class LoginFailureReason : uint8
         {
             Failed                          = 0,

@@ -718,6 +718,13 @@ WorldPacket const* LoginVerifyWorld::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* LegacyLootRules::Write()
+{
+    _worldPacket << uint8(LegacyRulesActive);
+
+    return &_worldPacket;
+}
+
 WorldPacket const* CharacterLoginFailed::Write()
 {
     _worldPacket << uint8(Code);

@@ -28973,6 +28973,17 @@ void Player::SendInitialPacketsBeforeAddToMap()
     /// SMSG_BINDPOINTUPDATE
     SendBindPointUpdate();
 
+    // SMSG_LEGACY_LOOT_RULES (0x4502D4): byte-exact from a 69382 sniff (5 hits, all False - see
+    // PLAN_A4.md Cluster A). This function runs on every map/instance entry (login via
+    // CharacterHandler AND every later world port via MovementHandler), matching the repeated hits
+    // seen well after the initial login in the capture. UNVERIFIED: the condition that would make
+    // retail send True - no True sample exists in any available capture, so this core always sends
+    // False.
+    {
+        WorldPackets::Character::LegacyLootRules legacyLootRules;
+        GetSession()->SendPacket(legacyLootRules.Write());
+    }
+
     // SMSG_SET_PROFICIENCY
     // SMSG_SET_PCT_SPELL_MODIFIER
     // SMSG_SET_FLAT_SPELL_MODIFIER

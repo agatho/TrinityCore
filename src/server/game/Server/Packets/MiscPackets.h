@@ -1588,6 +1588,21 @@ namespace WorldPackets
             uint32 CurrencyID = 0;
         };
 
+        // Byte-exact from a 69382 sniff (wpp_work/in/s69273_a_parsed.txt:437635, Length 8, u64 Money).
+        // UNVERIFIED which Player::ModifyMoney gain sources should trigger this vs. rely solely on
+        // the existing SMSG_LOOT_MONEY_NOTIFY / field-sync push (see PLAN_A4.md Cluster D) - built at
+        // the corpse/chest money-loot path (WorldSession::HandleLootMoneyOpcode), which is the one
+        // observed candidate that is not already covered by its own confirmation packet.
+        class NotifyMoney final : public ServerPacket
+        {
+        public:
+            explicit NotifyMoney() : ServerPacket(SMSG_NOTIFY_MONEY, 8) { }
+
+            WorldPacket const* Write() override;
+
+            uint64 Money = 0;
+        };
+
         class AccountWarbandSceneUpdate final : public ServerPacket
         {
         public:
