@@ -4434,13 +4434,18 @@ void WorldSession::HandleGuildGetOthersOwnedHouses(WorldPackets::Housing::GuildG
     // Look up houses owned by the specified player (typically a guild member)
     std::vector<Neighborhood*> neighborhoods = sNeighborhoodMgr.GetNeighborhoodsForPlayer(guildGetOthersOwnedHouses.PlayerGuid);
 
-    WorldPackets::Housing::HousingSvcsGuildGetHousingInfoResponse response;
+    // PLAN_B4 C.1: CMSG_GUILD_GET_OTHERS_OWNED_HOUSES is answered by the dedicated
+    // SMSG_GUILD_OTHERS_OWNED_HOUSES_RESULT (0x510047) -- a FLAT house list plus the querying
+    // player's guild GUID -- not the neighborhood-grouped HousingSvcsGuildGetHousingInfoResponse
+    // (0x580016) that was sent before. That grouped packet is a different opcode entirely, so the
+    // client never matched it to this request (the handler produced no visible effect). Wire is
+    // IDA-verified for build 67186; JamCliHouse element layout is the 12.0.7/68275 order.
+    // UNVERIFIED against a live 69404 sniff -- re-check when a capture is available.
+    WorldPackets::Housing::GuildOthersOwnedHousesResult response;
+    if (Guild const* guild = sGuildMgr->GetGuildById(player->GetGuildId()))
+        response.GuildGuid = guild->GetGUID();
     for (Neighborhood* neighborhood : neighborhoods)
     {
-        WorldPackets::Housing::JamCliHouseFinderNeighborhood entry;
-        entry.NeighborhoodGUID = neighborhood->GetGuid();
-        entry.OwnerGUID = neighborhood->GetOwnerGuid();
-        entry.Name = neighborhood->GetName();
         for (auto const& plot : neighborhood->GetPlots())
         {
             if (!plot.IsOccupied())
@@ -4450,9 +4455,8 @@ void WorldSession::HandleGuildGetOthersOwnedHouses(WorldPackets::Housing::GuildG
             house.OwnerGUID = plot.OwnerGuid;
             house.NeighborhoodGUID = neighborhood->GetGuid();
             house.PlotIndex = plot.PlotIndex;
-            entry.Houses.push_back(std::move(house));
+            response.Houses.push_back(std::move(house));
         }
-        response.Neighborhoods.push_back(std::move(entry));
     }
     SendPacket(response.Write());
 
