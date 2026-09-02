@@ -2379,6 +2379,11 @@ struct ItemConversionEntry
     int32 ItemLogicalCostGroupID;
     int32 AlternateItemLogicalCostGroupID;
     int32 PlayerConditionID;
+    int32 Flags;                            // 6th DATA field. The .db2 (68914) is NON-INLINE id:
+                                            // the file-size check proved a separate id block exists
+                                            // (546 = 502 + 4*RecordCount), so WDC5 TotalFieldCount=6
+                                            // counts 6 DATA columns (id not counted) -> struct = id + 6
+                                            // data (7 members), Meta IndexField=-1 (see DB2Metadata.h).
 };
 
 struct ItemConversionEntryEntry

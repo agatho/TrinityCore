@@ -2955,7 +2955,9 @@ struct ItemContextPickerEntryLoadInfo
 
 struct ItemConversionLoadInfo
 {
-    static constexpr DB2FieldMeta Fields[6] =
+    // Non-inline id (the .db2 has a separate id block; see Meta IndexField=-1). LoadInfo carries
+    // ID + the 6 data fields; ourMetaString skips Fields[0] (ID). struct = id + 6 data.
+    static constexpr DB2FieldMeta Fields[7] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Unknown920" },
@@ -2963,9 +2965,10 @@ struct ItemConversionLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "ItemLogicalCostGroupID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "AlternateItemLogicalCostGroupID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "PlayerConditionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },     // 6th data field (69404 layout 0x538B2B37)
     };
 
-    static constexpr DB2LoadInfo Instance{ Fields, 6, &ItemConversionMeta::Instance, HOTFIX_SEL_ITEM_CONVERSION };
+    static constexpr DB2LoadInfo Instance{ Fields, 7, &ItemConversionMeta::Instance, HOTFIX_SEL_ITEM_CONVERSION };
 };
 
 struct ItemConversionEntryLoadInfo
