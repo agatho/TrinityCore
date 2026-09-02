@@ -832,6 +832,16 @@ WorldPacket const* LogXPGain::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* XPGainAborted::Write()
+{
+    _worldPacket << Victim;
+    _worldPacket << int32(Amount);
+    _worldPacket << int32(Unused1);
+    _worldPacket << int32(Unused2);
+
+    return &_worldPacket;
+}
+
 // Payload: bits<1>, 1 byte. Length calibrated against SMSG_TALENTS_INVOLUNTARILY_RESET (0x4501C3,
 // identical reader shape, 4 captured packets, constant 1 byte) and SMSG_ACTIVE_GLYPHS (0x670047,
 // 2 captured packets whose trailing bit byte is 0x80).
