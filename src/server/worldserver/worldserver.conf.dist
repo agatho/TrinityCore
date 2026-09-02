@@ -4404,3 +4404,18 @@ Load.Locales = 1
 
 #
 ###################################################################################################
+
+###################################################################################################
+# COMMERCE / IN-GAME SHOP (BattlePay)
+#
+#    Shop.RealMoney.Mode
+#        Description: How real-money (CurrencyTypesID == 0) shop products are settled.
+#                     web      - the client opens the web checkout; the realm sends no game
+#                                response and grants only when the payment backend (PayPal) confirms.
+#                     instant  - grant server-side immediately with no charge (private-realm QA).
+#                     disabled - refuse real-money purchases (no token, no grant).
+#        Default:     "instant"
+
+Shop.RealMoney.Mode = "instant"
+
+###################################################################################################
