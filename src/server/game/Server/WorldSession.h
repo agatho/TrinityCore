@@ -903,6 +903,7 @@ namespace WorldPackets
         class CloseRuneforgeInteraction;
         class CloseTraitSystemInteraction;
         class ConversationLineStarted;
+        class ConversationCinematicReady;
         class RequestLatestSplashScreen;
         class QueryCountdownTimer;
         class DoCountdown;
@@ -3044,6 +3045,7 @@ class TC_GAME_API WorldSession
         bool IsCommentator() const { return _isCommentator; }
         void SetCommentator(bool on) { _isCommentator = on; }
         void HandleConversationLineStarted(WorldPackets::Misc::ConversationLineStarted& conversationLineStarted);
+        void HandleConversationCinematicReady(WorldPackets::Misc::ConversationCinematicReady& conversationCinematicReady);
         void HandleKeyboundOverride(WorldPackets::Spells::KeyboundOverride& keyboundOverride);
         void HandleRequestCrowdControlSpell(WorldPackets::Spells::RequestCrowdControlSpell& requestCrowdControlSpell);
         void HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownTimer& queryCountdownTimer);
@@ -3187,6 +3189,12 @@ class TC_GAME_API WorldSession
 
         std::array<uint8, 32> const& GetRealmListSecret() const { return _realmListSecret; }
         void SetRealmListSecret(std::array<uint8, 32> const& secret) { _realmListSecret = secret; }
+
+        // In-game realm-list ticket, minted per session by HandleBattlenetChangeRealmTicket and required by the
+        // tunnelled Command_RealmListRequest_v1 / Command_RealmJoinRequest_v1. Replaces the former constant
+        // "WorldserverRealmListTicket" literal, which was identical for every session and never validated.
+        void SetBattlenetRealmListTicket(std::string ticket, Seconds duration);
+        bool IsBattlenetRealmListTicketValid(std::string_view presented) const;
 
         std::unordered_map<uint32, uint8> const& GetRealmCharacterCounts() const { return _realmCharacterCounts; }
 
@@ -3402,6 +3410,8 @@ class TC_GAME_API WorldSession
         ClientBuild::VariantId _clientBuildVariant;
 
         std::array<uint8, 32> _realmListSecret;
+        std::string _realmListTicket;
+        SystemTimePoint _realmListTicketExpiry = SystemTimePoint::min();
         std::unordered_map<uint32 /*realmAddress*/, uint8> _realmCharacterCounts;
         std::unordered_map<uint32, std::function<void(MessageBuffer)>> _battlenetResponseCallbacks;
         uint32 _battlenetRequestToken;
