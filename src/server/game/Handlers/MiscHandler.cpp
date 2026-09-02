@@ -1162,34 +1162,107 @@ void WorldSession::HandleSetRaidDifficultyOpcode(WorldPackets::Misc::SetRaidDiff
 
 void WorldSession::HandleSetDifficultyID(WorldPackets::Misc::SetDifficultyID& setDifficultyID)
 {
-    // Unified 12.x difficulty-select opcode: the wire carries only the Difficulty.db2 id. Route to the
-    // existing (fully validated) dungeon/raid handlers by the DifficultyEntry's InstanceType so all the
-    // selectability / in-instance / group-leader / LFG / reset logic is reused verbatim - the client
-    // still uses this single opcode for both dungeon and raid difficulty in Midnight.
+    // Interactive 12.x difficulty change. Unlike the out-of-instance dropdown (CMSG_SET_DUNGEON_DIFFICULTY /
+    // CMSG_SET_RAID_DIFFICULTY, which reply with the SMSG_SET_DUNGEON_DIFFICULTY field update), this opcode
+    // carries only the Difficulty.db2 id and the client waits for SMSG_CHANGE_PLAYER_DIFFICULTY_RESULT - the
+    // rich result carrying either Success (with the applied MapID + DifficultyID) or one of the client's own
+    // ERR_DIFFICULTY_CHANGE_* refusal codes. Wire + pairing recovered from the 12.1.0.69497 client (writer
+    // RVA 0x1406CC920, single int16 DifficultyID) and the two captured result bodies (Success / Pending);
+    // upstream leaves both this CMSG and the result SMSG unhandled.
+    using ResultCode = WorldPackets::Misc::ChangePlayerDifficultyResultCode;
+
     DifficultyEntry const* difficultyEntry = sDifficultyStore.LookupEntry(setDifficultyID.DifficultyID);
     if (!difficultyEntry)
+        return;
+
+    // Only selectable dungeon/raid difficulties are meaningful; the client never offers others.
+    if (difficultyEntry->InstanceType != MAP_INSTANCE && difficultyEntry->InstanceType != MAP_RAID)
+        return;
+    if (!(difficultyEntry->Flags & DIFFICULTY_FLAG_CAN_SELECT))
+        return;
+
+    auto sendResult = [this](ResultCode code)
     {
-        TC_LOG_DEBUG("network", "WorldSession::HandleSetDifficultyID: {} sent an invalid difficulty {}!",
-            _player->GetGUID().ToString(), setDifficultyID.DifficultyID);
+        SendPacket(WorldPackets::Misc::ChangePlayerDifficultyResult(code).Write());
+    };
+
+    // Refusals whose meaning is the client's own error code verbatim (no guessing): the client shows
+    // ERR_DIFFICULTY_CHANGE_COMBAT / ERR_DIFFICULTY_DISABLED_IN_LFG for exactly these conditions.
+    if (_player->IsInCombat())
+    {
+        sendResult(ResultCode::Combat);
         return;
     }
 
-    if (difficultyEntry->InstanceType == MAP_INSTANCE)
+    bool const isRaid = difficultyEntry->InstanceType == MAP_RAID;
+    bool const legacy = (difficultyEntry->Flags & DIFFICULTY_FLAG_LEGACY) != 0;
+    Difficulty const difficultyID = Difficulty(difficultyEntry->ID);
+
+    Group* group = _player->GetGroup();
+    if (group)
     {
-        WorldPackets::Misc::SetDungeonDifficulty dungeon{ WorldPacket(CMSG_SET_DUNGEON_DIFFICULTY) };
-        dungeon.DifficultyID = setDifficultyID.DifficultyID;
-        HandleSetDungeonDifficultyOpcode(dungeon);
+        if (group->isLFGGroup())
+        {
+            sendResult(ResultCode::DisabledInLFG);
+            return;
+        }
+
+        // Only the leader changes the group's difficulty; the client gates this and sends no error on the
+        // wire for a non-leader, so mirror that with a silent no-op rather than an invented result code.
+        if (!group->IsLeader(_player->GetGUID()))
+            return;
     }
-    else if (difficultyEntry->InstanceType == MAP_RAID)
+
+    // TrinityCore only sets the difficulty of future instances; it cannot safely retune a map the player is
+    // already inside without desyncing it. That is the one condition whose exact retail result code is not
+    // recoverable offline, so rather than emit a guessed code we decline silently (the change simply does not
+    // happen, which is truthful) - see the same guard in HandleSetDungeonDifficultyOpcode.
+    if (Map* map = _player->FindMap(); map && map->Instanceable())
+        return;
+
+    // Already the active difficulty: acknowledge it but do not run the instance reset again (that would
+    // needlessly wipe saved progress on a redundant re-select).
+    Difficulty const current = isRaid ? (legacy ? _player->GetLegacyRaidDifficultyID() : _player->GetRaidDifficultyID())
+                                      : _player->GetDungeonDifficultyID();
+    if (difficultyID == current)
     {
-        WorldPackets::Misc::SetRaidDifficulty raid{ WorldPacket(CMSG_SET_RAID_DIFFICULTY) };
-        raid.DifficultyID = setDifficultyID.DifficultyID;
-        raid.Legacy = (difficultyEntry->Flags & DIFFICULTY_FLAG_LEGACY) != 0;
-        HandleSetRaidDifficultyOpcode(raid);
+        WorldPackets::Misc::ChangePlayerDifficultyResult unchanged(ResultCode::Success);
+        unchanged.MapID = _player->GetMapId();
+        unchanged.DifficultyID = uint16(difficultyID);
+        SendPacket(unchanged.Write());
+        return;
+    }
+
+    // Apply - identical state changes to the dropdown handlers.
+    if (group)
+    {
+        group->ResetInstances(InstanceResetMethod::OnChangeDifficulty, _player);
+        if (isRaid)
+            legacy ? group->SetLegacyRaidDifficultyID(difficultyID) : group->SetRaidDifficultyID(difficultyID);
+        else
+            group->SetDungeonDifficultyID(difficultyID);
     }
     else
-        TC_LOG_DEBUG("network", "WorldSession::HandleSetDifficultyID: {} sent difficulty {} with unhandled instance type {}",
-            _player->GetGUID().ToString(), difficultyEntry->ID, difficultyEntry->InstanceType);
+    {
+        _player->ResetInstances(InstanceResetMethod::OnChangeDifficulty);
+        if (isRaid)
+            legacy ? _player->SetLegacyRaidDifficultyID(difficultyID) : _player->SetRaidDifficultyID(difficultyID);
+        else
+            _player->SetDungeonDifficultyID(difficultyID);
+    }
+
+    // Canonical difficulty field the client consumes in every context (login, group join, change) ...
+    if (isRaid)
+        _player->SendRaidDifficulty(legacy);
+    else
+        _player->SendDungeonDifficulty();
+
+    // ... and the interactive confirmation this opcode is waiting on. Success carries the applied map +
+    // difficulty; the client stores DifficultyID for MapID when it is the map it is on.
+    WorldPackets::Misc::ChangePlayerDifficultyResult result(ResultCode::Success);
+    result.MapID = _player->GetMapId();
+    result.DifficultyID = uint16(difficultyID);
+    SendPacket(result.Write());
 }
 
 void WorldSession::HandleSetTaxiBenchmark(WorldPackets::Misc::SetTaxiBenchmarkMode& packet)
