@@ -303,6 +303,11 @@ void SetRaidDifficulty::Read()
     _worldPacket >> DifficultyID;
 }
 
+void SetDifficultyID::Read()
+{
+    _worldPacket >> DifficultyID;
+}
+
 WorldPacket const* ChangePlayerDifficultyResult::Write()
 {
     // The client reads one byte and splits it Result = b >> 4, InCombat = (b >> 3) & 1, which is
