@@ -216,4 +216,15 @@ WorldPacket const* AccountTransmogUpdate::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* AccountTransmogSetFavoritesUpdate::Write()
+{
+    _worldPacket << Bits<1>(IsFullUpdate);
+    _worldPacket << Bits<1>(IsSetFavorite);
+    _worldPacket << Size<uint32>(FavoriteTransmogSets);
+    if (!FavoriteTransmogSets.empty())
+        _worldPacket.append(FavoriteTransmogSets.data(), FavoriteTransmogSets.size());
+
+    return &_worldPacket;
+}
 }

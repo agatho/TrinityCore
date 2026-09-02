@@ -122,6 +122,7 @@ void CollectionMgr::SaveToDB(LoginDatabaseTransaction trans)
     SaveAccountHeirlooms(trans);
     SaveAccountMounts(trans);
     SaveAccountItemAppearances(trans);
+    SaveAccountFavoriteTransmogSets(trans);
     SaveAccountTransmogIllusions(trans);
     SaveAccountTransmogOutfits(trans);
     SaveAccountWarbandScenes(trans);
@@ -1138,6 +1139,90 @@ void CollectionMgr::SendFavoriteAppearances() const
             accountTransmogUpdate.NewAppearances.push_back(itemModifiedAppearanceId);
 
     _owner->SendPacket(accountTransmogUpdate.Write());
+}
+
+void CollectionMgr::LoadAccountFavoriteTransmogSets(PreparedQueryResult favoriteTransmogSets)
+{
+    if (!favoriteTransmogSets)
+        return;
+
+    do
+    {
+        _favoriteTransmogSets[favoriteTransmogSets->Fetch()[0].GetUInt32()] = CollectionItemState::Unchanged;
+    } while (favoriteTransmogSets->NextRow());
+}
+
+void CollectionMgr::SaveAccountFavoriteTransmogSets(LoginDatabaseTransaction trans)
+{
+    LoginDatabasePreparedStatement* stmt;
+    for (auto itr = _favoriteTransmogSets.begin(); itr != _favoriteTransmogSets.end();)
+    {
+        switch (itr->second)
+        {
+            case CollectionItemState::New:
+                stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_BNET_ITEM_FAVORITE_TRANSMOG_SET);
+                stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+                stmt->setUInt32(1, itr->first);
+                trans->Append(stmt);
+                itr->second = CollectionItemState::Unchanged;
+                ++itr;
+                break;
+            case CollectionItemState::Removed:
+                stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_BNET_ITEM_FAVORITE_TRANSMOG_SET);
+                stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+                stmt->setUInt32(1, itr->first);
+                trans->Append(stmt);
+                itr = _favoriteTransmogSets.erase(itr);
+                break;
+            case CollectionItemState::Unchanged:
+            case CollectionItemState::Changed:
+                ++itr;
+                break;
+        }
+    }
+}
+
+void CollectionMgr::SetTransmogSetIsFavorite(uint32 transmogSetId, bool apply)
+{
+    auto itr = _favoriteTransmogSets.find(transmogSetId);
+    if (apply)
+    {
+        if (itr == _favoriteTransmogSets.end())
+            _favoriteTransmogSets[transmogSetId] = CollectionItemState::New;
+        else if (itr->second == CollectionItemState::Removed)
+            itr->second = CollectionItemState::Unchanged;
+        else
+            return;
+    }
+    else if (itr != _favoriteTransmogSets.end())
+    {
+        if (itr->second == CollectionItemState::New)
+            _favoriteTransmogSets.erase(transmogSetId);
+        else
+            itr->second = CollectionItemState::Removed;
+    }
+    else
+        return;
+
+    // Incremental form: IsFullUpdate false, and IsSetFavorite selects insert versus erase on the client.
+    WorldPackets::Transmogrification::AccountTransmogSetFavoritesUpdate update;
+    update.IsFullUpdate = false;
+    update.IsSetFavorite = apply;
+    update.FavoriteTransmogSets.push_back(transmogSetId);
+
+    _owner->SendPacket(update.Write());
+}
+
+void CollectionMgr::SendFavoriteTransmogSets() const
+{
+    WorldPackets::Transmogrification::AccountTransmogSetFavoritesUpdate update;
+    update.IsFullUpdate = true;
+    update.FavoriteTransmogSets.reserve(_favoriteTransmogSets.size());
+    for (auto [transmogSetId, state] : _favoriteTransmogSets)
+        if (state != CollectionItemState::Removed)
+            update.FavoriteTransmogSets.push_back(transmogSetId);
+
+    _owner->SendPacket(update.Write());
 }
 
 void CollectionMgr::LoadTransmogIllusions()

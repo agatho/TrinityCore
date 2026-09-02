@@ -194,6 +194,26 @@ namespace WorldPackets
             std::vector<uint32> NewAppearances;
         };
 
+        // SMSG_ACCOUNT_TRANSMOG_SET_FAVORITES_UPDATE (0x420050) - the ItemCollectionType::TransmogSetFavorite member
+        // of the account-collection update family, sibling to SMSG_ACCOUNT_TRANSMOG_UPDATE (Transmog). Wire form, as
+        // read by the client deserializer at RVA 0x5E9010:
+        //     bit IsFullUpdate; bit IsSetFavorite; uint32 count; uint32 transmogSetIDs[count];
+        // The IDs are TransmogSet.db2 rows: the client container this fills is written only by the setter whose sole
+        // caller is C_TransmogSets.SetIsFavorite(transmogSetID, isFavorite). Handler at RVA 0x2124140 - when
+        // IsFullUpdate it frees every node and re-inserts the whole list, otherwise IsSetFavorite selects insert
+        // versus erase for the IDs carried.
+        class AccountTransmogSetFavoritesUpdate final : public ServerPacket
+        {
+        public:
+            explicit AccountTransmogSetFavoritesUpdate() : ServerPacket(SMSG_ACCOUNT_TRANSMOG_SET_FAVORITES_UPDATE) { }
+
+            WorldPacket const* Write() override;
+
+            bool IsFullUpdate = false;
+            bool IsSetFavorite = false;
+            std::vector<uint32> FavoriteTransmogSets;
+        };
+
         // CMSG_CLEAR_NEW_APPEARANCE (12.1 value 0x2A0005) -- "I have seen this wardrobe entry, drop its NEW
         // badge". Wire, from the 12.1.0.69382 client serializer RVA 0x746D30: it writes the opcode
         // (2752517 = 0x2A0005) and then one Write<uint32>. Fixed 8 bytes on the wire, 4 in the body.

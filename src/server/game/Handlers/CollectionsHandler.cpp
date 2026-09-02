@@ -36,6 +36,7 @@ void WorldSession::HandleCollectionItemSetFavorite(WorldPackets::Collections::Co
             break;
         }
         case ItemCollectionType::TransmogSetFavorite:
+            GetCollectionMgr()->SetTransmogSetIsFavorite(collectionItemSetFavorite.ID, collectionItemSetFavorite.IsFavorite);
             break;
         case ItemCollectionType::WarbandScene:
             GetCollectionMgr()->SetWarbandSceneIsFavorite(collectionItemSetFavorite.ID, collectionItemSetFavorite.IsFavorite);

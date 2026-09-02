@@ -210,6 +210,12 @@ public:
     void SetAppearanceIsFavorite(uint32 itemModifiedAppearanceId, bool apply);
     void SendFavoriteAppearances() const;
 
+    // Favorite transmog sets (ItemCollectionType::TransmogSetFavorite) - account-wide, TransmogSet.db2 ids
+    void LoadAccountFavoriteTransmogSets(PreparedQueryResult favoriteTransmogSets);
+    void SaveAccountFavoriteTransmogSets(LoginDatabaseTransaction trans);
+    void SetTransmogSetIsFavorite(uint32 transmogSetId, bool apply);
+    void SendFavoriteTransmogSets() const;
+
     // "New" appearances: the wardrobe NEW label + glow. Server-owned account state, cleared by
     // CMSG_CLEAR_NEW_APPEARANCE when the player looks at the entry.
     void ClearNewAppearance(uint32 itemModifiedAppearanceId);
@@ -252,6 +258,7 @@ private:
     std::unique_ptr<boost::dynamic_bitset<uint32>> _appearances;
     std::unordered_map<uint32, std::unordered_set<ObjectGuid>> _temporaryAppearances;
     std::unordered_map<uint32, CollectionItemState> _favoriteAppearances;
+    std::unordered_map<uint32, CollectionItemState> _favoriteTransmogSets;
     std::unordered_map<uint32, CollectionItemState> _newAppearances;   // itemModifiedAppearanceId -> pending "NEW" badge
     std::unique_ptr<boost::dynamic_bitset<uint32>> _transmogIllusions;
     Trinity::Containers::FlatSet<int32> _transmogOutfits;
