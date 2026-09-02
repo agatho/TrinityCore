@@ -29349,6 +29349,9 @@ void Player::SendInitialPacketsAfterAddToMap()
 
     GetSceneMgr().TriggerDelayedScenes();
 
+    // Push the account-wide store front (catalogue + per-item ownership) once the player is in the world.
+    GetSession()->SendAccountStoreFrontUpdate();
+
     // Resynchronise the client's world elapsed timers for the map we just entered. This is what
     // makes a mid-run zone-in (or a relog inside a running Mythic+ instance) show the dungeon timer
     // at the correct elapsed value - previously the timer was only ever pushed once, at run start,
@@ -29733,10 +29736,6 @@ void Player::SetDailyQuestStatus(uint32 quest_id)
 bool Player::IsDailyQuestDone(uint32 quest_id) const
 {
     return m_activePlayerData->DailyQuestsCompleted.FindIndex(quest_id) >= 0;
-    GetSceneMgr().TriggerDelayedScenes();
-
-    // Push the account-wide store front (catalogue + per-item ownership) once the player is in the world.
-    GetSession()->SendAccountStoreFrontUpdate();
 }
 
 void Player::SetWeeklyQuestStatus(uint32 quest_id)

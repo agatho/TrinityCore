@@ -191,7 +191,7 @@ public:
 
     // Appearances
     void LoadItemAppearances();
-    void LoadAccountItemAppearances(PreparedQueryResult knownAppearances, PreparedQueryResult favoriteAppearances, PreparedQueryResult newAppearances);
+    void LoadAccountItemAppearances(PreparedQueryResult knownAppearances, PreparedQueryResult favoriteAppearances, PreparedQueryResult newAppearances = PreparedQueryResult());
     void SaveAccountItemAppearances(LoginDatabaseTransaction trans);
     void AddItemAppearance(Item* item);
     void AddItemAppearance(uint32 itemId, uint32 appearanceModId = 0);
