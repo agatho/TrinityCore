@@ -1083,6 +1083,99 @@ void WorldSession::HandleSetRaidDifficultyOpcode(WorldPackets::Misc::SetRaidDiff
     _player->SendRaidDifficulty(setRaidDifficulty.Legacy != 0);
 }
 
+void WorldSession::HandleSetDifficultyID(WorldPackets::Misc::SetDifficultyID& setDifficultyID)
+{
+    // Interactive 12.x difficulty change. Unlike the out-of-instance dropdown (CMSG_SET_DUNGEON_DIFFICULTY /
+    // CMSG_SET_RAID_DIFFICULTY, which reply with the SMSG_SET_DUNGEON_DIFFICULTY field update), this opcode
+    // carries only the Difficulty.db2 id and the client waits for SMSG_CHANGE_PLAYER_DIFFICULTY_RESULT - the
+    // rich result carrying either Success (with the applied MapID + DifficultyID) or one of the client's own
+    // ERR_DIFFICULTY_CHANGE_* refusal codes. Wire + pairing recovered from the 12.1.0.69497 client (writer
+    // RVA 0x1406CC920, single int16 DifficultyID) and the two captured result bodies (Success / Pending);
+    // upstream leaves both this CMSG and the result SMSG unhandled. Not Mythic+: keystones are the separate
+    // ChallengeMode system (CMSG_START_CHALLENGE_MODE); the CAN_SELECT gate keeps this off keystone difficulty.
+    using ResultCode = WorldPackets::Misc::ChangePlayerDifficultyResultCode;
+
+    DifficultyEntry const* difficultyEntry = sDifficultyStore.LookupEntry(setDifficultyID.DifficultyID);
+    if (!difficultyEntry)
+        return;
+
+    if (difficultyEntry->InstanceType != MAP_INSTANCE && difficultyEntry->InstanceType != MAP_RAID)
+        return;
+    if (!(difficultyEntry->Flags & DIFFICULTY_FLAG_CAN_SELECT))
+        return;
+
+    auto sendResult = [this](ResultCode code)
+    {
+        SendPacket(WorldPackets::Misc::ChangePlayerDifficultyResult(code).Write());
+    };
+
+    if (_player->IsInCombat())
+    {
+        sendResult(ResultCode::Combat);
+        return;
+    }
+
+    bool const isRaid = difficultyEntry->InstanceType == MAP_RAID;
+    bool const legacy = (difficultyEntry->Flags & DIFFICULTY_FLAG_LEGACY) != 0;
+    Difficulty const difficultyID = Difficulty(difficultyEntry->ID);
+
+    Group* group = _player->GetGroup();
+    if (group)
+    {
+        if (group->isLFGGroup())
+        {
+            sendResult(ResultCode::DisabledInLFG);
+            return;
+        }
+        if (!group->IsLeader(_player->GetGUID()))
+            return;
+    }
+
+    // TrinityCore only sets the difficulty of future instances; it cannot safely retune a map the player is
+    // already inside. That is the one condition whose exact retail result code is not recoverable offline, so
+    // we decline silently rather than emit a guessed code (the change simply does not happen).
+    if (Map* map = _player->FindMap(); map && map->Instanceable())
+        return;
+
+    Difficulty const current = isRaid ? (legacy ? _player->GetLegacyRaidDifficultyID() : _player->GetRaidDifficultyID())
+                                      : _player->GetDungeonDifficultyID();
+    if (difficultyID == current)
+    {
+        WorldPackets::Misc::ChangePlayerDifficultyResult unchanged(ResultCode::Success);
+        unchanged.MapID = _player->GetMapId();
+        unchanged.DifficultyID = uint16(difficultyID);
+        SendPacket(unchanged.Write());
+        return;
+    }
+
+    if (group)
+    {
+        group->ResetInstances(InstanceResetMethod::OnChangeDifficulty, _player);
+        if (isRaid)
+            legacy ? group->SetLegacyRaidDifficultyID(difficultyID) : group->SetRaidDifficultyID(difficultyID);
+        else
+            group->SetDungeonDifficultyID(difficultyID);
+    }
+    else
+    {
+        _player->ResetInstances(InstanceResetMethod::OnChangeDifficulty);
+        if (isRaid)
+            legacy ? _player->SetLegacyRaidDifficultyID(difficultyID) : _player->SetRaidDifficultyID(difficultyID);
+        else
+            _player->SetDungeonDifficultyID(difficultyID);
+    }
+
+    if (isRaid)
+        _player->SendRaidDifficulty(legacy);
+    else
+        _player->SendDungeonDifficulty();
+
+    WorldPackets::Misc::ChangePlayerDifficultyResult result(ResultCode::Success);
+    result.MapID = _player->GetMapId();
+    result.DifficultyID = uint16(difficultyID);
+    SendPacket(result.Write());
+}
+
 void WorldSession::HandleSetTaxiBenchmark(WorldPackets::Misc::SetTaxiBenchmarkMode& packet)
 {
     if (packet.Enable)

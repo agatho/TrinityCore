@@ -416,6 +416,19 @@ namespace WorldPackets
             int16 DifficultyID = 0;
         };
 
+        // CMSG_SET_DIFFICULTY_ID (0x3D00E4): the unified 12.x interactive difficulty change. Wire (client
+        // writer RVA 0x1406CC920, 69497 cleaned exe): a single int16 DifficultyID (Difficulty.db2 id). Its
+        // reply is SMSG_CHANGE_PLAYER_DIFFICULTY_RESULT (not the dropdown's field update).
+        class SetDifficultyID final : public ClientPacket
+        {
+        public:
+            explicit SetDifficultyID(WorldPacket&& packet) : ClientPacket(CMSG_SET_DIFFICULTY_ID, std::move(packet)) { }
+
+            void Read() override;
+
+            int16 DifficultyID = 0;
+        };
+
         // Values recovered from the 12.0.7 client's own game-error table (the handler indexes it
         // with these ids and each entry names one ERR_DIFFICULTY_* string), so the names below are
         // the client's, not invented. Which trailing fields are present depends on the value -
