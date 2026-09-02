@@ -1628,7 +1628,7 @@ struct DriveCapabilityTierEntry
     uint32 ID;
     float Acceleration;                     // Tier acceleration rate
     float MaxSpeed;                         // Tier max speed threshold
-    int32 DriveCapabilityID;                // Parent DriveCapability
+    uint32 DriveCapabilityID;               // Parent DriveCapability (ParentIndexField - must be unsigned)
     int32 OrderIndex;                       // Tier order
 };
 
