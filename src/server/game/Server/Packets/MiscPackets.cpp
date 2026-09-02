@@ -656,6 +656,12 @@ void SetPvP::Read()
     _worldPacket >> Bits<1>(EnablePVP);
 }
 
+void ChromieTimeSelectExpansion::Read()
+{
+    _worldPacket >> Vendor;
+    _worldPacket >> ExpansionID;
+}
+
 void SetWarMode::Read()
 {
     _worldPacket >> Bits<1>(Enable);
