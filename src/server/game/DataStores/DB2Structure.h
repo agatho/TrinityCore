@@ -2545,13 +2545,11 @@ struct ItemConversionEntry
     int32 ItemLogicalCostGroupID;
     int32 AlternateItemLogicalCostGroupID;
     int32 PlayerConditionID;
-    // Flags NOT added: WoWDBDefs layout 538B2B37 claims coverage back to build 68209, but the
-    // physical ItemConversion.db2 on disk is WDC5-header-tagged WOWSTATIC_12_1_0_68914 (a build
-    // within that claimed range) and its own header reports TotalFieldCount=6, not 7 - i.e. the
-    // real client data for that build has no Flags column. LayoutHash 0x538B2B37 is unchanged
-    // whether Flags is present or absent, so it cannot arbitrate this by itself. Reverted the
-    // Flags addition (kept the IndexField=0 fix, which is independently confirmed correct) until
-    // a genuine 69404-tagged file/dump can confirm Flags one way or the other. See DB2Metadata.h.
+    int32 Flags;                            // 6th DATA field. The .db2 (68914) is NON-INLINE id:
+                                            // the file-size check proved a separate id block exists
+                                            // (546 = 502 + 4*RecordCount), so WDC5 TotalFieldCount=6
+                                            // counts 6 DATA columns (id not counted) -> struct = id + 6
+                                            // data (7 members), Meta IndexField=-1 (see DB2Metadata.h).
 };
 
 struct ItemConversionEntryEntry
