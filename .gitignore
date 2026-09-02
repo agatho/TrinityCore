@@ -25,4 +25,5 @@ cmake-build-*/*
 *.user
 
 build_game*.log
+build_game.log
 reconfigure.log

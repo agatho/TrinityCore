@@ -608,6 +608,9 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::PlaceDecor:
         case CriteriaType::RemoveDecor:
         case CriteriaType::CollectUniqueDecor:
+        // --- crafting orders
+        case CriteriaType::FulfillAnyCraftingOrder:
+        case CriteriaType::FulfillCraftingOrderType:
             SetCriteriaProgress(criteria, 1, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         // std case: increment at miscValue1
@@ -1810,6 +1813,10 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
         case CriteriaType::CollectUniqueDecor:
             // No asset - the ModifierTree does the discriminating, but it needs a real subject id in
             // miscValue1 (GarrFollower / GarrTalent / SoulbindConduit / GarrBuilding / HouseDecor).
+        case CriteriaType::FulfillCraftingOrderType:
+            // Asset = {CraftingOrderType} (0 public / 1 guild / 2 personal / 3 npc) == CraftingOrders::OrderType.
+            if (uint32(miscValue1) != uint32(criteria->Entry->Asset.ID))
+        case CriteriaType::FulfillAnyCraftingOrder:
             if (!miscValue1)
                 return false;
             break;

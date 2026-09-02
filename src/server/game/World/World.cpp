@@ -78,6 +78,7 @@
 #include "ItemBonusMgr.h"
 #include "ContributionMgr.h"
 #include "LFGListMgr.h"
+#include "CraftingOrderMgr.h"
 #include "LFGMgr.h"
 #include "Language.h"
 #include "ManagedWorldStateMgr.h"
@@ -1815,6 +1816,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading LFG rewards...");
     sLFGMgr->LoadRewards();
 
+    TC_LOG_INFO("server.loading", "Loading crafting orders...");
+    sCraftingOrderMgr.LoadFromDB();
+
     TC_LOG_INFO("server.loading", "Loading Graveyard-zone links...");
     sObjectMgr->LoadGraveyardZones();
 
@@ -2580,6 +2584,11 @@ void World::Update(uint32 diff)
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update LFGList"));
         sLFGListMgr.Update(diff);
+    }
+
+    {
+        TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update CraftingOrders"));
+        sCraftingOrderMgr.Update(diff);
     }
 
     {
