@@ -447,7 +447,10 @@ namespace WorldPackets
     {
         class ContributionContribute;
         class ContributionLastUpdateRequest;
+    }
+
     namespace CraftingOrders
+    {
         class CraftingOrderCreate;
         class CraftingOrderClaim;
         class CraftingOrderCancel;
