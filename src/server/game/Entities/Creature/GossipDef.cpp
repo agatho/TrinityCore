@@ -222,6 +222,7 @@ void PlayerMenu::BuildClientGossipText(WorldPackets::NPC::ClientGossipText& text
     text.QuestID = quest->GetQuestId();
     text.ContentTuningID = quest->GetContentTuningId();
     text.QuestType = questIcon;
+    text.QuestInfoID = quest->GetQuestInfoID();
     text.QuestFlags[0] = quest->GetFlags();
     text.QuestFlags[1] = quest->GetFlagsEx();
     text.QuestFlags[2] = quest->GetFlagsEx2();
@@ -447,11 +448,11 @@ void PlayerMenu::SendQuestGiverQuestListMessage(Object* questgiver)
 
         if (Quest const* quest = sObjectMgr->GetQuestTemplate(questID))
         {
-            questList.QuestDataText.emplace_back();
-            WorldPackets::NPC::ClientGossipText& text = questList.QuestDataText.back();
+            WorldPackets::NPC::ClientGossipText& text = questList.QuestDataText.emplace_back();
             text.QuestID = questID;
             text.ContentTuningID = quest->GetContentTuningId();
             text.QuestType = questMenuItem.QuestIcon;
+            text.QuestInfoID = quest->GetQuestInfoID();
             text.QuestFlags[0] = quest->GetFlags();
             text.QuestFlags[1] = quest->GetFlagsEx();
             text.QuestFlags[2] = quest->GetFlagsEx2();
