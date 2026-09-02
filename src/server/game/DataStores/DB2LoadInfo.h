@@ -2542,8 +2542,8 @@ struct GroupFinderActivityLoadInfo
     static constexpr DB2FieldMeta Fields[21] =
     {
         { .IsSigned = false, .Type = FT_INT,    .Name = "ID" },
-        { .IsSigned = true,  .Type = FT_STRING, .Name = "FullName" },
-        { .IsSigned = true,  .Type = FT_STRING, .Name = "ShortName" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "FullName" }, // must be unsigned per client meta
+        { .IsSigned = false, .Type = FT_STRING, .Name = "ShortName" }, // must be unsigned per client meta
         { .IsSigned = false, .Type = FT_BYTE,   .Name = "GroupFinderCategoryID" },
         { .IsSigned = true,  .Type = FT_BYTE,   .Name = "OrderIndex" },
         { .IsSigned = false, .Type = FT_SHORT,  .Name = "GroupFinderActivityGrpID" },
