@@ -48,7 +48,7 @@ enum class AreaTriggerFieldFlags : uint32
     AbsoluteOrientation = 0x0008,
     DynamicShape        = 0x0010,
     Attached            = 0x0020,
-    FaceMovementDir     = 0x0040,
+    FaceMovementDir     = 0x0040,   // applies when attached to unit (refers to movement direction of the unit)
     FollowsTerrain      = 0x0080,
     Unknown1025         = 0x0100,
     AlwaysExterior      = 0x0200,
@@ -159,6 +159,10 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
             Optional<uint32> startTimeOffset = {}, CurveInterpolationMode interpolation = CurveInterpolationMode::Linear);
         void ClearOverrideMoveCurve();
 
+        void SetOverrideFacingCurve(float overrideFacing);
+        void SetOverrideFacingCurve(std::array<DBCPosition2D, 2> const& points, Optional<uint32> startTimeOffset = {}, CurveInterpolationMode interpolation = CurveInterpolationMode::Linear);
+        void ClearOverrideFacingCurve();
+
         uint32 GetTimeToTarget() const { return m_areaTriggerData->TimeToTarget; }
         void SetTimeToTarget(uint32 timeToTarget) { SetUpdateFieldValue(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::TimeToTarget), timeToTarget); }
 
@@ -170,6 +174,9 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
 
         uint32 GetTimeToTargetPos() const { return m_areaTriggerData->TimeToTargetPos; }
         void SetTimeToTargetPos(uint32 timeToTargetPos) { SetUpdateFieldValue(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::TimeToTargetPos), timeToTargetPos); }
+
+        uint32 GetTimeToTargetFacing() const { return m_areaTriggerData->TimeToTargetFacing; }
+        void SetTimeToTargetFacing(uint32 timeToTargetFacing) { SetUpdateFieldValue(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::TimeToTargetFacing), timeToTargetFacing); }
 
         void SetSpellVisual(SpellCastVisual const& visual);
 
@@ -222,7 +229,7 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
 
         float GetProgress() const;
 
-        struct ScaleCurveData
+        struct OverrideCurveData
         {
             uint32 StartTimeOffset = 0;
             CurveInterpolationMode Mode = CurveInterpolationMode::Linear;
@@ -231,13 +238,13 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
             std::variant<float, Points> Curve;
         };
 
-        float GetScaleCurveProgress(UF::ScaleCurve const& scaleCurve, uint32 timeTo) const;
-        float GetScaleCurveValueAtProgress(UF::ScaleCurve const& scaleCurve, float x) const;
-        float GetScaleCurveValue(UF::ScaleCurve const& scaleCurve, uint32 timeTo) const;
-        void SetScaleCurve(UF::MutableFieldReference<UF::ScaleCurve, false> scaleCurveMutator, float constantValue);
-        void SetScaleCurve(UF::MutableFieldReference<UF::ScaleCurve, false> scaleCurveMutator, std::array<DBCPosition2D, 2> const& points, Optional<uint32> startTimeOffset, CurveInterpolationMode interpolation);
-        void ClearScaleCurve(UF::MutableFieldReference<UF::ScaleCurve, false> scaleCurveMutator);
-        void SetScaleCurve(UF::MutableFieldReference<UF::ScaleCurve, false> scaleCurveMutator, Optional<ScaleCurveData> const& curve);
+        float GetOverrideCurveProgress(UF::OverrideCurve const& overrideCurve, uint32 timeTo) const;
+        float GetOverrideCurveValueAtProgress(UF::OverrideCurve const& overrideCurve, float x) const;
+        float GetOverrideCurveValue(UF::OverrideCurve const& overrideCurve, uint32 timeTo) const;
+        void SetOverrideCurve(UF::MutableFieldReference<UF::OverrideCurve, false> overrideCurveMutator, float constantValue);
+        void SetOverrideCurve(UF::MutableFieldReference<UF::OverrideCurve, false> overrideCurveMutator, std::array<DBCPosition2D, 2> const& points, Optional<uint32> startTimeOffset, CurveInterpolationMode interpolation);
+        void ClearOverrideCurve(UF::MutableFieldReference<UF::OverrideCurve, false> overrideCurveMutator);
+        void SetOverrideCurve(UF::MutableFieldReference<UF::OverrideCurve, false> overrideCurveMutator, Optional<OverrideCurveData> const& curve);
 
         void UpdateTargetList();
         void SearchUnits(std::vector<Unit*>& targetList, float radius, bool check3D);
@@ -262,6 +269,7 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
         Position const* GetOrbitCenterPosition() const;
         Position CalculateOrbitPosition() const;
 
+        void UpdateDynamicShapeFlag();
         void UpdateHasPlayersFlag();
 
         void DebugVisualizePosition(); // Debug purpose only
