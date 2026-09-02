@@ -21,6 +21,7 @@
 
 #include "World.h"
 #include "WorldQuestMgr.h"
+#include "AreaPoiMgr.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "ArchaeologyMgr.h"
@@ -1695,6 +1696,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading World Quests...");
     sWorldQuestMgr->LoadFromDB();
 
+    TC_LOG_INFO("server.loading", "Loading Area POIs...");
+    sAreaPoiMgr->LoadFromDB();
+
     TC_LOG_INFO("server.loading", "Loading World Quests...");
 
     sObjectMgr->LoadTreasurePickerTemplates();                   // must be after LoadItemTemplates()
@@ -2578,7 +2582,8 @@ void World::Update(uint32 diff)
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update LFG"));
         sLFGMgr->Update(diff);
-    sWorldQuestMgr->Update(diff);
+        sWorldQuestMgr->Update(diff);
+        sAreaPoiMgr->Update(diff);
     }
 
     {

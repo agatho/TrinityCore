@@ -39,6 +39,7 @@
 #include "PoolMgr.h"
 #include "QuestDef.h"
 #include "QuestMgr.h"
+#include "AreaPoiMgr.h"
 #include "QuestPackets.h"
 #include "QuestPools.h"
 #include "ReputationMgr.h"
@@ -827,6 +828,20 @@ void WorldSession::HandleRequestWorldQuestUpdate(WorldPackets::Quest::RequestWor
 
     SendPacket(response.Write());
 }
+
+void WorldSession::HandleRequestAreaPoiUpdate(WorldPackets::Quest::RequestAreaPoiUpdate& /*packet*/)
+{
+    WorldPackets::Quest::AreaPoiUpdateResponse response;
+    sAreaPoiMgr->FillActiveAreaPois(response.AreaPois);
+    SendPacket(response.Write());
+}
+
+// CMSG_REQUEST_SCHEDULED_AREA_POI_UPDATE is answered by upstream's
+// WorldSession::HandleRequestScheduledAreaPoiUpdate(WorldPackets::Misc::RequestScheduledAreaPoiUpdate&)
+// in MiscHandler.cpp, which replies with the RE-correct (writer RVA 0x6D1230) empty
+// SMSG_SCHEDULED_AREA_POI_UPDATE_RESPONSE. We intentionally do NOT add a Quest-namespace overload of the
+// same name here: it would make &WorldSession::HandleRequestScheduledAreaPoiUpdate ambiguous in
+// Opcodes.cpp, and it would answer with the wrong response opcode (SMSG_AREA_POI_UPDATE_RESPONSE).
 
 // Every abort path below used to log and return. The client keeps the choice frame open in that case
 // and waits forever. SMSG_PLAYER_CHOICE_DISPLAY_ERROR is the message retail has for exactly this:

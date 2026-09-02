@@ -34,6 +34,7 @@
 #include "StringConvert.h"
 #include "World.h"
 #include "WorldStateMgr.h"
+#include "WorldStatePackets.h"
 #include "WowTime.h"
 
 GameEventMgr* GameEventMgr::instance()
@@ -1782,4 +1783,27 @@ bool IsEventActive(uint16 eventId)
 {
     GameEventMgr::ActiveEvents const& ae = sGameEventMgr->GetActiveEventList();
     return ae.find(eventId) != ae.end();
+}
+
+void GameEventMgr::FillScheduledWorldStates(std::vector<WorldPackets::WorldState::ScheduledWorldStateInfo>& schedules) const
+{
+    time_t const now = GameTime::GetGameTime();
+
+    for (GameEventData const& event : mGameEvent)
+    {
+        // Only a repeating event that drives a world state has a cycle. `occurence` is that period in minutes.
+        if (!event.WorldStateId || !event.occurence || !event.isValid())
+            continue;
+
+        // Outside the event's overall lifetime there is no current cycle. `end` is 0 for events that never expire.
+        if (now < event.start || (event.end > event.start && now >= event.end))
+            continue;
+
+        time_t const period = time_t(event.occurence) * MINUTE;
+        time_t const cycleStart = event.start + ((now - event.start) / period) * period;
+
+        // Duration is the whole period; Value is the state's value right now (re-sent whenever the event flips).
+        schedules.emplace_back(cycleStart, uint32(period), uint32(*event.WorldStateId),
+            WorldStateMgr::GetValue(*event.WorldStateId, nullptr));
+    }
 }

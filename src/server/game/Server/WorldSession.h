@@ -1283,6 +1283,8 @@ namespace WorldPackets
         class QuestPushResult;
         class PushQuestToParty;
         class RequestWorldQuestUpdate;
+        class RequestAreaPoiUpdate;
+        class RequestScheduledAreaPoiUpdate;
         class ChoiceResponse;
         class CloseQuestChoice;
         class UiMapQuestLinesRequest;
@@ -2739,6 +2741,10 @@ class TC_GAME_API WorldSession
         void HandlePushQuestToParty(WorldPackets::Quest::PushQuestToParty& packet);
         void HandleQuestPushResult(WorldPackets::Quest::QuestPushResult& packet);
         void HandleRequestWorldQuestUpdate(WorldPackets::Quest::RequestWorldQuestUpdate& packet);
+        void HandleRequestAreaPoiUpdate(WorldPackets::Quest::RequestAreaPoiUpdate& packet);
+        // CMSG_REQUEST_SCHEDULED_AREA_POI_UPDATE is handled by the Misc-namespace overload below
+        // (upstream MiscHandler.cpp, RE-correct empty response); no Quest-namespace overload to keep
+        // &WorldSession::HandleRequestScheduledAreaPoiUpdate unambiguous in Opcodes.cpp.
         void HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceResponse const& choiceResponse);
         void HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& closeQuestChoice);
         void HandleUiMapQuestLinesRequest(WorldPackets::Quest::UiMapQuestLinesRequest& uiMapQuestLinesRequest);
