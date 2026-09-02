@@ -32,6 +32,7 @@
 #include "GameObjectModel.h"
 #include "GameObjectPackets.h"
 #include "NPCPackets.h"
+#include "SpellPackets.h"
 #include "GameTime.h"
 #include "Garrison.h"
 #include "GossipDef.h"
@@ -3839,6 +3840,16 @@ void GameObject::SendCustomAnim(uint32 anim)
     customAnim.ObjectGUID = GetGUID();
     customAnim.CustomAnim = anim;
     SendMessageToSet(customAnim.Write(), true);
+}
+
+void GameObject::SendPlaySpellVisualKit(uint32 id, uint32 type, uint32 duration) const
+{
+    WorldPackets::Spells::GameObjectPlaySpellVisualKit gameObjectPlaySpellVisualKit;
+    gameObjectPlaySpellVisualKit.Object = GetGUID();
+    gameObjectPlaySpellVisualKit.KitRecID = id;
+    gameObjectPlaySpellVisualKit.KitType = type;
+    gameObjectPlaySpellVisualKit.Duration = duration;
+    SendMessageToSet(gameObjectPlaySpellVisualKit.Write(), true);
 }
 
 bool GameObject::IsInRange(float x, float y, float z, float radius) const
