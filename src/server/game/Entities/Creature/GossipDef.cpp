@@ -228,6 +228,7 @@ void PlayerMenu::BuildClientGossipText(WorldPackets::NPC::ClientGossipText& text
     text.QuestID = quest->GetQuestId();
     text.ContentTuningID = quest->GetContentTuningId();
     text.QuestType = questIcon;
+    text.QuestInfoID = quest->GetQuestInfoID();
     text.QuestFlags[0] = quest->GetFlags();
     text.QuestFlags[1] = quest->GetFlagsEx();
     text.QuestFlags[2] = quest->GetFlagsEx2();
