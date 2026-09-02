@@ -304,6 +304,19 @@ namespace WorldPackets
             int16 DifficultyID = 0;
         };
 
+        // CMSG_SET_DIFFICULTY_ID (0x3D00E4): the unified 12.x difficulty-select opcode. Wire (client
+        // writer RVA 0x1406CC920, 69497 cleaned exe): a single int16 DifficultyID (Difficulty.db2 id) -
+        // no dungeon/raid/legacy split on the wire; the DifficultyEntry's InstanceType/flags carry that.
+        class SetDifficultyID final : public ClientPacket
+        {
+        public:
+            explicit SetDifficultyID(WorldPacket&& packet) : ClientPacket(CMSG_SET_DIFFICULTY_ID, std::move(packet)) { }
+
+            void Read() override;
+
+            int16 DifficultyID = 0;
+        };
+
         class DungeonDifficultySet final : public ServerPacket
         {
         public:

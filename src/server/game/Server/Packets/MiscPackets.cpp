@@ -258,6 +258,11 @@ void SetRaidDifficulty::Read()
     _worldPacket >> DifficultyID;
 }
 
+void SetDifficultyID::Read()
+{
+    _worldPacket >> DifficultyID;
+}
+
 WorldPacket const* DungeonDifficultySet::Write()
 {
     _worldPacket << int16(DifficultyID);
