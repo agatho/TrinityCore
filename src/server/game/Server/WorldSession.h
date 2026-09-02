@@ -594,6 +594,8 @@ namespace WorldPackets
         class SuspendTokenResponse;
         class MoveApplyMovementForceAck;
         class MoveRemoveMovementForceAck;
+        class MoveApplyInertiaAck;
+        class MoveRemoveInertiaAck;
         class MoveInitActiveMoverComplete;
     }
 
@@ -651,6 +653,7 @@ namespace WorldPackets
         class SetRestrictPingsToAssistants;
         class SendPingUnit;
         class SendPingWorldPoint;
+        class SendPingCooldown;
     }
 
     namespace Pet
@@ -1344,6 +1347,10 @@ class TC_GAME_API WorldSession
         void HandleMoveRemoveMovementForceAck(WorldPackets::Movement::MoveRemoveMovementForceAck& moveRemoveMovementForceAck);
         void HandleMoveSetModMovementForceMagnitudeAck(WorldPackets::Movement::MovementSpeedAck& setModMovementForceMagnitudeAck);
 
+        // Inertia
+        void HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyInertiaAck& moveApplyInertiaAck);
+        void HandleMoveRemoveInertiaAck(WorldPackets::Movement::MoveRemoveInertiaAck& moveRemoveInertiaAck);
+
         void HandleRepopRequest(WorldPackets::Misc::RepopRequest& packet);
         void HandleAutostoreLootItemOpcode(WorldPackets::Loot::LootItem& packet);
         void HandleLootMoneyOpcode(WorldPackets::Loot::LootMoney& packet);
@@ -1454,6 +1461,7 @@ class TC_GAME_API WorldSession
         void HandleSetRestrictPingsToAssistants(WorldPackets::Party::SetRestrictPingsToAssistants const& setRestrictPingsToAssistants);
         void HandleSendPingUnit(WorldPackets::Party::SendPingUnit const& pingUnit);
         void HandleSendPingWorldPoint(WorldPackets::Party::SendPingWorldPoint const& pingWorldPoint);
+        void HandleSendPingCooldown(WorldPackets::Party::SendPingCooldown const& pingCooldown);
 
         void HandlePetitionBuy(WorldPackets::Petition::PetitionBuy& packet);
         void HandlePetitionShowSignatures(WorldPackets::Petition::PetitionShowSignatures& packet);
