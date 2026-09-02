@@ -10997,6 +10997,16 @@ void Unit::SendPetAIReaction(ObjectGuid guid) const
     owner->ToPlayer()->SendDirectMessage(packet.Write());
 }
 
+void Unit::SendDiminishingReturnStart(DiminishingGroup group, bool showCountdown, bool isImmune) const
+{
+    WorldPackets::Spells::DiminishingReturnStart diminishingReturnStart;
+    diminishingReturnStart.Unit = GetGUID();
+    diminishingReturnStart.Category = uint8(group);
+    diminishingReturnStart.ShowCountdown = showCountdown;
+    diminishingReturnStart.IsImmune = isImmune;
+    SendMessageToSet(diminishingReturnStart.Write(), true);
+}
+
 ///----------End of Pet responses methods----------
 
 void Unit::PropagateSpeedChange()

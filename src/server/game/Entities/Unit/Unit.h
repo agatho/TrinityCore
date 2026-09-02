@@ -1794,6 +1794,7 @@ class TC_GAME_API Unit : public WorldObject
         void SendPetActionSound(PetAction action) const;
         void SendPetDismissSound() const;
         void SendPetAIReaction(ObjectGuid guid) const;
+        void SendDiminishingReturnStart(DiminishingGroup group, bool showCountdown, bool isImmune) const;
         ///----------End of Pet responses methods----------
 
         void PropagateSpeedChange();
