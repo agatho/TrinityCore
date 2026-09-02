@@ -1111,38 +1111,6 @@ void WorldSession::HandleSetRaidDifficultyOpcode(WorldPackets::Misc::SetRaidDiff
     _player->SendRaidDifficulty(setRaidDifficulty.Legacy != 0);
 }
 
-void WorldSession::HandleSetDifficultyID(WorldPackets::Misc::SetDifficultyID& setDifficultyID)
-{
-    // Unified 12.x difficulty-select opcode: the wire carries only the Difficulty.db2 id. Route to the
-    // existing (fully validated) dungeon/raid handlers by the DifficultyEntry's InstanceType so all the
-    // selectability / in-instance / group-leader / LFG / reset logic is reused verbatim - the client
-    // still uses this single opcode for both dungeon and raid difficulty in Midnight.
-    DifficultyEntry const* difficultyEntry = sDifficultyStore.LookupEntry(setDifficultyID.DifficultyID);
-    if (!difficultyEntry)
-    {
-        TC_LOG_DEBUG("network", "WorldSession::HandleSetDifficultyID: {} sent an invalid difficulty {}!",
-            _player->GetGUID().ToString(), setDifficultyID.DifficultyID);
-        return;
-    }
-
-    if (difficultyEntry->InstanceType == MAP_INSTANCE)
-    {
-        WorldPackets::Misc::SetDungeonDifficulty dungeon{ WorldPacket(CMSG_SET_DUNGEON_DIFFICULTY) };
-        dungeon.DifficultyID = setDifficultyID.DifficultyID;
-        HandleSetDungeonDifficultyOpcode(dungeon);
-    }
-    else if (difficultyEntry->InstanceType == MAP_RAID)
-    {
-        WorldPackets::Misc::SetRaidDifficulty raid{ WorldPacket(CMSG_SET_RAID_DIFFICULTY) };
-        raid.DifficultyID = setDifficultyID.DifficultyID;
-        raid.Legacy = (difficultyEntry->Flags & DIFFICULTY_FLAG_LEGACY) != 0;
-        HandleSetRaidDifficultyOpcode(raid);
-    }
-    else
-        TC_LOG_DEBUG("network", "WorldSession::HandleSetDifficultyID: {} sent difficulty {} with unhandled instance type {}",
-            _player->GetGUID().ToString(), difficultyEntry->ID, difficultyEntry->InstanceType);
-}
-
 void WorldSession::HandleSetTaxiBenchmark(WorldPackets::Misc::SetTaxiBenchmarkMode& packet)
 {
     if (packet.Enable)
