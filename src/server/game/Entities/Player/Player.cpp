@@ -6829,9 +6829,26 @@ void Player::SetChromieTime(int32 expansionId)
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
         .ModifyValue(&UF::ActivePlayerData::UiChromieTimeExpansionID), expansionId);
 
-    // ChromieTimeExpansionMask comes from the DB2 entry's ExpansionMask, not 1 << id.
-    // Confirmed via 12.0.5 sniff: Pandaria (id=8) -> mask 0x10, Legion (id=10) -> mask 0x40.
+    // ChromieTimeExpansionMask comes from the UIChromieTimeExpansionInfo.db2 ExpansionMask field, not
+    // 1 << id. That DB2 is not present in this tree (its store does not exist in TC/upstream), so the
+    // mask is resolved from the sniff-authoritative values captured for 12.1 (ChromieOrgrimmar 69382):
+    // Cata(5)=0x9, TBC(6)=0x2, WotLK(7)=0x4, MoP(8)=0x10, WoD(9)=0x20, Legion(10)=0x40, SL(14)=0x100,
+    // BfA(15)=0x80, DF(16)=0x200. The client filters available content by this mask, so it must be
+    // correct on the wire (SendCtrOptions -> SMSG_SET_CTR_OPTIONS). expansionId is UIChromieTimeExpansionInfo.ID.
     uint32 expansionMask = 0;
+    switch (expansionId)
+    {
+        case  5: expansionMask = 0x009; break; // Cataclysm
+        case  6: expansionMask = 0x002; break; // The Burning Crusade
+        case  7: expansionMask = 0x004; break; // Wrath of the Lich King
+        case  8: expansionMask = 0x010; break; // Mists of Pandaria
+        case  9: expansionMask = 0x020; break; // Warlords of Draenor
+        case 10: expansionMask = 0x040; break; // Legion
+        case 14: expansionMask = 0x100; break; // Shadowlands
+        case 15: expansionMask = 0x080; break; // Battle for Azeroth
+        case 16: expansionMask = 0x200; break; // Dragonflight
+        default: expansionMask = 0;     break; // 0 = present, or an unknown id -> no timeline mask
+    }
 
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
         .ModifyValue(&UF::PlayerData::CtrOptions)

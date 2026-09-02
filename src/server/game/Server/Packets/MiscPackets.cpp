@@ -747,6 +747,12 @@ void OverrideScreenFlash::Read()
     _worldPacket >> Bits<1>(Override);
 }
 
+void ChromieTimeSelectExpansion::Read()
+{
+    _worldPacket >> Vendor;
+    _worldPacket >> ExpansionID;
+}
+
 void SetWarMode::Read()
 {
     _worldPacket >> Bits<1>(Enable);
