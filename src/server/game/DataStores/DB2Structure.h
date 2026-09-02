@@ -57,7 +57,11 @@ struct DelvesSeasonXSpellEntry
 
 struct PlayerCompanionInfoEntry
 {
+    // 69404 (12.1.0) client meta = "ssiiiiiiiiiiiiiii" (WoWDBDefs layout 55DA5E60, builds 68209-69587):
+    // adds a second localized string (Field_12_1_0_68209_001) and a new FlavorNodeID field;
+    // Field_12_0_0_64499_011 is confirmed = PlayerDataElementCharacterID.
     LocalizedString UnlockDescription;
+    LocalizedString Field_12_1_0_68209_001;                                           // NEW in 12.1.0
     uint32 ID;
     int32 DelvesSeasonID;
     int32 TraitTreeID;
@@ -69,8 +73,9 @@ struct PlayerCompanionInfoEntry
     int32 FactionID;
     int32 CreatureDisplayInfoID;
     int32 UiModelSceneID;
-    int32 Field_12_0_0_64499_011;
+    int32 PlayerDataElementCharacterID;                                               // was Field_12_0_0_64499_011
     int32 Field_12_0_0_64499_012;
+    int32 FlavorNodeID;                                                               // NEW in 12.1.0
     int32 ParentID;                                                                   // Field_12_0_1_64889_014, parent relation
 };
 

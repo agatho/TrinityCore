@@ -66,10 +66,13 @@ struct DelvesSeasonXSpellLoadInfo
 
 struct PlayerCompanionInfoLoadInfo
 {
-    // PlayerCompanionInfo.dbd LAYOUT F61B5AA1 (build 12.0.5.67186)
-    static constexpr DB2FieldMeta Fields[15] =
+    // PlayerCompanionInfo.dbd LAYOUT 55DA5E60 (12.1.0, builds 68209-69587, includes 69404).
+    // Matches PlayerCompanionInfoMeta (already 0x55DA5E60/17): +Field_12_1_0_68209_001 string,
+    // +FlavorNodeID, and Field_12_0_0_64499_011 renamed to PlayerDataElementCharacterID.
+    static constexpr DB2FieldMeta Fields[17] =
     {
         { .IsSigned = false, .Type = FT_STRING, .Name = "UnlockDescription" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Field_12_1_0_68209_001" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "DelvesSeasonID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "TraitTreeID" },
@@ -81,11 +84,12 @@ struct PlayerCompanionInfoLoadInfo
         { .IsSigned = true, .Type = FT_INT, .Name = "FactionID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "CreatureDisplayInfoID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "UiModelSceneID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_011" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "PlayerDataElementCharacterID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Field_12_0_0_64499_012" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "FlavorNodeID" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ParentID" },
     };
-    static constexpr DB2LoadInfo Instance{ Fields, 15, &PlayerCompanionInfoMeta::Instance, HOTFIX_SEL_PLAYER_COMPANION_INFO };
+    static constexpr DB2LoadInfo Instance{ Fields, 17, &PlayerCompanionInfoMeta::Instance, HOTFIX_SEL_PLAYER_COMPANION_INFO };
 };
 
 struct DelvesSeasonLoadInfo
