@@ -156,6 +156,20 @@ WorldPacket const* AuraUpdate::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* AddLossOfControl::Write()
+{
+    _worldPacket << Target;
+    _worldPacket << int32(SpellID);
+    _worldPacket << Caster;
+    _worldPacket << int32(Duration);
+    _worldPacket << int32(DurationLeft);
+    _worldPacket << uint32(LockoutSchoolMask);
+    _worldPacket << uint8(Type);
+    _worldPacket << uint8(DisplayType);
+
+    return &_worldPacket;
+}
+
 ByteBuffer& operator>>(ByteBuffer& buffer, TargetLocation& location)
 {
     buffer >> location.Transport;
