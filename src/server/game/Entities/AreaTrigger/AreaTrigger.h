@@ -106,10 +106,10 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
 
         AreaTriggerAI* AI() { return _ai.get(); }
 
-        bool IsCustom() const { return _areaTriggerTemplate && _areaTriggerTemplate->Id.IsCustom; }
-        bool IsServerSide() const { return _areaTriggerTemplate && _areaTriggerTemplate->Flags.HasFlag(AreaTriggerFlag::IsServerSide); }
+        bool IsCustom() const { return _areaTriggerTemplate->Id.IsCustom; }
+        bool IsServerSide() const { return _areaTriggerTemplate->Flags.HasFlag(AreaTriggerFlag::IsServerSide); }
         bool IsStaticSpawn() const { return _spawnId != 0; }
-        bool HasActionSetFlag(AreaTriggerActionSetFlag flag) const { return _areaTriggerTemplate && _areaTriggerTemplate->ActionSetFlags.HasFlag(flag); }
+        bool HasActionSetFlag(AreaTriggerActionSetFlag flag) const { return _areaTriggerTemplate->ActionSetFlags.HasFlag(flag); }
 
         bool IsNeverVisibleFor(WorldObject const* seer, bool allowServersideObjects) const override;
 
@@ -118,19 +118,12 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
         void PlaySpellVisual(uint32 spellVisualId) const;
 
     private:
-        bool Create(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration, AreaTriggerSpawn const* spawnData = nullptr, Unit* caster = nullptr, Unit* target = nullptr, SpellCastVisual spellVisual = { 0, 0 }, SpellInfo const* spellInfo = nullptr, Spell* spell = nullptr, AuraEffect const* aurEff = nullptr, bool addToMap = true);
+        bool Create(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration, AreaTriggerSpawn const* spawnData = nullptr, Unit* caster = nullptr, Unit* target = nullptr, SpellCastVisual spellVisual = { 0, 0 }, SpellInfo const* spellInfo = nullptr, Spell* spell = nullptr, AuraEffect const* aurEff = nullptr);
 
     public:
         static AreaTrigger* CreateAreaTrigger(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Position const& pos, int32 duration, Unit* caster, Unit* target, SpellCastVisual spellVisual = { 0, 0 }, SpellInfo const* spellInfo = nullptr, Spell* spell = nullptr, AuraEffect const* aurEff = nullptr);
-        static AreaTrigger* CreateStaticAreaTrigger(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration = -1, bool addToMap = true);
         static ObjectGuid CreateNewMovementForceId(Map* map, uint32 areaTriggerId);
         bool LoadFromDB(ObjectGuid::LowType spawnId, Map* map, bool addToMap, bool allowDuplicate);
-
-        // Plot AT visual setup (SpellForVisuals, PeriodModifier, ExtraScaleCurve).
-        // 12.0.5 removed the per-AT FHousingPlotAreaTrigger_C fragment; plot ownership is
-        // now communicated via PlayerHouseInfoComponentData.CurrentHouse on the Player.
-        // The AT itself still exists for editor-menu plot bounds / decal placement visuals.
-        void InitHousingPlotVisuals();
 
         void Update(uint32 diff) override;
         void Remove();
@@ -180,9 +173,6 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
 
         void SetSpellVisual(SpellCastVisual const& visual);
 
-        uint32 GetDecalPropertiesId() const { return m_areaTriggerData->DecalPropertiesID; }
-        void SetDecalPropertiesId(uint32 decalPropertiesId);
-
         int32 GetDuration() const { return _duration; }
         int32 GetTotalDuration() const { return _totalDuration; }
         void SetDuration(int32 newDuration);
@@ -223,9 +213,6 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
         void HandleUnitExit(Unit* unit);
 
         UF::UpdateField<UF::AreaTriggerData, int32(WowCS::EntityFragment::CGObject), TYPEID_AREATRIGGER> m_areaTriggerData;
-
-        // Removed in 12.0.5: FHousingPlotAreaTrigger_C fragment no longer exists.
-        // Client now tracks plot entry via PlayerHouseInfoComponentData.CurrentHouse (house GUID).
 
     protected:
         void _UpdateDuration(int32 newDuration);

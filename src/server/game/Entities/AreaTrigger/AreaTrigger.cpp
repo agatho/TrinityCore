@@ -113,7 +113,7 @@ void AreaTrigger::PlaySpellVisual(uint32 spellVisualId) const
     SendMessageToSet(packet.Write(), false);
 }
 
-bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration, AreaTriggerSpawn const* spawnData /*= nullptr*/, Unit* caster /*= nullptr*/, Unit* target /*= nullptr*/, SpellCastVisual spellVisual /*= { 0, 0 }*/, SpellInfo const* spellInfo /*= nullptr*/, Spell* spell /*= nullptr*/, AuraEffect const* aurEff /*= nullptr*/, bool addToMap /*= true*/)
+bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration, AreaTriggerSpawn const* spawnData /*= nullptr*/, Unit* caster /*= nullptr*/, Unit* target /*= nullptr*/, SpellCastVisual spellVisual /*= { 0, 0 }*/, SpellInfo const* spellInfo /*= nullptr*/, Spell* spell /*= nullptr*/, AuraEffect const* aurEff /*= nullptr*/)
 {
     _targetGuid = target ? target->GetGUID() : ObjectGuid::Empty;
     _aurEff = aurEff;
@@ -175,11 +175,9 @@ bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreateProperti
         SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::TimeToTargetFacing), *m_areaTriggerData->Duration);
     }
     SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::BoundsRadius2D), GetCreateProperties()->Shape.GetMaxSearchRadius());
-    // through the setter so that it stays the single change point for DecalPropertiesID; the area
-    // trigger is not in world yet, so this writes the update field and sends nothing
-    SetDecalPropertiesId(GetCreateProperties()->DecalPropertiesId);
+    SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::DecalPropertiesID), GetCreateProperties()->DecalPropertiesId);
     if (IsServerSide())
-        SetDecalPropertiesId(24); // Blue decal, for .debug areatrigger visibility
+        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::DecalPropertiesID), 24); // Blue decal, for .debug areatrigger visibility
 
     SetOverrideCurve(areaTriggerData.ModifyValue(&UF::AreaTriggerData::ExtraScaleCurve), 1.0f);
 
@@ -291,7 +289,7 @@ bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreateProperti
     if (HasOrbit())
         Relocate(CalculateOrbitPosition());
 
-    if (!IsStaticSpawn() && addToMap)
+    if (!IsStaticSpawn())
     {
         if (!GetMap()->AddToMap(this))
         {
@@ -320,58 +318,6 @@ AreaTrigger* AreaTrigger::CreateAreaTrigger(AreaTriggerCreatePropertiesId areaTr
     }
 
     return at;
-}
-
-AreaTrigger* AreaTrigger::CreateStaticAreaTrigger(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration /*= -1*/, bool addToMap /*= true*/)
-{
-    AreaTrigger* at = new AreaTrigger();
-    if (!at->Create(areaTriggerCreatePropertiesId, map, pos, duration, nullptr, nullptr, nullptr, { 0, 0 }, nullptr, nullptr, nullptr, addToMap))
-    {
-        delete at;
-        return nullptr;
-    }
-
-    return at;
-}
-
-// 12.0.5 removed FHousingPlotAreaTrigger_C fragment. The previous InitHousingPlotData
-// stored PlotID + owner/house/bnet GUIDs per-AT; that mechanism is gone. Plot ownership
-// is now communicated via PlayerHouseInfoComponentData.CurrentHouse on the Player entity.
-// The AT still exists for editor-menu plot bounds + decal visuals, so this thin init
-// only touches the AreaTrigger's own visual fields.
-void AreaTrigger::InitHousingPlotVisuals()
-{
-    // Force SpellForVisuals=1282351 and SpellXSpellVisualID=510142 for housing plot ATs.
-    // Spell 1282351 doesn't exist in sSpellMgr (AreaTriggerDataStore resets SpellForVisuals
-    // to 0 during load, and the normal SpellXSpellVisualID lookup in _InitFields fails).
-    // The client requires BOTH values to properly identify the AT as a housing plot
-    // boundary for the editor-menu decal and placement validation system.
-    {
-        auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);
-        if (*m_areaTriggerData->SpellForVisuals == 0)
-            SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::SpellForVisuals), int32(1282351));
-        if (m_areaTriggerData->SpellVisual->SpellXSpellVisualID == 0)
-            SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::SpellVisual).ModifyValue(&UF::SpellCastVisual::SpellXSpellVisualID), int32(510142));
-    }
-
-    // PeriodModifier=(0, 1.0) — retail sniff-verified on all housing plot ATs.
-    {
-        auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);
-        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::PeriodModifier)
-            .ModifyValue(&UF::AreaTriggerActionSetPeriodModifier::Field_0), int32(0));
-        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::PeriodModifier)
-            .ModifyValue(&UF::AreaTriggerActionSetPeriodModifier::Field_4), 1.0f);
-    }
-
-    // ExtraScaleCurve: ParameterCurve=0x3F800001, OverrideActive=true — tells client to
-    // flatten terrain / remove grass within the plot boundary (decor placement surface).
-    {
-        auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);
-        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::ExtraScaleCurve)
-            .ModifyValue(&UF::ScaleCurve::ParameterCurve), uint32(0x3F800001));
-        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::ExtraScaleCurve)
-            .ModifyValue(&UF::ScaleCurve::OverrideActive), true);
-    }
 }
 
 ObjectGuid AreaTrigger::CreateNewMovementForceId(Map* map, uint32 areaTriggerId)
@@ -553,64 +499,6 @@ void AreaTrigger::SetOverrideFacingCurve(std::array<DBCPosition2D, 2> const& poi
 void AreaTrigger::ClearOverrideFacingCurve()
 {
     ClearOverrideCurve(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::OverrideFacingCurve));
-}
-
-// Changing the decal at runtime needs two things: the update field so a client that only learns
-// about the area trigger later builds the right decal, and SMSG_AREA_TRIGGER_UPDATE_DECAL_PROPERTIES
-// for the clients that already have it - those rebuild the decal geometry from DecalProperties.db2
-// only when told to (client handler RVA 0x1F5E420 -> 0x1F59CA0).
-//
-// The two are ORDER DEPENDENT, and the natural order is the wrong one. The client handler reads its
-// OWN copy of DecalPropertiesID (object offset +644) and returns without doing anything while that
-// copy is zero; the message carries nothing but the guid, so it cannot supply the new id itself.
-// SetUpdateFieldValue only enqueues the object in Map::_updateObjects (BaseEntity::
-// AddToObjectUpdateIfNeeded), and that queue is not flushed until Map::SendObjectUpdates at the end
-// of the tick - long after SendMessageToSet has put this packet in the session queue. Sent in that
-// order the message is evaluated against the OLD id: a no-op when the old id was 0, and a rebuild
-// from the stale row when it was not. So the pending field update is flushed to the visible players
-// here, before the message goes out.
-//
-// Known limitation, not a guess: clearing the decal (new id 0) cannot be pushed to clients that
-// already have the area trigger. Their gate is "own id non-zero", so after the field reaches them
-// the message would be a no-op, and there is no other opcode for it - the old decal geometry stays
-// until the area trigger leaves their view. The early return below is therefore deliberate.
-//
-// UNVERIFIED: that the client field at object offset +644 is called DecalPropertiesID. The
-// behaviour is proven (the handler gates the rebuild on it), the name is convention - the string
-// "decalPropertiesID" exists at RVA 0x3D66AC0 but no code relates it to offset 644.
-// UNVERIFIED: no caller changes the decal at runtime. Both call sites above run during Create(),
-// so this core never actually emits SMSG_AREA_TRIGGER_UPDATE_DECAL_PROPERTIES today; the send path
-// and the flush below are untested against a live client. A spell or script effect that re-decals a
-// live area trigger would be the first real trigger.
-void AreaTrigger::SetDecalPropertiesId(uint32 decalPropertiesId)
-{
-    if (*m_areaTriggerData->DecalPropertiesID == decalPropertiesId)
-        return;
-
-    SetUpdateFieldValue(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::DecalPropertiesID), decalPropertiesId);
-
-    if (!IsInWorld() || !decalPropertiesId)
-        return;
-
-    // flush the field before the message, see the note above
-    if (m_objectUpdated)
-    {
-        RemoveFromObjectUpdate();                           // taken out of Map::_updateObjects, it is built right here instead
-        UpdateDataMapType updateData;
-        BuildUpdate(updateData);                            // clears the change mask and m_objectUpdated
-
-        WorldPacket updatePacket;
-        for (auto& [receiver, data] : updateData)
-        {
-            data.BuildPacket(&updatePacket);
-            receiver->SendDirectMessage(&updatePacket);
-            updatePacket.clear();
-        }
-    }
-
-    WorldPackets::AreaTrigger::AreaTriggerUpdateDecalProperties packet;
-    packet.AreaTriggerGUID = GetGUID();
-    SendMessageToSet(packet.Write(), false);
 }
 
 void AreaTrigger::SetSpellVisual(SpellCastVisual const& visual)
@@ -1030,9 +918,8 @@ void AreaTrigger::HandleUnitEnter(Unit* unit)
 
         player->UpdateQuestObjectiveProgress(QUEST_OBJECTIVE_AREA_TRIGGER_ENTER, GetEntry(), 1);
 
-        if (AreaTriggerTemplate const* areaTriggerTemplate = GetTemplate())
-            if (areaTriggerTemplate->ActionSetId)
-                player->UpdateCriteria(CriteriaType::EnterAreaTriggerWithActionSet, areaTriggerTemplate->ActionSetId);
+        if (GetTemplate()->ActionSetId)
+            player->UpdateCriteria(CriteriaType::EnterAreaTriggerWithActionSet, GetTemplate()->ActionSetId);
     }
 
     DoActions(unit);
@@ -1062,9 +949,8 @@ void AreaTrigger::HandleUnitExitInternal(Unit* unit, AreaTriggerExitReason exitM
         {
             player->UpdateQuestObjectiveProgress(QUEST_OBJECTIVE_AREA_TRIGGER_EXIT, GetEntry(), 1);
 
-            if (AreaTriggerTemplate const* areaTriggerTemplate = GetTemplate())
-                if (areaTriggerTemplate->ActionSetId)
-                    player->UpdateCriteria(CriteriaType::LeaveAreaTriggerWithActionSet, areaTriggerTemplate->ActionSetId);
+            if (GetTemplate()->ActionSetId)
+                player->UpdateCriteria(CriteriaType::LeaveAreaTriggerWithActionSet, GetTemplate()->ActionSetId);
         }
     }
 
@@ -1733,11 +1619,4 @@ void AreaTrigger::ClearValuesChangesMask()
 {
     m_values.ClearChangesMask(&AreaTrigger::m_areaTriggerData);
     WorldObject::ClearValuesChangesMask();
-}
-
-void AreaTrigger::SetScaleCurve(UF::MutableFieldReference<UF::ScaleCurve, false> scaleCurveMutator, float constantValue)
-{
-    ScaleCurveData curveTemplate;
-    curveTemplate.Curve = constantValue;
-    SetScaleCurve(scaleCurveMutator, curveTemplate);
 }
