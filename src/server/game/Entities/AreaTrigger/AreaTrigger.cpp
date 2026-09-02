@@ -113,7 +113,7 @@ void AreaTrigger::PlaySpellVisual(uint32 spellVisualId) const
     SendMessageToSet(packet.Write(), false);
 }
 
-bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration, AreaTriggerSpawn const* spawnData /*= nullptr*/, Unit* caster /*= nullptr*/, Unit* target /*= nullptr*/, SpellCastVisual spellVisual /*= { 0, 0 }*/, SpellInfo const* spellInfo /*= nullptr*/, Spell* spell /*= nullptr*/, AuraEffect const* aurEff /*= nullptr*/)
+bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration, AreaTriggerSpawn const* spawnData /*= nullptr*/, Unit* caster /*= nullptr*/, Unit* target /*= nullptr*/, SpellCastVisual spellVisual /*= { 0, 0 }*/, SpellInfo const* spellInfo /*= nullptr*/, Spell* spell /*= nullptr*/, AuraEffect const* aurEff /*= nullptr*/, bool addToMap /*= true*/)
 {
     _targetGuid = target ? target->GetGUID() : ObjectGuid::Empty;
     _aurEff = aurEff;
@@ -289,7 +289,7 @@ bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreateProperti
     if (HasOrbit())
         Relocate(CalculateOrbitPosition());
 
-    if (!IsStaticSpawn())
+    if (!IsStaticSpawn() && addToMap)
     {
         if (!GetMap()->AddToMap(this))
         {
@@ -1620,3 +1620,83 @@ void AreaTrigger::ClearValuesChangesMask()
     m_values.ClearChangesMask(&AreaTrigger::m_areaTriggerData);
     WorldObject::ClearValuesChangesMask();
 }
+
+// ---- Housing area-trigger helpers (restored from integration; curve refs adapted to 69497 OverrideCurve) ----
+AreaTrigger* AreaTrigger::CreateStaticAreaTrigger(AreaTriggerCreatePropertiesId areaTriggerCreatePropertiesId, Map* map, Position const& pos, int32 duration /*= -1*/, bool addToMap /*= true*/)
+{
+    AreaTrigger* at = new AreaTrigger();
+    if (!at->Create(areaTriggerCreatePropertiesId, map, pos, duration, nullptr, nullptr, nullptr, { 0, 0 }, nullptr, nullptr, nullptr, addToMap))
+    {
+        delete at;
+        return nullptr;
+    }
+
+    return at;
+}
+
+void AreaTrigger::SetDecalPropertiesId(uint32 decalPropertiesId)
+{
+    if (*m_areaTriggerData->DecalPropertiesID == decalPropertiesId)
+        return;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::DecalPropertiesID), decalPropertiesId);
+
+    if (!IsInWorld() || !decalPropertiesId)
+        return;
+
+    // flush the field before the message, see the note above
+    if (m_objectUpdated)
+    {
+        RemoveFromObjectUpdate();                           // taken out of Map::_updateObjects, it is built right here instead
+        UpdateDataMapType updateData;
+        BuildUpdate(updateData);                            // clears the change mask and m_objectUpdated
+
+        WorldPacket updatePacket;
+        for (auto& [receiver, data] : updateData)
+        {
+            data.BuildPacket(&updatePacket);
+            receiver->SendDirectMessage(&updatePacket);
+            updatePacket.clear();
+        }
+    }
+
+    WorldPackets::AreaTrigger::AreaTriggerUpdateDecalProperties packet;
+    packet.AreaTriggerGUID = GetGUID();
+    SendMessageToSet(packet.Write(), false);
+}
+
+void AreaTrigger::InitHousingPlotVisuals()
+{
+    // Force SpellForVisuals=1282351 and SpellXSpellVisualID=510142 for housing plot ATs.
+    // Spell 1282351 doesn't exist in sSpellMgr (AreaTriggerDataStore resets SpellForVisuals
+    // to 0 during load, and the normal SpellXSpellVisualID lookup in _InitFields fails).
+    // The client requires BOTH values to properly identify the AT as a housing plot
+    // boundary for the editor-menu decal and placement validation system.
+    {
+        auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);
+        if (*m_areaTriggerData->SpellForVisuals == 0)
+            SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::SpellForVisuals), int32(1282351));
+        if (m_areaTriggerData->SpellVisual->SpellXSpellVisualID == 0)
+            SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::SpellVisual).ModifyValue(&UF::SpellCastVisual::SpellXSpellVisualID), int32(510142));
+    }
+
+    // PeriodModifier=(0, 1.0) — retail sniff-verified on all housing plot ATs.
+    {
+        auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);
+        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::PeriodModifier)
+            .ModifyValue(&UF::AreaTriggerActionSetPeriodModifier::Field_0), int32(0));
+        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::PeriodModifier)
+            .ModifyValue(&UF::AreaTriggerActionSetPeriodModifier::Field_4), 1.0f);
+    }
+
+    // ExtraScaleCurve: ParameterCurve=0x3F800001, OverrideActive=true — tells client to
+    // flatten terrain / remove grass within the plot boundary (decor placement surface).
+    {
+        auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);
+        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::ExtraScaleCurve)
+            .ModifyValue(&UF::OverrideCurve::ParameterCurve), uint32(0x3F800001));
+        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::ExtraScaleCurve)
+            .ModifyValue(&UF::OverrideCurve::OverrideActive), true);
+    }
+}
+
