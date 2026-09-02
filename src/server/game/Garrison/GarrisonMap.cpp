@@ -31,20 +31,13 @@
 class GarrisonGridLoader
 {
 public:
-    GarrisonGridLoader(NGridType* grid, GarrisonMap* map, Cell const& cell)
-        : i_cell(cell), i_grid(grid), i_map(map), i_garrison(map->GetGarrison()), i_gameObjects(0), i_creatures(0)
+    GarrisonGridLoader(NGridType* grid, GarrisonMap* map)
+        : i_grid(grid), i_map(map), i_garrison(map->GetGarrison()), i_gameObjects(0), i_creatures(0)
     { }
-
-    void Visit(GameObjectMapType& m);
-    void Visit(CreatureMapType& m);
 
     void LoadN();
 
-    template<class T> static void SetObjectCell(T* obj, CellCoord const& cellCoord);
-    template<class T> void Visit(GridRefManager<T>& /*m*/) { }
-
 private:
-    Cell i_cell;
     NGridType* i_grid;
     GarrisonMap* i_map;
     Garrison* i_garrison;
@@ -56,46 +49,17 @@ void GarrisonGridLoader::LoadN()
 {
     if (i_garrison)
     {
-        i_cell.data.Part.cell_y = 0;
-        for (uint32 x = 0; x < MAX_NUMBER_OF_CELLS; ++x)
+        for (Garrison::Plot* plot : i_garrison->GetPlots())
         {
-            i_cell.data.Part.cell_x = x;
-            for (uint32 y = 0; y < MAX_NUMBER_OF_CELLS; ++y)
-            {
-                i_cell.data.Part.cell_y = y;
-
-                //Load creatures and game objects
-                TypeContainerVisitor<GarrisonGridLoader, GridTypeMapContainer> visitor(*this);
-                i_grid->VisitGrid(x, y, visitor);
-            }
-        }
-    }
-
-    TC_LOG_DEBUG("maps", "{} GameObjects and {} Creatures loaded for grid {} on map {}", i_gameObjects, i_creatures, i_grid->GetGridId(), i_map->GetId());
-}
-
-void GarrisonGridLoader::Visit(GameObjectMapType& m)
-{
-    std::vector<Garrison::Plot*> plots = i_garrison->GetPlots();
-    if (!plots.empty())
-    {
-        CellCoord cellCoord = i_cell.GetCellCoord();
-        for (Garrison::Plot* plot : plots)
-        {
-            Position const& spawn = plot->PacketInfo.PlotPos.Pos;
-            if (cellCoord != Trinity::ComputeCellCoord(spawn.GetPositionX(), spawn.GetPositionY()))
-                continue;
-
             GameObject* go = plot->CreateGameObject(i_map, i_garrison->GetFaction());
             if (!go)
                 continue;
 
-            go->AddToGrid(m);
-            ObjectGridLoader::SetObjectCell(go, cellCoord);
-            go->AddToWorld();
-            ++i_gameObjects;
+            ObjectGridLoaderBase::AddToMap(go, i_map, i_gameObjects);
         }
     }
+
+    TC_LOG_DEBUG("maps", "{} GameObjects and {} Creatures loaded for grid {} on map {}", i_gameObjects, i_creatures, i_grid->GetGridId(), i_map->GetId());
 }
 
 void GarrisonGridLoader::Visit(CreatureMapType& m)
@@ -192,11 +156,11 @@ GarrisonMap::GarrisonMap(uint32 id, time_t expiry, uint32 instanceId, ObjectGuid
     GarrisonMap::InitVisibilityDistance();
 }
 
-void GarrisonMap::LoadGridObjects(NGridType* grid, Cell const& cell)
+void GarrisonMap::LoadGridObjects(NGridType* grid)
 {
-    Map::LoadGridObjects(grid, cell);
+    Map::LoadGridObjects(grid);
 
-    GarrisonGridLoader loader(grid, this, cell);
+    GarrisonGridLoader loader(grid, this);
     loader.LoadN();
 }
 
