@@ -20,6 +20,7 @@
 #include "Common.h"
 #include "CreatureAI.h"
 #include "DatabaseEnv.h"
+#include "DB2Stores.h"
 #include "Group.h"
 #include "Log.h"
 #include "Map.h"
@@ -600,6 +601,35 @@ void WorldSession::HandlePetRename(WorldPackets::Pet::PetRename& packet)
     CharacterDatabase.CommitTransaction(trans);
 
     pet->SetPetNameTimestamp(uint32(GameTime::GetGameTime()));
+}
+
+void WorldSession::HandleSetPetSpecialization(WorldPackets::Pet::SetPetSpecializationRequest const& packet)
+{
+    // Only the player's own summoned hunter pet carries a live specialization; the client resolves the
+    // stable's petNumber to that pet's guid before sending. A spec change targeting a stabled (non-summoned)
+    // pet has no live object to apply spells to, so it is honestly ignored rather than faked.
+    Pet* pet = ObjectAccessor::GetPet(*_player, packet.PetGUID);
+    if (!pet || pet != _player->GetPet() || pet->getPetType() != HUNTER_PET)
+        return;
+
+    // C_SpecializationInfo.SetPetSpecialization() passes a 1-based specIndex into the list returned by
+    // C_StableInfo.GetAvailablePetSpecInfos(); resolve it to a ChrSpecialization the same way
+    // Pet::LoadPetFromDB does, honouring the pet-spec override aura. An already-resolved pet-spec id is
+    // accepted too, in case the client sends the resolved id rather than the raw index. SpecID is
+    // client-controlled, so it is bounded before indexing the fixed [class][order] table.
+    uint32 const classIndex = _player->HasAuraType(SPELL_AURA_OVERRIDE_PET_SPECS) ? PET_SPEC_OVERRIDE_CLASS_INDEX : 0;
+
+    ChrSpecializationEntry const* spec = sChrSpecializationStore.LookupEntry(packet.SpecID);
+    if (!spec || !spec->IsPetSpecialization())
+        spec = (packet.SpecID >= 1 && packet.SpecID <= MAX_SPECIALIZATIONS)
+            ? sDB2Manager.GetChrSpecializationByIndex(classIndex, packet.SpecID - 1)
+            : nullptr;
+
+    if (!spec)
+        return;
+
+    if (pet->GetSpecialization() != spec->ID)
+        pet->SetSpecialization(spec->ID);
 }
 
 void WorldSession::HandlePetAbandon(WorldPackets::Pet::PetAbandon& packet)
