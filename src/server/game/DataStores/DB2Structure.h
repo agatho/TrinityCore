@@ -29,7 +29,7 @@ struct AccountStoreCategoryEntry
 {
     LocalizedString Name;
     uint32 ID;
-    int32 StoreFrontID;
+    uint32 StoreFrontID;                     // ParentIndexField - must be unsigned
     int32 OrderIndex;
     int32 Icon;
     uint8 Field_11_0_7_57361_005;
@@ -40,7 +40,7 @@ struct AccountStoreItemEntry
     LocalizedString Name;
     LocalizedString Description;
     uint32 ID;
-    int32 StoreFrontID;
+    uint32 StoreFrontID;                     // ParentIndexField - must be unsigned
     int32 AccountStoreCategoryID;
     int32 OrderIndex;
     int32 Price;
