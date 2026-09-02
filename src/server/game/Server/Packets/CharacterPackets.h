@@ -688,6 +688,17 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // CMSG_LOGOUT_INSTANT (0x3E0074): empty payload. Requests an immediate logout that skips the
+        // camera zoom-out / LOGOUT_TIME timer of CMSG_LOGOUT_REQUEST (client sender RVA 0x6D8D44 writes
+        // only the opcode header, no field).
+        class LogoutInstant final : public ClientPacket
+        {
+        public:
+            explicit LogoutInstant(WorldPacket&& packet) : ClientPacket(CMSG_LOGOUT_INSTANT, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         class LogoutCancelAck final : public ServerPacket
         {
         public:

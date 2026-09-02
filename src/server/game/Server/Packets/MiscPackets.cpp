@@ -656,6 +656,11 @@ void SetPvP::Read()
     _worldPacket >> Bits<1>(EnablePVP);
 }
 
+void OverrideScreenFlash::Read()
+{
+    _worldPacket >> Bits<1>(Override);
+}
+
 void SetWarMode::Read()
 {
     _worldPacket >> Bits<1>(Enable);

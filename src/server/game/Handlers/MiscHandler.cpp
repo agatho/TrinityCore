@@ -311,6 +311,38 @@ void WorldSession::HandleLogoutCancelOpcode(WorldPackets::Character::LogoutCance
     }
 }
 
+void WorldSession::HandleLogoutInstant(WorldPackets::Character::LogoutInstant& /*logoutInstant*/)
+{
+    // CMSG_LOGOUT_INSTANT is the client asking to skip the LOGOUT_TIME timer / camera zoom-out of
+    // CMSG_LOGOUT_REQUEST. It is still server-authoritative: the same conditions that block an instant
+    // logout in HandleLogoutRequestOpcode (combat, falling, dueling/frozen) block it here, so it cannot
+    // be used to escape combat. When permitted, log out immediately.
+    if (!GetPlayer()->GetLootGUID().IsEmpty())
+        GetPlayer()->SendLootReleaseAll();
+
+    bool canLogoutInCombat = GetPlayer()->HasPlayerFlag(PLAYER_FLAGS_RESTING);
+
+    uint32 reason = 0;
+    if (GetPlayer()->IsInCombat() && !canLogoutInCombat)
+        reason = 1;
+    else if (GetPlayer()->IsFalling())
+        reason = 3;                                         // is jumping or falling
+    else if (GetPlayer()->duel || GetPlayer()->HasAura(9454)) // is dueling or frozen by GM via freeze command
+        reason = 2;
+
+    if (reason)
+    {
+        WorldPackets::Character::LogoutResponse logoutResponse;
+        logoutResponse.LogoutResult = reason;
+        logoutResponse.Instant = false;
+        SendPacket(logoutResponse.Write());
+        SetLogoutStartTime(0);
+        return;
+    }
+
+    LogoutPlayer(true);
+}
+
 void WorldSession::HandleTogglePvP(WorldPackets::Misc::TogglePvP& /*packet*/)
 {
     if (!GetPlayer()->HasPlayerFlag(PLAYER_FLAGS_IN_PVP))
@@ -350,6 +382,14 @@ void WorldSession::HandleSetPvP(WorldPackets::Misc::SetPvP& packet)
 void WorldSession::HandleSetWarMode(WorldPackets::Misc::SetWarMode& packet)
 {
     _player->SetWarModeDesired(packet.Enable);
+}
+
+void WorldSession::HandleOverrideScreenFlash(WorldPackets::Misc::OverrideScreenFlash& packet)
+{
+    // Pure client accessibility preference (disable screen-flash effects); the server has no gameplay
+    // use for it and only needs to accept and remember it for the session (queryable via
+    // HasScreenFlashOverride). Not persisted - the client resends its option value on every login.
+    _overrideScreenFlash = packet.Override;
 }
 
 void WorldSession::HandlePortGraveyard(WorldPackets::Misc::PortGraveyard& /*packet*/)

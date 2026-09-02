@@ -136,6 +136,7 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _tutorials(),
     _tutorialsChanged(TUTORIALS_FLAG_NONE),
     _filterAddonMessages(false),
+    _overrideScreenFlash(false),
     recruiterId(recruiter),
     isRecruiter(isARecruiter),
     _RBACData(nullptr),
