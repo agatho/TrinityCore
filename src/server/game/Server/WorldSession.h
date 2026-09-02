@@ -442,6 +442,7 @@ namespace WorldPackets
     namespace Collections
     {
         class CollectionItemSetFavorite;
+        class MakeConditionalAppearancePermanent;
     }
 
     namespace Contribution
@@ -3012,6 +3013,7 @@ class TC_GAME_API WorldSession
 
         // Collections
         void HandleCollectionItemSetFavorite(WorldPackets::Collections::CollectionItemSetFavorite& collectionItemSetFavorite);
+        void HandleMakeConditionalAppearancePermanent(WorldPackets::Collections::MakeConditionalAppearancePermanent& makeConditionalAppearancePermanent);
 
         // Crafting Orders
         void HandleCraftingOrderCreate(WorldPackets::CraftingOrders::CraftingOrderCreate& packet);

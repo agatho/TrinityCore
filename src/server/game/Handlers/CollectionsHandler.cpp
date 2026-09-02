@@ -44,3 +44,9 @@ void WorldSession::HandleCollectionItemSetFavorite(WorldPackets::Collections::Co
             break;
     }
 }
+
+void WorldSession::HandleMakeConditionalAppearancePermanent(WorldPackets::Collections::MakeConditionalAppearancePermanent& makeConditionalAppearancePermanent)
+{
+    // Promote a temporarily-held (conditional) transmog appearance into the permanent collection.
+    GetCollectionMgr()->MakeAppearancePermanent(uint32(makeConditionalAppearancePermanent.ItemModifiedAppearanceID));
+}
