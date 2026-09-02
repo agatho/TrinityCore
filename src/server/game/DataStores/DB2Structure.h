@@ -552,7 +552,7 @@ struct BountyEntry
     uint16 FactionID;
     uint32 IconFileDataID;
     uint32 TurninPlayerConditionID;
-    int32 BountySetID;
+    uint32 BountySetID;                     // ParentIndexField - must be unsigned
 };
 
 struct BountySetEntry
