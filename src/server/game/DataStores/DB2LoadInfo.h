@@ -31,7 +31,7 @@ struct AccountStoreCategoryLoadInfo
     {
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "StoreFrontID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "StoreFrontID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "OrderIndex" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Icon" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "Field_11_0_7_57361_005" },
@@ -47,7 +47,7 @@ struct AccountStoreItemLoadInfo
         { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
         { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "StoreFrontID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "StoreFrontID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "AccountStoreCategoryID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "OrderIndex" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Price" },
