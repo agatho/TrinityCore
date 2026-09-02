@@ -1651,7 +1651,7 @@ struct EncounterEventEntry
     int32 Unknown1200_2;            // bit 0 is evaluated inverted by the client reader at 0x2411DA0
     int32 Flags;                    // Enum.EncounterEventIconmask
     int32 IconFileDataID;           // 0 is legal, the client then falls back to the spell icon
-    int32 DungeonEncounterID;
+    uint32 DungeonEncounterID;      // ParentIndexField - must be unsigned
 };
 
 struct ExpectedStatEntry
