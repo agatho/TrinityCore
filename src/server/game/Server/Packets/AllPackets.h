@@ -18,6 +18,7 @@
 #ifndef TRINITYCORE_ALL_PACKETS_H
 #define TRINITYCORE_ALL_PACKETS_H
 
+#include "AccountStorePackets.h"
 #include "AchievementPackets.h"
 #include "AddonPackets.h"
 #include "AdventureJournalPackets.h"

@@ -36,6 +36,22 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     if (!m_reconnecting)
         m_stmts.resize(MAX_HOTFIXDATABASE_STATEMENTS);
 
+    // AccountStoreCategory.db2
+    PrepareStatement(HOTFIX_SEL_ACCOUNT_STORE_CATEGORY, "SELECT Name, ID, StoreFrontID, OrderIndex, Icon, Field_11_0_7_57361_005"
+        " FROM account_store_category WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_ACCOUNT_STORE_CATEGORY, "SELECT MAX(ID) + 1 FROM account_store_category", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_ACCOUNT_STORE_CATEGORY, "SELECT ID, Name_lang FROM account_store_category_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
+    // AccountStoreItem.db2
+    PrepareStatement(HOTFIX_SEL_ACCOUNT_STORE_ITEM, "SELECT Name, Description, ID, StoreFrontID, AccountStoreCategoryID, OrderIndex, Price, "
+        "CurrencyTypesID, Field_11_0_7_57361_008, RefundDuration, Field_11_0_7_57361_010, Field_11_0_7_57361_011, SpellID, TransmogSetID, "
+        "CreatureDisplayInfoID, UiModelSceneID, Icon, Field_12_0_0_63534_017, Field_12_0_0_63534_018, Field_12_0_0_63534_019"
+        " FROM account_store_item WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_ACCOUNT_STORE_ITEM, "SELECT MAX(ID) + 1 FROM account_store_item", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_ACCOUNT_STORE_ITEM, "SELECT ID, Name_lang, Description_lang FROM account_store_item_locale"
+        " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
     // Achievement.db2
     PrepareStatement(HOTFIX_SEL_ACHIEVEMENT, "SELECT Description, Title, Reward, ID, InstanceID, Faction, Supercedes, Category, MinimumCriteria, "
         "Points, Flags, UiOrder, IconFileID, RewardItemID, CriteriaTree, SharesCriteria, CovenantID, HiddenBeforeDisplaySeason, LegacyAfterTimeEvent"

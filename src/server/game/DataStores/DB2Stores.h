@@ -31,6 +31,8 @@
 
 class DB2HotfixGeneratorBase;
 
+TC_GAME_API extern DB2Storage<AccountStoreCategoryEntry>            sAccountStoreCategoryStore;
+TC_GAME_API extern DB2Storage<AccountStoreItemEntry>                sAccountStoreItemStore;
 TC_GAME_API extern DB2Storage<AchievementEntry>                     sAchievementStore;
 TC_GAME_API extern DB2Storage<UiTextureKitEntry>                    sUiTextureKitStore;
 TC_GAME_API extern DB2Storage<RenownRewardsEntry>                   sRenownRewardsStore;
