@@ -35,6 +35,7 @@
 #include "IpNetwork.h"
 #include "Locales.h"
 #include "LoginRESTService.h"
+#include "PayPalRESTService.h"
 #include "Memory.h"
 #include "MySQLThreading.h"
 #include "OpenSSLCrypto.h"
@@ -230,6 +231,22 @@ int main(int argc, char** argv)
     }
 
     auto sLoginServiceHandle = Trinity::make_unique_ptr_with_deleter<&Battlenet::LoginRESTService::StopNetwork>(&sLoginService);
+
+    // Inbound PayPal webhook receiver (Commerce Rail A). Gated on PayPal.Enabled so it is a complete
+    // no-op by default - no listener stood up unless configured. A start failure is non-fatal.
+    // StopNetwork() dereferences the acceptor, so only register cleanup if the listener actually started.
+    std::shared_ptr<void> sPayPalServiceHandle;
+    if (sConfigMgr->GetBoolDefault("PayPal.Enabled", false))
+    {
+        int32 ppPort = sConfigMgr->GetIntDefault("PayPal.Webhook.Port", 8082);
+        std::string ppBindIp = sConfigMgr->GetStringDefault("PayPal.Webhook.BindIP", httpBindIp);
+        if (ppPort <= 0 || ppPort > 0xFFFF)
+            TC_LOG_ERROR("server.bnetserver", "PayPal.Webhook.Port ({}) out of range (1-65535); webhook listener not started.", ppPort);
+        else if (!sPayPalRESTService.StartNetwork(*ioContext, ppBindIp, uint16(ppPort)))
+            TC_LOG_ERROR("server.bnetserver", "Failed to start PayPal webhook listener (check PayPal.WebhookId/ClientId/Secret).");
+        else
+            sPayPalServiceHandle = std::shared_ptr<void>(&sPayPalRESTService, [](void*) { sPayPalRESTService.StopNetwork(); });
+    }
 
     // Start the listening port (acceptor) for auth connections
     int32 bnport = sConfigMgr->GetIntDefault("BattlenetPort", 1119);

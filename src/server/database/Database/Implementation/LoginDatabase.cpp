@@ -205,6 +205,19 @@ void LoginDatabaseConnection::DoPrepareStatements()
     PrepareStatement(LOGIN_SEL_BNET_PLAYER_DATA_FLAGS_ACCOUNT, "SELECT storageIndex, mask FROM battlenet_account_player_data_flag WHERE battlenetAccountId = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_DEL_BNET_PLAYER_DATA_FLAGS_ACCOUNT, "DELETE FROM battlenet_account_player_data_flag WHERE battlenetAccountId = ? AND storageIndex = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_INS_BNET_PLAYER_DATA_FLAGS_ACCOUNT, "INSERT INTO battlenet_account_player_data_flag (battlenetAccountId, storageIndex, mask) VALUES (?, ?, ?)", CONNECTION_ASYNC);
+
+    // PayPal real-money settlement ledger (Commerce Rail A). Written by the bnetserver webhook,
+    // read + delivered by the worldserver PaymentMgr.
+    PrepareStatement(LOGIN_INS_PAYPAL_SETTLEMENT, "INSERT INTO paypal_settlement (orderId, accountId, productId, amount, currency, status) VALUES (?, ?, ?, ?, ?, 'CREATED') "
+        "ON DUPLICATE KEY UPDATE accountId = VALUES(accountId), productId = VALUES(productId), amount = VALUES(amount), currency = VALUES(currency)", CONNECTION_ASYNC);
+    // Transition a pending order (status IN CREATED/APPROVED only) to SETTLED/DENIED/REFUNDED. The
+    // status-source guard is what stops a duplicate PAYMENT.CAPTURE.COMPLETED webhook from flipping an
+    // already-DELIVERED row back to SETTLED and re-granting. Routed by the custom_id (accountId:productId).
+    PrepareStatement(LOGIN_UPD_PAYPAL_SETTLEMENT_STATUS, "UPDATE paypal_settlement SET status = ?, captureId = ? WHERE accountId = ? AND productId = ? AND status IN ('CREATED','APPROVED') ORDER BY createdAt DESC LIMIT 1", CONNECTION_ASYNC);
+    // Settled-but-undelivered rows, oldest first (worldserver world-thread poll).
+    PrepareStatement(LOGIN_SEL_PAYPAL_SETTLED, "SELECT orderId, captureId, accountId, productId, amount, currency FROM paypal_settlement WHERE status = 'SETTLED' ORDER BY createdAt ASC LIMIT ?", CONNECTION_SYNCH);
+    // Idempotent grant flip: only claims a row that is still SETTLED, so it can be granted exactly once.
+    PrepareStatement(LOGIN_UPD_PAYPAL_DELIVERED, "UPDATE paypal_settlement SET status = 'DELIVERED' WHERE orderId = ? AND status = 'SETTLED'", CONNECTION_ASYNC);
 }
 
 LoginDatabaseConnection::LoginDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

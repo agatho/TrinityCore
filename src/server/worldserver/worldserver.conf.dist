@@ -4404,3 +4404,36 @@ Load.Locales = 1
 
 #
 ###################################################################################################
+
+###################################################################################################
+# PAYPAL (Commerce Rail A - real-money settlement; worldserver: outbound create + delivery)
+#
+#    PayPal.Enabled
+#        Description: Master switch for the PayPal payment provider. When 0, PaymentMgr is a complete
+#                     no-op: no worker thread is spawned and nothing calls out to PayPal.
+#        Default:     0
+#        NOTE:        ClientId/Secret are sensitive - treat them like DB credentials. They are never
+#                     written to the log.
+
+PayPal.Enabled        = 0
+PayPal.Mode           = "sandbox"
+PayPal.ClientId       = ""
+PayPal.Secret         = ""
+PayPal.Currency       = "USD"
+PayPal.BrandName      = "My WoW Realm Store"
+PayPal.ReturnUrl      = "https://shop.myrealm.example/paypal/return"
+PayPal.CancelUrl      = "https://shop.myrealm.example/paypal/cancel"
+PayPal.VerifyCertificate = 1
+PayPal.CaBundle       = ""
+PayPal.SettlementPollMs  = 2000
+
+#    PayPal.TestProductPrice
+#        Description: QA-only fixed price (decimal string, e.g. "4.99") used by BeginRealMoneyCheckout
+#                     when the commerce product catalog (P2) is not yet present. Leave empty in
+#                     production; real prices come from the catalog once P2 lands.
+#        Default:     "" (empty => checkout refuses with a warning until the catalog exists)
+
+PayPal.TestProductPrice  = ""
+
+#
+###################################################################################################
