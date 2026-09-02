@@ -388,6 +388,7 @@ namespace WorldPackets
         class SetupWarbandGroups;
         class LogoutRequest;
         class LogoutCancel;
+        class LogoutInstant;
         class LoadingScreenNotify;
         class SetActionBarToggles;
         class RequestPlayedTime;
@@ -901,6 +902,7 @@ namespace WorldPackets
         class OpeningCinematic;
         class TogglePvP;
         class SetPvP;
+        class OverrideScreenFlash;
         class SetWarMode;
         class MountSpecial;
         class SetTaxiBenchmarkMode;
@@ -1642,6 +1644,9 @@ class TC_GAME_API WorldSession
 
         bool IsAddonRegistered(std::string_view prefix) const;
 
+        // Client accessibility preference (screen-flash effects), mirrored from CMSG_OVERRIDE_SCREEN_FLASH.
+        bool HasScreenFlashOverride() const { return _overrideScreenFlash; }
+
         void SendPacket(WorldPacket const* packet, bool forced = false);
 
         void SendNotification(char const* format, ...) ATTR_PRINTF(2, 3);
@@ -2227,6 +2232,7 @@ class TC_GAME_API WorldSession
         void HandleWhoOpcode(WorldPackets::Who::WhoRequestPkt& whoRequest);
         void HandleLogoutRequestOpcode(WorldPackets::Character::LogoutRequest& logoutRequest);
         void HandleLogoutCancelOpcode(WorldPackets::Character::LogoutCancel& logoutCancel);
+        void HandleLogoutInstant(WorldPackets::Character::LogoutInstant& logoutInstant);
 
         // GM Ticket opcodes
         void HandleGMTicketGetCaseStatusOpcode(WorldPackets::Ticket::GMTicketGetCaseStatus& packet);
@@ -2238,6 +2244,7 @@ class TC_GAME_API WorldSession
 
         void HandleTogglePvP(WorldPackets::Misc::TogglePvP& packet);
         void HandleSetPvP(WorldPackets::Misc::SetPvP& packet);
+        void HandleOverrideScreenFlash(WorldPackets::Misc::OverrideScreenFlash& packet);
         void HandleSetWarMode(WorldPackets::Misc::SetWarMode& packet);
 
         void HandleSetSelectionOpcode(WorldPackets::Misc::SetSelection& packet);
@@ -3473,6 +3480,7 @@ class TC_GAME_API WorldSession
         // Garrison login prologue (FOLLOWER_FATIGUE_CLEARED + FOLLOWER_ACTIVATIONS_SET) is sniff-confirmed
         // to be sent only before the FIRST GetGarrisonInfo result of a session.
         bool _sentGarrisonLoginPrologue = false;
+        bool _overrideScreenFlash;                          // client accessibility pref mirrored via CMSG_OVERRIDE_SCREEN_FLASH (session-only)
         uint32 recruiterId;
         bool isRecruiter;
         bool _isCommentator = false;                        // account is currently in commentator (spectator) mode

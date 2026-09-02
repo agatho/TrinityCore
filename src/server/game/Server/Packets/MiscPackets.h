@@ -1106,6 +1106,19 @@ namespace WorldPackets
             bool EnablePVP = false;
         };
 
+        // CMSG_OVERRIDE_SCREEN_FLASH (0x3E00BB): mirrors the client's accessibility preference for
+        // screen-flash effects (screen shake/flash on hits) to the server. Wire (client sender RVA
+        // 0x6D9AC4): a single bit + FlushBits.
+        class OverrideScreenFlash final : public ClientPacket
+        {
+        public:
+            explicit OverrideScreenFlash(WorldPacket&& packet) : ClientPacket(CMSG_OVERRIDE_SCREEN_FLASH, std::move(packet)) { }
+
+            void Read() override;
+
+            bool Override = false;
+        };
+
         class SetWarMode final : public ClientPacket
         {
         public:
