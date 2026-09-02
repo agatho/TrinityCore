@@ -67,6 +67,39 @@ void GarrisonGridLoader::LoadN()
 
             ObjectGridLoaderBase::AddToMap(go, i_map, i_gameObjects);
         }
+    }
+
+    TC_LOG_DEBUG("maps", "{} GameObjects and {} Creatures loaded for grid {} on map {}", i_gameObjects, i_creatures, i_grid->GetGridId(), i_map->GetId());
+}
+
+void GarrisonGridLoader::Visit(CreatureMapType& m)
+{
+    if (!i_garrison)
+        return;
+
+    CellCoord cellCoord = i_cell.GetCellCoord();
+    GarrisonFactionIndex faction = i_garrison->GetFaction();
+    std::vector<Garrison::Plot*> plots = i_garrison->GetPlots();
+
+    if (plots.empty())
+        return;
+
+    uint32 plotCount = static_cast<uint32>(plots.size());
+    uint32 followerIndex = 0;
+
+    for (auto const& [dbId, follower] : i_garrison->GetFollowerMap())
+    {
+        // Skip followers currently on missions
+        if (follower.PacketInfo.CurrentMissionID != 0)
+            continue;
+
+        // Skip inactive followers
+        if (follower.PacketInfo.FollowerStatus & FOLLOWER_STATUS_INACTIVE)
+            continue;
+
+        GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(follower.PacketInfo.GarrFollowerID);
+        if (!followerEntry)
+            continue;
 
         // Spawn active garrison followers as creatures near their plots. Branch feature, re-hosted into
         // 12.1's rewritten LoadN(): upstream dropped the per-cell Visit(CreatureMapType&) mechanism and now
