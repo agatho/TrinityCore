@@ -974,6 +974,11 @@ WorldPacket const* GuildKnownRecipes::Write()
     {
         _worldPacket << uint32(entry.SkillLineID);
         _worldPacket.append(entry.Blob.data(), entry.Blob.size());
+    }
+
+    return &_worldPacket;
+}
+
 // ------------------------------------------------------------------------------------------------
 // Guild rename cluster - reads mirror the RE'd client builders (see GuildPackets.h header comment).
 // ------------------------------------------------------------------------------------------------
@@ -1058,6 +1063,10 @@ WorldPacket const* GuildMemberRecipes::Write()
     _worldPacket << uint32(SkillRank);
     _worldPacket << uint32(SkillStep);
     _worldPacket.append(Blob.data(), Blob.size());
+
+    return &_worldPacket;
+}
+
 WorldPacket const* GuildRenameRequestedResult::Write()
 {
     _worldPacket << SizedString::BitsSize<7>(NewName);
@@ -1085,6 +1094,10 @@ WorldPacket const* GuildMembersWithRecipe::Write()
 
     for (ObjectGuid const& member : Members)
         _worldPacket << member;
+
+    return &_worldPacket;
+}
+
 WorldPacket const* GuildRenameRefundResult::Write()
 {
     _worldPacket << SizedString::BitsSize<7>(GuildName);

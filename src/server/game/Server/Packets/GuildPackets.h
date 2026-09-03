@@ -1305,6 +1305,8 @@ namespace WorldPackets
             uint32 SkillLineID = 0;
             uint32 RecipeSpellID = 0;
             std::vector<ObjectGuid> Members;
+        };
+
         // Guild rename cluster (12.1). All four CMSG wires below were reverse-engineered from the client
         // packet builders in wow_unpacked4.exe (ImageBase 0x140000000):
         //   0x2E0021 STATUS      @0x1407285e0 : header + PackedGUID

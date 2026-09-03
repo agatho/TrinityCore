@@ -199,6 +199,8 @@ namespace WorldPackets
             explicit PetClearSpells() : ServerPacket(SMSG_PET_CLEAR_SPELLS, 0) { }
 
             WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
         // Wire (sniff-decoded, s69273_a/prey1/prey2, 127 instances, lengths 4/19/34):
         // uint32 Count (full DWORD, proven by the Count==0 case measuring exactly 4 bytes -
         // no bit-packed length prefix), followed by Count PackedGuid entries (15 bytes observed

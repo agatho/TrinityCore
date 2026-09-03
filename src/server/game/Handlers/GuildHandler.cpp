@@ -881,6 +881,8 @@ void WorldSession::HandleGuildQueryMembersForRecipe(WorldPackets::Guild::GuildQu
 
         SendPacket(response.Write());
     }));
+}
+
 // Guild rename cluster (12.1) - see GuildRenameMgr / GuildPackets.h. The leading GuildRegistrarGUID
 // is the guild-rename interaction NPC and is read off the wire but not enforced, since the rename
 // itself is fully gated on guild-master permission inside GuildRenameMgr.
