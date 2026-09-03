@@ -30,6 +30,7 @@
 #include "Mail.h"
 #include "MiscPackets.h"
 #include "ObjectMgr.h"
+#include "PaymentMgr.h"
 #include "Player.h"
 #include "QueryHolder.h"
 #include "RealmList.h"
@@ -657,10 +658,27 @@ void WorldSession::HandleBattlePayOpenCheckout(WorldPackets::BattlePay::OpenChec
             return;
         case SHOP_REAL_MONEY_WEB:
         default:
-            // Sniff-accurate: the client already opened the shop2 HTTPS overlay from OPEN_CHECKOUT, so the
-            // game connection sends NO response. Completion, if any, arrives from the web backend (Rail A3).
+            // Rail A3 - PAYPAL. When a PayPal provider is configured and this is a routed real-money
+            // product (so it has a price to charge and an entitlement to grant), begin a PayPal checkout:
+            // PaymentMgr creates the order off-thread and hands the buyer the approve URL in-game; the
+            // bnetserver webhook settles it and the entitlement is granted (offline-safe) on the next
+            // settlement poll. An unrouted retail card (no shop_product, e.g. the Midnight expansion card)
+            // has nothing to charge or grant, so it keeps the sniff-accurate no-response behaviour below.
+            if (product && sPaymentMgr->IsEnabled())
+            {
+                sPaymentMgr->BeginRealMoneyCheckout(GetAccountId(),
+                    GetPlayer() ? GetPlayer()->GetGUID() : ObjectGuid::Empty,
+                    openCheckout.ProductID, openCheckout.ClientToken);
+                TC_LOG_INFO("network", "BattlePay: {} began a PayPal real-money checkout for product {} (client token {}).",
+                    GetPlayerInfo(), openCheckout.ProductID, openCheckout.ClientToken);
+                return;
+            }
+
+            // Sniff-accurate fallback: the client already opened the shop2 HTTPS overlay from OPEN_CHECKOUT,
+            // so with no PayPal provider the game connection sends NO response (completion, if any, arrives
+            // from a web backend - Rail A3).
             TC_LOG_DEBUG("network", "BattlePay: {} opened a real-money web checkout for product {} (client token {}); "
-                "no game response (Shop.RealMoney.Mode=web).", GetPlayerInfo(), openCheckout.ProductID, openCheckout.ClientToken);
+                "no game response (Shop.RealMoney.Mode=web, no PayPal provider).", GetPlayerInfo(), openCheckout.ProductID, openCheckout.ClientToken);
             return;
     }
 }
