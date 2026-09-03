@@ -366,9 +366,9 @@ void AreaTrigger::InitHousingPlotVisuals()
     {
         auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);
         SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::ExtraScaleCurve)
-            .ModifyValue(&UF::ScaleCurve::ParameterCurve), uint32(0x3F800001));
+            .ModifyValue(&UF::OverrideCurve::ParameterCurve), uint32(0x3F800001));
         SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::ExtraScaleCurve)
-            .ModifyValue(&UF::ScaleCurve::OverrideActive), true);
+            .ModifyValue(&UF::OverrideCurve::OverrideActive), true);
     }
 }
 

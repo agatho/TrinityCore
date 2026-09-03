@@ -103,6 +103,8 @@ CREATE TABLE `character_housing_decor` (
     `placementTime` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix timestamp when decor was placed (for refund window)',
     `sourceType` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'DecorSourceType: 0=Standard, 3=Deferred, 5=Spell, 6=Item',
     `sourceValue` VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Source context (spell ID, item GUID, etc.)',
+    `petGuid` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Battle pet counter bound to this decor slot (0 = none), HighGuid::BattlePet',
+    `petFlag` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Client-sent flag accompanying the pet binding (CMSG_HOUSING_DECOR_SET_PET)',
     PRIMARY KEY (`ownerGuid`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -346,4 +348,18 @@ CREATE TABLE `neighborhood_initiative_contributions` (
     PRIMARY KEY (`id`),
     UNIQUE INDEX `idx_initiative_player_task` (`initiativeDbId`, `playerGuid`, `taskId`),
     INDEX `idx_player` (`playerGuid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- character_housing_ignored_neighborhood - House-finder ignore list
+--
+-- Per-player set of neighborhoods hidden from the house finder listing
+-- (CMSG_HOUSING_SVCS_HOUSE_FINDER_IGNORE_NEIGHBORHOOD, build 12.1.0.69497).
+-- neighborhoodGuid stores the neighborhood GUID counter (HighGuid::Housing subType 4).
+-- ---------------------------------------------------------------------------
+DROP TABLE IF EXISTS `character_housing_ignored_neighborhood`;
+CREATE TABLE `character_housing_ignored_neighborhood` (
+    `ownerGuid` BIGINT UNSIGNED NOT NULL COMMENT 'Player character GUID counter',
+    `neighborhoodGuid` BIGINT UNSIGNED NOT NULL COMMENT 'Ignored neighborhood GUID counter',
+    PRIMARY KEY (`ownerGuid`, `neighborhoodGuid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

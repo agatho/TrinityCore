@@ -24,6 +24,7 @@
 #include "Position.h"
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class Neighborhood;
@@ -387,7 +388,16 @@ public:
     // Validation
     HousingResult ValidateDecorPlacement(uint32 decorId, Position const& pos, uint32 houseLevel) const;
 
+    // House-finder per-player ignore list (CMSG_HOUSING_SVCS_HOUSE_FINDER_IGNORE_NEIGHBORHOOD).
+    // Lazily loaded from character_housing_ignored_neighborhood, cached in memory, write-through
+    // to DB on mutation. Used to exclude neighborhoods from the finder listing.
+    bool IsNeighborhoodIgnored(ObjectGuid playerGuid, ObjectGuid neighborhoodGuid);
+    void AddIgnoredNeighborhood(ObjectGuid playerGuid, ObjectGuid neighborhoodGuid);
+    void RemoveIgnoredNeighborhood(ObjectGuid playerGuid, ObjectGuid neighborhoodGuid);
+
 private:
+    // Ensure the player's ignore set is loaded from DB into _ignoredNeighborhoods.
+    std::unordered_set<ObjectGuid>& EnsureIgnoredNeighborhoodsLoaded(ObjectGuid playerGuid);
     void LoadHouseDecorData();
     void LoadHouseLevelData();
     void LoadHouseRoomData();
@@ -478,6 +488,9 @@ private:
     // Fixture resolution: (componentType, wmoDataID, size) → default component ID
     // Key = (uint64(componentType) << 40) | (uint64(wmoDataID) << 8) | size
     std::unordered_map<uint64, uint32> _defaultFixtureByTypeWmo;
+
+    // House-finder ignore list, per player. Value present == loaded from DB.
+    std::unordered_map<ObjectGuid, std::unordered_set<ObjectGuid>> _ignoredNeighborhoods;
 };
 
 #define sHousingMgr HousingMgr::Instance()

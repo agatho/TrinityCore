@@ -62,6 +62,8 @@ public:
         time_t PlacementTime = 0;
         uint8 SourceType = DECOR_SOURCE_STANDARD;
         std::string SourceValue;
+        ObjectGuid PetGuid;         // battle-pet bound to this decor slot (empty = none)
+        uint8 PetFlag = 0;          // client-sent flag accompanying the pet binding
     };
 
     struct Room
@@ -167,6 +169,10 @@ public:
     static bool IsExteriorDecorPlacement(ObjectGuid roomGuid);
     HousingResult CommitDecorDyes(ObjectGuid decorGuid, std::array<uint32, MAX_HOUSING_DYE_SLOTS> const& dyeSlots);
     HousingResult SetDecorLocked(ObjectGuid decorGuid, bool locked);
+    // Bind (or, with an empty petGuid, clear) a battle pet on a placed decor slot.
+    HousingResult SetDecorPet(ObjectGuid decorGuid, ObjectGuid petGuid, uint8 petFlag);
+    // Wipe placed decor for a HousingHouseScope (1=Interior, 2=Exterior). Returns the count removed.
+    HousingResult ResetDecor(uint8 scope, uint32* outRemoved = nullptr);
     PlacedDecor const* GetPlacedDecor(ObjectGuid decorGuid) const;
     std::vector<PlacedDecor const*> GetAllPlacedDecor() const;
     uint32 GetDecorCount() const { return static_cast<uint32>(_placedDecor.size()); }
