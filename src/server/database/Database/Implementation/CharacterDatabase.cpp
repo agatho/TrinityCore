@@ -388,6 +388,8 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_DEL_CRAFTING_ORDER, "DELETE FROM crafting_orders WHERE OrderID=?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_CRAFTING_ORDER_REAGENTS, "DELETE FROM crafting_order_reagents WHERE OrderID=?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_INS_CRAFTING_ORDER_REAGENT, "INSERT INTO crafting_order_reagents (OrderID, Slot, ItemID, CurrencyID, Quantity) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_INS_CRAFTING_ORDER_REPORT, "INSERT INTO crafting_order_reports (OrderID, ReporterGuid, ReportedGuid, ReportType, MajorCategory, MinorCategoryFlags, Comment, ReportTime) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_TRANSMOG_OUTFIT, "UPDATE character_transmog_outfits SET name=?, iconname=?, ignore_mask=?, appearance0=?, appearance1=?, appearance2=?, appearance3=?, "
         "appearance4=?, appearance5=?, appearance6=?, appearance7=?, appearance8=?, appearance9=?, appearance10=?, appearance11=?, appearance12=?, appearance13=?, appearance14=?, "
         "appearance15=?, appearance16=?, appearance17=?, appearance18=?, mainHandEnchant=?, offHandEnchant=? WHERE guid=? AND setguid=? AND setindex=?", CONNECTION_ASYNC);

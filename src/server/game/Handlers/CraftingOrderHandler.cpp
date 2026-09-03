@@ -394,3 +394,28 @@ void WorldSession::HandleCraftingOrderUpdateIgnoreList(WorldPackets::CraftingOrd
 
     sCraftingOrderMgr.SetIgnoreList(player->GetGUID(), std::move(packet.IgnoredPlayers));
 }
+
+// The customer/crafter view's "Report" button (only shown on a Created order) files a player report against the
+// order's counterparty. The client sends this through the generic report system; the offender is derived from the
+// order (the reporter's own GUID is one side, so the other participant is the reported player). The report is
+// persisted for GM review; the client does not expect a response opcode.
+void WorldSession::HandleCraftingOrderReportPlayer(WorldPackets::CraftingOrders::CraftingOrderReportPlayer& packet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    CraftingOrders::Order const* order = sCraftingOrderMgr.GetOrder(packet.OrderID);
+    if (!order)
+        return;
+
+    ObjectGuid const reporter = player->GetGUID();
+
+    // A crafting order has two participants; the reporter is one of them, so the reported player is the other side.
+    // The report button appears on the customer's crafter-order view, so the crafter is the usual offender, but we
+    // resolve it symmetrically so either party can report the other.
+    ObjectGuid reported = (order->CustomerGUID == reporter) ? order->CrafterGUID : order->CustomerGUID;
+
+    sCraftingOrderMgr.ReportPlayer(packet.OrderID, reporter, reported, packet.ReportType,
+        packet.MajorCategory, packet.MinorCategoryFlags, packet.Comment);
+}

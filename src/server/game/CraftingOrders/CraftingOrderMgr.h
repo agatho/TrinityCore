@@ -128,6 +128,12 @@ public:
     void SetIgnoreList(ObjectGuid owner, std::vector<ObjectGuid> ignored);
     bool IsIgnoring(ObjectGuid owner, ObjectGuid other) const;
 
+    // Records a player report filed against a participant of a crafting order (CMSG_CRAFTING_ORDER_REPORT_PLAYER).
+    // The report is persisted to `crafting_order_reports` (character DB) for GM review; there is no client response.
+    // Returns false only when the order does not exist.
+    bool ReportPlayer(uint64 orderId, ObjectGuid reporter, ObjectGuid reported, int32 reportType,
+        int32 majorCategory, int32 minorCategoryFlags, std::string const& comment) const;
+
 private:
     CraftingOrderMgr() = default;
 

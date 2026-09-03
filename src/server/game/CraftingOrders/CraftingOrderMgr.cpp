@@ -503,3 +503,27 @@ bool CraftingOrderMgr::IsIgnoring(ObjectGuid owner, ObjectGuid other) const
         return false;
     return std::find(it->second.begin(), it->second.end(), other) != it->second.end();
 }
+
+bool CraftingOrderMgr::ReportPlayer(uint64 orderId, ObjectGuid reporter, ObjectGuid reported, int32 reportType,
+    int32 majorCategory, int32 minorCategoryFlags, std::string const& comment) const
+{
+    CraftingOrders::Order const* order = GetOrder(orderId);
+    if (!order)
+        return false;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CRAFTING_ORDER_REPORT);
+    uint8 i = 0;
+    stmt->setUInt64(i++, orderId);
+    stmt->setUInt64(i++, reporter.GetCounter());
+    stmt->setUInt64(i++, reported.GetCounter());
+    stmt->setInt32(i++, reportType);
+    stmt->setInt32(i++, majorCategory);
+    stmt->setInt32(i++, minorCategoryFlags);
+    stmt->setString(i++, comment);
+    stmt->setInt64(i++, GameTime::GetGameTime());
+    CharacterDatabase.Execute(stmt);
+
+    TC_LOG_INFO("network.opcode", "CraftingOrders: player {} reported order {} participant {} (type {}, major {}, minor 0x{:X})",
+        reporter.ToString(), orderId, reported.ToString(), reportType, majorCategory, uint32(minorCategoryFlags));
+    return true;
+}

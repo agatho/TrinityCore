@@ -156,6 +156,33 @@ namespace CraftingOrders
         bool HasContext = false;
     };
 
+    // CMSG_CRAFTING_ORDER_REPORT_PLAYER (0x3E0122): the customer view's "Report" button on a Created order sends a
+    // generic report through C_ReportSystem.SendReport(reportInfo, playerLocation). Client serializer sub @0x6DAC40:
+    //   u64 OrderID; { i32 MapID; f32 X,Y,Z; f32 Facing; i32 Program } (the standard report location header, the
+    //   playerLocation resolved from the reported crafter/customer GUID); i32 ReportType (Enum.ReportType.CraftingOrder
+    //   == 16); i32 MajorCategory (Enum.ReportMajorCategory); i32 MinorCategoryFlags (Enum.ReportMinorCategory
+    //   bitmask); SizedString<BitsSize<10>> Comment (max 1024). The offender is derived from the order, not sent as a
+    //   separate GUID - the OrderID identifies the customer/crafter pair.
+    class CraftingOrderReportPlayer final : public ClientPacket
+    {
+    public:
+        explicit CraftingOrderReportPlayer(WorldPacket&& packet) : ClientPacket(CMSG_CRAFTING_ORDER_REPORT_PLAYER, std::move(packet)) { }
+
+        void Read() override;
+
+        uint64 OrderID = 0;
+        int32 MapID = 0;
+        float PositionX = 0.0f;
+        float PositionY = 0.0f;
+        float PositionZ = 0.0f;
+        float Facing = 0.0f;
+        int32 Program = 0;
+        int32 ReportType = 0;
+        int32 MajorCategory = 0;
+        int32 MinorCategoryFlags = 0;
+        std::string Comment;
+    };
+
     // Client enum ClientCrafting::CraftingOrderResult (12.0.7.68275, extracted from the client enum registrar).
     enum class CraftingOrderResult : uint8
     {

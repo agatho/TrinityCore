@@ -205,6 +205,34 @@ void CraftingOrderFulfill::Read()
     }
 }
 
+void CraftingOrderReportPlayer::Read()
+{
+    // Client serializer sub @0x6DAC40.
+    _worldPacket >> OrderID;
+    _worldPacket >> MapID;
+    _worldPacket >> PositionX;
+    _worldPacket >> PositionY;
+    _worldPacket >> PositionZ;
+    _worldPacket >> Facing;
+    _worldPacket >> Program;
+    _worldPacket >> ReportType;
+    _worldPacket >> MajorCategory;
+    _worldPacket >> MinorCategoryFlags;
+
+    // SizedString<BitsSize<10>>: the length is a 10-bit value the compiler emits as Write<uint8>(len >> 2) plus
+    // 2 accumulator bits (same shape as the Reject/Fulfill note), followed by the raw bytes after FlushBits.
+    uint8 commentLenHigh = _worldPacket.read<uint8>();
+    _worldPacket.ResetBitPos();
+    uint32 commentLen = (uint32(commentLenHigh) << 2) | _worldPacket.ReadBits(2);
+
+    if (commentLen)
+    {
+        Comment.resize(commentLen);
+        for (uint32 i = 0; i < commentLen; ++i)
+            Comment[i] = _worldPacket.read<char>();
+    }
+}
+
 WorldPacket const* CraftingOrderActionResult::Write()
 {
     _worldPacket << uint8(Result);
