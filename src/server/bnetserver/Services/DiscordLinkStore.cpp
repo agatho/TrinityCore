@@ -87,7 +87,7 @@ namespace Battlenet
         stmt->setUInt64(1, link.DiscordUserId);
         stmt->setString(2, link.DiscordUserName);
         stmt->setUInt8(3, uint8(link.AccountType));
-        stmt->setString(4, "");             // access token is populated by the OAuth linker when available
+        stmt->setString(4, std::string_view());     // access token is populated by the OAuth linker when available
         LoginDatabase.Execute(stmt);
     }
 

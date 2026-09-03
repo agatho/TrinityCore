@@ -81,7 +81,7 @@ namespace Battlenet
 
         bool _enabled = false;                                  // BattlenetDiscord.Enabled
         mutable std::mutex _mutex;
-        std::unordered_map<uint32, DiscordLink> _links;
+        mutable std::unordered_map<uint32, DiscordLink> _links;
     };
 }
 
