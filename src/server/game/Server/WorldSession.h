@@ -696,6 +696,8 @@ namespace WorldPackets
         class RafGenerateRecruitmentLink;
         class RafClaimActivityReward;
         class RafClaimNextReward;
+        class RafUpdateRecruitmentInfo;
+        class RafRecruitPresenceSubscribe;
         class RemoveRafRecruit;
     }
 
@@ -1303,6 +1305,8 @@ class TC_GAME_API WorldSession
         void HandleRafGenerateRecruitmentLink(WorldPackets::RaF::RafGenerateRecruitmentLink& packet);
         void HandleRafClaimActivityReward(WorldPackets::RaF::RafClaimActivityReward& packet);
         void HandleRafClaimNextReward(WorldPackets::RaF::RafClaimNextReward& packet);
+        void HandleRafUpdateRecruitmentInfo(WorldPackets::RaF::RafUpdateRecruitmentInfo& packet);
+        void HandleRafRecruitPresenceSubscribe(WorldPackets::RaF::RafRecruitPresenceSubscribe& packet);
         void HandleRemoveRafRecruit(WorldPackets::RaF::RemoveRafRecruit& packet);
         void ClaimRafActivity(uint32 activityId);
         void SendRafAccountInfo(uint32 field);
