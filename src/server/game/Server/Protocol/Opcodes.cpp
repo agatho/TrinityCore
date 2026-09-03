@@ -986,8 +986,8 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_RAF_CLAIM_ACTIVITY_REWARD,                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRafClaimActivityReward);
     DEFINE_HANDLER(CMSG_RAF_CLAIM_NEXT_REWARD,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRafClaimNextReward);
     DEFINE_HANDLER(CMSG_RAF_GENERATE_RECRUITMENT_LINK,                      STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRafGenerateRecruitmentLink);
-    DEFINE_HANDLER(CMSG_RAF_RECRUIT_PRESENCE_SUBSCRIBE,                     STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_RAF_UPDATE_RECRUITMENT_INFO,                        STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_RAF_RECRUIT_PRESENCE_SUBSCRIBE,                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRafRecruitPresenceSubscribe);
+    DEFINE_HANDLER(CMSG_RAF_UPDATE_RECRUITMENT_INFO,                        STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRafUpdateRecruitmentInfo);
     DEFINE_HANDLER(CMSG_RANDOM_ROLL,                                        STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRandomRollOpcode);
     DEFINE_HANDLER(CMSG_READY_CHECK_RESPONSE,                               STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleReadyCheckResponseOpcode);
     DEFINE_HANDLER(CMSG_READ_ITEM,                                          STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleReadItem);

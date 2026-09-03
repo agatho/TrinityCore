@@ -19,6 +19,7 @@
 #define TRINITYCORE_REFER_A_FRIEND_PACKETS_H
 
 #include "Packet.h"
+#include "ObjectGuid.h"
 #include <array>
 #include <vector>
 
@@ -80,6 +81,22 @@ namespace WorldPackets
             void Read() override;
 
             uint32 Field = 0;
+        };
+
+        // CMSG_RAF_RECRUIT_PRESENCE_SUBSCRIBE (0x430127) wire (client serializer sub @0x6ADBA0):
+        //   { bit Subscribe; uint32 Count; Count x PackedGuid Recruits }. The client subscribes to (or unsubscribes
+        //   from) the online presence of the listed recruit account GUIDs; presence itself is delivered by the
+        //   BattleNet presence channel (SMSG_BATCH_PRESENCE_SUBSCRIPTION / BN_FRIEND_INFO_CHANGED), exactly like the
+        //   sibling CMSG_CLUB_PRESENCE_SUBSCRIBE.
+        class RafRecruitPresenceSubscribe final : public ClientPacket
+        {
+        public:
+            explicit RafRecruitPresenceSubscribe(WorldPacket&& packet) : ClientPacket(CMSG_RAF_RECRUIT_PRESENCE_SUBSCRIBE, std::move(packet)) { }
+
+            void Read() override;
+
+            bool Subscribe = false;
+            std::vector<ObjectGuid> Recruits;
         };
 
         // CMSG_RAF_CLAIM_NEXT_REWARD (0x400151) wire (sub_7FF72907ECF0): { uint32 FieldA, uint32 FieldB }.

@@ -48,6 +48,19 @@ void RafUpdateRecruitmentInfo::Read()
     _worldPacket >> Field;
 }
 
+void RafRecruitPresenceSubscribe::Read()
+{
+    // Wire: 1 bit Subscribe, then a byte-aligned uint32 count, then that many PackedGuids (client sub @0x6ADBA0).
+    _worldPacket >> Bits<1>(Subscribe);
+    _worldPacket.ResetBitPos();
+
+    uint32 count = 0;
+    _worldPacket >> count;
+    Recruits.resize(count);
+    for (ObjectGuid& guid : Recruits)
+        _worldPacket >> guid;
+}
+
 void RafClaimNextReward::Read()
 {
     _worldPacket >> FieldA;

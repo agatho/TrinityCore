@@ -17,6 +17,7 @@
 
 #include "WorldSession.h"
 #include "ReferAFriendPackets.h"
+#include "Log.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "ObjectMgr.h"
@@ -57,6 +58,29 @@ void WorldSession::SendRafAccountInfo(uint32 field)
 void WorldSession::HandleGetRafAccountInfo(WorldPackets::RaF::GetRafAccountInfo& packet)
 {
     SendRafAccountInfo(packet.Field);
+}
+
+// C_RecruitAFriend.RequestUpdatedRecruitmentInfo() - the RAF panel asks the server to re-send this account's
+// recruitment info (recruitment code/link, recruit list). There is no dedicated recruitment-info SMSG; the info
+// rides SMSG_RAF_ACCOUNT_INFO, which fires the client's RAF_INFO_UPDATED. So the refresh is a re-send of account
+// info, matching HandleGetRafAccountInfo (the client sends the same leading Field on both).
+void WorldSession::HandleRafUpdateRecruitmentInfo(WorldPackets::RaF::RafUpdateRecruitmentInfo& packet)
+{
+    SendRafAccountInfo(packet.Field);
+}
+
+// The RAF panel subscribes to the online presence of the listed recruit account GUIDs (or unsubscribes when
+// Subscribe is false). On the client, per-recruit presence is resolved through the BattleNet account layer
+// (C_BattleNet.GetAccountInfoByID, refreshed on BN_FRIEND_INFO_CHANGED) and pushed over the BattleNet presence
+// channel (SMSG_BATCH_PRESENCE_SUBSCRIPTION) - the same channel the sibling CMSG_CLUB_PRESENCE_SUBSCRIBE feeds.
+// That cross-account presence service is not run in this tree, so there is no live presence to push; the packet is
+// fully parsed and the subscription request is accepted (a no-op on the wire, exactly as HandleClubPresenceSubscribe
+// treats its equivalent). The recruit list itself is still delivered by SMSG_RAF_ACCOUNT_INFO.
+void WorldSession::HandleRafRecruitPresenceSubscribe(WorldPackets::RaF::RafRecruitPresenceSubscribe& packet)
+{
+    TC_LOG_DEBUG("network.opcode", "CMSG_RAF_RECRUIT_PRESENCE_SUBSCRIBE from {} subscribe {} recruits {} - "
+        "recruit presence is served by the BattleNet presence channel, which is not run in this tree",
+        GetPlayerInfo(), packet.Subscribe, packet.Recruits.size());
 }
 
 // The client asks the server to mint (or re-fetch) this account's recruitment code. The code is a stable,
