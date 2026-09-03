@@ -831,6 +831,20 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // CMSG_HIDE_QUEST_CHOICE (0x3D017E) -- sibling of CMSG_CLOSE_QUEST_CHOICE. Opcode-only (empty payload:
+        // client serializer RVA 0x6CDE20 writes only the opcode header, n=0). Sent when the PlayerChoice frame
+        // is *minimized* rather than dismissed: the PlayerChoiceToggle button (Blizzard_PlayerChoiceToggleButton.lua)
+        // hides the frame (HideUIPanel -> OnUIClosed) while GetCurrentPlayerChoiceInfo stays valid so the same
+        // toggle can re-show it. Unlike CLOSE, the choice remains ACTIVE, so the server must NOT reset the
+        // interaction here.
+        class HideQuestChoice final : public ClientPacket
+        {
+        public:
+            explicit HideQuestChoice(WorldPacket&& packet) : ClientPacket(CMSG_HIDE_QUEST_CHOICE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         class UiMapQuestLinesResponse final : public ServerPacket
         {
         public:

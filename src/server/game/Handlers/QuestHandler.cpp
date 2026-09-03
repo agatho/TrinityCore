@@ -822,6 +822,20 @@ void WorldSession::HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice&
         interaction.Reset();
 }
 
+// CMSG_HIDE_QUEST_CHOICE (0x3D017E): the player *minimized* the PlayerChoice frame rather than dismissing it.
+// The PlayerChoiceToggle button hides the frame (HideUIPanel -> C_PlayerChoice.OnUIClosed) while the choice
+// stays cached client-side (GetCurrentPlayerChoiceInfo) so the same toggle can re-show it and the pending
+// answer can still be submitted. This is the deliberate opposite of CMSG_CLOSE_QUEST_CHOICE: because the
+// choice is still live, the server must KEEP the active PlayerChoice interaction intact -- it must not call
+// interaction.Reset(). "Hidden" is a pure client-side view state with no server-side counterpart in the
+// PlayerChoice model (open via SendPlayerChoice, answer via CMSG_CHOICE_RESPONSE, end via CMSG_CLOSE_QUEST_CHOICE),
+// so the correct and complete server action is to acknowledge the packet and leave all interaction state
+// untouched. Registered (not left as Handle_NULL) so the frequent minimize toggles are accepted cleanly
+// instead of being logged as unhandled opcodes, and so the CLOSE-vs-HIDE distinction is explicit in code.
+void WorldSession::HandleHideQuestChoice(WorldPackets::Quest::HideQuestChoice& /*hideQuestChoice*/)
+{
+}
+
 void WorldSession::HandleUiMapQuestLinesRequest(WorldPackets::Quest::UiMapQuestLinesRequest& uiMapQuestLinesRequest)
 {
     UiMapEntry const* uiMap = sUiMapStore.LookupEntry(uiMapQuestLinesRequest.UiMapID);

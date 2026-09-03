@@ -685,6 +685,7 @@ namespace WorldPackets
         class RequestWorldQuestUpdate;
         class ChoiceResponse;
         class CloseQuestChoice;
+        class HideQuestChoice;
         class UiMapQuestLinesRequest;
         class SpawnTrackingUpdate;
     }
@@ -1624,6 +1625,7 @@ class TC_GAME_API WorldSession
         void HandleRequestWorldQuestUpdate(WorldPackets::Quest::RequestWorldQuestUpdate& packet);
         void HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceResponse const& choiceResponse);
         void HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& closeQuestChoice);
+        void HandleHideQuestChoice(WorldPackets::Quest::HideQuestChoice& hideQuestChoice);
         void HandleUiMapQuestLinesRequest(WorldPackets::Quest::UiMapQuestLinesRequest& uiMapQuestLinesRequest);
         void HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasurePicker const& queryTreasurePicker);
         void HandleSpawnTrackingUpdate(WorldPackets::Quest::SpawnTrackingUpdate& spawnTrackingUpdate);

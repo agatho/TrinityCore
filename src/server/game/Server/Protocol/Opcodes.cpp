@@ -566,7 +566,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_GUILD_UPDATE_INFO_TEXT,                             STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGuildUpdateInfoText);
     DEFINE_HANDLER(CMSG_GUILD_UPDATE_MOTD_TEXT,                             STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGuildUpdateMotdText);
     DEFINE_HANDLER(CMSG_HEARTH_AND_RESURRECT,                               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHearthAndResurrect);
-    DEFINE_HANDLER(CMSG_HIDE_QUEST_CHOICE,                                  STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_HIDE_QUEST_CHOICE,                                  STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleHideQuestChoice);
     DEFINE_HANDLER(CMSG_HOTFIX_REQUEST,                                     STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleHotfixRequest);
     DEFINE_HANDLER(CMSG_HOUSE_EXTERIOR_LOCK,                                STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_HOUSE_EXTERIOR_SET_HOUSE_POSITION,                  STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
