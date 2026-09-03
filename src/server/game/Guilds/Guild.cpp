@@ -2782,6 +2782,89 @@ void Guild::SetDiscordLink(DiscordUserId discordGuildId, DiscordUserId discordCh
     CharacterDatabase.Execute(stmt);
 }
 
+void Guild::SetDiscordSettingsMask(uint32 settings)
+{
+    m_discordSettings = settings & DISCORD_GUILD_SETTING_MASK;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_GUILD_DISCORD_SETTINGS);
+    stmt->setUInt64(0, m_id);
+    stmt->setUInt32(1, m_discordSettings);
+    stmt->setUInt64(2, m_discordGuildId);
+    stmt->setUInt64(3, m_discordChannelId);
+    CharacterDatabase.Execute(stmt);
+}
+
+void Guild::ReplicateDiscordSettingsToMembers() const
+{
+    uint8 settings = uint8(m_discordSettings & DISCORD_GUILD_SETTING_MASK);
+    for (auto const& [guid, member] : m_members)
+        if (Player* player = member.FindConnectedPlayer())
+            player->SetDiscordGuildSettings(settings);
+}
+
+// Guild management gate matching the client (Blizzard_Communities: IsGuildLeader() or IsGuildOfficer()).
+// We treat "officer" as any rank holding GR_RIGHT_MODIFY_GUILD_INFO; the leader always qualifies.
+bool Guild::_CanManageDiscord(Player const* player) const
+{
+    if (!player)
+        return false;
+    if (m_leaderGuid == player->GetGUID())
+        return true;
+    return _HasRankRight(player, GR_RIGHT_MODIFY_GUILD_INFO);
+}
+
+void Guild::HandleDiscordGuildLink(WorldSession* session, DiscordUserId discordServerId, DiscordUserId discordChannelId)
+{
+    Player* player = session ? session->GetPlayer() : nullptr;
+    if (!_CanManageDiscord(player))
+    {
+        TC_LOG_DEBUG("guild", "CMSG_DISCORD_GUILD_LINK: {} lacks rights to link guild {} to Discord.",
+            session ? session->GetPlayerInfo() : "<null>", m_id);
+        return;
+    }
+
+    SetDiscordLink(discordServerId, discordChannelId);
+
+    // Refresh the live bridge so forwarding/polling for this guild starts immediately.
+    sDiscordBridge->SetGuildLink(m_id, discordChannelId);
+
+    TC_LOG_INFO("guild", "Guild {} linked to Discord server {} channel {} by {}.",
+        m_id, discordServerId, discordChannelId, session->GetPlayerInfo());
+}
+
+void Guild::HandleDiscordGuildUnlink(WorldSession* session)
+{
+    Player* player = session ? session->GetPlayer() : nullptr;
+    if (!_CanManageDiscord(player))
+    {
+        TC_LOG_DEBUG("guild", "CMSG_DISCORD_GUILD_UNLINK: {} lacks rights to unlink guild {} from Discord.",
+            session ? session->GetPlayerInfo() : "<null>", m_id);
+        return;
+    }
+
+    SetDiscordLink(0, 0);
+    sDiscordBridge->SetGuildLink(m_id, 0);
+
+    TC_LOG_INFO("guild", "Guild {} unlinked from Discord by {}.", m_id, session->GetPlayerInfo());
+}
+
+void Guild::HandleDiscordSetGuildSetting(WorldSession* session, uint32 settings)
+{
+    Player* player = session ? session->GetPlayer() : nullptr;
+    if (!_CanManageDiscord(player))
+    {
+        TC_LOG_DEBUG("guild", "CMSG_DISCORD_SET_GUILD_SETTING: {} lacks rights on guild {}.",
+            session ? session->GetPlayerInfo() : "<null>", m_id);
+        return;
+    }
+
+    SetDiscordSettingsMask(settings);
+    ReplicateDiscordSettingsToMembers();
+
+    TC_LOG_INFO("guild", "Guild {} Discord settings set to 0x{:X} by {}.",
+        m_id, m_discordSettings, session->GetPlayerInfo());
+}
+
 void Guild::SendGuildDiscordMessage(std::string_view senderName, std::string_view message, DiscordUserId senderDiscordId) const
 {
     // The Discord bridge is the only producer of this chat type. Keeping the gate here means a

@@ -66,6 +66,7 @@ public:
 
     void ForwardGuildChatToDiscord(ObjectGuid::LowType guildId, std::string_view senderName, std::string_view message) override;
     bool IsConnected() const override { return _connected.load(std::memory_order_relaxed); }
+    void SetGuildChannel(ObjectGuid::LowType guildId, uint64 discordChannelId) override;
     char const* GetProviderName() const override { return "discord-rest"; }
 
 private:
@@ -93,6 +94,10 @@ private:
     HttpResponse Perform(int beastVerb, std::string const& target, std::string const& jsonBody);
 
     Settings _settings;
+    // _guildToChannel/_channelToGuild are read on the world thread (ForwardGuildChatToDiscord) and the
+    // I/O worker thread (PollChannels), and mutated at runtime by SetGuildChannel (world thread), so
+    // both are guarded by _mapsMutex. _lastMessageId is touched only by the worker thread.
+    mutable std::mutex _mapsMutex;
     std::unordered_map<uint64, uint64> _guildToChannel;      // guildId  -> channelId
     std::unordered_map<uint64, uint64> _channelToGuild;      // channelId -> guildId
     std::unordered_map<uint64, std::string> _lastMessageId;  // channelId -> last seen snowflake

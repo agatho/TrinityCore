@@ -59,18 +59,26 @@ void DiscordBridge::LoadConfig()
         return;
     }
 
+    // Cache the connection config so a runtime link (CMSG_DISCORD_GUILD_LINK) can lazily build a
+    // REST provider even if no guild was linked at startup.
+    _botToken = std::move(botToken);
+    _apiHost = sConfigMgr->GetStringDefault("Guild.DiscordBridge.ApiHost", "discord.com");
+    _caBundleFile = sConfigMgr->GetStringDefault("Guild.DiscordBridge.CaBundle", "");
+    _pollIntervalMs = sConfigMgr->GetIntDefault("Guild.DiscordBridge.PollIntervalMs", 3000);
+    _verifyCertificate = sConfigMgr->GetBoolDefault("Guild.DiscordBridge.VerifyCertificate", true);
+
     // Build the guildId -> Discord channel id map from guild_discord_settings.
-    std::unordered_map<uint64, uint64> linkedChannels;
+    _linkedChannels.clear();
     if (QueryResult result = CharacterDatabase.Query("SELECT guildid, discordChannelId FROM guild_discord_settings WHERE discordChannelId <> 0"))
     {
         do
         {
             Field* fields = result->Fetch();
-            linkedChannels[fields[0].GetUInt64()] = fields[1].GetUInt64();
+            _linkedChannels[fields[0].GetUInt64()] = fields[1].GetUInt64();
         } while (result->NextRow());
     }
 
-    if (linkedChannels.empty())
+    if (_linkedChannels.empty())
     {
         _provider = std::make_unique<IDiscordBridgeProvider>();
         TC_LOG_WARN("server.loading", "Discord bridge enabled with a bot token but no guild has a linked "
@@ -78,14 +86,7 @@ void DiscordBridge::LoadConfig()
         return;
     }
 
-    DiscordRestProvider::Settings settings;
-    settings.BotToken = std::move(botToken);
-    settings.ApiHost = sConfigMgr->GetStringDefault("Guild.DiscordBridge.ApiHost", "discord.com");
-    settings.CaBundleFile = sConfigMgr->GetStringDefault("Guild.DiscordBridge.CaBundle", "");
-    settings.PollIntervalMs = sConfigMgr->GetIntDefault("Guild.DiscordBridge.PollIntervalMs", 3000);
-    settings.VerifyCertificate = sConfigMgr->GetBoolDefault("Guild.DiscordBridge.VerifyCertificate", true);
-
-    SetProvider(std::make_unique<DiscordRestProvider>(std::move(settings), std::move(linkedChannels)));
+    RebuildRestProvider();
 
     TC_LOG_INFO("server.loading", "Discord bridge enabled (provider: '{}'). Inbound Discord messages "
         "surface as CHAT_MSG_GUILD_DISCORD guild lines; outbound guild chat mirroring is {}.",
@@ -127,6 +128,45 @@ void DiscordBridge::ForwardGuildChat(ObjectGuid::LowType guildId, std::string_vi
 
     // No-op provider simply drops this; a real bot/webhook forwards to the linked channel.
     _provider->ForwardGuildChatToDiscord(guildId, senderName, message);
+}
+
+bool DiscordBridge::RebuildRestProvider()
+{
+    if (!_enabled || _botToken.empty())
+        return false;
+
+    DiscordRestProvider::Settings settings;
+    settings.BotToken = _botToken;
+    settings.ApiHost = _apiHost;
+    settings.CaBundleFile = _caBundleFile;
+    settings.PollIntervalMs = _pollIntervalMs;
+    settings.VerifyCertificate = _verifyCertificate;
+
+    SetProvider(std::make_unique<DiscordRestProvider>(std::move(settings), _linkedChannels));
+    return true;
+}
+
+void DiscordBridge::SetGuildLink(ObjectGuid::LowType guildId, uint64 discordChannelId)
+{
+    if (!_enabled)
+        return;
+
+    if (discordChannelId != 0)
+        _linkedChannels[guildId] = discordChannelId;
+    else
+        _linkedChannels.erase(guildId);
+
+    // If a real REST provider is already running, update it in place (keeps poll state).
+    if (_provider && std::string_view(_provider->GetProviderName()) == "discord-rest")
+    {
+        _provider->SetGuildChannel(guildId, discordChannelId);
+        return;
+    }
+
+    // Otherwise we are a no-op provider. If a bot token is configured and at least one link now
+    // exists, upgrade to the real REST bridge; nothing to do if the last link was just removed.
+    if (!_linkedChannels.empty() && !_botToken.empty())
+        RebuildRestProvider();
 }
 
 void DiscordBridge::QueueInbound(DiscordInboundMessage message)

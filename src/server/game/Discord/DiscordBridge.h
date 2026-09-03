@@ -25,6 +25,7 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 // EXTERNAL BOUNDARY (spec section C).
@@ -62,6 +63,10 @@ public:
     // True only when a real provider has an established Discord connection.
     virtual bool IsConnected() const { return false; }
 
+    // Live (re)link: update the guildId -> Discord channel map at runtime. channelId 0 removes the
+    // link. No-op in the default provider. A real provider updates its routing tables thread-safely.
+    virtual void SetGuildChannel(ObjectGuid::LowType /*guildId*/, uint64 /*discordChannelId*/) { }
+
     virtual char const* GetProviderName() const { return "noop"; }
 };
 
@@ -97,12 +102,29 @@ public:
     // No-op unless enabled and a connected provider is installed.
     void ForwardGuildChat(ObjectGuid::LowType guildId, std::string_view senderName, std::string_view message);
 
+    // Runtime (un)link of a guild to a Discord channel (CMSG_DISCORD_GUILD_LINK / _UNLINK). Updates a
+    // live REST provider's routing map, or - when the first channel is linked while running as a no-op
+    // with a configured bot token - upgrades the provider to the real REST bridge. channelId 0 unlinks.
+    void SetGuildLink(ObjectGuid::LowType guildId, uint64 discordChannelId);
+
 private:
     DiscordBridge();
+
+    // Rebuild the REST provider from the cached config + current link map (used to upgrade no-op ->
+    // REST on the first runtime link). Returns false if the bridge cannot run as REST.
+    bool RebuildRestProvider();
 
     bool _enabled = false;                                  // Guild.DiscordBridge.Enabled
     bool _forwardOutbound = false;                          // Guild.DiscordBridge.ForwardGuildChat
     std::unique_ptr<IDiscordBridgeProvider> _provider;      // no-op by default
+
+    // Cached config (captured in LoadConfig) so a runtime link can lazily build a REST provider.
+    std::string _botToken;
+    std::string _apiHost;
+    std::string _caBundleFile;
+    uint32 _pollIntervalMs = 3000;
+    bool _verifyCertificate = true;
+    std::unordered_map<uint64, uint64> _linkedChannels;     // guildId -> channelId (current links)
 
     // Inbound messages handed over from the provider's I/O thread, drained on the world thread.
     std::mutex _inboundMutex;

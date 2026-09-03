@@ -273,6 +273,11 @@ void LoginDatabaseConnection::DoPrepareStatements()
     PrepareStatement(LOGIN_SEL_PAYPAL_SETTLED, "SELECT orderId, captureId, accountId, productId, amount, currency FROM paypal_settlement WHERE status = 'SETTLED' ORDER BY createdAt ASC LIMIT ?", CONNECTION_SYNCH);
     // Idempotent grant flip: only claims a row that is still SETTLED, so it can be granted exactly once.
     PrepareStatement(LOGIN_UPD_PAYPAL_DELIVERED, "UPDATE paypal_settlement SET status = 'DELIVERED' WHERE orderId = ? AND status = 'SETTLED'", CONNECTION_ASYNC);
+    // Discord account link (12.1.0). Populated by the bnetserver Discord link store (external OAuth
+    // linker); read by the worldserver to answer CMSG_DISCORD_REFRESH_AUTH via ActivePlayerData::DiscordInfo.
+    PrepareStatement(LOGIN_SEL_ACCOUNT_DISCORD, "SELECT discordUserId, discordUserName, accountType, accessToken FROM account_discord WHERE id = ?", CONNECTION_SYNCH); // 0: uint32
+    PrepareStatement(LOGIN_REP_ACCOUNT_DISCORD, "REPLACE INTO account_discord (id, discordUserId, discordUserName, accountType, accessToken) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC); // 0: uint32, 1: uint64, 2: string, 3: uint8, 4: string
+    PrepareStatement(LOGIN_DEL_ACCOUNT_DISCORD, "DELETE FROM account_discord WHERE id = ?", CONNECTION_ASYNC); // 0: uint32
 }
 
 LoginDatabaseConnection::LoginDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

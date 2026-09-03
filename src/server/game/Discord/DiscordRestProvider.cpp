@@ -31,6 +31,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <utility>
+#include <vector>
 
 namespace
 {
@@ -79,9 +81,14 @@ DiscordRestProvider::~DiscordRestProvider()
 
 void DiscordRestProvider::ForwardGuildChatToDiscord(ObjectGuid::LowType guildId, std::string_view senderName, std::string_view message)
 {
-    auto itr = _guildToChannel.find(guildId);
-    if (itr == _guildToChannel.end() || !itr->second)
-        return;     // this guild is not bridged
+    uint64 channelId = 0;
+    {
+        std::lock_guard<std::mutex> lock(_mapsMutex);
+        auto itr = _guildToChannel.find(guildId);
+        if (itr == _guildToChannel.end() || !itr->second)
+            return;     // this guild is not bridged
+        channelId = itr->second;
+    }
 
     // "**Name**: message", clamped to Discord's content limit.
     std::string line = Trinity::StringFormat("**{}**: {}", senderName, message);
@@ -94,7 +101,7 @@ void DiscordRestProvider::ForwardGuildChatToDiscord(ObjectGuid::LowType guildId,
 
     {
         std::lock_guard<std::mutex> lock(_outboundMutex);
-        _outbound.push_back({ itr->second, std::move(payload) });
+        _outbound.push_back({ channelId, std::move(payload) });
     }
     _wake.notify_all();
 }
@@ -214,11 +221,39 @@ void DiscordRestProvider::FlushOutbound()
 
 void DiscordRestProvider::PollChannels()
 {
-    for (auto const& [channelId, guildId] : _channelToGuild)
+    // Snapshot the routing map so a runtime relink (SetGuildChannel) cannot mutate it mid-iteration.
+    std::vector<std::pair<uint64, uint64>> channels;
+    {
+        std::lock_guard<std::mutex> lock(_mapsMutex);
+        channels.reserve(_channelToGuild.size());
+        for (auto const& [channelId, guildId] : _channelToGuild)
+            channels.emplace_back(channelId, guildId);
+    }
+
+    for (auto const& [channelId, guildId] : channels)
     {
         if (_stop.load(std::memory_order_relaxed))
             return;
         PollOneChannel(channelId, guildId);
+    }
+}
+
+void DiscordRestProvider::SetGuildChannel(ObjectGuid::LowType guildId, uint64 discordChannelId)
+{
+    std::lock_guard<std::mutex> lock(_mapsMutex);
+
+    // Drop the guild's previous channel mapping (if any) from the reverse map first.
+    auto existing = _guildToChannel.find(guildId);
+    if (existing != _guildToChannel.end())
+    {
+        _channelToGuild.erase(existing->second);
+        _guildToChannel.erase(existing);
+    }
+
+    if (discordChannelId != 0)
+    {
+        _guildToChannel[guildId] = discordChannelId;
+        _channelToGuild[discordChannelId] = guildId;
     }
 }
 
