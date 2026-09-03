@@ -354,6 +354,15 @@ namespace WorldPackets
         class GarrisonGetMapData;
     }
 
+    namespace Discord
+    {
+        class DiscordRefreshAuth;
+        class DiscordSetDisplayNameType;
+        class DiscordGuildLink;
+        class DiscordGuildUnlink;
+        class DiscordSetGuildSetting;
+    }
+
     namespace Guild
     {
         class QueryGuildInfo;
@@ -1436,6 +1445,13 @@ class TC_GAME_API WorldSession
         void HandleDeclinePetition(WorldPackets::Petition::DeclinePetition& packet);
         void HandleOfferPetition(WorldPackets::Petition::OfferPetition& packet);
         void HandleTurnInPetition(WorldPackets::Petition::TurnInPetition& packet);
+
+        // Discord integration (12.1.0)
+        void HandleDiscordRefreshAuth(WorldPackets::Discord::DiscordRefreshAuth& packet);
+        void HandleDiscordSetDisplayNameType(WorldPackets::Discord::DiscordSetDisplayNameType& packet);
+        void HandleDiscordGuildLink(WorldPackets::Discord::DiscordGuildLink& packet);
+        void HandleDiscordGuildUnlink(WorldPackets::Discord::DiscordGuildUnlink& packet);
+        void HandleDiscordSetGuildSetting(WorldPackets::Discord::DiscordSetGuildSetting& packet);
 
         void HandleGuildQueryOpcode(WorldPackets::Guild::QueryGuildInfo& query);
         void HandleGuildInviteByName(WorldPackets::Guild::GuildInviteByName& packet);

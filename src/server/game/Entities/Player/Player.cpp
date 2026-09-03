@@ -18861,7 +18861,38 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         GetSession()->GetCollectionMgr()->AddTransmogIllusion(transmogIllusion->ID);
     }
 
+    // Discord integration (12.1.0): seed ActivePlayerData::DiscordInfo (display-name preference +
+    // account OAuth link) so the client has its Discord state in the initial object create.
+    LoadDiscordSettings();
+
     return true;
+}
+
+void Player::LoadDiscordSettings()
+{
+    // Per-character display-name preference (CMSG_DISCORD_SET_DISPLAY_NAME_TYPE).
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHAR_DISCORD_SETTINGS);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    if (PreparedQueryResult result = CharacterDatabase.Query(stmt))
+        SetDiscordDisplayNameType((*result)[0].GetUInt8());
+
+    // Account-level Discord OAuth link, written by the bnetserver Discord link store (external OAuth
+    // linker). Surfaced through DiscordInfo so the client's IsUserOAuthed()/auth state reflects it.
+    LoginDatabasePreparedStatement* login = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_DISCORD);
+    login->setUInt32(0, GetSession()->GetAccountId());
+    if (PreparedQueryResult result = LoginDatabase.Query(login))
+    {
+        Field* fields = result->Fetch();
+        SetDiscordAuthInfo(fields[0].GetUInt64(), fields[2].GetUInt8(), fields[3].GetString());
+    }
+}
+
+void Player::SaveDiscordDisplayNameType() const
+{
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHAR_DISCORD_SETTINGS);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    stmt->setUInt8(1, GetDiscordDisplayNameType());
+    CharacterDatabase.Execute(stmt);
 }
 
 void Player::PushQuests()

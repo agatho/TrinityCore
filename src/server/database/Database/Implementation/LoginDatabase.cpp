@@ -205,6 +205,12 @@ void LoginDatabaseConnection::DoPrepareStatements()
     PrepareStatement(LOGIN_SEL_BNET_PLAYER_DATA_FLAGS_ACCOUNT, "SELECT storageIndex, mask FROM battlenet_account_player_data_flag WHERE battlenetAccountId = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_DEL_BNET_PLAYER_DATA_FLAGS_ACCOUNT, "DELETE FROM battlenet_account_player_data_flag WHERE battlenetAccountId = ? AND storageIndex = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_INS_BNET_PLAYER_DATA_FLAGS_ACCOUNT, "INSERT INTO battlenet_account_player_data_flag (battlenetAccountId, storageIndex, mask) VALUES (?, ?, ?)", CONNECTION_ASYNC);
+
+    // Discord account link (12.1.0). Populated by the bnetserver Discord link store (external OAuth
+    // linker); read by the worldserver to answer CMSG_DISCORD_REFRESH_AUTH via ActivePlayerData::DiscordInfo.
+    PrepareStatement(LOGIN_SEL_ACCOUNT_DISCORD, "SELECT discordUserId, discordUserName, accountType, accessToken FROM account_discord WHERE id = ?", CONNECTION_SYNCH); // 0: uint32
+    PrepareStatement(LOGIN_REP_ACCOUNT_DISCORD, "REPLACE INTO account_discord (id, discordUserId, discordUserName, accountType, accessToken) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC); // 0: uint32, 1: uint64, 2: string, 3: uint8, 4: string
+    PrepareStatement(LOGIN_DEL_ACCOUNT_DISCORD, "DELETE FROM account_discord WHERE id = ?", CONNECTION_ASYNC); // 0: uint32
 }
 
 LoginDatabaseConnection::LoginDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

@@ -440,11 +440,11 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_DF_SET_ROLES,                                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLfgSetRolesOpcode);
     DEFINE_HANDLER(CMSG_DF_TELEPORT,                                        STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLfgTeleportOpcode);
     DEFINE_HANDLER(CMSG_DISCARDED_TIME_SYNC_ACKS,                           STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_DISCORD_GUILD_LINK,                                 STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_DISCORD_GUILD_UNLINK,                               STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_DISCORD_REFRESH_AUTH,                               STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_DISCORD_SET_DISPLAY_NAME_TYPE,                      STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_DISCORD_SET_GUILD_SETTING,                          STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_DISCORD_GUILD_LINK,                                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDiscordGuildLink);
+    DEFINE_HANDLER(CMSG_DISCORD_GUILD_UNLINK,                               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDiscordGuildUnlink);
+    DEFINE_HANDLER(CMSG_DISCORD_REFRESH_AUTH,                               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDiscordRefreshAuth);
+    DEFINE_HANDLER(CMSG_DISCORD_SET_DISPLAY_NAME_TYPE,                      STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDiscordSetDisplayNameType);
+    DEFINE_HANDLER(CMSG_DISCORD_SET_GUILD_SETTING,                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDiscordSetGuildSetting);
     DEFINE_HANDLER(CMSG_DISMISS_CRITTER,                                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleDismissCritter);
     DEFINE_HANDLER(CMSG_DO_COUNTDOWN,                                       STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_DO_MASTER_LOOT_ROLL,                                STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);

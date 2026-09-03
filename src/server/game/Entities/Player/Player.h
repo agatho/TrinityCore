@@ -1521,6 +1521,24 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
             SetUpdateFieldValue(setter.ModifyValue(&UF::BankTabSettings::Description), description);
             SetUpdateFieldValue(setter.ModifyValue(&UF::BankTabSettings::DepositFlags), int32(depositFlags));
         }
+        // Discord integration (12.1.0). ActivePlayerData::DiscordInfo is the only channel through
+        // which the 12.1 client learns its server-authoritative Discord state (there is no dedicated
+        // SMSG_DISCORD_* opcode); changing these fields makes the client fire DISCORD_*_UPDATE.
+        uint8 GetDiscordGuildSettings() const { return m_activePlayerData->DiscordInfo->GuildSettings; }
+        void SetDiscordGuildSettings(uint8 settings) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::DiscordInfo).ModifyValue(&UF::DiscordPlayerInfo::GuildSettings), settings); }
+        uint8 GetDiscordDisplayNameType() const { return m_activePlayerData->DiscordInfo->DisplayNameType; }
+        void SetDiscordDisplayNameType(uint8 type) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::DiscordInfo).ModifyValue(&UF::DiscordPlayerInfo::DisplayNameType), type); }
+        void SetDiscordGuildLobby(uint64 guildLobbyId) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::DiscordInfo).ModifyValue(&UF::DiscordPlayerInfo::GuildLobbyID), guildLobbyId); }
+        void SetDiscordAuthInfo(uint64 discordUserId, uint8 accountType, std::string const& accessToken)
+        {
+            auto discord = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::DiscordInfo);
+            SetUpdateFieldValue(discord.ModifyValue(&UF::DiscordPlayerInfo::DiscordUserID), discordUserId);
+            SetUpdateFieldValue(discord.ModifyValue(&UF::DiscordPlayerInfo::AccountType), accountType);
+            SetUpdateFieldValue(discord.ModifyValue(&UF::DiscordPlayerInfo::AccessToken), accessToken);
+        }
+        void LoadDiscordSettings();     // load persisted per-character DisplayNameType + account Discord link
+        void SaveDiscordDisplayNameType() const;
+
         bool IsBackpackAutoSortDisabled() const { return m_activePlayerData->BackpackAutoSortDisabled; }
         void SetBackpackAutoSortDisabled(bool disabled) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::BackpackAutoSortDisabled), disabled); }
         bool IsBackpackSellJunkDisabled() const { return m_activePlayerData->BackpackSellJunkDisabled; }

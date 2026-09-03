@@ -836,6 +836,17 @@ class TC_GAME_API Guild
         DiscordUserId GetDiscordGuildId() const { return m_discordGuildId; }     // linked Discord server id
         DiscordUserId GetDiscordChannelId() const { return m_discordChannelId; } // linked Discord channel id
         void SetDiscordLink(DiscordUserId discordGuildId, DiscordUserId discordChannelId);
+        // Replaces the whole DiscordGuildSettings bitmask (masked to valid bits) + persists.
+        void SetDiscordSettingsMask(uint32 settings);
+        // Client-driven opcode entry points (permission-checked: leader or GR_RIGHT_MODIFY_GUILD_INFO).
+        // Handle the CMSG_DISCORD_GUILD_LINK / _UNLINK / _SET_GUILD_SETTING requests: verify rights,
+        // update + persist guild state, refresh the live Discord bridge, and replicate the settings
+        // bitmask to every online member's ActivePlayerData::DiscordInfo so the client updates.
+        void HandleDiscordGuildLink(WorldSession* session, DiscordUserId discordServerId, DiscordUserId discordChannelId);
+        void HandleDiscordGuildUnlink(WorldSession* session);
+        void HandleDiscordSetGuildSetting(WorldSession* session, uint32 settings);
+        // Push the current settings bitmask to online members' replicated DiscordInfo field.
+        void ReplicateDiscordSettingsToMembers() const;
         // Delivers a Discord-bridged line to online guild members as CHAT_MSG_GUILD_DISCORD.
         // Gated by the Discord bridge being enabled; never reaches a pre-12.1 client otherwise.
         void SendGuildDiscordMessage(std::string_view senderName, std::string_view message, DiscordUserId senderDiscordId = 0) const;
@@ -928,6 +939,7 @@ class TC_GAME_API Guild
         RankInfo const* GetRankInfo(GuildRankOrder rankOrder) const;
         RankInfo* GetRankInfo(GuildRankOrder rankOrder);
         bool _HasRankRight(Player const* player, uint32 right) const;
+        bool _CanManageDiscord(Player const* player) const;
     public:
         bool HasAnyRankRight(GuildRankId rankId, GuildRankRights rights) const;
 

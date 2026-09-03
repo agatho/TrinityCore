@@ -17,7 +17,12 @@
 
 #include "DiscordLinkStore.h"
 #include "Config.h"
+#include "DatabaseEnv.h"
+#include "Field.h"
 #include "Log.h"
+#include "LoginDatabase.h"
+#include "PreparedStatement.h"
+#include "QueryResult.h"
 
 namespace Battlenet
 {
@@ -44,23 +49,57 @@ namespace Battlenet
         if (!_enabled)
             return {};
 
-        std::lock_guard<std::mutex> guard(_mutex);
-        auto itr = _links.find(bnetAccountId);
-        if (itr == _links.end())
+        {
+            std::lock_guard<std::mutex> guard(_mutex);
+            auto itr = _links.find(bnetAccountId);
+            if (itr != _links.end())
+                return itr->second;
+        }
+
+        // Cache miss: read the persisted link from `account_discord` (shared with the worldserver).
+        LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_DISCORD);
+        stmt->setUInt32(0, bnetAccountId);
+        PreparedQueryResult result = LoginDatabase.Query(stmt);
+        if (!result)
             return {};
 
-        return itr->second;
+        Field* fields = result->Fetch();
+        DiscordLink link;
+        link.DiscordUserId = fields[0].GetUInt64();
+        link.DiscordUserName = fields[1].GetString();
+        link.AccountType = DiscordAccountType(fields[2].GetUInt8());
+
+        std::lock_guard<std::mutex> guard(_mutex);
+        _links[bnetAccountId] = link;
+        return link;
     }
 
     void DiscordLinkStore::SetLink(uint32 bnetAccountId, DiscordLink link)
     {
-        std::lock_guard<std::mutex> guard(_mutex);
-        _links[bnetAccountId] = std::move(link);
+        {
+            std::lock_guard<std::mutex> guard(_mutex);
+            _links[bnetAccountId] = link;
+        }
+
+        // Write-through so the worldserver can answer CMSG_DISCORD_REFRESH_AUTH from `account_discord`.
+        LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_REP_ACCOUNT_DISCORD);
+        stmt->setUInt32(0, bnetAccountId);
+        stmt->setUInt64(1, link.DiscordUserId);
+        stmt->setString(2, link.DiscordUserName);
+        stmt->setUInt8(3, uint8(link.AccountType));
+        stmt->setString(4, "");             // access token is populated by the OAuth linker when available
+        LoginDatabase.Execute(stmt);
     }
 
     void DiscordLinkStore::RemoveLink(uint32 bnetAccountId)
     {
-        std::lock_guard<std::mutex> guard(_mutex);
-        _links.erase(bnetAccountId);
+        {
+            std::lock_guard<std::mutex> guard(_mutex);
+            _links.erase(bnetAccountId);
+        }
+
+        LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_DISCORD);
+        stmt->setUInt32(0, bnetAccountId);
+        LoginDatabase.Execute(stmt);
     }
 }
