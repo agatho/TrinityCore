@@ -394,6 +394,19 @@ namespace WorldPackets
             MovementForce Force;
         };
 
+        // CMSG_MOVE_ADD_IMPULSE_ACK: client acknowledges a server-applied impulse. Wire is identical to
+        // MoveApplyMovementForceAck (MovementAck + MovementForce), verified from the client packet builder.
+        class MoveAddImpulseAck final : public ClientPacket
+        {
+        public:
+            explicit MoveAddImpulseAck(WorldPacket&& packet) : ClientPacket(CMSG_MOVE_ADD_IMPULSE_ACK, std::move(packet)) { }
+
+            void Read() override;
+
+            MovementAck Ack;
+            MovementForce Force;
+        };
+
         class MoveRemoveMovementForce final : public ServerPacket
         {
         public:

@@ -995,6 +995,12 @@ void MoveApplyMovementForceAck::Read()
     _worldPacket >> Force;
 }
 
+void MoveAddImpulseAck::Read()
+{
+    _worldPacket >> Ack;
+    _worldPacket >> Force;
+}
+
 WorldPacket const* MoveRemoveMovementForce::Write()
 {
     _worldPacket << MoverGUID;

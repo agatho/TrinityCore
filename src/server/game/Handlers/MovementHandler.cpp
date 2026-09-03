@@ -799,6 +799,26 @@ void WorldSession::HandleMoveApplyMovementForceAck(WorldPackets::Movement::MoveA
     mover->SendMessageToSet(updateApplyMovementForce.Write(), false);
 }
 
+void WorldSession::HandleMoveAddImpulseAck(WorldPackets::Movement::MoveAddImpulseAck& moveAddImpulseAck)
+{
+    // Client acknowledges a server-applied impulse (SMSG_MOVE_ADD_IMPULSE). The wire carries the full
+    // MovementAck + MovementForce, exactly like MoveApplyMovementForceAck. As with every movement ack the
+    // authoritative server work is validating the mover and the acknowledged movement state (position,
+    // flags and time) - this runs the movement anti-cheat and pins the stored MovementInfo. Unlike a
+    // persistent movement force there is no rebroadcast here: an impulse is a one-shot velocity change
+    // whose resulting trajectory reaches observers through the mover's subsequent movement heartbeats,
+    // and SMSG_MOVE_UPDATE_ADD_IMPULSE is not emitted with an unverified layout.
+    Unit* mover = ValidateAndGetUnitBeingMoved(moveAddImpulseAck.Ack.Status.guid, moveAddImpulseAck.GetOpcode(), true);
+    if (!mover)
+        return;
+
+    if (!ValidateMovementInfo(mover, &moveAddImpulseAck.Ack.Status))
+        return;
+
+    moveAddImpulseAck.Ack.Status.time = AdjustClientMovementTime(moveAddImpulseAck.Ack.Status.time);
+    mover->m_movementInfo = moveAddImpulseAck.Ack.Status;
+}
+
 void WorldSession::HandleMoveRemoveMovementForceAck(WorldPackets::Movement::MoveRemoveMovementForceAck& moveRemoveMovementForceAck)
 {
     Unit* mover = ValidateAndGetUnitBeingMoved(moveRemoveMovementForceAck.Ack.Status.guid, moveRemoveMovementForceAck.GetOpcode(), true);

@@ -215,6 +215,17 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_BATTLEMASTER_JOIN_ARENA,                            STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlemasterJoinArena);
     DEFINE_HANDLER(CMSG_BATTLEMASTER_JOIN_BRAWL,                            STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ,                   STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    // CMSG_BATTLEMASTER_JOIN_RATED_SOLO_SHUFFLE (0x3E00BF). Client wire = single uint8 Role
+    // (tank/healer/dps mask), verified from the client packet builder at wow.exe .text 0x1406D8650.
+    // Left as Handle_NULL: the Rated Solo Shuffle bracket does not exist server-side. Missing pieces
+    // are the whole mode - BattlegroundQueueIdType has no SoloShuffle (retail type 6) value; there is
+    // no BattlemasterList/BattlegroundTypeId template; the matchmaker (BattlegroundQueue::CheckSoloQueueMatch
+    // -> StartProposal) assembles a single 2-team match and has no 6-round 3v3 pod rotation, per-round
+    // scoring or "best of rounds" resolution; and there is no solo-shuffle personal-rating store
+    // (arena-team rating is stubbed, GetArenaTeamId returns 0). The server also deliberately reports
+    // RatedSoloShuffle = false in HandleGetPVPOptionsEnabled, so a stock client never enables the button.
+    // Parsing the Role byte only to enqueue into a non-existent bracket would be a silent no-op, so the
+    // packet stays dropped until the mode itself is authored.
     DEFINE_HANDLER(CMSG_BATTLEMASTER_JOIN_RATED_SOLO_SHUFFLE,               STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_BATTLEMASTER_JOIN_SKIRMISH,                         STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_BATTLENET_CHALLENGE_RESPONSE,                       STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
@@ -321,6 +332,15 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_CHAT_DROP_CAUTIONARY_CHAT_MESSAGE,                  STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_CHAT_JOIN_CHANNEL,                                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleJoinChannel);
     DEFINE_HANDLER(CMSG_CHAT_LEAVE_CHANNEL,                                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLeaveChannel);
+    // CMSG_CHAT_LOBBY_MATCHMAKER_MESSAGE_INSTANCE_CHAT (0x2C0031) and _PARTY (0x2C0030). Both are the
+    // WoW Labs / Plunderstorm lobby chat send. Client wire (verified from the packet builders at wow.exe
+    // .text 0x140748930 / 0x140748860) is identical to an ordinary chat message: uint32 Language, then
+    // SizedString::BitsSize<11> Text (max 0x500 bytes) - INSTANCE_CHAT routes to everyone in the lobby
+    // instance, PARTY to the lobby matchmaker party. Left as Handle_NULL: TrinityCore has no WoW Labs
+    // lobby / Plunderstorm match session and no lobby-matchmaker party (MAP_WOWLABS exists as an enum
+    // only, with no gameplay), so there is no recipient set to route the message to. Chat is fire-and-
+    // forget with no server response channel, so unlike the lobby party/queue opcodes there is nothing
+    // to answer either. The packet stays dropped until a lobby/matchmaker service exists to carry it.
     DEFINE_HANDLER(CMSG_CHAT_LOBBY_MATCHMAKER_MESSAGE_INSTANCE_CHAT,        STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_CHAT_LOBBY_MATCHMAKER_MESSAGE_PARTY,                STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_CHAT_MESSAGE_AFK,                                   STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleChatMessageAFKOpcode);
@@ -709,7 +729,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_MOUNT_CLEAR_FANFARE,                                STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_MOUNT_SET_FAVORITE,                                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMountSetFavorite);
     DEFINE_HANDLER(CMSG_MOUNT_SPECIAL_ANIM,                                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMountSpecialAnimOpcode);
-    DEFINE_HANDLER(CMSG_MOVE_ADD_IMPULSE_ACK,                               STATUS_UNHANDLED, PROCESS_THREADSAFE,   &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_MOVE_ADD_IMPULSE_ACK,                               STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMoveAddImpulseAck);
     DEFINE_HANDLER(CMSG_MOVE_APPLY_INERTIA_ACK,                             STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMoveApplyInertiaAck);
     DEFINE_HANDLER(CMSG_MOVE_APPLY_MOVEMENT_FORCE_ACK,                      STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMoveApplyMovementForceAck);
     DEFINE_HANDLER(CMSG_MOVE_CHANGE_TRANSPORT,                              STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementOpcodes);
@@ -770,7 +790,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_MOVE_SET_ALWAYS_ALLOW_PITCHING_ACK,                 STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementAckMessage);
     DEFINE_HANDLER(CMSG_MOVE_SET_CANNOT_SWIM_ACK,                           STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementAckMessage);
     DEFINE_HANDLER(CMSG_MOVE_SET_CAN_ADV_FLY_ACK,                           STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementAckMessage);
-    DEFINE_HANDLER(CMSG_MOVE_SET_CAN_DRIVE_ACK,                             STATUS_UNHANDLED, PROCESS_THREADSAFE,   &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_MOVE_SET_CAN_DRIVE_ACK,                             STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementAckMessage);
     DEFINE_HANDLER(CMSG_MOVE_SET_CAN_FLY_ACK,                               STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementAckMessage);
     DEFINE_HANDLER(CMSG_MOVE_SET_CAN_TURN_WHILE_FALLING_ACK,                STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementAckMessage);
     DEFINE_HANDLER(CMSG_MOVE_SET_COLLISION_HEIGHT_ACK,                      STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleSetCollisionHeightAck);
@@ -788,7 +808,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_MOVE_START_ASCEND,                                  STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementOpcodes);
     DEFINE_HANDLER(CMSG_MOVE_START_BACKWARD,                                STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementOpcodes);
     DEFINE_HANDLER(CMSG_MOVE_START_DESCEND,                                 STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementOpcodes);
-    DEFINE_HANDLER(CMSG_MOVE_START_DRIVE_FORWARD,                           STATUS_UNHANDLED, PROCESS_THREADSAFE,   &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_MOVE_START_DRIVE_FORWARD,                           STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementOpcodes);
     DEFINE_HANDLER(CMSG_MOVE_START_FORWARD,                                 STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementOpcodes);
     DEFINE_HANDLER(CMSG_MOVE_START_PITCH_DOWN,                              STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementOpcodes);
     DEFINE_HANDLER(CMSG_MOVE_START_PITCH_UP,                                STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleMovementOpcodes);
