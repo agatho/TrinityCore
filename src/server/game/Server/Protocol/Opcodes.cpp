@@ -405,6 +405,15 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_CONVERSATION_LINE_STARTED,                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleConversationLineStarted);
     DEFINE_HANDLER(CMSG_CONVERT_ITEM_TO_BIND_TO_ACCOUNT,                    STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_CONVERT_RAID,                                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleConvertRaidOpcode);
+    // CMSG_CONVERT_TIMERUNNING_CHARACTER (0x43018D) wire (client serializer sub @0x6B0E20): { PackedGuid CharacterGUID;
+    // uint32 }. It converts a Timerunning (Pandaria/Legion Remix) character to a standard character at end of event.
+    // Left as Handle_NULL: TrinityCore has NO Timerunning subsystem to convert FROM. ActivePlayerData::TimerunningSeasonID
+    // is a read-only UpdateField (no setter anywhere), there is no `timerunning_season` column on the characters table,
+    // no PLAYER_FLAGS_TIMERUNNING, and character creation with a season set is actively refused
+    // (CharacterHandler.cpp -> SendCharCreate(CHAR_CREATE_TIMERUNNING)). No TC character can therefore be in a
+    // Timerunning season, so there is nothing to clear/migrate and no conversion rules (Remix item CTR 2905 /
+    // artifact CTR 4579 -> standard gear) exist. A real implementation is gated on first building the Timerunning
+    // subsystem (persisted season flag + creation path + item/reward conversion tables); until then this is a no-op.
     DEFINE_HANDLER(CMSG_CONVERT_TIMERUNNING_CHARACTER,                      STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_COVENANT_RENOWN_REQUEST_CATCHUP_STATE,              STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_CANCEL,                              STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
