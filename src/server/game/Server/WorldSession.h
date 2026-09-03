@@ -1298,6 +1298,7 @@ namespace WorldPackets
         class RequestScheduledAreaPoiUpdate;
         class ChoiceResponse;
         class CloseQuestChoice;
+        class HideQuestChoice;
         class UiMapQuestLinesRequest;
         class SpawnTrackingUpdate;
         class QueryQuestItemUsability;
@@ -2775,6 +2776,7 @@ class TC_GAME_API WorldSession
         // &WorldSession::HandleRequestScheduledAreaPoiUpdate unambiguous in Opcodes.cpp.
         void HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceResponse const& choiceResponse);
         void HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& closeQuestChoice);
+        void HandleHideQuestChoice(WorldPackets::Quest::HideQuestChoice& hideQuestChoice);
         void HandleUiMapQuestLinesRequest(WorldPackets::Quest::UiMapQuestLinesRequest& uiMapQuestLinesRequest);
         void HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasurePicker const& queryTreasurePicker);
         void HandleSpawnTrackingUpdate(WorldPackets::Quest::SpawnTrackingUpdate& spawnTrackingUpdate);
