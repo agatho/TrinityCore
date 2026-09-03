@@ -93,6 +93,20 @@ namespace WorldPackets
             ObjectGuid PetGUID;
         };
 
+        // CMSG_SET_PET_FAVORITE (0x3D0012). Wire (client writer @0x1406CA250): uint8 StableSlot then one
+        // packed bit IsFavorite. StableSlot is the 1-based luaIndex the client shows (ActivePlayerData
+        // .PetStable.Pets[].PetSlot); C_StableInfo.SetPetFavorite(slot, isFavorite).
+        class SetPetFavorite final : public ClientPacket
+        {
+        public:
+            explicit SetPetFavorite(WorldPacket&& packet) : ClientPacket(CMSG_SET_PET_FAVORITE, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 StableSlot = 0;
+            bool IsFavorite = false;
+        };
+
         class PetSpellAutocast final : public ClientPacket
         {
         public:

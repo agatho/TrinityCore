@@ -538,6 +538,7 @@ void Pet::SavePetToDB(PetSaveMode mode)
         stmt->setUInt32(14, m_unitData->CreatedBySpell);
         stmt->setUInt8(15, getPetType());
         stmt->setUInt16(16, GetSpecialization());
+        stmt->setUInt8(17, owner->GetPetStable()->GetCurrentPet()->Favorite ? 1 : 0);
         trans->Append(stmt);
 
         CharacterDatabase.CommitTransaction(trans);

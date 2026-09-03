@@ -180,6 +180,13 @@ void SetPetSpecializationRequest::Read()
     _worldPacket >> PetGUID;
 }
 
+void SetPetFavorite::Read()
+{
+    _worldPacket >> StableSlot;
+    _worldPacket >> Bits<1>(IsFavorite);
+    _worldPacket.ResetBitPos();
+}
+
 void PetSpellAutocast::Read()
 {
     _worldPacket >> PetGUID;
