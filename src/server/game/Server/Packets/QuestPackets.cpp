@@ -54,6 +54,20 @@ WorldPacket const* QuestGiverStatus::Write()
     return &_worldPacket;
 }
 
+void RequestTreasurePunchListItems::Read()
+{
+    _worldPacket >> Selector;
+    Flag = _worldPacket.read<uint8>() != 0;
+}
+
+WorldPacket const* TreasurePunchListItemsResponse::Write()
+{
+    _worldPacket << Selector;
+    _worldPacket << uint32(0);      // Count: no world punch-list data source on this core -> honest empty list
+
+    return &_worldPacket;
+}
+
 WorldPacket const* QuestGiverStatusMultiple::Write()
 {
     _worldPacket << Size<int32>(QuestGiver);

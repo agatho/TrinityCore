@@ -80,6 +80,18 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // Client asks the server to (re)send the encounter timeline for the instance it is in (client builder
+        // 0x1406CE1A0: one PackedGUID). Answered with the existing SMSG_INSTANCE_ENCOUNTER_TIMELINE_SYNC.
+        class RequestInstanceEncounterEventSync final : public ClientPacket
+        {
+        public:
+            explicit RequestInstanceEncounterEventSync(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid EncounterGUID;
+        };
+
         class InstanceReset final : public ServerPacket
         {
         public:

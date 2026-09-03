@@ -129,6 +129,13 @@ void SetSelection::Read()
     _worldPacket >> Selection;
 }
 
+void AccountNotificationAcknowledged::Read()
+{
+    _worldPacket >> NotificationID;
+    _worldPacket >> NotificationType;
+    _worldPacket >> NotificationParam;
+}
+
 void SetPreferredCemetery::Read()
 {
     _worldPacket >> CemeteryID;

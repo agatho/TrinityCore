@@ -675,6 +675,30 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // Ack for one delivered account notification (the receipt for GetAccountNotifications). Wire recovered
+        // from the 12.1.0.69497 client builder 0x1406B0000: { uint64 NotificationID; uint32; uint32 }.
+        class AccountNotificationAcknowledged final : public ClientPacket
+        {
+        public:
+            explicit AccountNotificationAcknowledged(WorldPacket&& packet) : ClientPacket(CMSG_ACCOUNT_NOTIFICATION_ACKNOWLEDGED, std::move(packet)) { }
+
+            void Read() override;
+
+            uint64 NotificationID = 0;
+            uint32 NotificationType = 0;   // mirrors the per-entry record the server put in the notifications response
+            uint32 NotificationParam = 0;
+        };
+
+        // Empty-body toggle from the unit-popup difficulty submenu (client builder 0x1406A72A0: header only).
+        // The server flips the current difficulty to its Difficulty.db2 ToggleDifficultyID.
+        class TogglePlayerDifficulty final : public ClientPacket
+        {
+        public:
+            explicit TogglePlayerDifficulty(WorldPacket&& packet) : ClientPacket(CMSG_TOGGLE_DIFFICULTY, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         // SMSG_ACCOUNT_NOTIFICATIONS_RESPONSE (0x420310): wire is a single uint32 count followed by that
         // many notification entries. TrinityCore has no account-notification system, so the count is
         // always 0 (an honest empty list), which is exactly what live 12.0.7 captures show (4-byte payload).

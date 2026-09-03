@@ -89,6 +89,11 @@ void InstanceLockResponse::Read()
     _worldPacket >> Bits<1>(AcceptLock);
 }
 
+void RequestInstanceEncounterEventSync::Read()
+{
+    _worldPacket >> EncounterGUID;
+}
+
 WorldPacket const* RaidGroupOnly::Write()
 {
     _worldPacket << Delay;
