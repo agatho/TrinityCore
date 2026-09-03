@@ -618,6 +618,10 @@ namespace WorldPackets
         class GuildQueryMemberRecipes;
         class GuildQueryMembersForRecipe;
         class GuildChangeNameRequest;
+        class GuildRequestRenameStatus;
+        class GuildRequestRenameNameCheck;
+        class GuildRequestRename;
+        class GuildRequestRenameRefund;
     }
 
     namespace Hotfix
@@ -2396,6 +2400,10 @@ class TC_GAME_API WorldSession
         void SendPerksProgramTenderAwarded(int32 amount);
         void SendPerksProgramResultError();
         std::vector<WorldPackets::PerksProgram::PerksRecentPurchase> BuildPerksRecentPurchases() const;
+        void HandleGuildRequestRenameStatus(WorldPackets::Guild::GuildRequestRenameStatus& packet);
+        void HandleGuildRequestRenameNameCheck(WorldPackets::Guild::GuildRequestRenameNameCheck& packet);
+        void HandleGuildRequestRename(WorldPackets::Guild::GuildRequestRename& packet);
+        void HandleGuildRequestRenameRefund(WorldPackets::Guild::GuildRequestRenameRefund& packet);
         void HandleGuildSetGuildMaster(WorldPackets::Guild::GuildSetGuildMaster& packet);
         void HandleGuildUpdateMotdText(WorldPackets::Guild::GuildUpdateMotdText& packet);
         void HandleGuildNewsUpdateSticky(WorldPackets::Guild::GuildNewsUpdateSticky& packet);

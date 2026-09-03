@@ -23,6 +23,7 @@
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "GuildPackets.h"
+#include "GuildRenameMgr.h"
 #include "Log.h"
 #include "ObjectMgr.h"
 #include "Player.h"
@@ -880,4 +881,25 @@ void WorldSession::HandleGuildQueryMembersForRecipe(WorldPackets::Guild::GuildQu
 
         SendPacket(response.Write());
     }));
+// Guild rename cluster (12.1) - see GuildRenameMgr / GuildPackets.h. The leading GuildRegistrarGUID
+// is the guild-rename interaction NPC and is read off the wire but not enforced, since the rename
+// itself is fully gated on guild-master permission inside GuildRenameMgr.
+void WorldSession::HandleGuildRequestRenameStatus(WorldPackets::Guild::GuildRequestRenameStatus& /*packet*/)
+{
+    sGuildRenameMgr->HandleStatusRequest(this);
+}
+
+void WorldSession::HandleGuildRequestRenameNameCheck(WorldPackets::Guild::GuildRequestRenameNameCheck& packet)
+{
+    sGuildRenameMgr->HandleNameCheck(this, packet.DesiredName);
+}
+
+void WorldSession::HandleGuildRequestRename(WorldPackets::Guild::GuildRequestRename& packet)
+{
+    sGuildRenameMgr->HandleRenameRequest(this, packet.DesiredName);
+}
+
+void WorldSession::HandleGuildRequestRenameRefund(WorldPackets::Guild::GuildRequestRenameRefund& /*packet*/)
+{
+    sGuildRenameMgr->HandleRefundRequest(this);
 }

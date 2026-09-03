@@ -761,6 +761,11 @@ class TC_GAME_API Guild
         time_t GetCreatedDate() const { return m_createdDate; }
         uint64 GetBankMoney() const { return m_bankMoney; }
 
+        // Adds (add=true) or removes (add=false) money from the guild bank, persists it and notifies
+        // members. Returns false without changing anything if a removal would overdraw the bank.
+        // Used by the guild-rename charge/refund flow (GuildRenameMgr).
+        bool ModifyBankMoney(uint64 amount, bool add);
+
         bool SetName(std::string_view name);
 
         // Handle client commands

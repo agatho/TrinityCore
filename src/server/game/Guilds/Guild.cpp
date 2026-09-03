@@ -1333,6 +1333,17 @@ bool Guild::SetName(std::string_view name)
     return true;
 }
 
+bool Guild::ModifyBankMoney(uint64 amount, bool add)
+{
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+    if (!_ModifyBankMoney(trans, amount, add))
+        return false;
+
+    CharacterDatabase.CommitTransaction(trans);
+    SendEventBankMoneyChanged();
+    return true;
+}
+
 void Guild::HandleRoster(WorldSession* session)
 {
     WorldPackets::Guild::GuildRoster roster;

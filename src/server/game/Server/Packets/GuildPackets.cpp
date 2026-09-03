@@ -974,6 +974,71 @@ WorldPacket const* GuildKnownRecipes::Write()
     {
         _worldPacket << uint32(entry.SkillLineID);
         _worldPacket.append(entry.Blob.data(), entry.Blob.size());
+// ------------------------------------------------------------------------------------------------
+// Guild rename cluster - reads mirror the RE'd client builders (see GuildPackets.h header comment).
+// ------------------------------------------------------------------------------------------------
+
+void GuildRequestRenameStatus::Read()
+{
+    _worldPacket >> GuildRegistrarGUID;
+}
+
+void GuildRequestRenameNameCheck::Read()
+{
+    _worldPacket >> GuildRegistrarGUID;
+    _worldPacket >> ClientToken;
+    _worldPacket >> SizedString::BitsSize<7>(DesiredName);
+    _worldPacket >> SizedString::Data(DesiredName);
+}
+
+void GuildRequestRename::Read()
+{
+    _worldPacket >> GuildRegistrarGUID;
+    _worldPacket >> SizedString::BitsSize<7>(DesiredName);
+    _worldPacket >> SizedString::Data(DesiredName);
+}
+
+void GuildRequestRenameRefund::Read()
+{
+    _worldPacket >> GuildRegistrarGUID;
+    _worldPacket >> SizedString::BitsSize<7>(GuildName);
+    _worldPacket >> SizedString::Data(GuildName);
+}
+
+WorldPacket const* GuildRenameStatusUpdate::Write()
+{
+    _worldPacket.WriteBit(IsNameChangeEnabled);
+    _worldPacket.WriteBit(IsPlayerGuildMaster);
+    _worldPacket << SizedString::BitsSize<7>(OldGuildName);
+    _worldPacket << SizedString::BitsSize<7>(ReservedName);
+    _worldPacket.FlushBits();
+
+    _worldPacket << RefundEligibleEndTime;
+    _worldPacket << NextRenameTime;
+    _worldPacket << RenamePrice;
+    _worldPacket << RefundAmount;
+    _worldPacket << CurrentGuildMoney;
+    _worldPacket << Result;
+    _worldPacket << SizedString::Data(OldGuildName);
+    _worldPacket << SizedString::Data(ReservedName);
+    _worldPacket << ReservedNameExpirationTime;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* GuildRenameNameCheckResult::Write()
+{
+    _worldPacket << SizedString::BitsSize<7>(DesiredName);
+    _worldPacket << OptionalInit(NameErrorToken);
+    _worldPacket.FlushBits();
+
+    _worldPacket << SizedString::Data(DesiredName);
+    _worldPacket << Status;
+    if (NameErrorToken)
+    {
+        _worldPacket << SizedString::BitsSize<7>(*NameErrorToken);
+        _worldPacket.FlushBits();
+        _worldPacket << SizedString::Data(*NameErrorToken);
     }
 
     return &_worldPacket;
@@ -993,6 +1058,13 @@ WorldPacket const* GuildMemberRecipes::Write()
     _worldPacket << uint32(SkillRank);
     _worldPacket << uint32(SkillStep);
     _worldPacket.append(Blob.data(), Blob.size());
+WorldPacket const* GuildRenameRequestedResult::Write()
+{
+    _worldPacket << SizedString::BitsSize<7>(NewName);
+    _worldPacket.FlushBits();
+
+    _worldPacket << SizedString::Data(NewName);
+    _worldPacket << Status;
 
     return &_worldPacket;
 }
@@ -1013,6 +1085,13 @@ WorldPacket const* GuildMembersWithRecipe::Write()
 
     for (ObjectGuid const& member : Members)
         _worldPacket << member;
+WorldPacket const* GuildRenameRefundResult::Write()
+{
+    _worldPacket << SizedString::BitsSize<7>(GuildName);
+    _worldPacket.FlushBits();
+
+    _worldPacket << SizedString::Data(GuildName);
+    _worldPacket << Status;
 
     return &_worldPacket;
 }

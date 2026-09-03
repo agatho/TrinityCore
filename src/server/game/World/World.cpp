@@ -73,6 +73,7 @@
 #include "GroupMgr.h"
 #include "DiscordBridge.h"
 #include "GuildMgr.h"
+#include "GuildRenameMgr.h"
 #include "IPLocation.h"
 #include "InstanceEncounterTimeline.h"
 #include "InstanceLockMgr.h"
@@ -1961,6 +1962,8 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Initializing Discord bridge...");
     sDiscordBridge->LoadConfig();
+    TC_LOG_INFO("server.loading", "Loading Guild rename records...");
+    sGuildRenameMgr->Load();
 
     TC_LOG_INFO("server.loading", "Loading ArenaTeams...");
     sArenaTeamMgr->LoadArenaTeams();
