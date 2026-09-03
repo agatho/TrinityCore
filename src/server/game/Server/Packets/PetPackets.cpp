@@ -82,6 +82,15 @@ WorldPacket const* PetUnlearnedSpells::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* Guids::Write()
+{
+    _worldPacket << Size<uint32>(PetGUIDs);
+    for (ObjectGuid const& guid : PetGUIDs)
+        _worldPacket << guid;
+
+    return &_worldPacket;
+}
+
 WorldPacket const* PetNameInvalid::Write()
 {
     _worldPacket << uint32(Result);
@@ -169,6 +178,13 @@ void SetPetSpecializationRequest::Read()
     // packet object's layout is unchanged; the handler needs only SpecID and PetGUID.
     _worldPacket.read_skip<uint16>();
     _worldPacket >> PetGUID;
+}
+
+void SetPetFavorite::Read()
+{
+    _worldPacket >> StableSlot;
+    _worldPacket >> Bits<1>(IsFavorite);
+    _worldPacket.ResetBitPos();
 }
 
 void PetSpellAutocast::Read()

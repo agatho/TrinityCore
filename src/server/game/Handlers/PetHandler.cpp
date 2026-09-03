@@ -603,6 +603,13 @@ void WorldSession::HandlePetRename(WorldPackets::Pet::PetRename& packet)
     pet->SetPetNameTimestamp(uint32(GameTime::GetGameTime()));
 }
 
+void WorldSession::HandleSetPetFavorite(WorldPackets::Pet::SetPetFavorite const& packet)
+{
+    // Toggle the favorite star on a stabled/active hunter pet. The value persists in
+    // character_pet.favorite and is mirrored into ActivePlayerData.PetStable so the client updates.
+    _player->SetPetFavorite(packet.StableSlot, packet.IsFavorite);
+}
+
 void WorldSession::HandleSetPetSpecialization(WorldPackets::Pet::SetPetSpecializationRequest const& packet)
 {
     // Only the player's own summoned hunter pet carries a live specialization; the client resolves the

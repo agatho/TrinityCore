@@ -93,6 +93,20 @@ namespace WorldPackets
             ObjectGuid PetGUID;
         };
 
+        // CMSG_SET_PET_FAVORITE (0x3D0012). Wire (client writer @0x1406CA250): uint8 StableSlot then one
+        // packed bit IsFavorite. StableSlot is the 1-based luaIndex the client shows (ActivePlayerData
+        // .PetStable.Pets[].PetSlot); C_StableInfo.SetPetFavorite(slot, isFavorite).
+        class SetPetFavorite final : public ClientPacket
+        {
+        public:
+            explicit SetPetFavorite(WorldPacket&& packet) : ClientPacket(CMSG_SET_PET_FAVORITE, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 StableSlot = 0;
+            bool IsFavorite = false;
+        };
+
         class PetSpellAutocast final : public ClientPacket
         {
         public:
@@ -185,6 +199,19 @@ namespace WorldPackets
             explicit PetClearSpells() : ServerPacket(SMSG_PET_CLEAR_SPELLS, 0) { }
 
             WorldPacket const* Write() override { return &_worldPacket; }
+        // Wire (sniff-decoded, s69273_a/prey1/prey2, 127 instances, lengths 4/19/34):
+        // uint32 Count (full DWORD, proven by the Count==0 case measuring exactly 4 bytes -
+        // no bit-packed length prefix), followed by Count PackedGuid entries (15 bytes observed
+        // for a single-segment pet GUID: 19 = 4 + 15, 34 = 4 + 2*15). Matches LegionCore
+        // `Guids() : ServerPacket(SMSG_PET_GUIDS, 4) { } GuidVector PetGUIDs;`.
+        class Guids final : public ServerPacket
+        {
+        public:
+            explicit Guids() : ServerPacket(SMSG_PET_GUIDS, 4) { }
+
+            WorldPacket const* Write() override;
+
+            GuidVector PetGUIDs;
         };
 
         struct PetRenameData

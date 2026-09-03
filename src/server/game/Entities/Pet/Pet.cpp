@@ -373,6 +373,15 @@ bool Pet::LoadPetFromDB(Player* owner, uint32 petEntry, uint32 petnumber, bool c
 
     owner->SetMinion(this, true);
 
+    // SMSG_PET_GUIDS: this pet has just become the owner's active combat pet slot - the exact
+    // symmetric counterpart of Player::RemovePet's SetMinion(pet, false) + empty Guids send.
+    // See Player::SendPetGUIDs (Player.cpp) for the wire/sniff basis.
+    {
+        WorldPackets::Pet::Guids petGuidsPacket;
+        petGuidsPacket.PetGUIDs.push_back(GetGUID());
+        owner->SendDirectMessage(petGuidsPacket.Write());
+    }
+
     if (!isTemporarySummon)
         m_charmInfo->LoadPetActionBar(petInfo->ActionBar);
 
@@ -529,6 +538,7 @@ void Pet::SavePetToDB(PetSaveMode mode)
         stmt->setUInt32(14, m_unitData->CreatedBySpell);
         stmt->setUInt8(15, getPetType());
         stmt->setUInt16(16, GetSpecialization());
+        stmt->setUInt8(17, owner->GetPetStable()->GetCurrentPet()->Favorite ? 1 : 0);
         trans->Append(stmt);
 
         CharacterDatabase.CommitTransaction(trans);

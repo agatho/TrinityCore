@@ -163,6 +163,7 @@ public:
         ReactStates ReactState = ReactStates(0);
         PetType Type = MAX_PET_TYPE;
         bool WasRenamed = false;
+        bool Favorite = false;                                     // CMSG_SET_PET_FAVORITE -> PET_STABLE_FAVORITE; persisted in character_pet.favorite
     };
 
     Optional<uint32> CurrentPetIndex;                               // index into ActivePets or UnslottedPets if highest bit is set

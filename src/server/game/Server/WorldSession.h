@@ -1235,6 +1235,7 @@ namespace WorldPackets
         class PetCancelAura;
         class PetSetAction;
         class SetPetSpecializationRequest;
+        class SetPetFavorite;
     }
 
     namespace Petition
@@ -2879,6 +2880,7 @@ class TC_GAME_API WorldSession
         void HandlePetAbandonByNumber(WorldPackets::Pet::PetAbandonByNumber const& petAbandonByNumber);
         void HandlePetRename(WorldPackets::Pet::PetRename& packet);
         void HandleSetPetSpecialization(WorldPackets::Pet::SetPetSpecializationRequest const& packet);
+        void HandleSetPetFavorite(WorldPackets::Pet::SetPetFavorite const& packet);
         void HandlePetCancelAuraOpcode(WorldPackets::Spells::PetCancelAura& packet);
         void HandlePetSpellAutocastOpcode(WorldPackets::Pet::PetSpellAutocast& packet);
         void HandlePetCastSpellOpcode(WorldPackets::Spells::PetCastSpell& petCastSpell);

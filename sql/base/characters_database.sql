@@ -1485,6 +1485,7 @@ CREATE TABLE `character_pet` (
   `savetime` int unsigned NOT NULL DEFAULT '0',
   `abdata` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `specialization` smallint unsigned NOT NULL DEFAULT '0',
+  `favorite` tinyint unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `owner` (`owner`),
   KEY `idx_slot` (`slot`)
