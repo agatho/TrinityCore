@@ -545,6 +545,11 @@ void FarSight::Read()
     _worldPacket >> Bits<1>(Enable);
 }
 
+void LowLevelRaid2::Read()
+{
+    _worldPacket >> Bits<1>(Enable);
+}
+
 void SaveCUFProfiles::Read()
 {
     _worldPacket >> Size<uint32>(CUFProfiles);

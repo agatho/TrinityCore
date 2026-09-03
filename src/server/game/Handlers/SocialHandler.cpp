@@ -175,8 +175,37 @@ void WorldSession::HandleSetContactNotesOpcode(WorldPackets::Social::SetContactN
     _player->GetSocial()->SetFriendNote(packet.Player.Guid, packet.Notes);
 }
 
+// CMSG_SOCIAL_CONTRACT_REQUEST (0x430176) -> SMSG_SOCIAL_CONTRACT_REQUEST_RESPONSE (0x450325).
+// The client (C_SocialContractGlue.GetShouldShowSocialContract, CharacterSelect.lua) asks whether the
+// Social Contract dialog must be shown. It must be shown until the account has accepted it, so we look up
+// the per-battlenet-account acceptance flag and answer ShowSocialContract = !accepted. The flag is
+// persisted in auth.battlenet_accounts.social_contract_accepted (set by CMSG_ACCEPT_SOCIAL_CONTRACT), so
+// once accepted the client stops prompting on every login.
 void WorldSession::HandleSocialContractRequest(WorldPackets::Social::SocialContractRequest& /*socialContractRequest*/)
 {
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_SOCIAL_CONTRACT_ACCEPTED);
+    stmt->setUInt32(0, GetBattlenetAccountId());
+
+    GetQueryProcessor().AddCallback(LoginDatabase.AsyncQuery(stmt).WithPreparedCallback([this](PreparedQueryResult result)
+    {
+        bool accepted = result && (*result)[0].GetBool();
+
+        WorldPackets::Social::SocialContractRequestResponse response;
+        response.ShowSocialContract = !accepted;
+        SendPacket(response.Write());
+    }));
+}
+
+// CMSG_ACCEPT_SOCIAL_CONTRACT (0x430177): the player accepted the Social Contract at character select.
+// Persist the acceptance on the battlenet account so it is never prompted again, then push a fresh
+// SMSG_SOCIAL_CONTRACT_REQUEST_RESPONSE(ShowSocialContract = false) so the client's cached state updates
+// immediately for the current session (it also hides the dialog itself on click).
+void WorldSession::HandleAcceptSocialContract(WorldPackets::Social::AcceptSocialContract& /*acceptSocialContract*/)
+{
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_UPD_BNET_SOCIAL_CONTRACT_ACCEPTED);
+    stmt->setUInt32(0, GetBattlenetAccountId());
+    LoginDatabase.Execute(stmt);
+
     WorldPackets::Social::SocialContractRequestResponse response;
     response.ShowSocialContract = false;
     SendPacket(response.Write());

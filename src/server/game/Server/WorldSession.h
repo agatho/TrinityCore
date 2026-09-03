@@ -533,6 +533,7 @@ namespace WorldPackets
         class SetPvP;
         class OverrideScreenFlash;
         class SetWarMode;
+        class LowLevelRaid2;
         class MountSpecial;
         class SetTaxiBenchmarkMode;
         class MountSetFavorite;
@@ -725,6 +726,7 @@ namespace WorldPackets
         class SendContactList;
         class SetContactNotes;
         class SocialContractRequest;
+        class AcceptSocialContract;
     }
 
     namespace Spells
@@ -1345,6 +1347,7 @@ class TC_GAME_API WorldSession
         void HandleSetPvP(WorldPackets::Misc::SetPvP& packet);
         void HandleOverrideScreenFlash(WorldPackets::Misc::OverrideScreenFlash& packet);
         void HandleSetWarMode(WorldPackets::Misc::SetWarMode& packet);
+        void HandleLowLevelRaid2(WorldPackets::Misc::LowLevelRaid2& lowLevelRaid2);
 
         void HandleSetSelectionOpcode(WorldPackets::Misc::SetSelection& packet);
         void HandleStandStateChangeOpcode(WorldPackets::Misc::StandStateChange& packet);
@@ -1921,6 +1924,7 @@ class TC_GAME_API WorldSession
         void HandleRequestLatestSplashScreen(WorldPackets::Misc::RequestLatestSplashScreen& requestLatestSplashScreen);
 
         void HandleSocialContractRequest(WorldPackets::Social::SocialContractRequest& socialContractRequest);
+        void HandleAcceptSocialContract(WorldPackets::Social::AcceptSocialContract& acceptSocialContract);
 
         union ConnectToKey
         {

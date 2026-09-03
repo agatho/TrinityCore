@@ -392,6 +392,22 @@ void WorldSession::HandleOverrideScreenFlash(WorldPackets::Misc::OverrideScreenF
     _overrideScreenFlash = packet.Override;
 }
 
+// CMSG_LOW_LEVEL_RAID2 (0x3E00AE): the "allow joining low-level raids" toggle. Wire = one bit Enable
+// (client sender RVA 0x6D8360), the same one-bit body as the sibling CMSG_LOW_LEVEL_RAID1 (0x4300CF)
+// and with the same effect: it drives PLAYER_FLAGS_LOW_LEVEL_RAID_ENABLED. The flag is written to
+// characters.playerFlags (persisted), reloaded via ReplaceAllPlayerFlags and mirrored into the character
+// list as CHARACTER_FLAG_2_LOW_LEVEL_RAID_ENABLED (CharacterPackets.cpp). Semantics come from
+// PlayerScript.SetAllowLowLevelRaid(allow) / GetAllowLowLevelRaid() and the ENABLE/DISABLE_LOW_LEVEL_RAID
+// events (Blizzard_APIDocumentationGenerated). Because it is a player flag, not a session field, the
+// toggle survives relogging.
+void WorldSession::HandleLowLevelRaid2(WorldPackets::Misc::LowLevelRaid2& lowLevelRaid2)
+{
+    if (lowLevelRaid2.Enable)
+        _player->SetPlayerFlag(PLAYER_FLAGS_LOW_LEVEL_RAID_ENABLED);
+    else
+        _player->RemovePlayerFlag(PLAYER_FLAGS_LOW_LEVEL_RAID_ENABLED);
+}
+
 void WorldSession::HandlePortGraveyard(WorldPackets::Misc::PortGraveyard& /*packet*/)
 {
     if (GetPlayer()->IsAlive() || !GetPlayer()->HasPlayerFlag(PLAYER_FLAGS_GHOST))
