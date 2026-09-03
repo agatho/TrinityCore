@@ -600,7 +600,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_HOUSE_EXTERIOR_LOCK,                                STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHouseExteriorLock);
     DEFINE_HANDLER(CMSG_HOUSE_EXTERIOR_SET_HOUSE_POSITION,                  STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHouseExteriorSetHousePosition);
     DEFINE_HANDLER(CMSG_HOUSE_INTERIOR_LEAVE_HOUSE,                         STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHouseInteriorLeaveHouse);
-    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_DELETE,                           STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_DELETE,                           STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintDelete);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_DELETE_FROM_STORAGE,                  STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorDeleteFromStorage);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_LOCK,                                 STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorLock);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_MOVE,                                 STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorMove);
@@ -610,7 +610,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_REQUEST_STORAGE,                      STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorRequestStorage);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_SET_DYE_SLOTS,                        STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorSetDyeSlots);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_SET_EDIT_MODE,                        STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorSetEditMode);
-    DEFINE_HANDLER(CMSG_HOUSING_DECOR_SET_PET,                              STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_HOUSING_DECOR_SET_PET,                              STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorSetPet);
     DEFINE_HANDLER(CMSG_HOUSING_FIXTURE_CREATE_FIXTURE,                     STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingFixtureCreateFixture);
     DEFINE_HANDLER(CMSG_HOUSING_FIXTURE_DELETE_FIXTURE,                     STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingFixtureDeleteFixture);
     DEFINE_HANDLER(CMSG_HOUSING_FIXTURE_SET_CORE_FIXTURE,                   STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingFixtureSetCoreFixture);
@@ -635,7 +635,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_HOUSING_HOUSE_STATUS,                               STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingHouseStatus);
     DEFINE_HANDLER(CMSG_HOUSING_PHOTO_SHARING_CLEAR_AUTHORIZATION,          STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingPhotoSharingClearAuthorization);
     DEFINE_HANDLER(CMSG_HOUSING_PHOTO_SHARING_COMPLETE_AUTHORIZATION,       STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingPhotoSharingCompleteAuthorization);
-    DEFINE_HANDLER(CMSG_HOUSING_RESET_HOUSE,                                STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_HOUSING_RESET_HOUSE,                                STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingResetHouse);
     DEFINE_HANDLER(CMSG_HOUSING_RESET_KIOSK_MODE,                           STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingResetKioskMode);
     DEFINE_HANDLER(CMSG_HOUSING_ROOM_ADD,                                   STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingRoomAdd);
     DEFINE_HANDLER(CMSG_HOUSING_ROOM_APPLY_COMPONENT_MATERIALS,             STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingRoomApplyComponentMaterials);
@@ -654,7 +654,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO,                STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingSvcsGetPlayerHousesInfo);
     DEFINE_HANDLER(CMSG_HOUSING_SVCS_GET_POTENTIAL_HOUSE_OWNERS,            STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingSvcsGetPotentialHouseOwners);
     DEFINE_HANDLER(CMSG_HOUSING_SVCS_GUILD_CREATE_NEIGHBORHOOD,             STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingSvcsGuildCreateNeighborhood);
-    DEFINE_HANDLER(CMSG_HOUSING_SVCS_HOUSE_FINDER_IGNORE_NEIGHBORHOOD,      STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_HOUSING_SVCS_HOUSE_FINDER_IGNORE_NEIGHBORHOOD,      STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingSvcsHouseFinderIgnoreNeighborhood);
     DEFINE_HANDLER(CMSG_HOUSING_SVCS_NEIGHBORHOOD_RESERVE_PLOT,             STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingSvcsNeighborhoodReservePlot);
     DEFINE_HANDLER(CMSG_HOUSING_SVCS_PLAYER_VIEW_HOUSES_BY_BNET_ACCOUNT,    STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingSvcsPlayerViewHousesByBnetAccount);
     DEFINE_HANDLER(CMSG_HOUSING_SVCS_PLAYER_VIEW_HOUSES_BY_PLAYER,          STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingSvcsPlayerViewHousesByPlayer);

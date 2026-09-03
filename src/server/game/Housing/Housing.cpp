@@ -343,6 +343,9 @@ bool Housing::LoadFromDB(PreparedQueryResult housing, PreparedQueryResult decor,
             placed.PlacementTime = static_cast<time_t>(fields[15].GetUInt64());
             placed.SourceType = fields[16].GetUInt8();
             placed.SourceValue = fields[17].GetString();
+            if (uint64 petCounter = fields[18].GetUInt64())
+                placed.PetGuid = ObjectGuid::Create<HighGuid::BattlePet>(petCounter);
+            placed.PetFlag = fields[19].GetUInt8();
 
             uint64 expected = s_nextDecorDbId.load();
             while (decorDbId >= expected && !s_nextDecorDbId.compare_exchange_weak(expected, decorDbId + 1))
@@ -543,6 +546,8 @@ void Housing::SaveToDB(CharacterDatabaseTransaction trans)
         stmt->setUInt64(index++, static_cast<uint64>(decor.PlacementTime));
         stmt->setUInt8(index++, decor.SourceType);
         stmt->setString(index++, decor.SourceValue);
+        stmt->setUInt64(index++, decor.PetGuid.IsEmpty() ? 0 : decor.PetGuid.GetCounter());
+        stmt->setUInt8(index++, decor.PetFlag);
         trans->Append(stmt);
     }
 
@@ -1466,6 +1471,72 @@ HousingResult Housing::SetDecorLocked(ObjectGuid decorGuid, bool locked)
         _owner->GetName(), locked ? "locked" : "unlocked", decorGuid.ToString(), _houseGuid.ToString());
 
     SyncUpdateFields();
+    return HOUSING_RESULT_SUCCESS;
+}
+
+HousingResult Housing::SetDecorPet(ObjectGuid decorGuid, ObjectGuid petGuid, uint8 petFlag)
+{
+    if (_houseGuid.IsEmpty())
+        return HOUSING_RESULT_HOUSE_NOT_FOUND;
+
+    auto itr = _placedDecor.find(decorGuid);
+    if (itr == _placedDecor.end())
+        return HOUSING_RESULT_DECOR_NOT_FOUND;
+
+    itr->second.PetGuid = petGuid;
+    itr->second.PetFlag = petFlag;
+
+    // Immediate targeted persist for crash safety (mirrors SetDecorLocked).
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_HOUSING_DECOR_PET);
+    stmt->setUInt64(0, petGuid.IsEmpty() ? 0 : petGuid.GetCounter());
+    stmt->setUInt8(1, petFlag);
+    stmt->setUInt64(2, _owner->GetGUID().GetCounter());
+    stmt->setUInt64(3, decorGuid.GetCounter());
+    CharacterDatabase.Execute(stmt);
+
+    TC_LOG_DEBUG("housing", "Housing::SetDecorPet: Player {} {} pet {} on decor {} in house {}",
+        _owner->GetName(), petGuid.IsEmpty() ? "cleared" : "bound", petGuid.ToString(),
+        decorGuid.ToString(), _houseGuid.ToString());
+
+    SyncUpdateFields();
+    return HOUSING_RESULT_SUCCESS;
+}
+
+HousingResult Housing::ResetDecor(uint8 scope, uint32* outRemoved /*= nullptr*/)
+{
+    if (_houseGuid.IsEmpty())
+        return HOUSING_RESULT_HOUSE_NOT_FOUND;
+
+    // HousingHouseScope: 1 = Interior, 2 = Exterior. Anything else is rejected.
+    if (scope != 1 && scope != 2)
+        return HOUSING_RESULT_GENERIC_FAILURE;
+
+    bool wantExterior = (scope == 2);
+
+    // Snapshot the matching guids first — RemoveDecor mutates _placedDecor.
+    std::vector<ObjectGuid> toRemove;
+    toRemove.reserve(_placedDecor.size());
+    for (auto const& [guid, decor] : _placedDecor)
+    {
+        if (IsExteriorDecorPlacement(decor.RoomGuid) == wantExterior)
+            toRemove.push_back(guid);
+    }
+
+    uint32 removed = 0;
+    for (ObjectGuid const& guid : toRemove)
+    {
+        // RemoveDecor refunds budget, returns the item to the catalog, deletes the DB row
+        // and syncs update fields for each item — full teardown per decor.
+        if (RemoveDecor(guid) == HOUSING_RESULT_SUCCESS)
+            ++removed;
+    }
+
+    if (outRemoved)
+        *outRemoved = removed;
+
+    TC_LOG_INFO("housing", "Housing::ResetDecor: Player {} reset {} scope, removed {} decor from house {}",
+        _owner->GetName(), wantExterior ? "exterior" : "interior", removed, _houseGuid.ToString());
+
     return HOUSING_RESULT_SUCCESS;
 }
 

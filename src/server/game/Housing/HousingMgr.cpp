@@ -17,6 +17,7 @@
 
 #include "HousingMgr.h"
 #include "CharacterCache.h"
+#include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "DB2Structure.h"
 #include "GameObjectData.h"
@@ -1986,4 +1987,67 @@ uint32 HousingMgr::GetDefaultVisualRoomEntry() const
     TC_LOG_ERROR("housing", "HousingMgr::GetDefaultVisualRoomEntry: bestId={} fallbackId={} -> returning {}",
         bestId, fallbackId, result);
     return result;
+}
+
+// ---------------------------------------------------------------------------
+// House-finder per-player ignore list
+// (CMSG_HOUSING_SVCS_HOUSE_FINDER_IGNORE_NEIGHBORHOOD, build 12.1.0.69497)
+// Lazily loaded from character_housing_ignored_neighborhood, cached, write-through.
+// ---------------------------------------------------------------------------
+std::unordered_set<ObjectGuid>& HousingMgr::EnsureIgnoredNeighborhoodsLoaded(ObjectGuid playerGuid)
+{
+    auto itr = _ignoredNeighborhoods.find(playerGuid);
+    if (itr != _ignoredNeighborhoods.end())
+        return itr->second;
+
+    std::unordered_set<ObjectGuid>& set = _ignoredNeighborhoods[playerGuid];
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_HOUSING_IGNORED_NEIGHBORHOOD);
+    stmt->setUInt64(0, playerGuid.GetCounter());
+    if (PreparedQueryResult result = CharacterDatabase.Query(stmt))
+    {
+        do
+        {
+            uint64 counter = (*result)[0].GetUInt64();
+            // Neighborhood GUIDs are HighGuid::Housing subType 4; only the counter is stored.
+            // Resolve the live neighborhood to reconstruct the exact full GUID for comparison.
+            if (Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhoodByCounter(counter))
+                set.insert(neighborhood->GetGuid());
+        } while (result->NextRow());
+    }
+
+    return set;
+}
+
+bool HousingMgr::IsNeighborhoodIgnored(ObjectGuid playerGuid, ObjectGuid neighborhoodGuid)
+{
+    std::unordered_set<ObjectGuid> const& set = EnsureIgnoredNeighborhoodsLoaded(playerGuid);
+    return set.find(neighborhoodGuid) != set.end();
+}
+
+void HousingMgr::AddIgnoredNeighborhood(ObjectGuid playerGuid, ObjectGuid neighborhoodGuid)
+{
+    std::unordered_set<ObjectGuid>& set = EnsureIgnoredNeighborhoodsLoaded(playerGuid);
+    if (!set.insert(neighborhoodGuid).second)
+        return; // already ignored
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_HOUSING_IGNORED_NEIGHBORHOOD);
+    stmt->setUInt64(0, playerGuid.GetCounter());
+    stmt->setUInt64(1, neighborhoodGuid.GetCounter());
+    CharacterDatabase.Execute(stmt);
+
+    TC_LOG_DEBUG("housing", "HousingMgr::AddIgnoredNeighborhood: player {} ignores neighborhood {}",
+        playerGuid.ToString(), neighborhoodGuid.ToString());
+}
+
+void HousingMgr::RemoveIgnoredNeighborhood(ObjectGuid playerGuid, ObjectGuid neighborhoodGuid)
+{
+    std::unordered_set<ObjectGuid>& set = EnsureIgnoredNeighborhoodsLoaded(playerGuid);
+    if (!set.erase(neighborhoodGuid))
+        return;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_HOUSING_IGNORED_NEIGHBORHOOD);
+    stmt->setUInt64(0, playerGuid.GetCounter());
+    stmt->setUInt64(1, neighborhoodGuid.GetCounter());
+    CharacterDatabase.Execute(stmt);
 }

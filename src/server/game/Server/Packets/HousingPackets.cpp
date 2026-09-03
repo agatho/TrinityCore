@@ -111,6 +111,16 @@ void HousingDecorLock::Read()
         DecorGuid.ToString(), Locked, Field_49);
 }
 
+void HousingDecorSetPet::Read()
+{
+    _worldPacket >> DecorGuid;
+    _worldPacket >> PetGuid;
+    _worldPacket >> Flag;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_SET_PET DecorGuid: {} PetGuid: {} Flag: {}",
+        DecorGuid.ToString(), PetGuid.ToString(), Flag);
+}
+
 void HousingDecorSetDyeSlots::Read()
 {
     _worldPacket >> DecorGuid;
@@ -423,6 +433,25 @@ void HousingSvcsGetHouseFinderNeighborhood::Read()
     _worldPacket >> NeighborhoodGuid;
 
     TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_GET_HOUSE_FINDER_NEIGHBORHOOD NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
+}
+
+void HousingSvcsHouseFinderIgnoreNeighborhood::Read()
+{
+    _worldPacket >> NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_SVCS_HOUSE_FINDER_IGNORE_NEIGHBORHOOD NeighborhoodGuid: {}", NeighborhoodGuid.ToString());
+}
+
+WorldPacket const* HousingSvcsIgnoreNeighborhoodInviteResponse::Write()
+{
+    _worldPacket.WriteBit(Success);
+    _worldPacket.FlushBits();
+    _worldPacket << NeighborhoodGuid;
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_SVCS_IGNORE_NEIGHBORHOOD_INVITE_RESPONSE Success: {} NeighborhoodGuid: {}",
+        Success, NeighborhoodGuid.ToString());
+
+    return &_worldPacket;
 }
 
 void HousingSvcsGetBnetFriendNeighborhoods::Read()
@@ -1555,6 +1584,22 @@ WorldPacket const* HousingResetKioskModeResponse::Write()
     _worldPacket << uint8(Result);
 
     TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_RESET_KIOSK_MODE_RESPONSE Result: {}", Result);
+
+    return &_worldPacket;
+}
+
+void HousingResetHouse::Read()
+{
+    _worldPacket >> ResetScope;
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_RESET_HOUSE ResetScope: {}", ResetScope);
+}
+
+WorldPacket const* HousingResetHouseResponse::Write()
+{
+    _worldPacket << uint32(Result);
+
+    TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_RESET_HOUSE_RESPONSE Result: {}", Result);
 
     return &_worldPacket;
 }

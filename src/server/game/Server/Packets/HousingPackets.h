@@ -301,6 +301,21 @@ namespace WorldPackets::Housing
         bool Field_49 = false;
     };
 
+    // CMSG_HOUSING_DECOR_SET_PET (0x320003) — bind a battle pet to a placed decor slot.
+    // Client wire (12.1.0.69497, writer @0x140724410): PackedGUID DecorGUID (+0x20) +
+    // PackedGUID PetGUID (+0x30) + uint8 Flag (+0x40). Empty PetGUID clears the binding.
+    class HousingDecorSetPet final : public ClientPacket
+    {
+    public:
+        explicit HousingDecorSetPet(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_DECOR_SET_PET, std::move(packet)) { }
+
+        void Read() override;
+
+        ObjectGuid DecorGuid;
+        ObjectGuid PetGuid;
+        uint8 Flag = 0;
+    };
+
     class HousingDecorSetDyeSlots final : public ClientPacket
     {
     public:
@@ -766,6 +781,32 @@ namespace WorldPackets::Housing
         ObjectGuid NeighborhoodGuid;
     };
 
+    // CMSG_HOUSING_SVCS_HOUSE_FINDER_IGNORE_NEIGHBORHOOD (0x350026) — hide a neighborhood
+    // from this player's house-finder suggestions.
+    // Client wire (12.1.0.69497, writer @0x140725950): PackedGUID NeighborhoodGuid (+0x20).
+    class HousingSvcsHouseFinderIgnoreNeighborhood final : public ClientPacket
+    {
+    public:
+        explicit HousingSvcsHouseFinderIgnoreNeighborhood(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_HOUSE_FINDER_IGNORE_NEIGHBORHOOD, std::move(packet)) { }
+
+        void Read() override;
+
+        ObjectGuid NeighborhoodGuid;
+    };
+
+    // SMSG_HOUSING_SVCS_IGNORE_NEIGHBORHOOD_INVITE_RESPONSE (0x580022) — ack for the ignore
+    // action; drives the client IGNORE_NEIGHBORHOOD_RESPONSE event { success, neighborhoodGuid }.
+    class HousingSvcsIgnoreNeighborhoodInviteResponse final : public ServerPacket
+    {
+    public:
+        HousingSvcsIgnoreNeighborhoodInviteResponse() : ServerPacket(SMSG_HOUSING_SVCS_IGNORE_NEIGHBORHOOD_INVITE_RESPONSE) { }
+
+        WorldPacket const* Write() override;
+
+        bool Success = false;
+        ObjectGuid NeighborhoodGuid;
+    };
+
     class HousingSvcsGetBnetFriendNeighborhoods final : public ClientPacket
     {
     public:
@@ -813,6 +854,19 @@ namespace WorldPackets::Housing
         explicit HousingResetKioskMode(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_RESET_KIOSK_MODE, std::move(packet)) { }
 
         void Read() override { }
+    };
+
+    // CMSG_HOUSING_RESET_HOUSE (0x370008) — wipe the house's placed decor for a scope.
+    // Client wire (12.1.0.69497, writer @0x1407260d0): uint8 ResetScope (+0x20).
+    // HousingHouseScope: 0=None, 1=Interior, 2=Exterior.
+    class HousingResetHouse final : public ClientPacket
+    {
+    public:
+        explicit HousingResetHouse(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_RESET_HOUSE, std::move(packet)) { }
+
+        void Read() override;
+
+        uint8 ResetScope = 0;
     };
 
     class HousingHouseStatus final : public ClientPacket
@@ -1762,6 +1816,16 @@ namespace WorldPackets::Housing
         HousingResetKioskModeResponse() : ServerPacket(SMSG_HOUSING_RESET_KIOSK_MODE_RESPONSE) { }
         WorldPacket const* Write() override;
         uint8 Result = 0;  // IDA 12.0 verified (0x550007): single uint8
+    };
+
+    // SMSG_HOUSING_RESET_HOUSE_RESPONSE (0x590006) — result of CMSG_HOUSING_RESET_HOUSE.
+    // Drives HOUSE_RESET_COMPLETED (Result==0) / HOUSE_RESET_FAILED { result } client events.
+    class HousingResetHouseResponse final : public ServerPacket
+    {
+    public:
+        HousingResetHouseResponse() : ServerPacket(SMSG_HOUSING_RESET_HOUSE_RESPONSE) { }
+        WorldPacket const* Write() override;
+        uint32 Result = 0;   // HousingResult (0 = success)
     };
 
     // Retired 2026-05-11: HousingEditorAvailabilityResponse deleted (fake opcode 0xF1000007).

@@ -17,6 +17,7 @@
 
 #include "WorldSession.h"
 #include "Account.h"
+#include "BattlePetMgr.h"
 #include "MovementPackets.h"
 #include "HousingNeighborhoodMirrorEntity.h"
 #include "HousingPlayerHouseEntity.h"
@@ -4304,6 +4305,11 @@ void WorldSession::HandleHousingSvcsGetHouseFinderInfo(WorldPackets::Housing::Ho
                 continue;
         }
 
+        // Ignore filter: skip neighborhoods the player hid via the house finder
+        // (CMSG_HOUSING_SVCS_HOUSE_FINDER_IGNORE_NEIGHBORHOOD).
+        if (sHousingMgr.IsNeighborhoodIgnored(player->GetGUID(), neighborhood->GetGuid()))
+            continue;
+
         WorldPackets::Housing::JamCliHouseFinderNeighborhood entry;
         entry.NeighborhoodGUID = neighborhood->GetGuid();
         entry.OwnerGUID = neighborhood->GetOwnerGuid();
@@ -4841,6 +4847,162 @@ void WorldSession::HandleHousingResetKioskMode(WorldPackets::Housing::HousingRes
 
     TC_LOG_INFO("housing", "CMSG_HOUSING_RESET_KIOSK_MODE processed for player {}",
         player->GetGUID().ToString());
+}
+
+// CMSG_HOUSING_RESET_HOUSE (0x370008) — wire: uint8 ResetScope (HousingHouseScope: 1=Interior, 2=Exterior).
+// Wipes all placed decor for the given scope, returns each item to the player's decor storage,
+// persists, despawns the visuals, and replies SMSG_HOUSING_RESET_HOUSE_RESPONSE { uint32 Result }
+// which drives the client HOUSE_RESET_COMPLETED (Result==0) / HOUSE_RESET_FAILED events.
+void WorldSession::HandleHousingResetHouse(WorldPackets::Housing::HousingResetHouse const& housingResetHouse)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    auto sendResult = [this](HousingResult r)
+    {
+        WorldPackets::Housing::HousingResetHouseResponse response;
+        response.Result = static_cast<uint32>(r);
+        SendPacket(response.Write());
+    };
+
+    Housing* housing = player->GetHousing();
+    if (!housing)
+    {
+        sendResult(HOUSING_RESULT_HOUSE_NOT_FOUND);
+        return;
+    }
+
+    // Only the house owner may reset it.
+    if (!PlayerCanEditHousing(player, housing))
+    {
+        sendResult(HOUSING_RESULT_NOT_ON_OWNED_PLOT);
+        return;
+    }
+
+    uint8 scope = housingResetHouse.ResetScope;
+    if (scope != 1 && scope != 2) // HousingHouseScope::Interior / ::Exterior
+    {
+        sendResult(HOUSING_RESULT_GENERIC_FAILURE);
+        return;
+    }
+
+    bool wantExterior = (scope == 2);
+    uint8 plotIndex = housing->GetPlotIndex();
+
+    // Snapshot the decor to be removed (guid + source info) before the model teardown,
+    // so we can despawn the visuals and return each item to storage afterwards.
+    struct RemovedDecor { ObjectGuid Guid; uint8 SourceType; std::string SourceValue; };
+    std::vector<RemovedDecor> removedList;
+    for (auto const& [guid, decor] : housing->GetPlacedDecorMap())
+        if (Housing::IsExteriorDecorPlacement(decor.RoomGuid) == wantExterior)
+            removedList.push_back({ guid, decor.SourceType, decor.SourceValue });
+
+    uint32 removed = 0;
+    HousingResult result = housing->ResetDecor(scope, &removed);
+
+    if (result == HOUSING_RESULT_SUCCESS)
+    {
+        HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap());
+        HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap());
+        Battlenet::Account& account = GetBattlenetAccount();
+        for (RemovedDecor const& rd : removedList)
+        {
+            if (housingMap)
+                housingMap->DespawnDecorItem(plotIndex, rd.Guid);
+            else if (interiorMap)
+                interiorMap->DespawnDecorItem(rd.Guid);
+            // Return the decor to storage (HouseGUID=Empty), matching the single-remove flow.
+            account.SetHousingDecorStorageEntry(rd.Guid, ObjectGuid::Empty, rd.SourceType, rd.SourceValue);
+        }
+        account.SendUpdateToPlayer(player);
+    }
+
+    sendResult(result);
+
+    TC_LOG_INFO("housing", "CMSG_HOUSING_RESET_HOUSE player={} scope={} removed={} result={}",
+        player->GetGUID().ToString(), uint32(scope), removed, uint32(result));
+}
+
+// CMSG_HOUSING_DECOR_SET_PET (0x320003) — wire: PackedGUID DecorGUID + PackedGUID PetGUID + uint8 Flag.
+// Binds (or, with an empty PetGUID, clears) a battle pet on a placed decor slot and persists it.
+// The client updates its local decor-instance info optimistically; there is no dedicated response
+// opcode in the 12.1 protocol (the DECOR response range 0x55xxxx has no SET_PET member), so the
+// server acknowledges by refreshing the owner's account decor storage entity.
+void WorldSession::HandleHousingDecorSetPet(WorldPackets::Housing::HousingDecorSetPet const& housingDecorSetPet)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    Housing* housing = player->GetHousing();
+    if (!housing)
+        return;
+
+    // Only the house owner may modify decor.
+    if (!PlayerCanEditHousing(player, housing))
+        return;
+
+    // The target decor instance must exist in this house.
+    if (!housing->GetPlacedDecor(housingDecorSetPet.DecorGuid))
+        return;
+
+    // When binding a pet (non-empty GUID), it must belong to this player's battle-pet journal.
+    ObjectGuid petGuid = housingDecorSetPet.PetGuid;
+    if (!petGuid.IsEmpty())
+    {
+        BattlePets::BattlePetMgr* petMgr = GetBattlePetMgr();
+        if (!petMgr || !petMgr->GetPet(petGuid))
+        {
+            TC_LOG_DEBUG("housing", "CMSG_HOUSING_DECOR_SET_PET: player {} tried to bind unowned pet {}",
+                player->GetGUID().ToString(), petGuid.ToString());
+            return;
+        }
+    }
+
+    HousingResult result = housing->SetDecorPet(housingDecorSetPet.DecorGuid, petGuid, housingDecorSetPet.Flag);
+    if (result == HOUSING_RESULT_SUCCESS)
+    {
+        // Refresh the owner's account decor storage so the client's decor-instance info
+        // (GetDecorAssignedPetName) reflects the new binding.
+        GetBattlenetAccount().SendUpdateToPlayer(player);
+    }
+
+    TC_LOG_INFO("housing", "CMSG_HOUSING_DECOR_SET_PET player={} decor={} pet={} flag={} result={}",
+        player->GetGUID().ToString(), housingDecorSetPet.DecorGuid.ToString(),
+        petGuid.ToString(), uint32(housingDecorSetPet.Flag), uint32(result));
+}
+
+// CMSG_HOUSING_SVCS_HOUSE_FINDER_IGNORE_NEIGHBORHOOD (0x350026) — wire: PackedGUID NeighborhoodGuid.
+// Records a per-player ignored neighborhood so the house finder excludes it, then replies
+// SMSG_HOUSING_SVCS_IGNORE_NEIGHBORHOOD_INVITE_RESPONSE { bool Success, PackedGUID NeighborhoodGuid },
+// which drives the client IGNORE_NEIGHBORHOOD_RESPONSE event.
+void WorldSession::HandleHousingSvcsHouseFinderIgnoreNeighborhood(WorldPackets::Housing::HousingSvcsHouseFinderIgnoreNeighborhood const& housingSvcsHouseFinderIgnoreNeighborhood)
+{
+    Player* player = GetPlayer();
+    if (!player)
+        return;
+
+    ObjectGuid neighborhoodGuid = housingSvcsHouseFinderIgnoreNeighborhood.NeighborhoodGuid;
+    bool success = false;
+    if (!neighborhoodGuid.IsEmpty())
+    {
+        // The client may send a bulletin-board GO GUID; resolve to the real neighborhood GUID
+        // so the stored ignore matches the finder's GetGuid() comparison.
+        if (Neighborhood* neighborhood = sNeighborhoodMgr.ResolveNeighborhood(neighborhoodGuid, player))
+            neighborhoodGuid = neighborhood->GetGuid();
+
+        sHousingMgr.AddIgnoredNeighborhood(player->GetGUID(), neighborhoodGuid);
+        success = true;
+    }
+
+    WorldPackets::Housing::HousingSvcsIgnoreNeighborhoodInviteResponse response;
+    response.Success = success;
+    response.NeighborhoodGuid = neighborhoodGuid;
+    SendPacket(response.Write());
+
+    TC_LOG_INFO("housing", "CMSG_HOUSING_SVCS_HOUSE_FINDER_IGNORE_NEIGHBORHOOD player={} neighborhood={} success={}",
+        player->GetGUID().ToString(), neighborhoodGuid.ToString(), success);
 }
 
 // ============================================================
@@ -5492,6 +5654,22 @@ void WorldSession::HandleHousingBlueprintRename(WorldPackets::Housing::HousingBl
     bool ok = sHousingBlueprintMgr.Rename(GetBattlenetAccountId(), packet.BlueprintId, packet.Name);
     response.Result = ok ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_GENERIC_FAILURE;
     SendPacket(response.Write());
+}
+
+// CMSG_HOUSING_BLUEPRINT_DELETE (0x310003) — delete a saved blueprint owned by the BNet account.
+// Client wire: u64 BlueprintId. Client listens for HousingBlueprintDeleteSuccess/Failure, driven
+// by SMSG_HOUSING_BLUEPRINT_DELETE_RESULT { u32 Result, u64 BlueprintId }.
+void WorldSession::HandleHousingBlueprintDelete(WorldPackets::Housing::HousingBlueprintDelete const& packet)
+{
+    WorldPackets::Housing::HousingBlueprintDeleteResult response;
+    response.BlueprintId = packet.BlueprintId;
+    // Ownership is implicit: the account can only delete blueprints in its own store.
+    bool ok = sHousingBlueprintMgr.Delete(GetBattlenetAccountId(), packet.BlueprintId);
+    response.Result = ok ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_GENERIC_FAILURE;
+    SendPacket(response.Write());
+
+    TC_LOG_INFO("housing", "CMSG_HOUSING_BLUEPRINT_DELETE account={} blueprintId={} result={}",
+        GetBattlenetAccountId(), packet.BlueprintId, uint32(response.Result));
 }
 
 void WorldSession::HandleHousingBlueprintImport(WorldPackets::Housing::HousingBlueprintImport const& packet)

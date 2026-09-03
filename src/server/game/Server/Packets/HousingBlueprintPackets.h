@@ -133,6 +133,17 @@ namespace WorldPackets::Housing
         std::string Name;
     };
 
+    // CMSG_HOUSING_BLUEPRINT_DELETE (0x310003) — delete a saved blueprint.
+    // Client wire (12.1.0.69497, writer @0x140728f10): uint64 BlueprintId (+0x20 deref).
+    class HousingBlueprintDelete final : public ClientPacket
+    {
+    public:
+        explicit HousingBlueprintDelete(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_BLUEPRINT_DELETE, std::move(packet)) { }
+        void Read() override;
+
+        uint64 BlueprintId = 0;
+    };
+
     // CMSG_HOUSING_BLUEPRINT_IMPORT 0x310005 — wire: bits<24> bits<1> u8 pguid u32 Blob [BIN]
     class HousingBlueprintImport final : public ClientPacket
     {

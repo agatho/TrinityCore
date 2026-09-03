@@ -650,6 +650,7 @@ namespace WorldPackets
         class HousingBlueprintExport;
         class HousingBlueprintExportRoom;
         class HousingBlueprintRename;
+        class HousingBlueprintDelete;
         class HousingBlueprintImport;
         class HouseExteriorCommitPosition;
         class HouseInteriorLeaveHouse;
@@ -658,6 +659,7 @@ namespace WorldPackets
         class HousingDecorMove;
         class HousingDecorRemove;
         class HousingDecorLock;
+        class HousingDecorSetPet;
         class HousingDecorSetDyeSlots;
         class HousingDecorDeleteFromStorage;
         class HousingDecorRequestStorage;
@@ -697,12 +699,14 @@ namespace WorldPackets
         class HousingSvcsGetPotentialHouseOwners;
         class HousingSvcsGetHouseFinderInfo;
         class HousingSvcsGetHouseFinderNeighborhood;
+        class HousingSvcsHouseFinderIgnoreNeighborhood;
         class HousingSvcsGetBnetFriendNeighborhoods;
         class HousingSvcsDeleteAllNeighborhoodInvites;
         class HousingHouseStatus;
         class HousingGetCurrentHouseInfo;
         class HousingGetPlayerPermissions;
         class HousingResetKioskMode;
+        class HousingResetHouse;
         class DeclineNeighborhoodInvites;
         class QueryNeighborhoodInfo;
         class InvitePlayerToNeighborhood;
@@ -1043,6 +1047,7 @@ namespace WorldPackets
         class HousingBlueprintExport;
         class HousingBlueprintExportRoom;
         class HousingBlueprintRename;
+        class HousingBlueprintDelete;
         class HousingBlueprintImport;
         class HouseExteriorCommitPosition;
         class HouseInteriorLeaveHouse;
@@ -1051,6 +1056,7 @@ namespace WorldPackets
         class HousingDecorMove;
         class HousingDecorRemove;
         class HousingDecorLock;
+        class HousingDecorSetPet;
         class HousingDecorSetDyeSlots;
         class HousingDecorDeleteFromStorage;
         class HousingDecorRequestStorage;
@@ -1090,12 +1096,14 @@ namespace WorldPackets
         class HousingSvcsGetPotentialHouseOwners;
         class HousingSvcsGetHouseFinderInfo;
         class HousingSvcsGetHouseFinderNeighborhood;
+        class HousingSvcsHouseFinderIgnoreNeighborhood;
         class HousingSvcsGetBnetFriendNeighborhoods;
         class HousingSvcsDeleteAllNeighborhoodInvites;
         class HousingHouseStatus;
         class HousingGetCurrentHouseInfo;
         class HousingGetPlayerPermissions;
         class HousingResetKioskMode;
+        class HousingResetHouse;
         class DeclineNeighborhoodInvites;
         class QueryNeighborhoodInfo;
         class InvitePlayerToNeighborhood;
@@ -2465,6 +2473,7 @@ class TC_GAME_API WorldSession
         void HandleHousingDecorMove(WorldPackets::Housing::HousingDecorMove const& housingDecorMove);
         void HandleHousingDecorRemove(WorldPackets::Housing::HousingDecorRemove const& housingDecorRemove);
         void HandleHousingDecorLock(WorldPackets::Housing::HousingDecorLock const& housingDecorLock);
+        void HandleHousingDecorSetPet(WorldPackets::Housing::HousingDecorSetPet const& housingDecorSetPet);
         void HandleHousingDecorSetDyeSlots(WorldPackets::Housing::HousingDecorSetDyeSlots const& housingDecorSetDyeSlots);
         void HandleHousingDecorDeleteFromStorage(WorldPackets::Housing::HousingDecorDeleteFromStorage const& housingDecorDeleteFromStorage);
         // Retired 2026-05-12: HandleHousingDecorDeleteFromStorageById (fake CMSG 0x30000A).
@@ -2481,6 +2490,7 @@ class TC_GAME_API WorldSession
         void HandleHousingBlueprintExport(WorldPackets::Housing::HousingBlueprintExport const& packet);
         void HandleHousingBlueprintExportRoom(WorldPackets::Housing::HousingBlueprintExportRoom const& packet);
         void HandleHousingBlueprintRename(WorldPackets::Housing::HousingBlueprintRename const& packet);
+        void HandleHousingBlueprintDelete(WorldPackets::Housing::HousingBlueprintDelete const& packet);
         void HandleHousingBlueprintImport(WorldPackets::Housing::HousingBlueprintImport const& packet);
 
         // Housing - Fixture System
@@ -2527,6 +2537,7 @@ class TC_GAME_API WorldSession
         void HandleHousingSvcsGetPotentialHouseOwners(WorldPackets::Housing::HousingSvcsGetPotentialHouseOwners const& housingSvcsGetPotentialHouseOwners);
         void HandleHousingSvcsGetHouseFinderInfo(WorldPackets::Housing::HousingSvcsGetHouseFinderInfo const& housingSvcsGetHouseFinderInfo);
         void HandleHousingSvcsGetHouseFinderNeighborhood(WorldPackets::Housing::HousingSvcsGetHouseFinderNeighborhood const& housingSvcsGetHouseFinderNeighborhood);
+        void HandleHousingSvcsHouseFinderIgnoreNeighborhood(WorldPackets::Housing::HousingSvcsHouseFinderIgnoreNeighborhood const& housingSvcsHouseFinderIgnoreNeighborhood);
         void HandleHousingSvcsGetBnetFriendNeighborhoods(WorldPackets::Housing::HousingSvcsGetBnetFriendNeighborhoods const& housingSvcsGetBnetFriendNeighborhoods);
         void HandleHousingSvcsDeleteAllNeighborhoodInvites(WorldPackets::Housing::HousingSvcsDeleteAllNeighborhoodInvites const& housingSvcsDeleteAllNeighborhoodInvites);
 
@@ -2546,6 +2557,7 @@ class TC_GAME_API WorldSession
         void HandleHousingGetCurrentHouseInfo(WorldPackets::Housing::HousingGetCurrentHouseInfo const& housingGetCurrentHouseInfo);
         void HandleHousingGetPlayerPermissions(WorldPackets::Housing::HousingGetPlayerPermissions const& housingGetPlayerPermissions);
         void HandleHousingResetKioskMode(WorldPackets::Housing::HousingResetKioskMode const& housingResetKioskMode);
+        void HandleHousingResetHouse(WorldPackets::Housing::HousingResetHouse const& housingResetHouse);
 
         // Phase 7 Housing Decor handlers
         // Retired 2026-05-12: HandleHousingDecorUpdateDyeSlot (fake CMSG 0x300008, dup of SET_DYE_SLOTS).

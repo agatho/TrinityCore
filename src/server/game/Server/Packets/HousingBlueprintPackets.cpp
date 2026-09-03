@@ -97,6 +97,11 @@ void HousingBlueprintRename::Read()
     _worldPacket >> SizedString::Data(Name);
 }
 
+void HousingBlueprintDelete::Read()
+{
+    _worldPacket >> BlueprintId;
+}
+
 void HousingBlueprintImport::Read()
 {
     // wire: bits<24> bits<1> u8 pguid u32 Blob  (spec §4)
