@@ -1,0 +1,84 @@
+-- ========================================================================================
+-- CONTENT SLICE -- Waking Shores (map 2444) :: spawn reconcile across 7 captures
+-- ========================================================================================
+-- Generated 2026-09-04 by TCHarvest tools/author_chain_slice.py
+-- Sources: dfws_1_proj: dump_12.1.0.69587_2026-09-03_21-10-11.pkt + TCHarvest.lua + combat log; ws_1_proj; ws_2_proj; ws_3_proj; ws_4_proj; ws_5_proj; ws_6_proj
+--
+-- tools/zone_census_report.py --reconcile: union by entry+position (3yd), diffed against the realm
+-- (4yd, claimed matching). Wanderers reconciled by population, never by position. Entries seen in
+-- one capture only are HELD (listed in the ledger below), never deleted, never emitted.
+-- ========================================================================================
+
+-- CANDIDATE spawns: present in the capture union, absent from the realm.
+-- spawntimesecs: 0 measured, 0 from realm siblings, 3 fallback (300s). Per-row provenance below.
+-- No respawn cadence was confidently measured. That is the expected result on a walk-through
+-- capture: a create block fires on VISIBILITY, not on spawn -- see synth/timing.py for the numbers.
+-- 105 row(s) from WANDERING entries were skipped: a roaming creature is captured
+-- wherever it stood, so its coordinates are not placement data. Reconcile those by count.
+-- Provenance is on every row. No DELETEs are generated: a realm spawn the captures
+-- never saw is a coverage question, not a defect.
+DELETE FROM `creature` WHERE `guid` BETWEEN 8200000 AND 8200002;
+INSERT INTO `creature` (`guid`,`id`,`map`,`PhaseId`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`MovementType`) VALUES
+ (8200000, 198191, 2444, 0, 3554.8264, -1181.3334, 211.1241, 3.6811, 300, 0),  -- sources=dfws_1_proj phase=DEFAULT (no neighbour) spawntime=300s FALLBACK -- no measured cadence and no realm sibling to inherit from
+ (8200001, 198191, 2444, 0, 1435.9757, -368.7465, 384.2386, 4.0196, 300, 0),  -- sources=ws_4_proj phase=DEFAULT (no neighbour) spawntime=300s FALLBACK -- no measured cadence and no realm sibling to inherit from
+ (8200002, 198191, 2444, 0, 1800.2101, 1323.6354, 184.2876, 1.3923, 300, 0);  -- sources=ws_5_proj+ws_6_proj phase=DEFAULT (no neighbour) spawntime=300s FALLBACK -- no measured cadence and no realm sibling to inherit from
+
+-- ledger (tools/zone_census_report.py artifacts.txt):
+-- TCHarvest capture-ARTIFACT + REVIEW ledger
+-- ==========================================
+-- map=2444 table=creature captures=7
+-- 
+-- rule 1  every entry a player SUMMONED in any capture is a capture artifact, never a
+--         world spawn. Source: the combat log's SPELL_SUMMON events, via each capture's
+--         summoned_entries.txt roster. Class-agnostic -- a Hunter's pet, a Shaman's
+--         totem and a Warlock's imp all arrive the same way.
+-- rule 2  an entry must be seen in 2 capture(s) or more to be emitted. Entries seen in
+--         exactly one capture are HELD FOR REVIEW and NEVER deleted: measured on four
+--         Arathi captures, the 2+ bucket was 100% real content, but the single-capture
+--         bucket holds real content too (Stuck Ogre, Cindy Springstock, the Fightbot).
+-- manual  --exclude-entries ADDS to rule 1. It is never the only mechanism.
+-- 
+-- candidate entries: 27 | emitted: 1 | excluded as artifacts: 0 | held for review: 26
+-- 
+-- EXCLUDED -- capture artifacts, never emitted (0)
+--   (none)
+-- 
+-- HELD FOR REVIEW -- one capture only, withheld from the SQL but NOT deleted (26)
+--   entry 59262    Demonic Gateway                  seen in only 1 capture (ws_1_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 59271    Demonic Gateway                  seen in only 1 capture (ws_1_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 186634   Blacktalon Assassin              seen in only 1 capture (ws_6_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 186716   Molten Extracts                  seen in only 1 capture (ws_6_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 186721   Destroyed Extracts               seen in only 1 capture (ws_6_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 186732   Djaradin Banner                  seen in only 1 capture (ws_6_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 187085   Galestrike Primalist             seen in only 1 capture (ws_5_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 187229   Cataloger Coralie                seen in only 1 capture (ws_1_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 187234   Pathfinder Tacha                 seen in only 1 capture (ws_1_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 188434   Restraints                       seen in only 1 capture (ws_6_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 188695   Tracker                          seen in only 1 capture (ws_4_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 190013   Ruby Dragon Egg                  seen in only 1 capture (ws_3_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 190298   Tracker Two                      seen in only 1 capture (ws_4_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 191475   Amella                           seen in only 1 capture (ws_1_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 191975   Rocan the Mountain               seen in only 1 capture (ws_3_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 192054   Bottled Water Elemental          seen in only 1 capture (ws_3_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 192371   Qalashi Dusttwister              seen in only 1 capture (ws_6_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 193363   Sendrax                          seen in only 1 capture (ws_1_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 194195   Lifeshrine Door                  seen in only 1 capture (ws_4_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 196583   Bronze Timekeeper                seen in only 1 capture (ws_4_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 197239   Masseuse                         seen in only 1 capture (dfws_1_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 197950   Steelcliff Ohuna                 seen in only 1 capture (dfws_1_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 198910   Invis Bunny, location targeting  seen in only 1 capture (dfws_1_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 199689   Arrow                            seen in only 1 capture (ws_4_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 202415   Invisible Bunny - Cave Entrance  seen in only 1 capture (ws_1_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+--   entry 207098   [DNT] Hook Stalker               seen in only 1 capture (dfws_1_proj) -- HELD FOR REVIEW, not deleted: this bucket also holds real content only one run happened to see
+-- 
+-- EMITTED -- corroborated content (1)
+--   entry 198191   Bronze Timekeeper Assistant      corroborated by 4 captures (dfws_1_proj, ws_4_proj, ws_5_proj, ws_6_proj)
+-- 
+-- combat-log summon rosters read:
+--   ws_1_proj                no combat-log roster found -- this capture's own summons could NOT be excluded by rule 1
+--   ws_2_proj                no combat-log roster found -- this capture's own summons could NOT be excluded by rule 1
+--   ws_3_proj                no combat-log roster found -- this capture's own summons could NOT be excluded by rule 1
+--   ws_4_proj                no combat-log roster found -- this capture's own summons could NOT be excluded by rule 1
+--   ws_5_proj                no combat-log roster found -- this capture's own summons could NOT be excluded by rule 1
+--   ws_6_proj                2      entries  out\ws_6_proj\zone_2444\combatlog_summoned_entries.txt
+--   dfws_1_proj              5      entries  out\dfws_1_proj\zone_2444\combatlog_summoned_entries.txt

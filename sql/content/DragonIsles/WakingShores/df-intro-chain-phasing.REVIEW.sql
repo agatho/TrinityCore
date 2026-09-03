@@ -1,0 +1,241 @@
+-- ========================================================================================
+-- CONTENT SLICE -- Waking Shores (map 2444) :: Dragonflight intro chain -- PHASE GRAPH (REVIEW)
+-- ========================================================================================
+-- Generated 2026-09-04 by TCHarvest tools/author_chain_slice.py
+-- Sources: dfws_1_proj: dump_12.1.0.69587_2026-09-03_21-10-11.pkt + TCHarvest.lua + combat log; ws_1_proj; ws_2_proj; ws_3_proj; ws_4_proj; ws_5_proj; ws_6_proj
+--
+-- ALL ROWS COMMENTED. SMSG_PHASE_SHIFT_CHANGE gives the player's phase set per tick; a phase
+-- renders in TC only through phase_area(AreaId, PhaseId) + a loadable condition (SourceEntry = AreaId).
+-- AreaId here is INFERRED: the player's addon-sampled position nearest to the push tick, mapped to
+-- the areaId of the closest realm spawn. Conditions are proposed from the quest event nearest to
+-- the push (accept -> QUESTTAKEN 9, reward -> QUESTREWARDED 8, complete -> QUESTSTATE 47 mask 2).
+-- NOTE: none of the captured phase ids exist on the realm (phase_area, creature, gameobject) -- the
+-- TDB phases this zone with a different id set. Reconciling the two is a human decision.
+-- ========================================================================================
+
+
+-- ----------------------------------------------------------------------------------------
+-- phase pushes after arriving on the map (login/arrival baseline sets listed first)
+-- ----------------------------------------------------------------------------------------
+-- tick 444005: BASELINE set of 28 phases pushed (login / map arrival): [1139, 1231, 1706, 4064, 4070, 6483, 6690, 7434, 7510, 7645, 8389, 8658, 10368, 14750, 16013, 19122, 19123, 19125, 19168, 19258, 20045, 21820, 21855, 22154, 23766, 24825, 27177, 27732]
+-- tick 695880: phase 14750 REMOVED -- nearest quest event: reward 65436 at tick 695802 (+0.1s); was active since tick 444005 (252s)
+-- tick 810167: phase 19121 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 810167: phase 19133 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 810167: phase 19821 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 810167: phase 19125 REMOVED -- no quest event within 5s; was active since tick 444005 (366s)
+-- tick 815598: phase 19268 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 815598: phase 19820 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 815598: phase 24300 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 824888: phase 7645 REMOVED -- no quest event within 5s; was active since tick 444005 (381s)
+-- tick 824888: phase 24300 REMOVED -- no quest event within 5s; was active since tick 815598 (9s)
+-- tick 878242: phase 11827 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 878242: phase 19119 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 897174: phase 19122 REMOVED -- no quest event within 5s; was active since tick 444005 (453s)
+-- tick 938192: phase 19123 REMOVED -- no quest event within 5s; was active since tick 444005 (494s)
+-- tick 966416: phase 19176 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 966416: phase 19121 REMOVED -- no quest event within 5s; was active since tick 810167 (156s)
+-- tick 1026796: phase 19822 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1026796: phase 19825 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1026796: phase 19168 REMOVED -- no quest event within 5s; was active since tick 444005 (583s)
+-- tick 1026796: phase 19258 REMOVED -- no quest event within 5s; was active since tick 444005 (583s)
+-- tick 1026796: phase 19820 REMOVED -- no quest event within 5s; was active since tick 815598 (211s)
+-- tick 1092817: phase 19133 REMOVED -- nearest quest event: reward 66589 at tick 1092828 (-0.0s); was active since tick 810167 (283s)
+-- tick 1093569: phase 19142 ADDED (1 flags) -- nearest quest event: reward 72240 at tick 1093587 (-0.0s); no addon position sample within 90s -> AreaId unknown
+-- tick 1093569: phase 19329 ADDED (1 flags) -- nearest quest event: reward 72240 at tick 1093587 (-0.0s); no addon position sample within 90s -> AreaId unknown
+-- tick 1093569: phase 19268 REMOVED -- nearest quest event: reward 72240 at tick 1093587 (-0.0s); was active since tick 815598 (278s)
+-- tick 1393649: phase 19137 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1393649: phase 19329 REMOVED -- no quest event within 5s; was active since tick 1093569 (300s)
+-- tick 1454186: phase 19189 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1454186: phase 19176 REMOVED -- no quest event within 5s; was active since tick 966416 (488s)
+-- tick 1454186: phase 19821 REMOVED -- no quest event within 5s; was active since tick 810167 (644s)
+-- tick 1454186: phase 19822 REMOVED -- no quest event within 5s; was active since tick 1026796 (427s)
+-- tick 1561438: BASELINE set of 53 phases pushed (login / map arrival): [16976, 17554, 18075, 18320, 18373, 18866, 18877, 19064, 19215, 19296, 19300, 19318, 19459, 19462, 19552, 19557, 19565, 19596, 19640, 19752, 19774, 19776, 19777, 19778, 19779, 19780, 19781, 19782, 19783, 19784, 19823, 19846, 19847, 19848, 19849, 19850, 19851, 19852, 19853, 19854] ...
+-- tick 1630631: phase 18449 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1630631: phase 18450 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1630631: phase 18451 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1630631: phase 19120 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1630631: phase 19129 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1658567: phase 19188 ADDED (1 flags) -- no quest event within 5s; player ~(3745,-1910) via gossip npc 196091 2s away -> nearest realm spawn 197899 in area 13722 (9yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13722, 19188, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 1658567: phase 19364 ADDED (1 flags) -- no quest event within 5s; player ~(3745,-1910) via gossip npc 196091 2s away -> nearest realm spawn 197899 in area 13722 (9yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13722, 19364, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 1658567: phase 19189 REMOVED -- no quest event within 5s; was active since tick 1454186 (204s)
+-- tick 1692459: phase 18390 ADDED (1 flags) -- nearest quest event: reward 67700 at tick 1692474 (-0.0s); no addon position sample within 90s -> AreaId unknown
+-- tick 1694591: phase 19190 ADDED (1 flags) -- nearest quest event: reward 67700 at tick 1692474 (+2.1s); no addon position sample within 90s -> AreaId unknown
+-- tick 1694591: phase 19191 ADDED (1 flags) -- nearest quest event: reward 67700 at tick 1692474 (+2.1s); no addon position sample within 90s -> AreaId unknown
+-- tick 1694591: phase 19192 ADDED (1 flags) -- nearest quest event: reward 67700 at tick 1692474 (+2.1s); no addon position sample within 90s -> AreaId unknown
+-- tick 1710132: phase 18393 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1710132: phase 19126 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1710132: phase 19950 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1710132: phase 19188 REMOVED -- no quest event within 5s; was active since tick 1658567 (52s)
+-- tick 1718037: phase 19364 REMOVED -- no quest event within 5s; was active since tick 1658567 (59s)
+-- tick 2018568: phase 19364 ADDED (1 flags) -- no quest event within 5s; player ~(3678,-1834) via gossip npc 187412 22s away -> nearest realm spawn 187412 in area 13722 (2yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13722, 19364, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 2077825: phase 19364 REMOVED -- no quest event within 5s; was active since tick 1658567 (419s)
+-- tick 2170232: phase 19194 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 2170232: phase 19191 REMOVED -- no quest event within 5s; was active since tick 1694591 (476s)
+-- tick 2325731: phase 19193 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 2325731: phase 19192 REMOVED -- no quest event within 5s; was active since tick 1694591 (631s)
+-- tick 2450201: phase 19195 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 2450201: phase 19190 REMOVED -- no quest event within 5s; was active since tick 1694591 (756s)
+-- tick 2617621: phase 18997 ADDED (1 flags) -- no quest event within 5s; player ~(3592,-1499) via zone change 'Wingrest Embassy' 3s away -> nearest realm spawn 187125 in area 13722 (7yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13722, 18997, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 2617621: phase 18390 REMOVED -- no quest event within 5s; was active since tick 1692459 (925s)
+-- tick 2705283: phase 19154 ADDED (1 flags) -- nearest quest event: accept 69911 at tick 2705283 (+0.0s); player ~(3582,-1460) via gossip npc 193362 2s away -> nearest realm spawn 193362 in area 13722 (5yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13722, 19154, 'INFERRED dfws_1_proj: pushed +0.0s after accept of quest 69911');
+-- INSERT INTO `conditions` (`SourceTypeOrReferenceId`, `SourceGroup`, `SourceEntry`, `ConditionTypeOrReference`, `ConditionValue1`, `ConditionValue2`, `Comment`) VALUES (26, 19154, 13722, 9, 69911, 0, 'INFERRED: phase 19154 in area 13722 while quest 69911 accepted');
+-- tick 3143004: phase 19120 REMOVED -- no quest event within 5s; was active since tick 1630631 (1512s)
+-- tick 3217930: phase 19120 ADDED (1 flags) -- no quest event within 5s; player ~(3592,-1400) via gossip npc 187257 11s away -> nearest realm spawn 187257 in area 13722 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13722, 19120, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 3544881: phase 18997 REMOVED -- no quest event within 5s; was active since tick 2617621 (927s)
+-- tick 3589802: phase 18997 ADDED (1 flags) -- no quest event within 5s; player ~(3593,-1473) via zone change 'Wingrest Embassy' 1s away -> nearest realm spawn 187062 in area 13722 (12yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13722, 18997, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 3589802: phase 19154 REMOVED -- no quest event within 5s; was active since tick 2705283 (885s)
+-- tick 3647450: phase 19077 ADDED (1 flags) -- no quest event within 5s; player ~(3584,-1459) via gossip npc 193362 40s away -> nearest realm spawn 193362 in area 13722 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13722, 19077, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 3647450: phase 19127 ADDED (1 flags) -- no quest event within 5s; player ~(3584,-1459) via gossip npc 193362 40s away -> nearest realm spawn 193362 in area 13722 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13722, 19127, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 3647450: phase 19170 ADDED (1 flags) -- no quest event within 5s; player ~(3584,-1459) via gossip npc 193362 40s away -> nearest realm spawn 193362 in area 13722 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13722, 19170, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 3647450: phase 19126 REMOVED -- no quest event within 5s; was active since tick 1710132 (1937s)
+-- tick 3647450: phase 19129 REMOVED -- no quest event within 5s; was active since tick 1630631 (2017s)
+-- tick 3693124: phase 19076 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 3693124: phase 19170 REMOVED -- no quest event within 5s; was active since tick 3647450 (46s)
+-- tick 3777123: phase 19076 REMOVED -- no quest event within 5s; was active since tick 3693124 (84s)
+-- tick 3786644: phase 19186 ADDED (1 flags) -- nearest quest event: reward 69914 at tick 3782569 (+4.1s); no addon position sample within 90s -> AreaId unknown
+-- tick 3786644: phase 19297 ADDED (1 flags) -- nearest quest event: reward 69914 at tick 3782569 (+4.1s); no addon position sample within 90s -> AreaId unknown
+-- tick 3786644: phase 19127 REMOVED -- nearest quest event: reward 69914 at tick 3782569 (+4.1s); was active since tick 3647450 (139s)
+-- tick 3934962: phase 18393 REMOVED -- no quest event within 5s; was active since tick 1710132 (2225s)
+-- tick 3934962: phase 18449 REMOVED -- no quest event within 5s; was active since tick 1630631 (2304s)
+-- tick 3934962: phase 18450 REMOVED -- no quest event within 5s; was active since tick 1630631 (2304s)
+-- tick 3934962: phase 18451 REMOVED -- no quest event within 5s; was active since tick 1630631 (2304s)
+-- tick 3934962: phase 18997 REMOVED -- no quest event within 5s; was active since tick 2617621 (1317s)
+-- tick 3934962: phase 19077 REMOVED -- no quest event within 5s; was active since tick 3647450 (288s)
+-- tick 3934962: phase 19120 REMOVED -- no quest event within 5s; was active since tick 1630631 (2304s)
+-- tick 3934962: phase 19186 REMOVED -- no quest event within 5s; was active since tick 3786644 (148s)
+-- tick 3934962: phase 19193 REMOVED -- no quest event within 5s; was active since tick 2325731 (1609s)
+-- tick 3934962: phase 19194 REMOVED -- no quest event within 5s; was active since tick 2170232 (1765s)
+-- tick 3934962: phase 19195 REMOVED -- no quest event within 5s; was active since tick 2450201 (1485s)
+-- tick 3934962: phase 19950 REMOVED -- no quest event within 5s; was active since tick 1710132 (2225s)
+-- tick 4070443: phase 18393 ADDED (1 flags) -- no quest event within 5s; player ~(3420,-1378) via zone change 'Wingrest Embassy' 2s away -> nearest realm spawn 187321 in area 13939 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 18393, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4070443: phase 18449 ADDED (1 flags) -- no quest event within 5s; player ~(3420,-1378) via zone change 'Wingrest Embassy' 2s away -> nearest realm spawn 187321 in area 13939 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 18449, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4070443: phase 18450 ADDED (1 flags) -- no quest event within 5s; player ~(3420,-1378) via zone change 'Wingrest Embassy' 2s away -> nearest realm spawn 187321 in area 13939 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 18450, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4070443: phase 18451 ADDED (1 flags) -- no quest event within 5s; player ~(3420,-1378) via zone change 'Wingrest Embassy' 2s away -> nearest realm spawn 187321 in area 13939 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 18451, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4070443: phase 18997 ADDED (1 flags) -- no quest event within 5s; player ~(3420,-1378) via zone change 'Wingrest Embassy' 2s away -> nearest realm spawn 187321 in area 13939 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 18997, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4070443: phase 19077 ADDED (1 flags) -- no quest event within 5s; player ~(3420,-1378) via zone change 'Wingrest Embassy' 2s away -> nearest realm spawn 187321 in area 13939 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19077, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4070443: phase 19120 ADDED (1 flags) -- no quest event within 5s; player ~(3420,-1378) via zone change 'Wingrest Embassy' 2s away -> nearest realm spawn 187321 in area 13939 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19120, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4070443: phase 19186 ADDED (1 flags) -- no quest event within 5s; player ~(3420,-1378) via zone change 'Wingrest Embassy' 2s away -> nearest realm spawn 187321 in area 13939 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19186, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4070443: phase 19193 ADDED (1 flags) -- no quest event within 5s; player ~(3420,-1378) via zone change 'Wingrest Embassy' 2s away -> nearest realm spawn 187321 in area 13939 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19193, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4070443: phase 19194 ADDED (1 flags) -- no quest event within 5s; player ~(3420,-1378) via zone change 'Wingrest Embassy' 2s away -> nearest realm spawn 187321 in area 13939 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19194, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4070443: phase 19195 ADDED (1 flags) -- no quest event within 5s; player ~(3420,-1378) via zone change 'Wingrest Embassy' 2s away -> nearest realm spawn 187321 in area 13939 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19195, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4070443: phase 19950 ADDED (1 flags) -- no quest event within 5s; player ~(3420,-1378) via zone change 'Wingrest Embassy' 2s away -> nearest realm spawn 187321 in area 13939 (4yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19950, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4232220: phase 18393 REMOVED -- no quest event within 5s; was active since tick 1710132 (2522s)
+-- tick 4232220: phase 18449 REMOVED -- no quest event within 5s; was active since tick 1630631 (2602s)
+-- tick 4232220: phase 18450 REMOVED -- no quest event within 5s; was active since tick 1630631 (2602s)
+-- tick 4232220: phase 18451 REMOVED -- no quest event within 5s; was active since tick 1630631 (2602s)
+-- tick 4232220: phase 18997 REMOVED -- no quest event within 5s; was active since tick 2617621 (1615s)
+-- tick 4232220: phase 19077 REMOVED -- no quest event within 5s; was active since tick 3647450 (585s)
+-- tick 4232220: phase 19120 REMOVED -- no quest event within 5s; was active since tick 1630631 (2602s)
+-- tick 4232220: phase 19186 REMOVED -- no quest event within 5s; was active since tick 3786644 (446s)
+-- tick 4232220: phase 19193 REMOVED -- no quest event within 5s; was active since tick 2325731 (1906s)
+-- tick 4232220: phase 19194 REMOVED -- no quest event within 5s; was active since tick 2170232 (2062s)
+-- tick 4232220: phase 19195 REMOVED -- no quest event within 5s; was active since tick 2450201 (1782s)
+-- tick 4232220: phase 19950 REMOVED -- no quest event within 5s; was active since tick 1710132 (2522s)
+-- tick 4368663: phase 18393 ADDED (1 flags) -- no quest event within 5s; player ~(3427,-1386) via zone change 'Wingrest Embassy' 0s away -> nearest realm spawn 187321 in area 13939 (6yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 18393, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4368663: phase 18449 ADDED (1 flags) -- no quest event within 5s; player ~(3427,-1386) via zone change 'Wingrest Embassy' 0s away -> nearest realm spawn 187321 in area 13939 (6yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 18449, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4368663: phase 18450 ADDED (1 flags) -- no quest event within 5s; player ~(3427,-1386) via zone change 'Wingrest Embassy' 0s away -> nearest realm spawn 187321 in area 13939 (6yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 18450, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4368663: phase 18451 ADDED (1 flags) -- no quest event within 5s; player ~(3427,-1386) via zone change 'Wingrest Embassy' 0s away -> nearest realm spawn 187321 in area 13939 (6yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 18451, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4368663: phase 18997 ADDED (1 flags) -- no quest event within 5s; player ~(3427,-1386) via zone change 'Wingrest Embassy' 0s away -> nearest realm spawn 187321 in area 13939 (6yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 18997, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4368663: phase 19077 ADDED (1 flags) -- no quest event within 5s; player ~(3427,-1386) via zone change 'Wingrest Embassy' 0s away -> nearest realm spawn 187321 in area 13939 (6yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19077, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4368663: phase 19120 ADDED (1 flags) -- no quest event within 5s; player ~(3427,-1386) via zone change 'Wingrest Embassy' 0s away -> nearest realm spawn 187321 in area 13939 (6yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19120, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4368663: phase 19186 ADDED (1 flags) -- no quest event within 5s; player ~(3427,-1386) via zone change 'Wingrest Embassy' 0s away -> nearest realm spawn 187321 in area 13939 (6yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19186, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4368663: phase 19193 ADDED (1 flags) -- no quest event within 5s; player ~(3427,-1386) via zone change 'Wingrest Embassy' 0s away -> nearest realm spawn 187321 in area 13939 (6yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19193, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4368663: phase 19194 ADDED (1 flags) -- no quest event within 5s; player ~(3427,-1386) via zone change 'Wingrest Embassy' 0s away -> nearest realm spawn 187321 in area 13939 (6yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19194, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4368663: phase 19195 ADDED (1 flags) -- no quest event within 5s; player ~(3427,-1386) via zone change 'Wingrest Embassy' 0s away -> nearest realm spawn 187321 in area 13939 (6yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19195, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4368663: phase 19950 ADDED (1 flags) -- no quest event within 5s; player ~(3427,-1386) via zone change 'Wingrest Embassy' 0s away -> nearest realm spawn 187321 in area 13939 (6yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13939, 19950, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 4529736: phase 19852 REMOVED -- no quest event within 5s; was active since tick 1561438 (2968s)
+-- tick 4657499: phase 18393 REMOVED -- no quest event within 5s; was active since tick 1710132 (2947s)
+-- tick 4657499: phase 18449 REMOVED -- no quest event within 5s; was active since tick 1630631 (3027s)
+-- tick 4657499: phase 18450 REMOVED -- no quest event within 5s; was active since tick 1630631 (3027s)
+-- tick 4657499: phase 18451 REMOVED -- no quest event within 5s; was active since tick 1630631 (3027s)
+-- tick 4657499: phase 18997 REMOVED -- no quest event within 5s; was active since tick 2617621 (2040s)
+-- tick 4657499: phase 19077 REMOVED -- no quest event within 5s; was active since tick 3647450 (1010s)
+-- tick 4657499: phase 19120 REMOVED -- no quest event within 5s; was active since tick 1630631 (3027s)
+-- tick 4657499: phase 19186 REMOVED -- no quest event within 5s; was active since tick 3786644 (871s)
+-- tick 4657499: phase 19193 REMOVED -- no quest event within 5s; was active since tick 2325731 (2332s)
+-- tick 4657499: phase 19194 REMOVED -- no quest event within 5s; was active since tick 2170232 (2487s)
+-- tick 4657499: phase 19195 REMOVED -- no quest event within 5s; was active since tick 2450201 (2207s)
+-- tick 4657499: phase 19950 REMOVED -- no quest event within 5s; was active since tick 1710132 (2947s)
+-- tick 4661113: phase 18876 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 4661113: phase 19187 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 4667908: phase 18237 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 4667908: phase 18427 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 4673231: phase 18237 REMOVED -- nearest quest event: reward 65760 at tick 4677559 (-4.3s); was active since tick 4667908 (5s)
+-- tick 4673231: phase 18427 REMOVED -- nearest quest event: reward 65760 at tick 4677559 (-4.3s); was active since tick 4667908 (5s)
+-- tick 4677543: phase 19214 ADDED (1 flags) -- nearest quest event: reward 65760 at tick 4677559 (-0.0s); no addon position sample within 90s -> AreaId unknown
+-- tick 4677543: phase 19187 REMOVED -- nearest quest event: reward 65760 at tick 4677559 (-0.0s); was active since tick 4661113 (16s)
+-- tick 4866614: phase 19396 ADDED (1 flags) -- nearest quest event: progress 65990 at tick 4866614 (+0.0s); no addon position sample within 90s -> AreaId unknown
+-- tick 4914234: phase 19214 REMOVED -- nearest quest event: accept 65991 at tick 4914234 (+0.0s); was active since tick 4677543 (237s)
+-- tick 4914234: phase 19215 REMOVED -- nearest quest event: accept 65991 at tick 4914234 (+0.0s); was active since tick 1561438 (3353s)
+-- tick 4914234: phase 19396 REMOVED -- nearest quest event: accept 65991 at tick 4914234 (+0.0s); was active since tick 4866614 (48s)
+-- tick 4948600: phase 19297 REMOVED -- nearest quest event: complete 65991 at tick 4948600 (+0.0s); was active since tick 3786644 (1162s)
+-- tick 5002184: phase 18237 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 5002184: phase 18427 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 5304347: phase 18428 ADDED (1 flags) -- nearest quest event: progress 66107 at tick 5304347 (+0.0s); no addon position sample within 90s -> AreaId unknown
+-- tick 5304347: phase 18427 REMOVED -- nearest quest event: progress 66107 at tick 5304347 (+0.0s); was active since tick 4667908 (636s)
+-- tick 5691224: phase 18373 REMOVED -- no quest event within 5s; was active since tick 1561438 (4130s)
+-- tick 5722026: phase 18374 ADDED (1 flags) -- nearest quest event: reward 66196 at tick 5721949 (+0.1s); player ~(3134,-1288) via gossip npc 186428 3s away -> nearest realm spawn 186410 in area 13703 (5yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13703, 18374, 'INFERRED dfws_1_proj: pushed +0.1s after reward of quest 66196');
+-- INSERT INTO `conditions` (`SourceTypeOrReferenceId`, `SourceGroup`, `SourceEntry`, `ConditionTypeOrReference`, `ConditionValue1`, `ConditionValue2`, `Comment`) VALUES (26, 18374, 13703, 8, 66196, 0, 'INFERRED: phase 18374 in area 13703 while quest 66196 rewarded');
+-- tick 5722026: phase 19614 ADDED (1 flags) -- nearest quest event: reward 66196 at tick 5721949 (+0.1s); player ~(3134,-1288) via gossip npc 186428 3s away -> nearest realm spawn 186410 in area 13703 (5yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13703, 19614, 'INFERRED dfws_1_proj: pushed +0.1s after reward of quest 66196');
+-- INSERT INTO `conditions` (`SourceTypeOrReferenceId`, `SourceGroup`, `SourceEntry`, `ConditionTypeOrReference`, `ConditionValue1`, `ConditionValue2`, `Comment`) VALUES (26, 19614, 13703, 8, 66196, 0, 'INFERRED: phase 19614 in area 13703 while quest 66196 rewarded');
+-- tick 5722026: phase 19614 REMOVED -- nearest quest event: reward 66196 at tick 5721949 (+0.1s); was active since tick 5722026 (0s)
+-- tick 5841269: phase 18237 REMOVED -- no quest event within 5s; was active since tick 4667908 (1173s)
+-- tick 5841269: phase 18428 REMOVED -- no quest event within 5s; was active since tick 5304347 (537s)
+-- tick 5893908: phase 18437 ADDED (1 flags) -- no quest event within 5s; player ~(-786,2441) via zone change 'Life Vault Ruins' 1s away -> nearest realm spawn 192576 in area 13764 (5yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13764, 18437, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 5893908: phase 18484 ADDED (1 flags) -- no quest event within 5s; player ~(-786,2441) via zone change 'Life Vault Ruins' 1s away -> nearest realm spawn 192576 in area 13764 (5yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13764, 18484, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 5893908: phase 18595 ADDED (1 flags) -- no quest event within 5s; player ~(-786,2441) via zone change 'Life Vault Ruins' 1s away -> nearest realm spawn 192576 in area 13764 (5yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13764, 18595, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 5893908: phase 19291 ADDED (1 flags) -- no quest event within 5s; player ~(-786,2441) via zone change 'Life Vault Ruins' 1s away -> nearest realm spawn 192576 in area 13764 (5yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13764, 19291, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 5893908: phase 19755 ADDED (1 flags) -- no quest event within 5s; player ~(-786,2441) via zone change 'Life Vault Ruins' 1s away -> nearest realm spawn 192576 in area 13764 (5yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13764, 19755, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 5893908: phase 19756 ADDED (1 flags) -- no quest event within 5s; player ~(-786,2441) via zone change 'Life Vault Ruins' 1s away -> nearest realm spawn 192576 in area 13764 (5yd)
+-- INSERT INTO `phase_area` (`AreaId`, `PhaseId`, `Comment`) VALUES (13764, 19756, 'INFERRED dfws_1_proj: pushed on entering the area, no quest event nearby -> unconditional for this area');
+-- tick 5926122: phase 18437 REMOVED -- no quest event within 5s; was active since tick 5893908 (32s)
+-- tick 5926122: phase 18484 REMOVED -- no quest event within 5s; was active since tick 5893908 (32s)
+-- tick 5926122: phase 18595 REMOVED -- no quest event within 5s; was active since tick 5893908 (32s)
+-- tick 5926122: phase 19291 REMOVED -- no quest event within 5s; was active since tick 5893908 (32s)
+-- tick 5926122: phase 19755 REMOVED -- no quest event within 5s; was active since tick 5893908 (32s)
+-- tick 5926122: phase 19756 REMOVED -- no quest event within 5s; was active since tick 5893908 (32s)
+-- tick 5941722: BASELINE set of 47 phases pushed (login / map arrival): [18350, 18650, 18836, 18872, 19216, 19289, 19335, 19532, 19539, 19560, 19569, 19586, 19646, 19648, 19704, 19738, 19747, 19770, 19833, 19859, 19860, 19861, 19862, 19863, 19864, 19865, 19867, 19868, 19869, 19870, 19914, 19917, 20737, 21182, 21183, 21184, 21185, 21186, 21397, 21491] ...
+-- tick 5947393: phase 19770 REMOVED -- no quest event within 5s; was active since tick 5941722 (6s)
+-- tick 5947393: phase 19833 REMOVED -- no quest event within 5s; was active since tick 5941722 (6s)
+-- tick 5954613: BASELINE set of 28 phases pushed (login / map arrival): [19358, 19505, 19507, 19577, 19728, 19741, 19797, 19828, 19866, 19931, 20162, 20163, 20332, 20333, 20506, 20564, 20611, 21094, 21422, 21633, 21974, 21975, 23042, 23088, 23096, 23734, 24825, 27177]

@@ -2,3 +2,9 @@
 # Applied to the local integration testserver for validation, not upstream/master
 # (content depends on integration-only systems). One line per slice, top-down.
 DragonIsles/WakingShores/65997-chasing-sendrax.sql
+DragonIsles/WakingShores/behavioural-harvest-7-captures.sql
+DragonIsles/WakingShores/behavioural-harvest-7-captures.hotfixes.sql    # target-db: hotfixes (apply to the HOTFIX database, not world)
+DragonIsles/WakingShores/df-intro-chain-scripts.sql                      # sections marked 'depends: C++' need zone_the_waking_shores.cpp built first
+DragonIsles/WakingShores/df-intro-chain-spawns.sql
+DragonIsles/WakingShores/df-intro-chain-patrols.sql
+# DragonIsles/WakingShores/df-intro-chain-phasing.REVIEW.sql            # REVIEW ONLY -- every row commented; never applied as-is
