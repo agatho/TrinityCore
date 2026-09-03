@@ -1142,6 +1142,22 @@ namespace WorldPackets
             bool Enable = false;
         };
 
+        // CMSG_LOW_LEVEL_RAID2 (0x3E00AE): the "allow joining low-level raids" toggle. Wire (client sender
+        // RVA 0x6D8360): a single bit + FlushBits, i.e. the same one-bit body as the sibling
+        // CMSG_LOW_LEVEL_RAID1 (0x4300CF). The bit is the on/off state and drives
+        // PLAYER_FLAGS_LOW_LEVEL_RAID_ENABLED, which is persisted in characters.playerFlags and mirrored to
+        // the character list as CHARACTER_FLAG_2_LOW_LEVEL_RAID_ENABLED. Semantics from
+        // PlayerScript.SetAllowLowLevelRaid / GetAllowLowLevelRaid (Blizzard_APIDocumentationGenerated).
+        class LowLevelRaid2 final : public ClientPacket
+        {
+        public:
+            explicit LowLevelRaid2(WorldPacket&& packet) : ClientPacket(CMSG_LOW_LEVEL_RAID2, std::move(packet)) { }
+
+            void Read() override;
+
+            bool Enable = false;
+        };
+
         class AccountHeirloomUpdate final : public ServerPacket
         {
         public:

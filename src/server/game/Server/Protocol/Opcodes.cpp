@@ -146,7 +146,7 @@ void OpcodeTable::InitializeClientOpcodes()
 
     DEFINE_HANDLER(CMSG_ABANDON_NPE_RESPONSE,                               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleAbandonNPEResponse);
     DEFINE_HANDLER(CMSG_ACCEPT_GUILD_INVITE,                                STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGuildAcceptInvite);
-    DEFINE_HANDLER(CMSG_ACCEPT_SOCIAL_CONTRACT,                             STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_ACCEPT_SOCIAL_CONTRACT,                             STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleAcceptSocialContract);
     DEFINE_HANDLER(CMSG_ACCEPT_TRADE,                                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleAcceptTradeOpcode);
     DEFINE_HANDLER(CMSG_ACCOUNT_BANK_DEPOSIT_MONEY,                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleAccountBankDepositMoney);
     DEFINE_HANDLER(CMSG_ACCOUNT_BANK_WITHDRAW_MONEY,                        STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleAccountBankWithdrawMoney);
@@ -425,6 +425,15 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_CONVERSATION_LINE_STARTED,                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleConversationLineStarted);
     DEFINE_HANDLER(CMSG_CONVERT_ITEM_TO_BIND_TO_ACCOUNT,                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleConvertItemToBindToAccount);
     DEFINE_HANDLER(CMSG_CONVERT_RAID,                                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleConvertRaidOpcode);
+    // CMSG_CONVERT_TIMERUNNING_CHARACTER (0x43018D) wire (client serializer sub @0x6B0E20): { PackedGuid CharacterGUID;
+    // uint32 }. It converts a Timerunning (Pandaria/Legion Remix) character to a standard character at end of event.
+    // Left as Handle_NULL: TrinityCore has NO Timerunning subsystem to convert FROM. ActivePlayerData::TimerunningSeasonID
+    // is a read-only UpdateField (no setter anywhere), there is no `timerunning_season` column on the characters table,
+    // no PLAYER_FLAGS_TIMERUNNING, and character creation with a season set is actively refused
+    // (CharacterHandler.cpp -> SendCharCreate(CHAR_CREATE_TIMERUNNING)). No TC character can therefore be in a
+    // Timerunning season, so there is nothing to clear/migrate and no conversion rules (Remix item CTR 2905 /
+    // artifact CTR 4579 -> standard gear) exist. A real implementation is gated on first building the Timerunning
+    // subsystem (persisted season flag + creation path + item/reward conversion tables); until then this is a no-op.
     DEFINE_HANDLER(CMSG_CONVERT_TIMERUNNING_CHARACTER,                      STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_COVENANT_RENOWN_REQUEST_CATCHUP_STATE,              STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleCovenantRenownRequestCatchupState);
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_CANCEL,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderCancel);
@@ -707,7 +716,13 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_LOBBY_MATCHMAKER_SET_PLAYER_READY,                  STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleLobbyMatchmakerSetPlayerReady);
     DEFINE_HANDLER(CMSG_LOGOUT_CANCEL,                                      STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLogoutCancelOpcode);
     DEFINE_HANDLER(CMSG_LOGOUT_INSTANT,                                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLogoutInstant);
-    DEFINE_HANDLER(CMSG_LOGOUT_LOBBY_MATCHMAKER,                            STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    // CMSG_LOGOUT_LOBBY_MATCHMAKER (0x3E0127): empty packet (client sender RVA 0x6DAEB0 writes only the
+    // opcode header). It belongs to the Plunderstorm lobby/matchmaker flow (C_LobbyMatchmakerInfo) and is
+    // sent when the client leaves the matchmaker lobby. A standard TrinityCore realm has no Plunderstorm
+    // lobby server and never places a session into that state, so there is no server-side action to take.
+    // Registered STATUS_IGNORED (not STATUS_UNHANDLED) so an occurrence is silently dropped instead of
+    // logging a spurious "not handled opcode" error. Genuine server-inert opcode - see report.
+    DEFINE_HANDLER(CMSG_LOGOUT_LOBBY_MATCHMAKER,                            STATUS_IGNORED,   PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_LOGOUT_REQUEST,                                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLogoutRequestOpcode);
     DEFINE_HANDLER(CMSG_LOG_DISCONNECT,                                     STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_EarlyProccess);
     DEFINE_HANDLER(CMSG_LOG_STREAMING_ERROR,                                STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleLogStreamingError);
@@ -717,7 +732,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_LOOT_ROLL,                                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLootRoll);
     DEFINE_HANDLER(CMSG_LOOT_UNIT,                                          STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLootOpcode);
     DEFINE_HANDLER(CMSG_LOW_LEVEL_RAID1,                                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLowLevelRaid1);
-    DEFINE_HANDLER(CMSG_LOW_LEVEL_RAID2,                                    STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_LOW_LEVEL_RAID2,                                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleLowLevelRaid2);
     DEFINE_HANDLER(CMSG_MAIL_CREATE_TEXT_ITEM,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMailCreateTextItem);
     DEFINE_HANDLER(CMSG_MAIL_DELETE,                                        STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleMailDelete);
     DEFINE_HANDLER(CMSG_MAIL_GET_LIST,                                      STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGetMailList);
@@ -1036,7 +1051,17 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_REQUEST_SCHEDULED_PVP_INFO,                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestScheduledPvpInfo);
     DEFINE_HANDLER(CMSG_REQUEST_STABLED_PETS,                               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestStabledPets);
     DEFINE_HANDLER(CMSG_REQUEST_STORE_FRONT_INFO_UPDATE,                    STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
-    DEFINE_HANDLER(CMSG_REQUEST_SURVEY,                                     STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    // CMSG_REQUEST_SURVEY (0x3D030D): body = one uint32 (client sender RVA 0x6D22F0 writes the opcode
+    // header then a single uint32 read from the sender object at +0x20). That uint32 is the
+    // SurveyDeliveryMoment enum (0 Login, 1 ProfessionTable, 2 QuestTurnIn, 3 ChestLooted,
+    // 4 MythicPlusCompleted, 5 EncounterEnd) passed to C_WowSurvey.TriggerSurveyServe(deliveryMoment).
+    // It is Blizzard's telemetry/NPS survey-serving system: the client asks whether a survey should be
+    // served at this moment; a server with a configured survey campaign would answer with a survey to
+    // open (fires SURVEY_DELIVERED / C_WowSurvey.OpenSurvey). TrinityCore ships no survey backend and no
+    // survey content, so there is genuinely nothing to serve - the correct behaviour is to serve none.
+    // Registered STATUS_IGNORED (not STATUS_UNHANDLED) so the frequent client requests are silently
+    // dropped instead of spamming "not handled opcode" errors. Genuine server-inert opcode - see report.
+    DEFINE_HANDLER(CMSG_REQUEST_SURVEY,                                     STATUS_IGNORED,   PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_REQUEST_TREASURE_PUNCH_LIST_ITEMS,                  STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_REQUEST_VEHICLE_EXIT,                               STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleRequestVehicleExit);
     DEFINE_HANDLER(CMSG_REQUEST_VEHICLE_NEXT_SEAT,                          STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleRequestVehicleNextSeat);

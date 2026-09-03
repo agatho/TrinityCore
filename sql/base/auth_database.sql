@@ -534,6 +534,7 @@ CREATE TABLE `battlenet_accounts` (
   `LastCharacterUndelete` int unsigned NOT NULL DEFAULT '0',
   `LoginTicket` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `LoginTicketExpiry` int unsigned DEFAULT NULL,
+  `social_contract_accepted` tinyint unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Account System';
 /*!40101 SET character_set_client = @saved_cs_client */;

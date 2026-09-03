@@ -149,6 +149,17 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // CMSG_ACCEPT_SOCIAL_CONTRACT (0x430177): empty packet (client sender RVA 0x6B0C10 writes only the
+        // opcode header). Sent by C_SocialContractGlue.TryUpdateSocialContract() when the player clicks
+        // Accept on the Social Contract dialog shown at character select (Blizzard_GlueXML/SocialContract.lua).
+        class AcceptSocialContract final : public ClientPacket
+        {
+        public:
+            explicit AcceptSocialContract(WorldPacket&& packet) : ClientPacket(CMSG_ACCEPT_SOCIAL_CONTRACT, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
         class SocialContractRequestResponse final : public ServerPacket
         {
         public:
