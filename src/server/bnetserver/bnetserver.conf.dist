@@ -459,3 +459,29 @@ Logger.sql.updates=3,Console Bnet
 
 #
 ###################################################################################################
+
+###################################################################################################
+# PAYPAL (Commerce Rail A - inbound webhook receiver; bnetserver hosts the HTTP listener)
+#
+#    PayPal.Enabled
+#        Description: Master switch. When 0, no webhook listener is started (complete no-op).
+#        Default:     0
+#
+#    PayPal.WebhookId / ClientId / Secret
+#        Description: Required to VERIFY webhook signatures (postback API). The listener refuses to
+#                     start unless all three are set. Same app credentials as the worldserver conf.
+#                     Sensitive - never logged.
+
+PayPal.Enabled        = 0
+PayPal.Mode           = "sandbox"
+PayPal.ClientId       = ""
+PayPal.Secret         = ""
+PayPal.WebhookId      = ""
+PayPal.VerifyMode     = "postback"
+PayPal.Webhook.Port   = 8082
+PayPal.Webhook.BindIP = "0.0.0.0"
+PayPal.VerifyCertificate = 1
+PayPal.CaBundle       = ""
+
+#
+###################################################################################################

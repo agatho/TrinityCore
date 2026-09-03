@@ -99,6 +99,7 @@
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "OutdoorPvPMgr.h"
+#include "PaymentMgr.h"
 #include "PetitionMgr.h"
 #include "Player.h"
 #include "PlayerDump.h"
@@ -1322,6 +1323,10 @@ void World::LoadConfigSettings(bool reload)
         // call ScriptMgr if we're reloading the configuration
         sScriptMgr->OnConfigLoad(reload);
     }
+
+    // Commerce Rail A (real money -> PayPal). Mirrors the DiscordBridge LoadConfig hook; runs on
+    // both initial load and reload. Complete no-op unless PayPal.Enabled = 1.
+    sPaymentMgr->LoadConfig();
 }
 
 /// Initialize the World
@@ -2597,6 +2602,12 @@ void World::Update(uint32 diff)
     {
         TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update CraftingOrders"));
         sCraftingOrderMgr.Update(diff);
+    }
+
+    {
+        TC_METRIC_TIMER("world_update_time", TC_METRIC_TAG("type", "Update payments"));
+        // Rail-A payment pump: hand out approve URLs + poll paypal_settlement -> grant. No-op unless enabled.
+        sPaymentMgr->Update(diff);
     }
 
     {
