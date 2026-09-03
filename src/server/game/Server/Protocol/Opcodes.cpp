@@ -436,7 +436,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_LIST_MY_ORDERS,                      STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderListMyOrders);
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_REJECT,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderReject);
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_RELEASE,                             STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderRelease);
-    DEFINE_HANDLER(CMSG_CRAFTING_ORDER_REPORT_PLAYER,                       STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_CRAFTING_ORDER_REPORT_PLAYER,                       STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderReportPlayer);
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_UPDATE_IGNORE_LIST,                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderUpdateIgnoreList);
     DEFINE_HANDLER(CMSG_CREATE_CHARACTER,                                   STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleCharCreateOpcode);
     DEFINE_HANDLER(CMSG_CREATE_SHIPMENT,                                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCreateShipment);
