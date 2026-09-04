@@ -150,7 +150,7 @@ char const* VasTransferMgr::ResultString(TransferResult result)
 }
 
 VasTransferMgr::TransferResult VasTransferMgr::TransferCharacter(ObjectGuid::LowType charGuid, uint32 targetRealmId,
-    std::string* outName, std::string* outTargetDb)
+    std::string* outName, std::string* outTargetDb, bool validateOnly)
 {
     uint32 const currentRealmId = sRealmList->GetCurrentRealmId().Realm;
 
@@ -201,8 +201,13 @@ VasTransferMgr::TransferResult VasTransferMgr::TransferCharacter(ObjectGuid::Low
         "WHERE s.owner_guid = {} LIMIT 1", targetDb, sourceDb, charGuid).c_str()))
         return TRANSFER_ERR_GUID_COLLISION;
 
-    // Everything checked out: move the rows in one transaction, then remove them from the source. INSERT ...
-    // SELECT keeps every guid, so all foreign references stay valid without a remap.
+    // Everything the transfer can be rejected for has been checked. A validation-only request stops here with
+    // success - nothing is moved.
+    if (validateOnly)
+        return TRANSFER_OK;
+
+    // Move the rows in one transaction, then remove them from the source. INSERT ... SELECT keeps every guid,
+    // so all foreign references stay valid without a remap.
     CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
 
     auto copyDel = [&](std::string const& copySql, std::string const& delSql)

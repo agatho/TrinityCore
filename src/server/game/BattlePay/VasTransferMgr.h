@@ -62,8 +62,10 @@ public:
 
     // Move the character (source realm = this realm) to targetRealmId. Synchronous and transactional; on any
     // rejection nothing is written. outName/outTargetDb are filled for the caller's log/response when non-null.
+    // With validateOnly = true it runs every eligibility/collision check and returns the same result WITHOUT
+    // moving anything - the client's transfer flow validates before it commits, and so does the server.
     TransferResult TransferCharacter(ObjectGuid::LowType charGuid, uint32 targetRealmId,
-        std::string* outName = nullptr, std::string* outTargetDb = nullptr);
+        std::string* outName = nullptr, std::string* outTargetDb = nullptr, bool validateOnly = false);
 
     static char const* ResultString(TransferResult result);
 

@@ -829,11 +829,27 @@ namespace WorldPackets
 
             void Read() override;
 
+            // Wire (client serializer sub_7FF72907C390, fully RE'd): 4x uint32 + 4x packed guid header, then a
+            // 5-byte bit block of five string-length prefixes (6,7,7,6,12 bits) and a single trailing bool bit
+            // = IsValidationOnly, then the string bodies (not needed here). The four guids carry the character
+            // plus account/bnet/target guids; the character is the one that is a Player guid.
             uint32 SequenceId = 0;
             uint32 ServiceType = 0;
-            ObjectGuid Character;              // first guid (selected character in the PCT flow)
             uint32 Context = 0;
             uint32 TargetRealmAddress = 0;     // wowRealmAddress of the picked target realm (JamCliVASTargetRealm[+0])
+            ObjectGuid Guid1;
+            ObjectGuid Guid2;
+            ObjectGuid Guid3;
+            ObjectGuid Guid4;
+            bool IsValidationOnly = false;     // flow calls validate-pass first, then commit-pass
+
+            ObjectGuid GetCharacterGuid() const  // the character is the sole Player-type guid among the four
+            {
+                for (ObjectGuid const& g : { Guid1, Guid2, Guid3, Guid4 })
+                    if (g.IsPlayer())
+                        return g;
+                return ObjectGuid::Empty;
+            }
         };
 
         // CMSG_BATTLE_PAY_DISTRIBUTION_ASSIGN_VAS (0x400167) - a large nested struct (client token, several

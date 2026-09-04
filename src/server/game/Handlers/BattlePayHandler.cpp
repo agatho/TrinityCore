@@ -33,6 +33,7 @@
 #include "Player.h"
 #include "QueryHolder.h"
 #include "RealmList.h"
+#include "VasTransferMgr.h"
 #include "World.h"
 #include "WowTokenMgr.h"
 #include <algorithm>
@@ -1670,24 +1671,67 @@ void WorldSession::HandleBattlePayDistributionAssignVas(WorldPackets::BattlePay:
 
 void WorldSession::HandleBattlePayStartVasPurchase(WorldPackets::BattlePay::BattlePayStartVasPurchase& packet)
 {
-    // This is the request the paid-character-transfer flow sends (Lua AssignPCTDistribution): it carries the
-    // selected character, the VAS service type and the TARGET realm's wowRealmAddress. Resolve the target realm
-    // against the realms this server fronts and log the full transfer intent - this is the client-driven entry
-    // point to VasTransferMgr.
-    //
-    // It is not executed here yet for one honest reason: the flow calls twice - a validation pass then a commit
-    // pass - distinguished by an isValidationOnly bool that lives in this packet's bit-packed tail. Reading it
-    // needs the per-string bit-length widths (a small targeted RE still outstanding); executing on the
-    // validation pass would move the character prematurely. Until that bit is read, the reliable execution path
-    // is the .character transfer GM command, which drives the same VasTransferMgr.
-    uint32 targetRealmId = 0;
-    if (packet.TargetRealmAddress)
-        targetRealmId = Battlenet::RealmHandle(packet.TargetRealmAddress).Realm;
+    // The paid-character-transfer flow's request (Lua AssignPCTDistribution): the selected character, the VAS
+    // service type, the TARGET realm's wowRealmAddress, and an IsValidationOnly bool (the flow validates, then
+    // commits). The character is the sole Player-type guid among the four the packet carries. Resolve the realm
+    // and drive VasTransferMgr - validate-only on the validation pass, a real cross-DB move on the commit pass -
+    // then answer with the SMSG the flow waits on (ASSIGN_VAS_RESPONSE: token, storeError, VasTransactionPurchaseResult).
+    ObjectGuid const character = packet.GetCharacterGuid();
+    uint32 const targetRealmId = packet.TargetRealmAddress ? Battlenet::RealmHandle(packet.TargetRealmAddress).Realm : 0;
 
-    TC_LOG_INFO("network", "BattlePay: StartVasPurchase from {}: seq={} serviceType={} character={} "
-        "targetRealmAddress={:#x} (realm {}) - transfer intent parsed; execution gated on the isValidationOnly bit.",
-        GetPlayerInfo(), packet.SequenceId, packet.ServiceType, packet.Character.ToString(),
-        packet.TargetRealmAddress, targetRealmId);
+    // VasTransactionPurchaseResult values (Enum, from BattlepayConstantsDocumentation): 0 success, 2 no
+    // character, 5 invalid destination realm, 20 unique-key (a same-name character already on the target -
+    // exactly WoW's only hard transfer rejection), 43 locked-for-VAS (character online), 20011 realm not
+    // eligible, 44 generic.
+    auto mapResult = [](VasTransferMgr::TransferResult r) -> uint32
+    {
+        switch (r)
+        {
+            case VasTransferMgr::TRANSFER_OK:               return 0;
+            case VasTransferMgr::TRANSFER_ERR_CHAR_NOT_FOUND: return 2;
+            case VasTransferMgr::TRANSFER_ERR_NO_TARGET:    return 5;
+            case VasTransferMgr::TRANSFER_ERR_NO_SOURCE:    return 20011;
+            case VasTransferMgr::TRANSFER_ERR_IN_WORLD:     return 43;
+            case VasTransferMgr::TRANSFER_ERR_NAME_TAKEN:   return 20;
+            case VasTransferMgr::TRANSFER_ERR_GUID_COLLISION: return 20;
+            case VasTransferMgr::TRANSFER_ERR_DB:           return 44;
+            default:                                        return 44;
+        }
+    };
+
+    auto respond = [&](uint32 vasResult)
+    {
+        WorldPackets::BattlePay::BattlePayDistributionAssignVasResponse response;
+        response.Field1 = packet.SequenceId;   // token the client correlates the answer to
+        response.Field2 = 0;                    // storeError: no store-layer error
+        response.Result = vasResult;            // VasTransactionPurchaseResult
+        SendPacket(response.Write());
+    };
+
+    if (!sVasTransferMgr->IsEnabled())
+    {
+        TC_LOG_INFO("network", "BattlePay: StartVasPurchase from {}: character transfer is not configured "
+            "(VAS.TransferRealmDatabases).", GetPlayerInfo());
+        respond(20011);   // realm not eligible
+        return;
+    }
+
+    if (character.IsEmpty())
+    {
+        respond(2);       // no character guid in the request
+        return;
+    }
+
+    std::string name;
+    VasTransferMgr::TransferResult const result = sVasTransferMgr->TransferCharacter(
+        character.GetCounter(), targetRealmId, &name, nullptr, packet.IsValidationOnly);
+
+    TC_LOG_INFO("network", "BattlePay: StartVasPurchase from {}: seq={} serviceType={} character={} '{}' "
+        "targetRealm={} validateOnly={} -> {} (vasResult {}).", GetPlayerInfo(), packet.SequenceId,
+        packet.ServiceType, character.ToString(), name, targetRealmId, packet.IsValidationOnly,
+        VasTransferMgr::ResultString(result), mapResult(result));
+
+    respond(mapResult(result));
 }
 
 void WorldSession::HandleCharacterCheckUpgrade(WorldPackets::BattlePay::CharacterCheckUpgrade& /*packet*/)

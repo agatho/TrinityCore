@@ -382,15 +382,26 @@ void VasCheckTransferOk::Read()
 
 void BattlePayStartVasPurchase::Read()
 {
-    // Wire order from the client builder sub_7FF72AE6E2F0: seq, serviceType, guid, context, targetRealmAddress,
-    // then name/blob strings and further guids we do not need. Read up to the realm address, then consume the
-    // rest so the stream stays aligned.
+    // Full wire (serializer sub_7FF72907C390): 4x uint32 + 4x packed guid, then a 5-byte bit block of five
+    // string-length prefixes (6,7,7,6,12 bits) followed by the single IsValidationOnly bool bit, then the
+    // string bodies. Read through the bool; the string bodies are not needed, so rfinish afterwards.
     _worldPacket >> SequenceId;
     _worldPacket >> ServiceType;
-    _worldPacket >> Character;
+    _worldPacket >> Guid1;
     _worldPacket >> Context;
     _worldPacket >> TargetRealmAddress;
-    _worldPacket.rfinish();
+    _worldPacket >> Guid2;
+    _worldPacket >> Guid3;
+    _worldPacket >> Guid4;
+
+    _worldPacket.ReadBits(6);    // len(string1)
+    _worldPacket.ReadBits(7);    // len(string2)
+    _worldPacket.ReadBits(7);    // len(string3)
+    _worldPacket.ReadBits(6);    // len(string4)
+    _worldPacket.ReadBits(12);   // len(string5)
+    IsValidationOnly = _worldPacket.ReadBit();
+
+    _worldPacket.rfinish();      // string bodies not needed
 }
 
 void BattlePayDistributionAssignVas::Read()
