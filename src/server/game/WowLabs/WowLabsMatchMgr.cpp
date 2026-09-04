@@ -16,6 +16,7 @@
  */
 
 #include "WowLabsMatchMgr.h"
+#include "Config.h"
 #include "LobbyMatchmakerPackets.h"
 #include "Log.h"
 #include "Map.h"
@@ -24,6 +25,9 @@
 #include "World.h"
 #include <algorithm>
 #include <random>
+
+// Cadence of the out-of-ring storm damage tick.
+static constexpr uint32 DAMAGE_INTERVAL_MS = 1000;
 
 bool WowLabsMatchMgr::Match::HasMember(ObjectGuid bnet) const
 {
@@ -163,30 +167,141 @@ uint32 WowLabsMatchMgr::GetSelectedArea(Match const* match, ObjectGuid bnet) con
     return itr != match->SelectedArea.end() ? itr->second : 0;
 }
 
+// Send SMSG..MATCH_STATE_CHANGED for a phase to every player currently in a match instance. (Pre-login
+// characterless sessions are not on the map; reaching them is a live-client concern the offline build cannot
+// exercise.)
+static void SendMatchStateToInstance(Map* map, WowLabsMatchMgr::Phase phase)
+{
+    if (!map)
+        return;
+
+    WorldPackets::WowLabs::WowLabsNotifyPlayersMatchStateChanged packet;
+    packet.State = WowLabsMatchMgr::WireState(phase);
+    WorldPacket const* built = packet.Write();
+
+    for (MapReference const& ref : map->GetPlayers())
+        if (Player* player = ref.GetSource())
+            player->SendDirectMessage(built);
+}
+
 void WowLabsMatchMgr::BeginPrematch(Match* match)
 {
     if (!match)
         return;
 
     bool const firstEntry = match->MatchPhase != Phase::Prematch;
-    match->MatchPhase = Phase::Prematch;
+    if (match->MatchPhase == Phase::Reserved)
+        match->MatchPhase = Phase::Prematch;
 
-    // Tell every player currently in the match instance. Broadcasting on every entry (not only the first) means
-    // a player who arrives into an already-running pre-match is told the state too; re-sending the same phase to
-    // players already there is harmless. (Pre-login characterless sessions are not on the map; reaching them is
-    // a live-client concern the offline build cannot exercise.)
-    Map* map = sMapMgr->FindMap(MAP_ID, match->InstanceId);
-    if (!map)
-        return;
-
-    WorldPackets::WowLabs::WowLabsNotifyPlayersMatchStateChanged packet;
-    packet.State = WireState(Phase::Prematch);
-    WorldPacket const* built = packet.Write();
-
-    for (MapReference const& ref : map->GetPlayers())
-        if (Player* player = ref.GetSource())
-            player->SendDirectMessage(built);
+    // Broadcast on every entry (not only the first) so a player arriving into an already-running pre-match is
+    // told the state too; re-sending the same phase to players already there is harmless. Do not down-shift a
+    // match that is already Active back to Prematch - a late arrival just gets the current phase.
+    SendMatchStateToInstance(sMapMgr->FindMap(MAP_ID, match->InstanceId), match->MatchPhase);
 
     if (firstEntry)
         TC_LOG_DEBUG("network", "WowLabs: match {} (instance {}) entered pre-match.", match->Id, match->InstanceId);
+}
+
+std::vector<WowLabsMatchMgr::CirclePhase> const& WowLabsMatchMgr::GetCircleSchedule() const
+{
+    // Hand-authored storm schedule (real timings/coords are encrypted DB2). Centred on the map origin, matching
+    // the provisional drop zones (±1000..1500). Radii in yards; times in ms.
+    static std::vector<CirclePhase> const schedule =
+    {
+        { 30000u, 60000u, 2000.0f, 1200.0f, 0.0f, 0.0f },   // hold 30s @2000, shrink to 1200 over 60s
+        { 15000u, 45000u, 1200.0f,  600.0f, 0.0f, 0.0f },
+        { 15000u, 30000u,  600.0f,  200.0f, 0.0f, 0.0f },
+        { 10000u, 20000u,  200.0f,   50.0f, 0.0f, 0.0f },
+    };
+    return schedule;
+}
+
+bool WowLabsMatchMgr::ComputeCircle(Match const* match, float& centerX, float& centerY, float& radius) const
+{
+    if (!match || match->MatchPhase != Phase::Active)
+        return false;
+
+    std::vector<CirclePhase> const& schedule = GetCircleSchedule();
+    if (schedule.empty())
+        return false;
+
+    uint32 t = match->ActiveElapsedMs;
+    for (CirclePhase const& p : schedule)
+    {
+        centerX = p.CenterX;
+        centerY = p.CenterY;
+        if (t < p.HoldMs)                       // holding at the phase's start radius
+        {
+            radius = p.FromRadius;
+            return true;
+        }
+        t -= p.HoldMs;
+        if (t < p.ShrinkMs)                      // shrinking toward the phase's end radius
+        {
+            float const f = p.ShrinkMs ? float(t) / float(p.ShrinkMs) : 1.0f;
+            radius = p.FromRadius + (p.ToRadius - p.FromRadius) * f;
+            return true;
+        }
+        t -= p.ShrinkMs;                         // this phase is done, fall through to the next
+    }
+
+    // Past the last phase: settle at the final radius / centre.
+    CirclePhase const& last = schedule.back();
+    centerX = last.CenterX;
+    centerY = last.CenterY;
+    radius = last.ToRadius;
+    return true;
+}
+
+void WowLabsMatchMgr::UpdateInstance(Map* map, uint32 diff)
+{
+    if (!map)
+        return;
+
+    Match* match = FindByInstanceId(map->GetInstanceId());
+    if (!match)
+        return;
+
+    if (match->MatchPhase == Phase::Prematch)
+    {
+        match->PrematchElapsedMs += diff;
+        uint32 const prematchMs = sConfigMgr->GetIntDefault("WowLabs.PrematchSeconds", 30) * IN_MILLISECONDS;
+        if (match->PrematchElapsedMs >= prematchMs)
+        {
+            match->MatchPhase = Phase::Active;
+            match->ActiveElapsedMs = 0;
+            match->DamageAccumMs = 0;
+            SendMatchStateToInstance(map, Phase::Active);
+            TC_LOG_DEBUG("network", "WowLabs: match {} (instance {}) is now active.", match->Id, match->InstanceId);
+        }
+        return;
+    }
+
+    if (match->MatchPhase != Phase::Active)
+        return;
+
+    match->ActiveElapsedMs += diff;
+
+    // Out-of-ring storm damage, applied on a fixed cadence regardless of the update granularity.
+    match->DamageAccumMs += diff;
+    if (match->DamageAccumMs < DAMAGE_INTERVAL_MS)
+        return;
+    match->DamageAccumMs -= DAMAGE_INTERVAL_MS;
+
+    float cx, cy, radius;
+    if (!ComputeCircle(match, cx, cy, radius))
+        return;
+
+    uint32 const damage = sConfigMgr->GetIntDefault("WowLabs.CircleDamagePerTick", 50);
+    if (!damage)
+        return;
+
+    for (MapReference const& ref : map->GetPlayers())
+    {
+        Player* player = ref.GetSource();
+        if (!player || !player->IsAlive() || player->IsGameMaster())
+            continue;
+        if (player->GetDistance2d(cx, cy) > radius)
+            player->EnvironmentalDamage(DAMAGE_FIRE, damage);
+    }
 }

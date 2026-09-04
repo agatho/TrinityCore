@@ -42,8 +42,9 @@ public:
     {
         static ChatCommandTable wowlabsCommandTable =
         {
-            { "enter", HandleWowLabsEnterCommand, rbac::RBAC_PERM_COMMAND_GO, Console::No },
-            { "leave", HandleWowLabsLeaveCommand, rbac::RBAC_PERM_COMMAND_GO, Console::No },
+            { "enter",  HandleWowLabsEnterCommand,  rbac::RBAC_PERM_COMMAND_GO, Console::No },
+            { "leave",  HandleWowLabsLeaveCommand,  rbac::RBAC_PERM_COMMAND_GO, Console::No },
+            { "status", HandleWowLabsStatusCommand, rbac::RBAC_PERM_COMMAND_GO, Console::No },
         };
         static ChatCommandTable commandTable =
         {
@@ -93,6 +94,41 @@ public:
         // Home the player back to their bind point, off the match map.
         player->TeleportTo(player->m_homebind);
         handler->PSendSysMessage("WoW Labs: left the match, returning home.");
+        return true;
+    }
+
+    static bool HandleWowLabsStatusCommand(ChatHandler* handler)
+    {
+        Player* player = handler->GetPlayer();
+        if (!player)
+            return false;
+
+        WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->FindByInstanceId(player->GetWowLabsInstanceId());
+        if (!match)
+        {
+            handler->PSendSysMessage("WoW Labs: not in a match.");
+            return true;
+        }
+
+        char const* phase = "reserved";
+        switch (match->MatchPhase)
+        {
+            case WowLabsMatchMgr::Phase::Prematch: phase = "prematch"; break;
+            case WowLabsMatchMgr::Phase::Active:   phase = "active";   break;
+            case WowLabsMatchMgr::Phase::Ended:    phase = "ended";    break;
+            default: break;
+        }
+
+        handler->PSendSysMessage("WoW Labs match {} (instance {}): phase {}, active {}s.",
+            match->Id, match->InstanceId, phase, match->ActiveElapsedMs / 1000);
+
+        float cx, cy, radius;
+        if (sWowLabsMatchMgr->ComputeCircle(match, cx, cy, radius))
+        {
+            float const dist = player->GetDistance2d(cx, cy);
+            handler->PSendSysMessage("  circle: centre ({:.0f}, {:.0f}) radius {:.0f}; you are {:.0f} away ({}).",
+                cx, cy, radius, dist, dist > radius ? "OUTSIDE - taking storm damage" : "inside");
+        }
         return true;
     }
 };

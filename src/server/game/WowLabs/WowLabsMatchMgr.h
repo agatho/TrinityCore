@@ -24,6 +24,8 @@
 #include <unordered_map>
 #include <vector>
 
+class Map;
+
 // Plunderstorm / WoW Labs live-match registry (design: scratchpad plunderstorm_design.md, P3).
 //
 // A match is reserved the moment a lobby is acquired (every proposal member accepted). It owns:
@@ -70,6 +72,19 @@ public:
         float Z = 0.0f;
     };
 
+    // One shrink step of the storm circle: hold at FromRadius for HoldMs, then shrink to ToRadius over ShrinkMs,
+    // centred on (CenterX, CenterY). The real timings/coords live in encrypted WoW Labs DB2s; this is a hand-
+    // authored provisional schedule (GetCircleSchedule) so the server can enforce a real, shrinking play area.
+    struct CirclePhase
+    {
+        uint32 HoldMs = 0;
+        uint32 ShrinkMs = 0;
+        float FromRadius = 0.0f;
+        float ToRadius = 0.0f;
+        float CenterX = 0.0f;
+        float CenterY = 0.0f;
+    };
+
     struct Match
     {
         uint64 Id = 0;
@@ -79,6 +94,11 @@ public:
         Phase MatchPhase = Phase::Reserved;
         std::vector<MatchMember> Members;
         std::unordered_map<uint64 /*bnet counter*/, uint32 /*areaId*/> SelectedArea;   // each member's drop pick
+
+        // Circle / timing state (P5).
+        uint32 PrematchElapsedMs = 0;
+        uint32 ActiveElapsedMs = 0;   // time since the match went Active - drives the circle schedule
+        uint32 DamageAccumMs = 0;     // out-of-ring damage cadence accumulator
 
         bool HasMember(ObjectGuid bnet) const;
     };
@@ -110,6 +130,18 @@ public:
 
     // The wire value the client expects for a phase (Prematch -> 3 verified; others provisional).
     static uint32 WireState(Phase phase);
+
+    // --- Circle controller (P5) ---
+
+    // Per-instance tick, driven from Map::Update on the map's own thread (so touching players is thread-safe).
+    // Advances the pre-match timer, transitions Prematch -> Active, and applies out-of-ring storm damage.
+    void UpdateInstance(Map* map, uint32 diff);
+
+    // The current storm circle for a match, sampled from the schedule at its active elapsed time. Returns false
+    // before the match is Active or with no schedule.
+    bool ComputeCircle(Match const* match, float& centerX, float& centerY, float& radius) const;
+
+    std::vector<CirclePhase> const& GetCircleSchedule() const;
 
 private:
     WowLabsMatchMgr() = default;
