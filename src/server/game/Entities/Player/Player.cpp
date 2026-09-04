@@ -25133,9 +25133,16 @@ void Player::SendInitialPacketsAfterAddToMap()
     // Plunderstorm / WoW Labs: a player who has just finished entering a match instance enters the pre-match /
     // area-selection phase. BeginPrematch sets the phase (idempotent) and sends SMSG..MATCH_STATE_CHANGED to
     // everyone in the instance, so a player arriving into an already-running pre-match is told the state too.
+    // The match is free-for-all, so flag the player FFA-PvP - without it players cannot damage each other and no
+    // kill (OnPVPKill) would ever fire.
     if (m_wowLabsInstanceId)
+    {
         if (WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->FindByInstanceId(m_wowLabsInstanceId))
+        {
+            SetPvpFlag(UNIT_BYTE2_FLAG_FFA_PVP);
             sWowLabsMatchMgr->BeginPrematch(match);
+        }
+    }
 }
 
 void Player::SendUpdateToOutOfRangeGroupMembers()

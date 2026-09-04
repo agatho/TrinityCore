@@ -91,6 +91,7 @@
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#include "WowLabsMatchMgr.h"
 #include <queue>
 #include <sstream>
 #include <cmath>
@@ -11611,7 +11612,10 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
         if (Player* killerPlr = attacker->ToPlayer())
         {
             if (Player* killedPlr = victim->ToPlayer())
+            {
                 sScriptMgr->OnPVPKill(killerPlr, killedPlr);
+                sWowLabsMatchMgr->OnPlayerKill(killerPlr, killedPlr);   // Plunderstorm kill credit (no-op off-map)
+            }
             else if (Creature* killedCre = victim->ToCreature())
                 sScriptMgr->OnCreatureKill(killerPlr, killedCre);
         }

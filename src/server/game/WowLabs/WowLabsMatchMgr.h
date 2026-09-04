@@ -104,6 +104,10 @@ public:
         uint32 PeakPlayers = 0;                 // most alive players seen at once - the field size for placement
         std::vector<ObjectGuid> FinishOrder;    // players by death order (first death first); winner is not here
 
+        // Combat economy (P7).
+        std::unordered_map<uint64 /*player counter*/, uint32> Kills;          // kills scored this match
+        std::unordered_map<uint64 /*player counter*/, uint32> PlunderEarned;  // Plunder gained in-match (kills)
+
         bool HasMember(ObjectGuid bnet) const;
     };
 
@@ -113,6 +117,13 @@ public:
     Match* FindByToken(uint32 token);
     Match* FindByInstanceId(uint32 instanceId);
     Match* FindByMember(ObjectGuid bnet);
+
+    // The newest match still open to join (Reserved / Prematch / Active), or nullptr. Used by .wowlabs join so a
+    // second player can drop into an existing match instead of spawning their own.
+    Match* GetNewestJoinableMatch();
+
+    // Add a member to a match's roster if not already present (so the area handlers, keyed by bnet, find them).
+    void AddMemberToMatch(Match* match, ObjectGuid bnet, std::string const& name);
 
     // Tear a match down (all players left / match ended). Safe to call with an unknown id.
     void RemoveMatch(uint64 matchId);
@@ -152,6 +163,10 @@ public:
     // End an active match: rank the players (winner + FinishOrder), award Plunder by placement, tell the clients
     // (MATCH_STATE_CHANGED -> Ended, and per-player MATCH_END when WowLabs.SendMatchEnd is enabled).
     void EndMatch(Map* map, Match* match, ObjectGuid winner);
+
+    // A player killed another player. If both are in the same active match, credit the kill and award the
+    // per-kill Plunder bounty (the in-match half of the economy; loot/abilities are the encrypted-DB2 ceiling).
+    void OnPlayerKill(Player* killer, Player* killed);
 
 private:
     WowLabsMatchMgr() = default;

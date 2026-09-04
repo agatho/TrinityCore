@@ -110,6 +110,27 @@ void WowLabsMatchMgr::RemoveMatch(uint64 matchId)
     _matches.erase(matchId);
 }
 
+WowLabsMatchMgr::Match* WowLabsMatchMgr::GetNewestJoinableMatch()
+{
+    Match* newest = nullptr;
+    for (auto& kv : _matches)
+    {
+        Match& m = kv.second;
+        if (m.MatchPhase == Phase::Ended)
+            continue;
+        if (!newest || m.Id > newest->Id)
+            newest = &m;
+    }
+    return newest;
+}
+
+void WowLabsMatchMgr::AddMemberToMatch(Match* match, ObjectGuid bnet, std::string const& name)
+{
+    if (!match || match->HasMember(bnet))
+        return;
+    match->Members.push_back({ bnet, name });
+}
+
 uint32 WowLabsMatchMgr::OwnRealmAddress() const
 {
     return GetVirtualRealmAddress();
@@ -335,6 +356,31 @@ void WowLabsMatchMgr::UpdateInstance(Map* map, uint32 diff)
     }
 }
 
+void WowLabsMatchMgr::OnPlayerKill(Player* killer, Player* killed)
+{
+    if (!killer || !killed || killer == killed)
+        return;
+
+    uint32 const instanceId = killer->GetWowLabsInstanceId();
+    if (!instanceId || killed->GetWowLabsInstanceId() != instanceId)
+        return;   // not the same WoW Labs match (or not in one)
+
+    Match* match = FindByInstanceId(instanceId);
+    if (!match || match->MatchPhase != Phase::Active)
+        return;
+
+    uint32 const bounty = sConfigMgr->GetIntDefault("WowLabs.PlunderPerKill", 100);
+    match->Kills[killer->GetGUID().GetCounter()] += 1;
+    if (bounty)
+    {
+        match->PlunderEarned[killer->GetGUID().GetCounter()] += bounty;
+        killer->ModifyCurrency(PLUNDER_CURRENCY, int32(bounty), CurrencyGainSource::PvPScriptedAward);
+    }
+
+    TC_LOG_DEBUG("network", "WowLabs: match {} - {} killed {} (+{} Plunder).",
+        match->Id, killer->GetName(), killed->GetName(), bounty);
+}
+
 void WowLabsMatchMgr::EndMatch(Map* map, Match* match, ObjectGuid winner)
 {
     if (!match || match->MatchPhase == Phase::Ended)
@@ -363,21 +409,26 @@ void WowLabsMatchMgr::EndMatch(Map* map, Match* match, ObjectGuid winner)
         if (!player || player->IsGameMaster())
             continue;
 
-        auto itr = placement.find(player->GetGUID().GetCounter());
+        uint64 const key = player->GetGUID().GetCounter();
+        auto itr = placement.find(key);
         uint32 const place = itr != placement.end() ? itr->second : std::max(total, 1u);   // stragglers = last
-        int32 const plunder = place ? int32(winReward / place) : 0;   // 1st full, 2nd half, 3rd a third...
-        if (plunder > 0)
-            player->ModifyCurrency(PLUNDER_CURRENCY, plunder, CurrencyGainSource::PvPScriptedAward);
+        int32 const placementBonus = place ? int32(winReward / place) : 0;   // 1st full, 2nd half, 3rd a third...
+        if (placementBonus > 0)
+            player->ModifyCurrency(PLUNDER_CURRENCY, placementBonus, CurrencyGainSource::PvPScriptedAward);
 
-        // Per-player end-of-match summary. Kills are not attributed yet (a further increment), so 0 for now.
+        // Per-player end-of-match summary: placement, kills scored, and total Plunder acquired this match (the
+        // in-match kill bounties already awarded plus the placement bonus).
         if (sendEnd)
         {
+            uint32 const kills = match->Kills.count(key) ? match->Kills[key] : 0;
+            int32 const plunderAcquired = int32(match->PlunderEarned.count(key) ? match->PlunderEarned[key] : 0) + placementBonus;
+
             WorldPackets::WowLabs::WowLabsNotifyPlayersMatchEnd packet;
             packet.MatchType = 1;   // Plunderstorm
             packet.MatchEnded = true;
             packet.Details.push_back({ 0 /*Placement*/,       int32(place) });
-            packet.Details.push_back({ 1 /*Kills*/,           0 });
-            packet.Details.push_back({ 2 /*PlunderAcquired*/, plunder });
+            packet.Details.push_back({ 1 /*Kills*/,           int32(kills) });
+            packet.Details.push_back({ 2 /*PlunderAcquired*/, plunderAcquired });
             player->SendDirectMessage(packet.Write());
         }
     }

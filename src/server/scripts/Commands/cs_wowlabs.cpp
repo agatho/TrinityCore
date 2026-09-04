@@ -43,6 +43,7 @@ public:
         static ChatCommandTable wowlabsCommandTable =
         {
             { "enter",  HandleWowLabsEnterCommand,  rbac::RBAC_PERM_COMMAND_GO, Console::No },
+            { "join",   HandleWowLabsJoinCommand,   rbac::RBAC_PERM_COMMAND_GO, Console::No },
             { "leave",  HandleWowLabsLeaveCommand,  rbac::RBAC_PERM_COMMAND_GO, Console::No },
             { "status", HandleWowLabsStatusCommand, rbac::RBAC_PERM_COMMAND_GO, Console::No },
         };
@@ -77,6 +78,35 @@ public:
         }
 
         handler->PSendSysMessage("WoW Labs: entering match {} (instance {}) on map {}.", match->Id, match->InstanceId, WowLabsMatchMgr::MAP_ID);
+        return true;
+    }
+
+    static bool HandleWowLabsJoinCommand(ChatHandler* handler)
+    {
+        Player* player = handler->GetPlayer();
+        if (!player)
+            return false;
+
+        WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->GetNewestJoinableMatch();
+        if (!match)
+        {
+            handler->PSendSysMessage("WoW Labs: no open match to join - use .wowlabs enter to create one.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        sWowLabsMatchMgr->AddMemberToMatch(match, player->GetSession()->GetBattlenetAccountGUID(), player->GetName());
+        player->SetWowLabsInstanceId(match->InstanceId);
+
+        if (!player->TeleportTo(WowLabsMatchMgr::MAP_ID, 0.0f, 0.0f, 300.0f, 0.0f, TELE_TO_NONE, match->InstanceId))
+        {
+            player->SetWowLabsInstanceId(0);
+            handler->PSendSysMessage("WoW Labs: teleport to map {} failed - are the map data files for it extracted?", WowLabsMatchMgr::MAP_ID);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        handler->PSendSysMessage("WoW Labs: joined match {} (instance {}) on map {}.", match->Id, match->InstanceId, WowLabsMatchMgr::MAP_ID);
         return true;
     }
 
