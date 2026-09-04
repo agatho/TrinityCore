@@ -16,6 +16,7 @@
  */
 
 #include "BattlegroundSoloShuffle.h"
+#include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "DBCEnums.h"
 #include "Log.h"
@@ -23,6 +24,8 @@
 #include "Player.h"
 #include "SpellAuras.h"
 #include "SpellHistory.h"
+#include "World.h"
+#include <cmath>
 
 BattlegroundSoloShuffle::BattlegroundSoloShuffle(BattlegroundTemplate const* battlegroundTemplate)
     : Arena(battlegroundTemplate)
@@ -58,6 +61,18 @@ void BattlegroundSoloShuffle::AddPlayer(Player* player, BattlegroundQueueTypeId 
     {
         _lobby[slot].Guid = player->GetGUID();
         _lobby[slot].IsHealer = isHealer;
+
+        // Load this character's persisted solo-shuffle MMR (slot kSoloShuffleArenaSlot in character_arena_stats),
+        // defaulting to the configured start rating on the first ever queue. The statement is CONNECTION_SYNCH,
+        // so a direct query here is safe and mirrors ArenaTeam::LoadMemberFromDB.
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_MATCH_MAKER_RATING);
+        stmt->setUInt64(0, player->GetGUID().GetCounter());
+        stmt->setUInt8(1, kSoloShuffleArenaSlot);
+        if (PreparedQueryResult result = CharacterDatabase.Query(stmt))
+            _lobby[slot].Rating = (*result)[0].GetUInt16();
+        else
+            _lobby[slot].Rating = static_cast<uint16>(sWorld->getIntConfig(CONFIG_ARENA_START_MATCHMAKER_RATING));
+
         ++_assigned;
     }
 }
@@ -84,10 +99,53 @@ void BattlegroundSoloShuffle::EndBattleground(Team winner)
         return;
     }
 
-    // Final per-player record (personal-rating persistence is the P2 increment - see the Solo Shuffle plan).
+    // Series over: persist each player's personal solo-shuffle MMR. Each of the six rounds is scored as one
+    // game against the lobby's average rating, so a player's rating moves by a bounded Elo step driven by how
+    // many of the six rounds they won. The lobby average is a fair single opponent proxy for a reshuffled pod
+    // where everyone faced everyone.
+    uint32 ratingSum = 0;
+    uint8 present = 0;
     for (LobbySlot const& s : _lobby)
         if (!s.Guid.IsEmpty())
-            TC_LOG_DEBUG("bg.battleground", "Solo Shuffle {}: {} finished {}/6 rounds won", GetInstanceID(), s.Guid.ToString(), s.RoundsWon);
+        {
+            ratingSum += s.Rating;
+            ++present;
+        }
+
+    if (present)
+    {
+        double const avgRating = double(ratingSum) / double(present);
+        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
+        for (LobbySlot const& s : _lobby)
+        {
+            if (s.Guid.IsEmpty())
+                continue;
+
+            // Expected win probability of a single round against an average-rated opponent, then the whole-series
+            // delta = K * (actualWins - expectedWins) over the six rounds. At an even lobby (rating == average)
+            // expected is 3 wins, so >3 rounds gains and <3 loses, symmetric and bounded to +/- kRoundsPerSeries*kPerGameK/... .
+            double const expectedPerRound = 1.0 / (1.0 + std::pow(10.0, (avgRating - double(s.Rating)) / 400.0));
+            double const expectedWins = expectedPerRound * double(kRoundsPerSeries);
+            int32 const delta = int32(std::lround(double(kPerGameK) * (double(s.RoundsWon) - expectedWins)));
+
+            int32 newRating = int32(s.Rating) + delta;
+            if (newRating < 0)
+                newRating = 0;
+
+            CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_ARENA_STATS);
+            stmt->setUInt64(0, s.Guid.GetCounter());
+            stmt->setUInt8(1, kSoloShuffleArenaSlot);
+            stmt->setUInt16(2, uint16(newRating));
+            trans->Append(stmt);
+
+            TC_LOG_DEBUG("bg.battleground", "Solo Shuffle {}: {} finished {}/{} rounds won, rating {} -> {} ({}{})",
+                GetInstanceID(), s.Guid.ToString(), s.RoundsWon, kRoundsPerSeries, s.Rating, newRating,
+                delta >= 0 ? "+" : "", delta);
+        }
+
+        CharacterDatabase.CommitTransaction(trans);
+    }
 
     Battleground::EndBattleground(winner);
 }
