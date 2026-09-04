@@ -611,10 +611,10 @@ namespace WorldPackets
         };
 
         // 0x450326 - the per-player end-of-match summary that feeds C_EndOfMatchUI.GetEndOfMatchDetails() and
-        // fires SHOW_END_OF_MATCH_UI. The FIELD SET is authoritative (EndOfMatchUIDocumentation.lua:
-        // MatchDetails { matchType: EndOfMatchType, matchEnded: bool, detailsList: MatchDetail[] }); the exact
-        // wire WIDTHS/ORDER are NOT verified from the image and need a live-client sniff, so the send is gated
-        // behind the WowLabs.SendMatchEnd config (default off) - see WowLabsHandler / WowLabsMatchMgr.
+        // fires SHOW_END_OF_MATCH_UI. Wire RE-confirmed from the client: GetEndOfMatchDetails (clean-exe
+        // 0x140E1E7C0) reads the stored result as matchType@+12 (int32), matchEnded@+16 (bool), detailsList@+24
+        // (8-byte MatchDetail { int32 type, int32 value }), in that order - matching EndOfMatchUIDocumentation.lua.
+        // The JAM bool (bit) and array (uint32 count) conventions match the sibling area packets in this file.
         class WowLabsNotifyPlayersMatchEnd final : public ServerPacket
         {
         public:

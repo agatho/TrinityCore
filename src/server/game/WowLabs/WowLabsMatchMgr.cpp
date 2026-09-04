@@ -429,7 +429,10 @@ void WowLabsMatchMgr::EndMatch(Map* map, Match* match, ObjectGuid winner)
         placement[match->FinishOrder[i].GetCounter()] = total - uint32(i);
 
     uint32 const winReward = sConfigMgr->GetIntDefault("WowLabs.PlunderWinReward", 1000);
-    bool const sendEnd = sConfigMgr->GetBoolDefault("WowLabs.SendMatchEnd", false);
+    // Default on: the MATCH_END wire is RE-confirmed (GetEndOfMatchDetails reads matchType@+12 int32,
+    // matchEnded@+16 bool, detailsList@+24 of 8-byte MatchDetail{int32 type, int32 value}); the JAM bool/array
+    // conventions match the sibling area packets. Left as a config only so an operator can silence it.
+    bool const sendEnd = sConfigMgr->GetBoolDefault("WowLabs.SendMatchEnd", true);
 
     // Tell the clients the match is over (single-uint32 phase - the Ended wire value is provisional, like Active).
     SendMatchStateToInstance(map, Phase::Ended);
