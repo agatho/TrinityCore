@@ -1,0 +1,103 @@
+/*
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+// Plunderstorm / WoW Labs GM commands (design: scratchpad plunderstorm_design.md, P3).
+//
+// The live client reaches a WoW Labs match by the fast-login reconnect handshake, which can only be exercised
+// against the real client. `.wowlabs enter` is the server-verifiable path: it reserves a solo match and drops
+// the caller straight onto their own instance of MAP_WOWLABS, so the map factory / instance plumbing (P3) can
+// be tested on the running realm without the client handoff. `.wowlabs leave` clears the binding and sends the
+// player home.
+
+#include "Chat.h"
+#include "ChatCommand.h"
+#include "Player.h"
+#include "RBAC.h"
+#include "ScriptMgr.h"
+#include "WowLabsMatchMgr.h"
+#include <vector>
+
+using namespace Trinity::ChatCommands;
+
+class wowlabs_commandscript : public CommandScript
+{
+public:
+    wowlabs_commandscript() : CommandScript("wowlabs_commandscript") { }
+
+    std::span<ChatCommandBuilder const> GetCommands() const override
+    {
+        static ChatCommandTable wowlabsCommandTable =
+        {
+            { "enter", HandleWowLabsEnterCommand, rbac::RBAC_PERM_COMMAND_GO, Console::No },
+            { "leave", HandleWowLabsLeaveCommand, rbac::RBAC_PERM_COMMAND_GO, Console::No },
+        };
+        static ChatCommandTable commandTable =
+        {
+            { "wowlabs", wowlabsCommandTable },
+        };
+        return commandTable;
+    }
+
+    static bool HandleWowLabsEnterCommand(ChatHandler* handler)
+    {
+        Player* player = handler->GetPlayer();
+        if (!player)
+            return false;
+
+        // Reserve a solo test match for this account and bind the player to its instance so MapManager::CreateMap
+        // gives them their own instance of MAP_WOWLABS.
+        std::vector<WowLabsMatchMgr::MatchMember> roster = { { player->GetSession()->GetBattlenetAccountGUID(), player->GetName() } };
+        WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->CreateMatch(std::move(roster), 0 /*Solo*/);
+        player->SetWowLabsInstanceId(match->InstanceId);
+
+        // Provisional drop point: the real drop zones live in encrypted WoW Labs DB2s (P4), so this is a
+        // placeholder centre-of-map spawn just to prove the instance is enterable.
+        if (!player->TeleportTo(WowLabsMatchMgr::MAP_ID, 0.0f, 0.0f, 300.0f, 0.0f, TELE_TO_NONE, match->InstanceId))
+        {
+            player->SetWowLabsInstanceId(0);
+            sWowLabsMatchMgr->RemoveMatch(match->Id);
+            handler->PSendSysMessage("WoW Labs: teleport to map {} failed - are the map data files for it extracted?", WowLabsMatchMgr::MAP_ID);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        handler->PSendSysMessage("WoW Labs: entering match {} (instance {}) on map {}.", match->Id, match->InstanceId, WowLabsMatchMgr::MAP_ID);
+        return true;
+    }
+
+    static bool HandleWowLabsLeaveCommand(ChatHandler* handler)
+    {
+        Player* player = handler->GetPlayer();
+        if (!player)
+            return false;
+
+        if (WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->FindByInstanceId(player->GetWowLabsInstanceId()))
+            sWowLabsMatchMgr->RemoveMatch(match->Id);
+
+        player->SetWowLabsInstanceId(0);
+
+        // Home the player back to their bind point, off the match map.
+        player->TeleportTo(player->m_homebind);
+        handler->PSendSysMessage("WoW Labs: left the match, returning home.");
+        return true;
+    }
+};
+
+void AddSC_wowlabs_commandscript()
+{
+    new wowlabs_commandscript();
+}

@@ -241,6 +241,19 @@ Map* MapManager::CreateMap(uint32 mapId, Player* player, Optional<uint32> lfgDun
         if (!map)
             map = CreateGarrison(mapId, newInstanceId, player);
     }
+    else if (entry->IsWowLabs())
+    {
+        // Plunderstorm / WoW Labs: every match is its own instance of MAP_WOWLABS (map 2695). The instance id
+        // is the match the player has been bound to (WowLabsMatchMgr, via the acquired lobby or the .wowlabs
+        // command); with none set there is no match to enter.
+        newInstanceId = player->GetWowLabsInstanceId();
+        if (!newInstanceId)
+            return nullptr;
+
+        map = FindMap_i(mapId, newInstanceId);
+        if (!map)
+            map = CreateWorldMap(mapId, newInstanceId);   // a plain, populated instance per match
+    }
     else
     {
         newInstanceId = 0;

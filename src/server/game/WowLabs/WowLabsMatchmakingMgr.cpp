@@ -20,6 +20,7 @@
 #include "LobbyMatchmakerPackets.h"
 #include "Log.h"
 #include "WorldSession.h"
+#include "WowLabsMatchMgr.h"
 #include <algorithm>
 
 namespace
@@ -416,6 +417,23 @@ void WowLabsMatchmakingMgr::RespondToProposal(WorldSession* session, bool accept
 void WowLabsMatchmakingMgr::FinalizeProposal()
 {
     using namespace WorldPackets::LobbyMatchmaker;
+
+    // Every party in the proposal joins ONE lobby, so reserve a single match and gather its whole roster.
+    std::vector<WowLabsMatchMgr::MatchMember> roster;
+    uint8 gameMode = 0;
+    for (ObjectGuid leader : _proposalLeaders)
+    {
+        Party* p = GetPartyByBnet(leader);
+        if (!p)
+            continue;
+        gameMode = uint8(p->PlaylistEntry);   // all proposal parties share a playlist; last wins (they match)
+        for (Member const& m : p->Members)
+            roster.push_back({ m.BnetAccountGuid, m.Name });
+    }
+
+    WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->CreateMatch(std::move(roster), gameMode);
+
+    // Tell every member where to fast-login: this realm, the match's one-time token, its game mode and map.
     for (ObjectGuid leader : _proposalLeaders)
     {
         Party* p = GetPartyByBnet(leader);
@@ -425,13 +443,18 @@ void WowLabsMatchmakingMgr::FinalizeProposal()
         {
             if (!m.Session)
                 continue;
-            LobbyMatchmakerLobbyAcquiredServer acquired;   // P3 fills the real fast-login target
+            LobbyMatchmakerLobbyAcquiredServer acquired;
+            acquired.RealmAddress = sWowLabsMatchMgr->OwnRealmAddress();
+            acquired.Token = match->Token;
+            acquired.GameMode = match->GameMode;
+            acquired.MapId = WowLabsMatchMgr::MAP_ID;
             m.Session->SendPacket(acquired.Write());
         }
         SendQueueResult(p, LobbyMatchmakerQueueResult::LOBBY_ACQUIRED);
         p->State = Party::NotQueued;
     }
-    TC_LOG_DEBUG("network", "WowLabs: lobby acquired for {} parties.", _proposalLeaders.size());
+    TC_LOG_DEBUG("network", "WowLabs: lobby acquired for {} parties (match {}, instance {}).",
+        _proposalLeaders.size(), match->Id, match->InstanceId);
     _proposalLeaders.clear();
     _proposalAccepted.clear();
 }

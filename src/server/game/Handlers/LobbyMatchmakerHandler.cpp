@@ -66,6 +66,7 @@
 #include "LobbyMatchmakerPackets.h"
 #include "Log.h"
 #include "WowLabsMatchmakingMgr.h"
+#include "WowLabsMatchMgr.h"
 
 namespace
 {
@@ -167,10 +168,28 @@ void WorldSession::HandleLobbyMatchmakerCreateCharacter(WorldPackets::LobbyMatch
         lobbyMatchmakerCreateCharacter.Customizations.size());
 }
 
+// The client sends this on the same connection right after SMSG_LOBBY_MATCHMAKER_LOBBY_ACQUIRED_SERVER (it has
+// no reply): it records where its next login should land - the WoW Labs match realm+map - then disconnects and
+// reconnects there. The destination carries no token (JamFastLoginDestination is realm+char+mode+map), so the
+// server ties the reconnect back to the reserved match by the account, not by an echoed handle. Here we just
+// validate that the registered destination is a match this account was actually proposed, and log the outcome;
+// the reconnecting session is bound to the match instance when it enters the world.
 void WorldSession::HandleRegisterFastLogin(WorldPackets::LobbyMatchmaker::RegisterFastLogin& registerFastLogin)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_REGISTER_FAST_LOGIN from {} doFastLogin {} to realm {} map {} from realm {} map {} - this message is itself a reply, no counterpart exists",
-        GetPlayerInfo(), registerFastLogin.DoFastLogin,
-        registerFastLogin.ToDestination.RealmAddress, registerFastLogin.ToDestination.MapID,
-        registerFastLogin.FromDestination.RealmAddress, registerFastLogin.FromDestination.MapID);
+    WorldPackets::LobbyMatchmaker::FastLoginDestination const& to = registerFastLogin.ToDestination;
+
+    WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->FindByMember(GetBattlenetAccountGUID());
+    bool const destinationValid = match
+        && to.MapID == WowLabsMatchMgr::MAP_ID
+        && to.RealmAddress == sWowLabsMatchMgr->OwnRealmAddress();
+
+    if (!registerFastLogin.DoFastLogin || !destinationValid)
+    {
+        TC_LOG_DEBUG("network.opcode", "CMSG_REGISTER_FAST_LOGIN from {} doFastLogin {} to realm {} map {} - no matching reserved WoW Labs match, ignored",
+            GetPlayerInfo(), registerFastLogin.DoFastLogin, to.RealmAddress, to.MapID);
+        return;
+    }
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_REGISTER_FAST_LOGIN from {} accepted: match {} instance {} char {} - reconnect will land on MAP_WOWLABS",
+        GetPlayerInfo(), match->Id, match->InstanceId, to.CharacterGUID.ToString());
 }
