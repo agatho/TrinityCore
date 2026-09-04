@@ -416,16 +416,33 @@ void WowLabsMatchMgr::UpdateInstance(Map* map, uint32 diff)
 
 std::vector<WowLabsMatchMgr::AbilityDef> const& WowLabsMatchMgr::GetAbilityPool() const
 {
-    // Config-driven default pool. The real Plunderstorm abilities are bespoke event spells (distinct spell per
-    // rarity rank, with an event resource model) that don't exist in this client's spell store, so the default
-    // uses stock spells - the same spell across ranks - purely to make the pickup/stack mechanic real and
-    // testable. Point WowLabs.AbilityPool at real per-rank spell ids to get true fidelity.
+    // The real Plunderstorm ability pool (Season 1: 10 offensive + 10 utility). Each ability's four rank spells
+    // were recovered from the client's own data: the player-castable ability spells are tagged
+    // Spell.NameSubtext = "Offensive"/"Utility", and their four rarity ranks (Common..Epic) are the variants with
+    // descending cooldowns. These spell ids are present in this client's spell store (verified on 12.1.5.69594),
+    // so they are genuinely learnable and castable here - not placeholders.
     static std::vector<AbilityDef> const pool =
     {
-        { 1, "Fireball",  true,  { 133,  133,  133,  133  } },
-        { 2, "Frostbolt", true,  { 116,  116,  116,  116  } },
-        { 3, "Blink",     false, { 1953, 1953, 1953, 1953 } },
-        { 4, "Levitate",  false, { 1706, 1706, 1706, 1706 } },
+        {  1, "Earthbreaker",       true,  { 435018, 435021, 435023, 435025 } },
+        {  2, "Fire Whirl",         true,  { 431777, 432746, 432748, 432750 } },
+        {  3, "Holy Shield",        true,  { 433380, 433472, 433473, 433474 } },
+        {  4, "Rime Arrow",         true,  { 435276, 435290, 435288, 435295 } },
+        {  5, "Storm Archon",       true,  { 442445, 442819, 442840, 442862 } },
+        {  6, "Mana Sphere",        true,  { 431501, 432730, 432737, 432744 } },
+        {  7, "Searing Axe",        true,  { 432490, 432752, 432754, 432756 } },
+        {  8, "Slicing Winds",      true,  { 433082, 433184, 433185, 433186 } },
+        {  9, "Star Bomb",          true,  { 434880, 435030, 435032, 435034 } },
+        { 10, "Toxic Smackerel",    true,  { 436254, 436310, 436308, 436312 } },
+        { 11, "Steel Traps",        false, { 434598, 434679, 434681, 434684 } },
+        { 12, "Windstorm",          false, { 433263, 433256, 433264, 433265 } },
+        { 13, "Explosive Caltrops", false, { 432541, 432759, 432762, 432764 } },
+        { 14, "Hunter's Chains",    false, { 436031, 436211, 436229, 436240 } },
+        { 15, "Lightning Bulwark",  false, { 442371, 442404, 442407, 442411 } },
+        { 16, "Snowdrift",          false, { 433364, 433373, 433374, 433375 } },
+        { 17, "Fade to Shadow",     false, { 432547, 432765, 432766, 432767 } },
+        { 18, "Repel",              false, { 435286, 435292, 435296, 435298 } },
+        { 19, "Faeform",            false, { 432594, 432768, 432769, 432770 } },
+        { 20, "Quaking Leap",       false, { 435454, 435510, 435729, 435757 } },
     };
     return pool;
 }
