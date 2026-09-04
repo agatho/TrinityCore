@@ -89,9 +89,9 @@ EnumCharactersResult::CharacterInfoBasic::CharacterInfoBasic(Field const* fields
     // "character_banned.guid, characters.slot, characters.createTime, characters.logout_time, characters.activeTalentGroup, characters.lastLoginBuild, "
     //  23                                    24                                    25                                    26                                    27
     // "characters.personalTabardEmblemStyle, characters.personalTabardEmblemColor, characters.personalTabardBorderStyle, characters.personalTabardBorderColor, characters.personalTabardBackgroundColor "
-    // 19 * 8 fields of equipment cache...
-    //  180
-    // "character_declinedname.genitive"
+    // 19 * 8 fields of equipment cache (indices 28..179) ...
+    //  180                            181
+    // "characters.timerunningSeasonId, character_declinedname.genitive"
 
     Guid              = ObjectGuid::Create<HighGuid::Player>(fields[0].GetUInt64());
     VirtualRealmAddress = GetVirtualRealmAddress();
@@ -129,7 +129,7 @@ EnumCharactersResult::CharacterInfoBasic::CharacterInfoBasic(Field const* fields
     if (fields[17].GetUInt64())
         Flags |= CHARACTER_FLAG_LOCKED_BY_BILLING;
 
-    if (sWorld->getBoolConfig(CONFIG_DECLINED_NAMES_USED) && !fields[180].GetStringView().empty())
+    if (sWorld->getBoolConfig(CONFIG_DECLINED_NAMES_USED) && !fields[181].GetStringView().empty())
         Flags |= CHARACTER_FLAG_DECLINED;
 
     if (atLoginFlags & AT_LOGIN_CUSTOMIZE)
@@ -183,6 +183,10 @@ EnumCharactersResult::CharacterInfoBasic::CharacterInfoBasic(Field const* fields
     PersonalTabard.BorderStyle = fields[25].GetInt32();
     PersonalTabard.BorderColor = fields[26].GetInt32();
     PersonalTabard.BackgroundColor = fields[27].GetInt32();
+
+    // A non-zero season marks a Timerunning (Legion/Pandaria Remix) character; the client renders the
+    // season badge in the character-select list from this. Column index is after the 19*8 equipment cache.
+    TimerunningSeasonID = fields[180].GetInt32();
 
     for (std::size_t slot = 0; slot < VisualItems.size(); ++slot)
     {
