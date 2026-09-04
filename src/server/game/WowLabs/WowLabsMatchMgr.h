@@ -24,6 +24,7 @@
 #include <unordered_map>
 #include <vector>
 
+class Creature;
 class Map;
 class Player;
 
@@ -203,6 +204,10 @@ public:
     // A player killed another player. If both are in the same active match, credit the kill and award the
     // per-kill Plunder bounty, XP, and (retail) an ability drop.
     void OnPlayerKill(Player* killer, Player* killed);
+
+    // A player killed a creature in a match: award mob Plunder + XP, and (retail: first kill / elites guarantee
+    // a spell) drop an ability. No-op off a match map.
+    void OnCreatureKill(Player* killer, Creature* killed);
 
     // --- Ability pickup / stack (P7) ---
 

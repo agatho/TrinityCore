@@ -17,6 +17,7 @@
 
 #include "WowLabsMatchMgr.h"
 #include "Config.h"
+#include "Creature.h"
 #include "LobbyMatchmakerPackets.h"
 #include "Log.h"
 #include "Map.h"
@@ -592,6 +593,40 @@ void WowLabsMatchMgr::OnPlayerEnterMatch(Player* player, Match* match)
     uint64 const key = player->GetGUID().GetCounter();
     uint8 const level = match->Level.count(key) ? match->Level[key] : uint8(1);
     ApplyMatchLevelHealth(player, match, level ? level : uint8(1));
+}
+
+void WowLabsMatchMgr::OnCreatureKill(Player* killer, Creature* killed)
+{
+    if (!killer || !killed)
+        return;
+
+    uint32 const instanceId = killer->GetWowLabsInstanceId();
+    if (!instanceId)
+        return;
+    Match* match = FindByInstanceId(instanceId);
+    if (!match || match->MatchPhase != Phase::Active)
+        return;
+
+    uint64 const key = killer->GetGUID().GetCounter();
+    bool const elite = killed->IsElite();
+
+    // Plunder banked at match end; elites are worth much more (retail).
+    match->PlunderEarned[key] += sConfigMgr->GetIntDefault(elite ? "WowLabs.PlunderPerElite" : "WowLabs.PlunderPerMob", elite ? 50 : 10);
+
+    // XP -> level, same curve as player kills.
+    uint32 const xpPerLevel = std::max(1, sConfigMgr->GetIntDefault("WowLabs.XpPerLevel", 200));
+    match->Xp[key] += sConfigMgr->GetIntDefault(elite ? "WowLabs.XpPerElite" : "WowLabs.XpPerMob", elite ? 100 : 25);
+    uint8 const newLevel = uint8(std::min<uint32>(MAX_MATCH_LEVEL, 1 + match->Xp[key] / xpPerLevel));
+    uint8& level = match->Level[key];
+    if (newLevel > level)
+    {
+        level = newLevel;
+        ApplyMatchLevelHealth(killer, match, level);
+    }
+
+    // Retail: elites guarantee a spell drop.
+    if (elite && sConfigMgr->GetBoolDefault("WowLabs.AbilityDropOnKill", true))
+        GrantRandomAbility(killer, match);
 }
 
 void WowLabsMatchMgr::OnPlayerKill(Player* killer, Player* killed)

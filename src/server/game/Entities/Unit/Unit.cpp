@@ -11617,7 +11617,10 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
                 sWowLabsMatchMgr->OnPlayerKill(killerPlr, killedPlr);   // Plunderstorm kill credit (no-op off-map)
             }
             else if (Creature* killedCre = victim->ToCreature())
+            {
                 sScriptMgr->OnCreatureKill(killerPlr, killedCre);
+                sWowLabsMatchMgr->OnCreatureKill(killerPlr, killedCre);   // Plunderstorm mob loot (no-op off-map)
+            }
         }
         else if (Creature* killerCre = attacker->ToCreature())
         {
