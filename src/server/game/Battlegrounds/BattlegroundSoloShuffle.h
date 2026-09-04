@@ -49,7 +49,15 @@ private:
         ObjectGuid Guid;
         bool       IsHealer = false;
         uint8      RoundsWon = 0;
+        uint16     Rating = 0;      // personal solo-shuffle MMR, loaded at join, re-persisted at series end
     };
+
+    // Solo Shuffle keeps a personal matchmaker rating in character_arena_stats under a slot distinct from the
+    // three team-arena slots (0=2v2, 1=3v3, 2=5v5); the series is 6 individual games, so the rating moves by a
+    // bounded per-game Elo step against the lobby's average rating.
+    static constexpr uint8 kSoloShuffleArenaSlot = 3;
+    static constexpr uint16 kRoundsPerSeries     = 6;
+    static constexpr int32  kPerGameK            = 16;   // total swing bounded to +/- (kRoundsPerSeries*kPerGameK)/2
 
     std::array<LobbySlot, 6> _lobby;   // slots 0/1 = the two healers, 2..5 = the four damage players
     uint8 _assigned = 0;               // how many lobby slots have been filled by AddPlayer
