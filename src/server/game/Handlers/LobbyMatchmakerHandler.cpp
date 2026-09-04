@@ -135,15 +135,7 @@ void WorldSession::HandleLobbyMatchmakerSetPlayerReady(WorldPackets::LobbyMatchm
 // der Warteschlangenzustand, das andere die Fehlermeldung.
 void WorldSession::HandleLobbyMatchmakerEnterQueue(WorldPackets::LobbyMatchmaker::LobbyMatchmakerEnterQueue& lobbyMatchmakerEnterQueue)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_ENTER_QUEUE from {} playlist {} character {} race {} class {} sex {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerEnterQueue.PlaylistEntryID,
-        lobbyMatchmakerEnterQueue.CharacterGUID.ToString(),
-        lobbyMatchmakerEnterQueue.Customization.RaceID,
-        lobbyMatchmakerEnterQueue.Customization.ClassID,
-        lobbyMatchmakerEnterQueue.Customization.SexID);
-
-    SendQueueResult(this, WorldPackets::LobbyMatchmaker::LobbyMatchmakerQueueResult::CANNOT_QUEUE);
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::ENTER_QUEUE_FAILED);
+    sWowLabsMatchmakingMgr->EnterQueue(this);
 }
 
 // 0x430175, leere Nutzlast. Der Client will die Warteschlange verlassen. Er steht in keiner -
@@ -153,19 +145,14 @@ void WorldSession::HandleLobbyMatchmakerEnterQueue(WorldPackets::LobbyMatchmaker
 // "du stehst jetzt in keiner Warteschlange".
 void WorldSession::HandleLobbyMatchmakerAbandonQueue(WorldPackets::LobbyMatchmaker::LobbyMatchmakerAbandonQueue& /*lobbyMatchmakerAbandonQueue*/)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_ABANDON_QUEUE from {} - no lobby matchmaker service", GetPlayerInfo());
-
-    SendQueueResult(this, WorldPackets::LobbyMatchmaker::LobbyMatchmakerQueueResult::LEFT_QUEUE);
+    sWowLabsMatchmakingMgr->AbandonQueue(this);
 }
 
 // 0x430174, ein Bit. Antwort auf SMSG_LOBBY_MATCHMAKER_QUEUE_PROPOSED, das dieser Realm nie
 // sendet - die Nachricht ist also verwaist, wenn sie ankommt.
 void WorldSession::HandleLobbyMatchmakerQueueProposalResponse(WorldPackets::LobbyMatchmaker::LobbyMatchmakerQueueProposalResponse& lobbyMatchmakerQueueProposalResponse)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_QUEUE_PROPSAL_RESPONSE from {} accept {} - no proposal was made by this realm",
-        GetPlayerInfo(), lobbyMatchmakerQueueProposalResponse.Accept);
-
-    SendQueueResult(this, WorldPackets::LobbyMatchmaker::LobbyMatchmakerQueueResult::CANNOT_QUEUE);
+    sWowLabsMatchmakingMgr->RespondToProposal(this, lobbyMatchmakerQueueProposalResponse.Accept);
 }
 
 // 0x43017E und 0x430172 sind selbst ANTWORTEN - auf

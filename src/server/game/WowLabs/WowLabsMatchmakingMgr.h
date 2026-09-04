@@ -57,10 +57,13 @@ public:
 
     struct Party
     {
+        enum QueueState : uint8 { NotQueued = 0, Queued = 1, Proposed = 2 };
+
         uint64 Id = 0;
         ObjectGuid LeaderBnetGuid;
         std::vector<Member> Members;
         uint32 PlaylistEntry = 0;     // PartyPlaylistEntry { Solo=0, Duo=1, Trio=2, Training=3 }
+        uint8 State = NotQueued;
 
         Member* FindMember(ObjectGuid bnet);
         bool IsLeader(ObjectGuid bnet) const { return LeaderBnetGuid == bnet; }
@@ -75,6 +78,13 @@ public:
     void LeaveParty(WorldSession* session);
     void SetPlaylistEntry(WorldSession* leader, uint32 playlistEntry);
     void SetReady(WorldSession* session, bool ready);
+
+    // Queue phase (P2): a whole party enters the queue; when enough players are queued a lobby is proposed to
+    // them; each member accepts/declines; on full acceptance the lobby is acquired (the client then fast-logs
+    // into the match). AbandonQueue pulls the party out at any point.
+    void EnterQueue(WorldSession* session);
+    void RespondToProposal(WorldSession* session, bool accept);
+    void AbandonQueue(WorldSession* session);
 
     // A session dropping out of the lobby (disconnect / logout / entering world) must be pulled from its party.
     void OnSessionLeave(WorldSession* session);
@@ -100,9 +110,20 @@ private:
 
     WorldSession* FindLobbySession(ObjectGuid bnet) const;
 
+    // Queue helpers.
+    void SendQueueResult(Party const* party, uint8 status);   // to every member of the party
+    void TryFormLobby();                                       // propose a lobby when enough players are queued
+    void FinalizeProposal();                                   // all accepted -> acquire the lobby
+    void DissolveProposal(uint8 statusToSend);                // decline/leave -> tell the members and reset
+    uint32 MinLobbyPlayers() const;                           // config, default 1 (solo pop) for a private realm
+
     std::unordered_map<uint64 /*bnet counter*/, std::shared_ptr<Party>> _partiesByBnet;   // member bnet -> party
     std::unordered_map<uint64 /*invitee bnet*/, std::vector<ObjectGuid /*inviter bnet*/>> _pendingInvites;
     std::unordered_map<uint64 /*bnet counter*/, WorldSession*> _lobbySessions;
+
+    std::vector<ObjectGuid> _queuedLeaders;                   // party leaders currently in queue
+    std::vector<ObjectGuid> _proposalLeaders;                 // party leaders in the pending proposal
+    std::unordered_map<uint64, bool> _proposalAccepted;       // member bnet counter -> accepted
     uint64 _nextPartyId = 1;
 };
 

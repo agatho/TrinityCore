@@ -193,6 +193,22 @@ WorldPacket const* LobbyMatchmakerPartyInfo::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* LobbyMatchmakerQueueProposed::Write()
+{
+    // No modelled body (see header) - the pop is correlated by session, the client answers with a bool.
+    return &_worldPacket;
+}
+
+WorldPacket const* LobbyMatchmakerLobbyAcquiredServer::Write()
+{
+    _worldPacket << uint32(RealmAddress);
+    _worldPacket << uint32(Token);
+    _worldPacket << uint8(GameMode);
+    _worldPacket << uint32(MapId);
+
+    return &_worldPacket;
+}
 }
 
 namespace WorldPackets::WowLabs

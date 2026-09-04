@@ -384,6 +384,37 @@ namespace WorldPackets
             std::vector<LobbyMatchmakerPartyInfoMember> Members;
             std::vector<LobbyMatchmakerPartyInfoMember> Invited;
         };
+
+        // SMSG_LOBBY_MATCHMAKER_QUEUE_PROPOSED (0x45031C / wire 0x420320). The queue "pop": drives the client
+        // event LOBBY_MATCHMAKER_QUEUE_POPPED, to which the client answers CMSG_..QUEUE_PROPSAL_RESPONSE{Accept}.
+        // The body is one of the runtime-dispatched WoW-Labs messages whose exact framing is NOT statically
+        // recoverable (opcode dwords are not immediates; needs a dynamic capture). The response correlates by
+        // session, so P2 sends the pop with no modelled fields; a proposal id / countdown is added once captured.
+        class LobbyMatchmakerQueueProposed final : public ServerPacket
+        {
+        public:
+            explicit LobbyMatchmakerQueueProposed() : ServerPacket(SMSG_LOBBY_MATCHMAKER_QUEUE_PROPOSED, 4) { }
+
+            WorldPacket const* Write() override;
+        };
+
+        // SMSG_LOBBY_MATCHMAKER_LOBBY_ACQUIRED_SERVER (0x45031E / wire 0x42031c). Sent once a proposal is fully
+        // accepted: tells the client which server/instance to fast-login to (it then ForceLogout()s). The client
+        // handler reads a dword at object offset +44; the fields below are the inferred fast-login target
+        // (~ FastLoginDestination: realm address, a token, game mode, map id) and are populated best-effort in
+        // P2, finalised in P3 when the MAP_WOWLABS instance handoff is built. Field framing is inferred.
+        class LobbyMatchmakerLobbyAcquiredServer final : public ServerPacket
+        {
+        public:
+            explicit LobbyMatchmakerLobbyAcquiredServer() : ServerPacket(SMSG_LOBBY_MATCHMAKER_LOBBY_ACQUIRED_SERVER, 16) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 RealmAddress = 0;
+            uint32 Token = 0;
+            uint8 GameMode = 0;
+            uint32 MapId = 0;
+        };
     }
 
     // --------------------------------------------------------------------------------------

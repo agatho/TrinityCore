@@ -16,6 +16,7 @@
  */
 
 #include "WowLabsMatchmakingMgr.h"
+#include "Config.h"
 #include "LobbyMatchmakerPackets.h"
 #include "Log.h"
 #include "WorldSession.h"
@@ -273,6 +274,14 @@ void WowLabsMatchmakingMgr::OnSessionLeave(WorldSession* session)
 {
     if (!session)
         return;
+
+    // Pull the party out of any queue/proposal first (removes it from the queued/proposed sets and notifies
+    // co-proposed parties), clear this member's proposal acceptance, then leave the party.
+    if (Party* party = GetPartyByBnet(BnetGuidOf(session)))
+        if (party->State != Party::NotQueued)
+            AbandonQueue(session);
+    _proposalAccepted.erase(session->GetBattlenetAccountGUID().GetCounter());
+
     LeaveParty(session);
     _lobbySessions.erase(session->GetBattlenetAccountGUID().GetCounter());
     _pendingInvites.erase(session->GetBattlenetAccountGUID().GetCounter());
@@ -308,4 +317,151 @@ void WowLabsMatchmakingMgr::SendPartyInfoTo(WorldSession* session, Party const* 
         }
     }
     session->SendPacket(info.Write());
+}
+
+uint32 WowLabsMatchmakingMgr::MinLobbyPlayers() const
+{
+    // A private realm rarely has the ~60 players retail fills a lobby with; default 1 so a solo party pops
+    // immediately and the whole handshake is exercisable. Operators can raise it to require a fuller lobby.
+    return std::max<uint32>(1u, uint32(sConfigMgr->GetIntDefault("WowLabs.MinLobbyPlayers", 1)));
+}
+
+void WowLabsMatchmakingMgr::SendQueueResult(Party const* party, uint8 status)
+{
+    if (!party)
+        return;
+    for (Member const& m : party->Members)
+    {
+        if (!m.Session)
+            continue;
+        WorldPackets::LobbyMatchmaker::LobbyMatchmakerQueueResult res;
+        res.Status = status;
+        m.Session->SendPacket(res.Write());
+    }
+}
+
+void WowLabsMatchmakingMgr::EnterQueue(WorldSession* session)
+{
+    using namespace WorldPackets::LobbyMatchmaker;
+    Party* party = GetOrCreatePartyFor(session);
+    if (!party->IsLeader(BnetGuidOf(session)))   // only the leader queues the party
+    {
+        SendError(session, WowLabsPartyError::ENTER_QUEUE_FAILED);
+        return;
+    }
+    if (party->State != Party::NotQueued)
+        return;
+
+    party->State = Party::Queued;
+    _queuedLeaders.push_back(party->LeaderBnetGuid);
+    SendQueueResult(party, LobbyMatchmakerQueueResult::QUEUED);
+    TryFormLobby();
+}
+
+void WowLabsMatchmakingMgr::TryFormLobby()
+{
+    if (!_proposalLeaders.empty())
+        return;   // one proposal at a time
+
+    uint32 players = 0;
+    for (ObjectGuid leader : _queuedLeaders)
+        if (Party* p = GetPartyByBnet(leader))
+            players += uint32(p->Members.size());
+    if (players < MinLobbyPlayers())
+        return;
+
+    _proposalLeaders = _queuedLeaders;
+    _queuedLeaders.clear();
+    _proposalAccepted.clear();
+    for (ObjectGuid leader : _proposalLeaders)
+    {
+        Party* p = GetPartyByBnet(leader);
+        if (!p)
+            continue;
+        p->State = Party::Proposed;
+        for (Member const& m : p->Members)
+        {
+            _proposalAccepted[m.BnetAccountGuid.GetCounter()] = false;
+            if (m.Session)
+            {
+                WorldPackets::LobbyMatchmaker::LobbyMatchmakerQueueProposed proposed;
+                m.Session->SendPacket(proposed.Write());
+            }
+        }
+    }
+    TC_LOG_DEBUG("network", "WowLabs: proposed a lobby to {} parties ({} players).", _proposalLeaders.size(), players);
+}
+
+void WowLabsMatchmakingMgr::RespondToProposal(WorldSession* session, bool accept)
+{
+    using namespace WorldPackets::LobbyMatchmaker;
+    ObjectGuid const bnet = BnetGuidOf(session);
+    if (_proposalAccepted.find(bnet.GetCounter()) == _proposalAccepted.end())
+        return;   // not part of the current proposal
+
+    if (!accept)
+    {
+        DissolveProposal(LobbyMatchmakerQueueResult::QUEUE_EXPIRED);
+        return;
+    }
+
+    _proposalAccepted[bnet.GetCounter()] = true;
+    for (auto const& kv : _proposalAccepted)
+        if (!kv.second)
+            return;   // still waiting on someone
+
+    FinalizeProposal();
+}
+
+void WowLabsMatchmakingMgr::FinalizeProposal()
+{
+    using namespace WorldPackets::LobbyMatchmaker;
+    for (ObjectGuid leader : _proposalLeaders)
+    {
+        Party* p = GetPartyByBnet(leader);
+        if (!p)
+            continue;
+        for (Member const& m : p->Members)
+        {
+            if (!m.Session)
+                continue;
+            LobbyMatchmakerLobbyAcquiredServer acquired;   // P3 fills the real fast-login target
+            m.Session->SendPacket(acquired.Write());
+        }
+        SendQueueResult(p, LobbyMatchmakerQueueResult::LOBBY_ACQUIRED);
+        p->State = Party::NotQueued;
+    }
+    TC_LOG_DEBUG("network", "WowLabs: lobby acquired for {} parties.", _proposalLeaders.size());
+    _proposalLeaders.clear();
+    _proposalAccepted.clear();
+}
+
+void WowLabsMatchmakingMgr::DissolveProposal(uint8 statusToSend)
+{
+    for (ObjectGuid leader : _proposalLeaders)
+        if (Party* p = GetPartyByBnet(leader))
+        {
+            SendQueueResult(p, statusToSend);
+            p->State = Party::NotQueued;
+        }
+    _proposalLeaders.clear();
+    _proposalAccepted.clear();
+}
+
+void WowLabsMatchmakingMgr::AbandonQueue(WorldSession* session)
+{
+    using namespace WorldPackets::LobbyMatchmaker;
+    Party* party = GetPartyByBnet(BnetGuidOf(session));
+    if (!party)
+        return;
+
+    if (party->State == Party::Proposed)   // dissolving the proposal also notifies the co-proposed parties
+    {
+        DissolveProposal(LobbyMatchmakerQueueResult::LEFT_QUEUE);
+        return;
+    }
+
+    std::erase(_queuedLeaders, party->LeaderBnetGuid);
+    party->State = Party::NotQueued;
+    SendQueueResult(party, LobbyMatchmakerQueueResult::LEFT_QUEUE);
 }
