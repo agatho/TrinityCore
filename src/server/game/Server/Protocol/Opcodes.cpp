@@ -217,16 +217,11 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_BATTLEMASTER_JOIN_RATED_BG_BLITZ,                   STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlemasterJoinRatedBGBlitz);
     // CMSG_BATTLEMASTER_JOIN_RATED_SOLO_SHUFFLE (0x3E00BF). Client wire = single uint8 Role
     // (tank/healer/dps mask), verified from the client packet builder at wow.exe .text 0x1406D8650.
-    // Left as Handle_NULL: the Rated Solo Shuffle bracket does not exist server-side. Missing pieces
-    // are the whole mode - BattlegroundQueueIdType has no SoloShuffle (retail type 6) value; there is
-    // no BattlemasterList/BattlegroundTypeId template; the matchmaker (BattlegroundQueue::CheckSoloQueueMatch
-    // -> StartProposal) assembles a single 2-team match and has no 6-round 3v3 pod rotation, per-round
-    // scoring or "best of rounds" resolution; and there is no solo-shuffle personal-rating store
-    // (arena-team rating is stubbed, GetArenaTeamId returns 0). The server also deliberately reports
-    // RatedSoloShuffle = false in HandleGetPVPOptionsEnabled, so a stock client never enables the button.
-    // Parsing the Role byte only to enqueue into a non-existent bracket would be a silent no-op, so the
-    // packet stays dropped until the mode itself is authored.
-    DEFINE_HANDLER(CMSG_BATTLEMASTER_JOIN_RATED_SOLO_SHUFFLE,               STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    // Rated Solo Shuffle now exists server-side: BattlegroundQueueIdType::RatedSoloShuffle, queue entry
+    // BattlemasterList 1065 ("All Arenas", solo), the solo matchmaker (CheckSoloQueueMatch 3/0/1) + proposal
+    // machinery reused from Blitz, and HandleGetPVPOptionsEnabled now advertises RatedSoloShuffle = true. The
+    // handler queues a 6-player 3v3 lobby; the 6-round shuffle controller/rating is layered on top (see plan).
+    DEFINE_HANDLER(CMSG_BATTLEMASTER_JOIN_RATED_SOLO_SHUFFLE,               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlemasterJoinRatedSoloShuffle);
     DEFINE_HANDLER(CMSG_BATTLEMASTER_JOIN_SKIRMISH,                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlemasterJoinSkirmish);
     DEFINE_HANDLER(CMSG_BATTLENET_CHALLENGE_RESPONSE,                       STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleBattlenetChallengeResponse);
     DEFINE_HANDLER(CMSG_BATTLENET_REQUEST,                                  STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleBattlenetRequest);

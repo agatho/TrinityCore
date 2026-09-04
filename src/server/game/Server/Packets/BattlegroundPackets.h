@@ -511,6 +511,18 @@ namespace WorldPackets
             uint8 Roles = 0;
         };
 
+        // CMSG_BATTLEMASTER_JOIN_RATED_SOLO_SHUFFLE - same wire shape as Blitz (one role-mask byte, no queue id).
+        class BattlemasterJoinRatedSoloShuffle final : public ClientPacket
+        {
+        public:
+            explicit BattlemasterJoinRatedSoloShuffle(WorldPacket&& packet)
+                : ClientPacket(CMSG_BATTLEMASTER_JOIN_RATED_SOLO_SHUFFLE, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 Roles = 0;
+        };
+
         // CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3E00C1), body = 3 bytes.
         //
         // Serializer VA 0x7FF729153120 writes obj+0x20 then obj+0x21, then one bit from obj+0x22 and flushes.

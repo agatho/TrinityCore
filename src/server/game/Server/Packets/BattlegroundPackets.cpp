@@ -178,6 +178,11 @@ void BattlemasterJoinRatedBGBlitz::Read()
     _worldPacket >> Roles;
 }
 
+void BattlemasterJoinRatedSoloShuffle::Read()
+{
+    _worldPacket >> Roles;
+}
+
 void JoinRatedBattleground::Read()
 {
     _worldPacket >> Roles;

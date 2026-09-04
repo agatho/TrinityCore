@@ -171,6 +171,12 @@ void BattlegroundMgr::Update(uint32 diff)
             for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
                 GetBattlegroundQueue(blitzQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
 
+            // Rated Solo Shuffle uses the same solo-matchmaker (CheckSoloQueueMatch) and needs the same
+            // rating-independent periodic sweep for exactly the reasons above.
+            BattlegroundQueueTypeId soloShuffleQueueId = BGQueueTypeId(BATTLEGROUND_SOLO_SHUFFLE, BattlegroundQueueIdType::RatedSoloShuffle, true, 0);
+            for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
+                GetBattlegroundQueue(soloShuffleQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
+
             // Rated battlegrounds are matched by CheckPremadeMatch, which only runs when something
             // schedules an update. Sweep it on the same timer so a queue that could not pair two
             // premades at join time retries instead of sitting idle. CheckPremadeMatch reads no rating
@@ -844,6 +850,16 @@ bool BattlegroundMgr::IsValidQueueId(BattlegroundQueueTypeId bgQueueTypeId)
             // not Arena, even though the mode is rated. Rated must be set and TeamSize must be 0 - both read
             // straight off the packed QueueID retail sent back to the client (0x1F1000000019044D).
             if (battlemasterList->GetType() != BattlemasterType::Battleground)
+                return false;
+            if (!bgQueueTypeId.Rated)
+                return false;
+            if (bgQueueTypeId.TeamSize)
+                return false;
+            break;
+        case BattlegroundQueueIdType::RatedSoloShuffle:
+            // BattlemasterList 1065 ("All Arenas", solo) is an arena entry, so GetType() is Arena. Rated must be
+            // set; TeamSize is 0 (the mode is implied by the queue Type - the lobby is always 6 players, 3v3 rounds).
+            if (battlemasterList->GetType() != BattlemasterType::Arena)
                 return false;
             if (!bgQueueTypeId.Rated)
                 return false;
