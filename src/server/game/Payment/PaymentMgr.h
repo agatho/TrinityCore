@@ -73,15 +73,17 @@ private:
     void PumpApproveUrls();     // world thread: hand approve URLs to sessions
     void PumpSettlements();     // world thread: poll paypal_settlement (SETTLED) -> grant
 
-    // Resolve the price + description for a product. On this branch there is no commerce catalog,
-    // so this uses the PayPal.TestProductPrice config fallback. TODO(P2): resolve via BattlePayMgr /
-    // CatalogMgr once the commerce checkout rail lands on integration.
+    // Resolve the price + description for a product from the real BattlePay catalog: a routed real-money
+    // product is charged its shop DisplayPrice (/100000); an unrouted/QA product falls back to the
+    // PayPal.TestProductPrice config so a sandbox order can still be driven, and a product with neither is
+    // refused rather than charged a guessed amount.
     bool ResolveProduct(uint64 productId, std::string& outValue, std::string& outDescription) const;
 
-    // Grant a settled product to an account. TODO(P2): call the real DeliveryPipeline / BattlePayMgr
-    // grant (SMSG_BATTLE_PAY_DELIVERY_ENDED + DISTRIBUTION_UPDATE). Returns true only if the product
-    // was actually delivered - a false return leaves the row SETTLED so it is retried later, never
-    // flipping it to DELIVERED without an actual grant.
+    // Grant a settled product to an account by creating a real account-level BattlePay entitlement
+    // (sBattlePayMgr->CreateEntitlement) that the buyer claims on next login - offline-safe, since a
+    // webhook can settle while the buyer is offline. Returns true only if the entitlement was actually
+    // created; a false return leaves the row SETTLED so it is retried later, never flipping it to
+    // DELIVERED without an actual grant.
     bool DeliverSettledProduct(uint32 accountId, uint64 productId, std::string const& orderId);
 
     bool _enabled = false;
