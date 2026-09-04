@@ -363,7 +363,16 @@ void GetVasTransferTargetRealmList::Read()
 
 void VasGetQueueMinutes::Read()
 {
-    _worldPacket >> Field1;
+    // The response echoes a uint64 correlation handle; the request carries it. Read it as a uint64 when the
+    // body is wide enough, else zero-extend a uint32 - robust against either request width without throwing.
+    if (_worldPacket.size() - _worldPacket.rpos() >= sizeof(uint64))
+        _worldPacket >> Handle;
+    else
+    {
+        uint32 low = 0;
+        _worldPacket >> low;
+        Handle = low;
+    }
 }
 
 void VasCheckTransferOk::Read()
@@ -381,6 +390,21 @@ void BattlePayDistributionAssignVas::Read()
 {
     _worldPacket >> Token;
     _worldPacket.rfinish();   // the remaining fields are not modelled (see header); consume them
+}
+
+WorldPacket const* VasGetQueueMinutesResponse::Write()
+{
+    _worldPacket << uint64(Handle);
+    _worldPacket << uint32(QueueMinutes);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CharacterUpgradeManualUnrevokeResult::Write()
+{
+    _worldPacket << uint32(Result);
+
+    return &_worldPacket;
 }
 
 WorldPacket const* BattlePayDistributionAssignVasResponse::Write()

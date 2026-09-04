@@ -743,7 +743,32 @@ namespace WorldPackets
 
             void Read() override;
 
-            uint32 Field1 = 0;
+            uint64 Handle = 0;   // the correlation token the response echoes (client matches it in its pending table)
+        };
+
+        // SMSG_VAS_GET_QUEUE_MINUTES_RESPONSE (0x4202C1) - flat 12 bytes, VERIFIED from the client parser
+        // sub_7FF72AE70450: { uint64 Handle; uint32 QueueMinutes }. No sub-frame, no bits.
+        class VasGetQueueMinutesResponse final : public ServerPacket
+        {
+        public:
+            explicit VasGetQueueMinutesResponse() : ServerPacket(SMSG_VAS_GET_QUEUE_MINUTES_RESPONSE, 12) { }
+
+            WorldPacket const* Write() override;
+
+            uint64 Handle = 0;
+            uint32 QueueMinutes = 0;
+        };
+
+        // SMSG_CHARACTER_UPGRADE_MANUAL_UNREVOKE_RESULT (0x42026B) - flat 4 bytes, VERIFIED from the client
+        // parser sub_7FF72A663530: a single uint32 Result. No character guid on the wire (resolved client-side).
+        class CharacterUpgradeManualUnrevokeResult final : public ServerPacket
+        {
+        public:
+            explicit CharacterUpgradeManualUnrevokeResult() : ServerPacket(SMSG_CHARACTER_UPGRADE_MANUAL_UNREVOKE_RESULT, 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Result = 0;
         };
 
         // CMSG_VAS_CHECK_TRANSFER_OK (0x400139) - one uint32 (the VAS service/product context to validate).

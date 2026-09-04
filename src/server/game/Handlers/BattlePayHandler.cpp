@@ -1689,20 +1689,27 @@ void WorldSession::HandleCharacterCheckUpgrade(WorldPackets::BattlePay::Characte
 void WorldSession::HandleCharacterUpgradeManualUnrevokeRequest(WorldPackets::BattlePay::CharacterUpgradeManualUnrevokeRequest& packet)
 {
     // Undo a revoked boost on a character. That requires a revoked boost entitlement, which exists only after a
-    // web-side purchase/refund cycle this realm has none of, so there is nothing to unrevoke. The paired result
-    // SMSG is a framed message whose inner layout is not offline-provable, so a guessed frame is not sent (it
-    // would risk disconnecting the client); the request is read and logged pending a live capture.
+    // web-side purchase/refund cycle this realm has none of, so there is nothing to unrevoke. Answer with the
+    // real result wire (client parser sub_7FF72A663530: a single uint32; no guid) - the Lua handler treats 0 as
+    // success and any non-zero as failure (ERROR_MANUAL_UNREVOKE_FAILURE), so a non-zero code is the honest
+    // "nothing to unrevoke" answer rather than falsely reporting success.
     TC_LOG_INFO("network", "BattlePay: CharacterUpgradeManualUnrevokeRequest from {}: character={} - no revoked "
-        "boost to unrevoke.", GetPlayerInfo(), packet.CharacterGUID.ToString());
+        "boost to unrevoke; returning failure.", GetPlayerInfo(), packet.CharacterGUID.ToString());
+
+    WorldPackets::BattlePay::CharacterUpgradeManualUnrevokeResult result;
+    result.Result = 1;   // non-zero == failure (client shows the generic unrevoke-failure dialog)
+    SendPacket(result.Write());
 }
 
 void WorldSession::HandleVasGetQueueMinutes(WorldPackets::BattlePay::VasGetQueueMinutes& packet)
 {
-    // Estimated queue time for a VAS service. This realm processes transfers synchronously (no queue), but the
-    // response is a framed message whose inner layout is not offline-provable, so a guessed frame is not sent;
-    // the request is read and logged pending a live capture that proves the response wire.
-    TC_LOG_DEBUG("network", "BattlePay: VasGetQueueMinutes from {}: context={} - no queue; response wire pending "
-        "a live capture.", GetPlayerInfo(), packet.Field1);
+    // Estimated queue time for a VAS service. This realm processes transfers synchronously (the GM/transfer path
+    // runs inline), so the honest estimate is zero. Wire recovered from the client parser sub_7FF72AE70450:
+    // { uint64 Handle; uint32 QueueMinutes } - echo the request's correlation handle so the client matches it.
+    WorldPackets::BattlePay::VasGetQueueMinutesResponse response;
+    response.Handle = packet.Handle;
+    response.QueueMinutes = 0;
+    SendPacket(response.Write());
 }
 
 void WorldSession::HandleBattlePayAckFailedResponse(WorldPackets::BattlePay::BattlePayAckFailedResponse& packet)
