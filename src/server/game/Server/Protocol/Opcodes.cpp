@@ -511,7 +511,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_GET_REMAINING_GAME_TIME,                            STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_GET_TROPHY_LIST,                                    STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_GET_UNDELETE_CHARACTER_COOLDOWN_STATUS,             STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleGetUndeleteCooldownStatus);
-    DEFINE_HANDLER(CMSG_GET_VAS_ACCOUNT_CHARACTER_LIST,                     STATUS_IGNORED,   PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_GET_VAS_ACCOUNT_CHARACTER_LIST,                     STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleGetVasAccountCharacterList);
     DEFINE_HANDLER(CMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST,                 STATUS_IGNORED,   PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_GM_TICKET_ACKNOWLEDGE_SURVEY,                       STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_GM_TICKET_GET_CASE_STATUS,                          STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleGMTicketGetCaseStatusOpcode);

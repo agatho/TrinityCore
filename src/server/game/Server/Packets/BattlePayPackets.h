@@ -770,6 +770,73 @@ namespace WorldPackets
             uint32 Field2 = 0;
             uint32 Result = 0;
         };
+
+        // ---- VAS transfer list responses (server -> client) --------------------------------------------
+        //
+        // Element layouts are VERIFIED from the client deserializers (cfunc_cache decompile). Outer headers
+        // and a few per-entry field SEMANTICS are not offline-provable (JamCliVASTargetRealm is a reflected
+        // type with no descriptor); those are populated with clearly-labeled best-effort values and are
+        // live-test-pending. String lengths are bit-packed exactly as the client reads them.
+
+        // One transferable character (SMSG_GET_VAS_ACCOUNT_CHARACTER_LIST_RESULT vector element, verified).
+        struct VasAccountCharacterInfo
+        {
+            ObjectGuid CharacterGUID;                  // the character
+            ObjectGuid AccountGUID;                    // 2nd guid: the owning bnet/wow-account guid (inferred)
+            uint32 VirtualRealmAddress = 0;            // field 3 (inferred: the character's home realm address)
+            uint8 Flags1 = 0;                          // 4 per-entry u8s (transfer eligibility flags - unlabeled)
+            uint8 Flags2 = 0;
+            uint8 Flags3 = 0;
+            uint8 Flags4 = 0;
+            uint64 HousingData = 0;                    // opaque 8-byte housing/plot key (verified width, opaque)
+            uint32 Field9 = 0;                         // trailing uint32 (unlabeled)
+            std::string CharacterName;                 // 6-bit length prefix
+            std::string RealmName;                     // 9-bit length prefix
+        };
+
+        // SMSG_GET_VAS_ACCOUNT_CHARACTER_LIST_RESULT (0x420297). Outer header = 4x uint32 (agreed across both
+        // dump versions) then the character vector. Header field meanings are unlabeled offline; Field1 echoes
+        // the request token so the client can correlate, the rest are 0 until proven.
+        class GetVasAccountCharacterListResult final : public ServerPacket
+        {
+        public:
+            explicit GetVasAccountCharacterListResult() : ServerPacket(SMSG_GET_VAS_ACCOUNT_CHARACTER_LIST_RESULT, 32) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Field1 = 0;
+            uint32 Field2 = 0;
+            uint32 Field3 = 0;
+            uint32 Field4 = 0;
+            std::vector<VasAccountCharacterInfo> Characters;
+        };
+
+        // One transfer-target realm (SMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST_RESULT element JamCliVASTargetRealm,
+        // verified widths). The 6 uint32s are an unlabeled reflected type; the mapping below is inferred so the
+        // client has a selectable, named realm - live-test-pending on which field it transfers TO.
+        struct VasTargetRealmInfo
+        {
+            uint32 RealmId = 0;                        // inferred
+            uint32 VirtualRealmAddress = 0;            // inferred: the field the client targets the transfer to
+            uint32 Field3 = 0;
+            uint32 Field4 = 0;
+            uint32 Field5 = 0;
+            uint32 Field6 = 0;
+            std::string RealmName;                     // 9-bit length prefix
+        };
+
+        // SMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST_RESULT (0x420298). Outer header field count is ambiguous
+        // between dump versions; the base (all_smsg) layout of leading uint32s + the realm vector is used and
+        // is live-test-pending.
+        class GetVasTransferTargetRealmListResult final : public ServerPacket
+        {
+        public:
+            explicit GetVasTransferTargetRealmListResult() : ServerPacket(SMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST_RESULT, 44) { }
+
+            WorldPacket const* Write() override;
+
+            std::vector<VasTargetRealmInfo> Realms;
+        };
     }
 }
 

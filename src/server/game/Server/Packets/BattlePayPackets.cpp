@@ -379,4 +379,60 @@ WorldPacket const* BattlePayDistributionAssignVasResponse::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* GetVasAccountCharacterListResult::Write()
+{
+    // Outer header: 4 uint32 (both dump versions agree), then a uint32-counted vector of characters. The
+    // per-entry string pair shares one bit-packed length block exactly as the client reads it: the 6-bit
+    // name length then the 9-bit realm length (WriteBits 6 then 9, FlushBits), then the two raw bodies -
+    // this reproduces the verified nameLen = A>>2, realmLen = ((A&3)<<7)|(B>>1).
+    _worldPacket << uint32(Field1);
+    _worldPacket << uint32(Field2);
+    _worldPacket << uint32(Field3);
+    _worldPacket << uint32(Field4);
+    _worldPacket << uint32(Characters.size());
+
+    for (VasAccountCharacterInfo const& c : Characters)
+    {
+        _worldPacket << c.CharacterGUID;
+        _worldPacket << c.AccountGUID;
+        _worldPacket << uint32(c.VirtualRealmAddress);
+        _worldPacket << uint8(c.Flags1);
+        _worldPacket << uint8(c.Flags2);
+        _worldPacket << uint8(c.Flags3);
+        _worldPacket << uint8(c.Flags4);
+        _worldPacket << uint64(c.HousingData);
+        _worldPacket << uint32(c.Field9);
+        _worldPacket.WriteBits(c.CharacterName.length(), 6);
+        _worldPacket.WriteBits(c.RealmName.length(), 9);
+        _worldPacket.FlushBits();
+        _worldPacket.append(c.CharacterName.data(), c.CharacterName.length());
+        _worldPacket.append(c.RealmName.data(), c.RealmName.length());
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* GetVasTransferTargetRealmListResult::Write()
+{
+    // Outer header is ambiguous between dump versions; a uint32-counted vector of the verified realm entry
+    // (6 uint32 + a 9-bit-length-prefixed name) is used. Field meanings of the 6 uint32 are an unlabeled
+    // reflected type - populated best-effort, live-test-pending.
+    _worldPacket << uint32(Realms.size());
+
+    for (VasTargetRealmInfo const& r : Realms)
+    {
+        _worldPacket << uint32(r.RealmId);
+        _worldPacket << uint32(r.VirtualRealmAddress);
+        _worldPacket << uint32(r.Field3);
+        _worldPacket << uint32(r.Field4);
+        _worldPacket << uint32(r.Field5);
+        _worldPacket << uint32(r.Field6);
+        _worldPacket.WriteBits(r.RealmName.length(), 9);
+        _worldPacket.FlushBits();
+        _worldPacket.append(r.RealmName.data(), r.RealmName.length());
+    }
+
+    return &_worldPacket;
+}
 }

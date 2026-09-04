@@ -1562,3 +1562,35 @@ void WorldSession::HandleVasGetServiceStatus(WorldPackets::BattlePay::VasGetServ
     WorldPackets::BattlePay::VasGetServiceStatusResponse response;
     SendPacket(response.Write());
 }
+
+void WorldSession::HandleGetVasAccountCharacterList(WorldPackets::BattlePay::GetVasAccountCharacterList& packet)
+{
+    // The account's characters, offered as VAS-transfer candidates. The verified per-entry wire carries the
+    // character guid, the owning account guid, the home realm's virtual address and the character name; the
+    // remaining per-entry fields (four flag bytes, an 8-byte housing key, a trailing uint32) have no proven
+    // offline meaning, so they stay 0. RealmName is left empty (the worldserver exposes no clean realm-name
+    // accessor here) - it is display-only and not required to identify a character.
+    WorldPackets::BattlePay::GetVasAccountCharacterListResult result;
+    result.Field1 = packet.Field1;   // echo the request token so the client can correlate the answer
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_VAS_ACCOUNT_CHARACTER_LIST);
+    stmt->setUInt32(0, GetAccountId());
+    if (PreparedQueryResult res = CharacterDatabase.Query(stmt))
+    {
+        uint32 const virtualRealm = GetVirtualRealmAddress();
+        ObjectGuid const accountGuid = GetAccountGUID();
+        do
+        {
+            Field* fields = res->Fetch();
+            WorldPackets::BattlePay::VasAccountCharacterInfo info;
+            info.CharacterGUID = ObjectGuid::Create<HighGuid::Player>(fields[0].GetUInt64());
+            info.AccountGUID = accountGuid;
+            info.VirtualRealmAddress = virtualRealm;
+            info.CharacterName = fields[1].GetString();
+            result.Characters.push_back(std::move(info));
+        }
+        while (res->NextRow());
+    }
+
+    SendPacket(result.Write());
+}
