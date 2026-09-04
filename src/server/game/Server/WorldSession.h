@@ -378,6 +378,7 @@ namespace WorldPackets
         class AlterApperance;
         class EnumCharacters;
         class GetAccountCharacterList;
+        class ConvertTimerunningCharacter;
         class CreateCharacter;
         class CharDelete;
         class CharacterRenameRequest;
@@ -2084,6 +2085,7 @@ class TC_GAME_API WorldSession
         void HandleCharEnum(CharacterDatabaseQueryHolder const& holder);
         void HandleCharEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/);
         void HandleGetAccountCharacterList(WorldPackets::Character::GetAccountCharacterList& packet);
+        void HandleConvertTimerunningCharacter(WorldPackets::Character::ConvertTimerunningCharacter& packet);
         void HandleCharUndeleteEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/);
         void HandleCharDeleteOpcode(WorldPackets::Character::CharDelete& charDelete);
         void HandleSetupWarbandGroups(WorldPackets::Character::SetupWarbandGroups& setupWarbandGroups);

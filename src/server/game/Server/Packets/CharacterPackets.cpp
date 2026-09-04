@@ -460,6 +460,12 @@ void GetAccountCharacterList::Read()
         _worldPacket.read(Data.data(), len);
 }
 
+void ConvertTimerunningCharacter::Read()
+{
+    _worldPacket >> CharacterGUID;
+    _worldPacket >> Field;
+}
+
 void CheckCharacterNameAvailability::Read()
 {
     _worldPacket >> SequenceIndex;
