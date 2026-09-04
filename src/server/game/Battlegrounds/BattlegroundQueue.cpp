@@ -1727,6 +1727,31 @@ void BattlegroundQueue::BattlegroundQueueUpdate(uint32 /*diff*/, BattlegroundBra
             m_SelectionPools[TEAM_HORDE].Init();
         }
     }
+    else if (BattlegroundQueueIdType(m_queueId.Type) == BattlegroundQueueIdType::TrainingGrounds)
+    {
+        // Solo practice: pop the instant a single player is queued, with no opponents, into a
+        // BattlegroundTrainingGrounds instance (which never auto-ends). Direct invite (no proposal), like the
+        // rated-arena path - the player accepts via CMSG_BATTLEFIELD_PORT and the normal entry flow ports them.
+        for (uint32 qi = BG_QUEUE_NORMAL_ALLIANCE; qi <= BG_QUEUE_NORMAL_HORDE; ++qi)
+        {
+            for (GroupQueueInfo* ginfo : m_QueuedGroups[bracket_id][qi])
+            {
+                if (ginfo->IsInvitedToBGInstanceGUID)
+                    continue;
+
+                Battleground* bg2 = sBattlegroundMgr->CreateNewBattleground(m_queueId, bracket_id);
+                if (!bg2)
+                {
+                    TC_LOG_ERROR("bg.battleground", "BattlegroundQueue::Update - Cannot create Training Grounds instance: {}", m_queueId.BattlemasterListId);
+                    return;
+                }
+
+                InviteGroupToBG(ginfo, bg2, ginfo->Team);
+                bg2->StartBattleground();
+                return;   // one instance per pass
+            }
+        }
+    }
     else if (BattlegroundQueueIdType(m_queueId.Type) == BattlegroundQueueIdType::RatedBattlegroundBlitz)
     {
         // Rated + non-arena previously fell through here doing nothing at all, which is why a rated

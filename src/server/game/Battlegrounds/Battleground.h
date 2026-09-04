@@ -262,7 +262,11 @@ enum class BattlegroundQueueIdType : uint8
     // join CMSG carries no queue id (just a Roles byte); the server assembles the lobby and runs it on a
     // solo-only rated-arena map. Backing BattlemasterList = the solo-arena pool 1053-1064, with 1065
     // ("All Arenas", solo) as the random-map queue entry (resolved via wago.tools - encrypted in client extract).
-    RatedSoloShuffle = 10
+    RatedSoloShuffle = 10,
+    // Training Grounds: a solo, unrated PvP practice instance (BattlemasterList 1145). The join CMSG carries a
+    // Roles byte + a TrainingGroundID selecting the practice map. No opponents - the queue pops the instant one
+    // player is queued and the match never auto-ends (the player leaves manually).
+    TrainingGrounds = 11
 };
 
 enum class BattlegroundPointCaptureStatus

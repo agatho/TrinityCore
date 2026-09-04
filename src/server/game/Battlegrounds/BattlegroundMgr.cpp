@@ -18,6 +18,7 @@
 #include "BattlegroundMgr.h"
 #include "Arena.h"
 #include "BattlegroundSoloShuffle.h"
+#include "BattlegroundTrainingGrounds.h"
 #include "BattlegroundPackets.h"
 #include "Containers.h"
 #include "DB2Stores.h"
@@ -510,6 +511,8 @@ Battleground* BattlegroundMgr::CreateNewBattleground(BattlegroundQueueTypeId que
     Battleground* bg = nullptr;
     if (bgTypeId == BATTLEGROUND_SOLO_SHUFFLE)
         bg = new BattlegroundSoloShuffle(bg_template);   // 6-round 3v3 shuffle controller
+    else if (bgTypeId == BATTLEGROUND_TRAINING_GROUNDS)
+        bg = new BattlegroundTrainingGrounds(bg_template);   // solo practice (never auto-ends)
     else if (bg_template->IsArena())
         bg = new Arena(bg_template);
     else
@@ -865,6 +868,14 @@ bool BattlegroundMgr::IsValidQueueId(BattlegroundQueueTypeId bgQueueTypeId)
             if (battlemasterList->GetType() != BattlemasterType::Arena)
                 return false;
             if (!bgQueueTypeId.Rated)
+                return false;
+            if (bgQueueTypeId.TeamSize)
+                return false;
+            break;
+        case BattlegroundQueueIdType::TrainingGrounds:
+            // Solo, unrated practice. BattlemasterList 1145 spans both arena and battleground practice maps, so
+            // the type is not constrained here; only Rated (must be false) and TeamSize (0) are.
+            if (bgQueueTypeId.Rated)
                 return false;
             if (bgQueueTypeId.TeamSize)
                 return false;
