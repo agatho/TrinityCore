@@ -757,6 +757,67 @@ namespace WorldPackets
             uint32 Field1 = 0;
         };
 
+        // CMSG_BATTLE_PAY_ACK_FAILED_RESPONSE - the client acknowledges a failed purchase result. One uint32
+        // (the server token being acked). Fire-and-forget: no response.
+        class BattlePayAckFailedResponse final : public ClientPacket
+        {
+        public:
+            explicit BattlePayAckFailedResponse(WorldPacket&& packet) : ClientPacket(CMSG_BATTLE_PAY_ACK_FAILED_RESPONSE, std::move(packet)) { }
+
+            void Read() override { _worldPacket >> ServerToken; }
+
+            uint32 ServerToken = 0;
+        };
+
+        // CMSG_BATTLE_PAY_REQUEST_PRICE_INFO - one uint32 (the product/context to price).
+        class BattlePayRequestPriceInfo final : public ClientPacket
+        {
+        public:
+            explicit BattlePayRequestPriceInfo(WorldPacket&& packet) : ClientPacket(CMSG_BATTLE_PAY_REQUEST_PRICE_INFO, std::move(packet)) { }
+
+            void Read() override { _worldPacket >> ProductID; }
+
+            uint32 ProductID = 0;
+        };
+
+        // CMSG_BATTLE_PAY_CANCEL_OPEN_CHECKOUT - the client abandons an open checkout. Small body that the
+        // server does not need to act on (the checkout it opened carries no server-side reservation to release).
+        class BattlePayCancelOpenCheckout final : public ClientPacket
+        {
+        public:
+            explicit BattlePayCancelOpenCheckout(WorldPacket&& packet) : ClientPacket(CMSG_BATTLE_PAY_CANCEL_OPEN_CHECKOUT, std::move(packet)) { }
+
+            void Read() override { _worldPacket.rfinish(); }
+        };
+
+        // CMSG_BATTLE_PAY_START_VAS_PURCHASE (0x400122) - a large nested struct beginning the paid VAS
+        // purchase (product, target guids, region/appearance choices). Only the leading uint32 (a client token)
+        // is modelled; the rest is consumed. Like a real-money checkout, the purchase itself is settled web-side,
+        // so the realm sends no game response - it is not a request the client blocks a game answer on.
+        class BattlePayStartVasPurchase final : public ClientPacket
+        {
+        public:
+            explicit BattlePayStartVasPurchase(WorldPacket&& packet) : ClientPacket(CMSG_BATTLE_PAY_START_VAS_PURCHASE, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Token = 0;
+        };
+
+        // CMSG_BATTLE_PAY_DISTRIBUTION_ASSIGN_VAS (0x400167) - a large nested struct (client token, several
+        // guids, product choice and flag bytes). Only the leading uint32 (a client/distribution token used to
+        // correlate the answer) is modelled; the rest is consumed to keep the stream aligned. The exact struct
+        // is live-capture-pending and is not needed to refuse an assign for which no entitlement exists.
+        class BattlePayDistributionAssignVas final : public ClientPacket
+        {
+        public:
+            explicit BattlePayDistributionAssignVas(WorldPacket&& packet) : ClientPacket(CMSG_BATTLE_PAY_DISTRIBUTION_ASSIGN_VAS, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Token = 0;
+        };
+
         // SMSG_BATTLE_PAY_DISTRIBUTION_ASSIGN_VAS_RESPONSE (0x420316) - three uint32 (client parser
         // sub_7FF7290B7D50 reads exactly {uint32, uint32, uint32}, no strings, no vector).
         class BattlePayDistributionAssignVasResponse final : public ServerPacket

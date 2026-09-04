@@ -1649,3 +1649,81 @@ void WorldSession::HandleVasCheckTransferOk(WorldPackets::BattlePay::VasCheckTra
     response.Field1 = packet.Field1;
     SendPacket(response.Write());
 }
+
+void WorldSession::HandleBattlePayDistributionAssignVas(WorldPackets::BattlePay::BattlePayDistributionAssignVas& packet)
+{
+    // Assign a purchased VAS (transfer/rename/faction-change) entitlement to a character. VAS entitlements are
+    // created only by the web-side purchase, which this realm has none of, so there is nothing to assign -
+    // answer honestly with "distribution not found" rather than drop the packet and leave the client's VAS UI
+    // waiting. The cross-realm move itself IS implemented (VasTransferMgr / .character transfer); wiring this
+    // opcode to it needs a live capture to prove which request field carries the target realm.
+    TC_LOG_INFO("network", "BattlePay: DistributionAssignVas from {}: token={} - no VAS entitlement to assign.",
+        GetPlayerInfo(), packet.Token);
+
+    WorldPackets::BattlePay::BattlePayDistributionAssignVasResponse response;
+    response.Field1 = packet.Token;
+    response.Result = uint32(RESULT_DISTRIBUTION_NOT_FOUND);
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleBattlePayStartVasPurchase(WorldPackets::BattlePay::BattlePayStartVasPurchase& packet)
+{
+    // Begin a paid VAS purchase. Like every real-money purchase in this core the settlement is web-side, so the
+    // realm sends no game response (the client drives the web checkout); the token is logged so the reading can
+    // be confirmed against a real client. The delivered entitlement, when a payment backend confirms it, is what
+    // later reaches the assign path above.
+    TC_LOG_INFO("network", "BattlePay: StartVasPurchase from {}: token={} (settled web-side, no game response).",
+        GetPlayerInfo(), packet.Token);
+}
+
+void WorldSession::HandleCharacterCheckUpgrade(WorldPackets::BattlePay::CharacterCheckUpgrade& /*packet*/)
+{
+    // The client polls whether this account can spend a character boost. Eligibility is already carried by the
+    // account's owned boost entitlements (delivered with the purchase list), and the boost is applied by its own
+    // opcode (CMSG_CHARACTER_UPGRADE_START, implemented), so this poll needs no separate answer. Logged rather
+    // than silently dropped.
+    TC_LOG_DEBUG("network", "BattlePay: CharacterCheckUpgrade from {} - boost eligibility comes from the owned "
+        "entitlement list; no separate response.", GetPlayerInfo());
+}
+
+void WorldSession::HandleCharacterUpgradeManualUnrevokeRequest(WorldPackets::BattlePay::CharacterUpgradeManualUnrevokeRequest& packet)
+{
+    // Undo a revoked boost on a character. That requires a revoked boost entitlement, which exists only after a
+    // web-side purchase/refund cycle this realm has none of, so there is nothing to unrevoke. The paired result
+    // SMSG is a framed message whose inner layout is not offline-provable, so a guessed frame is not sent (it
+    // would risk disconnecting the client); the request is read and logged pending a live capture.
+    TC_LOG_INFO("network", "BattlePay: CharacterUpgradeManualUnrevokeRequest from {}: character={} - no revoked "
+        "boost to unrevoke.", GetPlayerInfo(), packet.CharacterGUID.ToString());
+}
+
+void WorldSession::HandleVasGetQueueMinutes(WorldPackets::BattlePay::VasGetQueueMinutes& packet)
+{
+    // Estimated queue time for a VAS service. This realm processes transfers synchronously (no queue), but the
+    // response is a framed message whose inner layout is not offline-provable, so a guessed frame is not sent;
+    // the request is read and logged pending a live capture that proves the response wire.
+    TC_LOG_DEBUG("network", "BattlePay: VasGetQueueMinutes from {}: context={} - no queue; response wire pending "
+        "a live capture.", GetPlayerInfo(), packet.Field1);
+}
+
+void WorldSession::HandleBattlePayAckFailedResponse(WorldPackets::BattlePay::BattlePayAckFailedResponse& packet)
+{
+    // The client acknowledges a purchase result it treated as failed. Fire-and-forget: there is nothing to send
+    // back, but it is read and logged rather than silently dropped.
+    TC_LOG_DEBUG("network", "BattlePay: AckFailedResponse from {}: serverToken={}.", GetPlayerInfo(), packet.ServerToken);
+}
+
+void WorldSession::HandleBattlePayRequestPriceInfo(WorldPackets::BattlePay::BattlePayRequestPriceInfo& packet)
+{
+    // The client asks for a product's price. This core delivers prices inline with the product list
+    // (BattlePayGetProductList), so a product the client can see already carries its DisplayPrice; there is no
+    // separate price message to send. Logged for wire confirmation.
+    TC_LOG_DEBUG("network", "BattlePay: RequestPriceInfo from {}: product={} - price is carried by the product list.",
+        GetPlayerInfo(), packet.ProductID);
+}
+
+void WorldSession::HandleBattlePayCancelOpenCheckout(WorldPackets::BattlePay::BattlePayCancelOpenCheckout& /*packet*/)
+{
+    // The client abandons a checkout it opened. The realm holds no server-side reservation for an open checkout
+    // (the web overlay owns that state), so there is nothing to release; acknowledged by log only.
+    TC_LOG_DEBUG("network", "BattlePay: CancelOpenCheckout from {}.", GetPlayerInfo());
+}

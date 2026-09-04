@@ -371,6 +371,18 @@ void VasCheckTransferOk::Read()
     _worldPacket >> Field1;
 }
 
+void BattlePayStartVasPurchase::Read()
+{
+    _worldPacket >> Token;
+    _worldPacket.rfinish();   // the remaining fields are not modelled (see header); consume them
+}
+
+void BattlePayDistributionAssignVas::Read()
+{
+    _worldPacket >> Token;
+    _worldPacket.rfinish();   // the remaining fields are not modelled (see header); consume them
+}
+
 WorldPacket const* BattlePayDistributionAssignVasResponse::Write()
 {
     _worldPacket << uint32(Field1);
