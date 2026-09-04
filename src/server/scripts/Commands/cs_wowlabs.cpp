@@ -205,7 +205,11 @@ public:
             sWowLabsMatchMgr->GrantRandomAbility(player, match);
             handler->PSendSysMessage("WoW Labs: picked up a random ability. Pool ids:");
             for (WowLabsMatchMgr::AbilityDef const& a : sWowLabsMatchMgr->GetAbilityPool())
-                handler->PSendSysMessage("  {} = {} ({})", a.Id, a.Name, a.Offensive ? "offensive" : "utility");
+            {
+                char const* kind = a.Kind == WowLabsMatchMgr::KIND_OFFENSIVE ? "offensive"
+                                 : a.Kind == WowLabsMatchMgr::KIND_UTILITY   ? "utility" : "consumable";
+                handler->PSendSysMessage("  {} = {} ({})", a.Id, a.Name, kind);
+            }
         }
         return true;
     }

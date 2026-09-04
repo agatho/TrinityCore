@@ -449,26 +449,35 @@ std::vector<WowLabsMatchMgr::AbilityDef> const& WowLabsMatchMgr::GetAbilityPool(
     // so they are genuinely learnable and castable here - not placeholders.
     static std::vector<AbilityDef> const pool =
     {
-        {  1, "Earthbreaker",       true,  { 435018, 435021, 435023, 435025 } },
-        {  2, "Fire Whirl",         true,  { 431777, 432746, 432748, 432750 } },
-        {  3, "Holy Shield",        true,  { 433380, 433472, 433473, 433474 } },
-        {  4, "Rime Arrow",         true,  { 435276, 435290, 435288, 435295 } },
-        {  5, "Storm Archon",       true,  { 442445, 442819, 442840, 442862 } },
-        {  6, "Mana Sphere",        true,  { 431501, 432730, 432737, 432744 } },
-        {  7, "Searing Axe",        true,  { 432490, 432752, 432754, 432756 } },
-        {  8, "Slicing Winds",      true,  { 433082, 433184, 433185, 433186 } },
-        {  9, "Star Bomb",          true,  { 434880, 435030, 435032, 435034 } },
-        { 10, "Toxic Smackerel",    true,  { 436254, 436310, 436308, 436312 } },
-        { 11, "Steel Traps",        false, { 434598, 434679, 434681, 434684 } },
-        { 12, "Windstorm",          false, { 433263, 433256, 433264, 433265 } },
-        { 13, "Explosive Caltrops", false, { 432541, 432759, 432762, 432764 } },
-        { 14, "Hunter's Chains",    false, { 436031, 436211, 436229, 436240 } },
-        { 15, "Lightning Bulwark",  false, { 442371, 442404, 442407, 442411 } },
-        { 16, "Snowdrift",          false, { 433364, 433373, 433374, 433375 } },
-        { 17, "Fade to Shadow",     false, { 432547, 432765, 432766, 432767 } },
-        { 18, "Repel",              false, { 435286, 435292, 435296, 435298 } },
-        { 19, "Faeform",            false, { 432594, 432768, 432769, 432770 } },
-        { 20, "Quaking Leap",       false, { 435454, 435510, 435729, 435757 } },
+        {  1, "Earthbreaker",       KIND_OFFENSIVE,  { 435018, 435021, 435023, 435025 } },
+        {  2, "Fire Whirl",         KIND_OFFENSIVE,  { 431777, 432746, 432748, 432750 } },
+        {  3, "Holy Shield",        KIND_OFFENSIVE,  { 433380, 433472, 433473, 433474 } },
+        {  4, "Rime Arrow",         KIND_OFFENSIVE,  { 435276, 435290, 435288, 435295 } },
+        {  5, "Storm Archon",       KIND_OFFENSIVE,  { 442445, 442819, 442840, 442862 } },
+        {  6, "Mana Sphere",        KIND_OFFENSIVE,  { 431501, 432730, 432737, 432744 } },
+        {  7, "Searing Axe",        KIND_OFFENSIVE,  { 432490, 432752, 432754, 432756 } },
+        {  8, "Slicing Winds",      KIND_OFFENSIVE,  { 433082, 433184, 433185, 433186 } },
+        {  9, "Star Bomb",          KIND_OFFENSIVE,  { 434880, 435030, 435032, 435034 } },
+        { 10, "Toxic Smackerel",    KIND_OFFENSIVE,  { 436254, 436310, 436308, 436312 } },
+        { 11, "Steel Traps",        KIND_UTILITY,    { 434598, 434679, 434681, 434684 } },
+        { 12, "Windstorm",          KIND_UTILITY,    { 433263, 433256, 433264, 433265 } },
+        { 13, "Explosive Caltrops", KIND_UTILITY,    { 432541, 432759, 432762, 432764 } },
+        { 14, "Hunter's Chains",    KIND_UTILITY,    { 436031, 436211, 436229, 436240 } },
+        { 15, "Lightning Bulwark",  KIND_UTILITY,    { 442371, 442404, 442407, 442411 } },
+        { 16, "Snowdrift",          KIND_UTILITY,    { 433364, 433373, 433374, 433375 } },
+        { 17, "Fade to Shadow",     KIND_UTILITY,    { 432547, 432765, 432766, 432767 } },
+        { 18, "Repel",              KIND_UTILITY,    { 435286, 435292, 435296, 435298 } },
+        { 19, "Faeform",            KIND_UTILITY,    { 432594, 432768, 432769, 432770 } },
+        { 20, "Quaking Leap",       KIND_UTILITY,    { 435454, 435510, 435729, 435757 } },
+        // Newer-season abilities (Wowhead ability compendium), same recovery method (subtext + cooldown ranks).
+        { 21, "Celestial Barrage",  KIND_OFFENSIVE,  { 471717, 472390, 472403, 472406 } },
+        { 22, "Aura of Zealotry",   KIND_OFFENSIVE,  { 473810, 473819, 473823, 473828 } },
+        { 23, "Call Galefeather",   KIND_UTILITY,    { 474121, 474650, 474651, 474652 } },
+        { 24, "G.R.A.V. Glove",     KIND_UTILITY,    { 472908, 472908, 472908, 472908 } },   // only 1 castable rank found
+        // Consumable-slot items (single use, one "rank"): the found-on-the-ground throwables/shields.
+        { 25, "Stormproof Sloop",   KIND_CONSUMABLE, { 438619, 438619, 438619, 438619 } },
+        { 26, "Rigged Chest",       KIND_CONSUMABLE, { 437334, 437334, 437334, 437334 } },
+        { 27, "Chicken Coup",       KIND_CONSUMABLE, { 437263, 437263, 437263, 437263 } },
     };
     return pool;
 }
@@ -507,19 +516,31 @@ uint8 WowLabsMatchMgr::GrantAbility(Player* player, Match* match, uint32 ability
         return h.Rank;
     }
 
-    // New pickup -> place on a free slot of the ability's type (offensive 0/1, utility 2/3).
-    uint8 const base = def->Offensive ? 0 : 2;
-    bool used[2] = { false, false };
-    for (HeldAbility const& h : held)
+    // New pickup -> place on a free slot of the ability's kind. Retail action bar: 2 offensive slots (0/1),
+    // 2 utility slots (2/3), 1 consumable slot (4).
+    uint8 base = 0, slotCount = 2;
+    switch (def->Kind)
     {
-        if (h.ActionSlot == base) used[0] = true;
-        else if (h.ActionSlot == base + 1) used[1] = true;
+        case KIND_UTILITY:    base = 2; slotCount = 2; break;
+        case KIND_CONSUMABLE: base = 4; slotCount = 1; break;
+        case KIND_OFFENSIVE:
+        default:              base = 0; slotCount = 2; break;
     }
-    uint8 slot = !used[0] ? base : (!used[1] ? uint8(base + 1) : uint8(255));
+
+    uint8 slot = 255;
+    for (uint8 i = 0; i < slotCount; ++i)
+    {
+        uint8 const candidate = base + i;
+        if (std::none_of(held.begin(), held.end(), [candidate](HeldAbility const& h) { return h.ActionSlot == candidate; }))
+        {
+            slot = candidate;
+            break;
+        }
+    }
 
     if (slot == 255)
     {
-        // Both slots of this type full: drop the one in the base slot to make room.
+        // Every slot of this kind is full: drop the one in the base slot to make room.
         for (auto it = held.begin(); it != held.end(); ++it)
         {
             if (it->ActionSlot != base)

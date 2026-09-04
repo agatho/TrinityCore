@@ -67,11 +67,12 @@ public:
     // spell data; GetAbilityPool returns a config-driven default so the pickup/stack mechanic is real and
     // testable. Offensive abilities go to the two offensive action slots, utility to the two utility slots.
     static constexpr uint8 ABILITY_RANKS = 4;   // Common, Uncommon, Rare, Epic
+    enum AbilityKind : uint8 { KIND_OFFENSIVE = 0, KIND_UTILITY = 1, KIND_CONSUMABLE = 2 };
     struct AbilityDef
     {
         uint32 Id = 0;
         std::string Name;
-        bool Offensive = true;
+        uint8 Kind = KIND_OFFENSIVE;
         uint32 RankSpell[ABILITY_RANKS] = { };   // spell id granted at each rank (1-based rank -> index rank-1)
     };
 
