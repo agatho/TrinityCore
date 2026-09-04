@@ -174,19 +174,41 @@ uint32 WowLabsMatchMgr::WireState(Phase phase)
 
 std::vector<WowLabsMatchMgr::DropZone> const& WowLabsMatchMgr::GetDropZones(Match const* /*match*/) const
 {
-    // Hand-authored drop zones for MAP_WOWLABS. The real set lives in encrypted WoW Labs DB2s and is not
-    // offline-obtainable; these are provisional coordinates purely so the area-selection flow has real,
-    // validatable options. One set is shared by every match for now.
+    // The real Plunderstorm drop zones: every AreaPOI on map 2695 (Void Zone: Arathi Highlands) in the client's
+    // own data, with client coordinates. Id = the AreaPOI id; AreaType 0. One set is shared by every match.
     static std::vector<DropZone> const zones =
     {
-        { 1, 0,  1000.0f,  1000.0f, 200.0f },
-        { 2, 0,  1000.0f, -1000.0f, 200.0f },
-        { 3, 0, -1000.0f,  1000.0f, 200.0f },
-        { 4, 0, -1000.0f, -1000.0f, 200.0f },
-        { 5, 0,     0.0f,     0.0f, 250.0f },
-        { 6, 0,  1500.0f,     0.0f, 200.0f },
-        { 7, 0, -1500.0f,     0.0f, 200.0f },
-        { 8, 0,     0.0f,  1500.0f, 200.0f },
+        { 7658, 0,  -979.51f, -3527.38f,  57.40f },   // Hammerfall
+        { 7659, 0,  -883.26f, -1633.16f,  49.99f },   // Thoradin's Wall
+        { 7660, 0,  -636.19f, -1912.89f,  64.06f },   // Clearfell's Patch
+        { 7661, 0,  -793.63f, -1777.57f,  59.56f },   // Hatchet Ridge
+        { 7662, 0,  -861.15f, -2068.44f,  63.26f },   // Ar'gorok
+        { 7663, 0, -1088.74f, -1690.61f,  35.85f },   // Newstead
+        { 7664, 0, -1357.86f, -1545.19f,  54.99f },   // Highlands Mill
+        { 7665, 0, -1252.05f, -1650.84f,  48.09f },   // Labor's Rest
+        { 7666, 0, -1351.97f, -1833.70f,  62.32f },   // Valorcall Pass
+        { 7667, 0, -1676.58f, -1737.84f,  81.32f },   // Stromgarde Keep
+        { 7668, 0, -1203.47f, -1903.33f,  87.52f },   // High Perch
+        { 7669, 0, -1032.32f, -1951.11f,  60.67f },   // Northfold Crossing
+        { 7670, 0,  -991.27f, -2256.61f,  13.51f },   // Drywhisker Mine
+        { 7671, 0, -1183.44f, -2195.45f,  58.06f },   // Circle of Elements
+        { 7672, 0,  -897.14f, -2413.26f,  56.45f },   // Contested Pass
+        { 7673, 0, -1320.80f, -2051.44f,  63.49f },   // Marrow's Farm
+        { 7674, 0, -1472.89f, -2073.56f,  27.21f },   // Galson's Lode
+        { 7675, 0, -2090.02f, -2039.35f,   5.67f },   // Faldir's Cove
+        { 7676, 0, -1773.73f, -2451.62f,  57.79f },   // Forsaken Wagon
+        { 7677, 0, -1484.74f, -2628.56f,  54.59f },   // The Mangled Chord
+        { 7678, 0, -1251.86f, -2521.64f,  21.15f },   // Refuge Pointe
+        { 7679, 0, -1349.49f, -2738.33f,  58.92f },   // Circle of Outer Binding
+        { 7680, 0, -1090.31f, -2843.17f,  42.22f },   // Dabyrie's Farmstead
+        { 7681, 0, -1521.45f, -2949.39f,  13.94f },   // Go'shek Farm
+        { 7682, 0, -1954.77f, -2833.32f,  79.72f },   // Boulderfist Hall
+        { 7683, 0, -2072.97f, -2454.40f,  76.09f },   // Thandol Span
+        { 7684, 0, -1825.41f, -3352.46f,  53.87f },   // Witherbark Village
+        { 7685, 0,  -950.22f, -3117.47f,  48.32f },   // The Neglected Seat
+        { 7686, 0,  -873.74f, -3284.15f,  75.14f },   // Circle of East Binding
+        { 7687, 0, -1018.20f, -3823.99f, 145.26f },   // Drywhisker Gorge
+        { 7688, 0, -1527.48f, -2165.09f,  17.37f },   // Circle of Inner Binding
     };
     return zones;
 }
@@ -250,14 +272,17 @@ void WowLabsMatchMgr::BeginPrematch(Match* match)
 
 std::vector<WowLabsMatchMgr::CirclePhase> const& WowLabsMatchMgr::GetCircleSchedule() const
 {
-    // Hand-authored storm schedule (real timings/coords are encrypted DB2). Centred on the map origin, matching
-    // the provisional drop zones (±1000..1500). Radii in yards; times in ms.
+    // Storm schedule centred on the real map: the "Circle of Inner Binding" AreaPOI (id 7688) is the final-ring
+    // marker on map 2695, so the circle collapses toward it. Radii are scaled to Arathi Highlands (the void-zone
+    // POIs span ~1500 x ~2300 yards). Phase timings are hand-authored (the retail curve is server-internal).
+    static constexpr float CENTER_X = -1527.48f;   // Circle of Inner Binding
+    static constexpr float CENTER_Y = -2165.09f;
     static std::vector<CirclePhase> const schedule =
     {
-        { 30000u, 60000u, 2000.0f, 1200.0f, 0.0f, 0.0f },   // hold 30s @2000, shrink to 1200 over 60s
-        { 15000u, 45000u, 1200.0f,  600.0f, 0.0f, 0.0f },
-        { 15000u, 30000u,  600.0f,  200.0f, 0.0f, 0.0f },
-        { 10000u, 20000u,  200.0f,   50.0f, 0.0f, 0.0f },
+        { 30000u, 60000u, 1800.0f, 1000.0f, CENTER_X, CENTER_Y },   // hold 30s @1800, shrink to 1000 over 60s
+        { 15000u, 45000u, 1000.0f,  500.0f, CENTER_X, CENTER_Y },
+        { 15000u, 30000u,  500.0f,  200.0f, CENTER_X, CENTER_Y },
+        { 10000u, 20000u,  200.0f,   40.0f, CENTER_X, CENTER_Y },
     };
     return schedule;
 }

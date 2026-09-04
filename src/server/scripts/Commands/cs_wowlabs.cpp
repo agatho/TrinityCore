@@ -67,9 +67,9 @@ public:
         WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->CreateMatch(std::move(roster), 0 /*Solo*/);
         player->SetWowLabsInstanceId(match->InstanceId);
 
-        // Provisional drop point: the real drop zones live in encrypted WoW Labs DB2s (P4), so this is a
-        // placeholder centre-of-map spawn just to prove the instance is enterable.
-        if (!player->TeleportTo(WowLabsMatchMgr::MAP_ID, 0.0f, 0.0f, 300.0f, 0.0f, TELE_TO_NONE, match->InstanceId))
+        // Drop onto the real map: the "Circle of Inner Binding" AreaPOI on map 2695, the storm's final-ring
+        // centre (needs map 2695's terrain extracted from the client for the ground to be there).
+        if (!player->TeleportTo(WowLabsMatchMgr::MAP_ID, -1527.48f, -2165.09f, 17.37f, 0.0f, TELE_TO_NONE, match->InstanceId))
         {
             player->SetWowLabsInstanceId(0);
             sWowLabsMatchMgr->RemoveMatch(match->Id);
@@ -99,7 +99,7 @@ public:
         sWowLabsMatchMgr->AddMemberToMatch(match, player->GetSession()->GetBattlenetAccountGUID(), player->GetName());
         player->SetWowLabsInstanceId(match->InstanceId);
 
-        if (!player->TeleportTo(WowLabsMatchMgr::MAP_ID, 0.0f, 0.0f, 300.0f, 0.0f, TELE_TO_NONE, match->InstanceId))
+        if (!player->TeleportTo(WowLabsMatchMgr::MAP_ID, -1527.48f, -2165.09f, 17.37f, 0.0f, TELE_TO_NONE, match->InstanceId))
         {
             player->SetWowLabsInstanceId(0);
             handler->PSendSysMessage("WoW Labs: teleport to map {} failed - are the map data files for it extracted?", WowLabsMatchMgr::MAP_ID);
