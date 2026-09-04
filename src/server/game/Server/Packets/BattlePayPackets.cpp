@@ -382,8 +382,15 @@ void VasCheckTransferOk::Read()
 
 void BattlePayStartVasPurchase::Read()
 {
-    _worldPacket >> Token;
-    _worldPacket.rfinish();   // the remaining fields are not modelled (see header); consume them
+    // Wire order from the client builder sub_7FF72AE6E2F0: seq, serviceType, guid, context, targetRealmAddress,
+    // then name/blob strings and further guids we do not need. Read up to the realm address, then consume the
+    // rest so the stream stays aligned.
+    _worldPacket >> SequenceId;
+    _worldPacket >> ServiceType;
+    _worldPacket >> Character;
+    _worldPacket >> Context;
+    _worldPacket >> TargetRealmAddress;
+    _worldPacket.rfinish();
 }
 
 void BattlePayDistributionAssignVas::Read()

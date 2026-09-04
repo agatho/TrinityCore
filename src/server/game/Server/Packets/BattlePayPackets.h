@@ -815,10 +815,13 @@ namespace WorldPackets
             void Read() override { _worldPacket.rfinish(); }
         };
 
-        // CMSG_BATTLE_PAY_START_VAS_PURCHASE (0x400122) - a large nested struct beginning the paid VAS
-        // purchase (product, target guids, region/appearance choices). Only the leading uint32 (a client token)
-        // is modelled; the rest is consumed. Like a real-money checkout, the purchase itself is settled web-side,
-        // so the realm sends no game response - it is not a request the client blocks a game answer on.
+        // CMSG_BATTLE_PAY_START_VAS_PURCHASE (0x400122) - begins a paid VAS purchase. The leading fields are
+        // resolved from the client builder sub_7FF72AE6E2F0: a request sequence id, the VAS service type, a
+        // guid (the selected character/product), a context uint32, then the TARGET REALM's wowRealmAddress
+        // (copied from the picked JamCliVASTargetRealm[+0]). The tail (name/blob strings, more guids) is not
+        // needed to identify the transfer and is consumed. The per-guid role is not offline-provable, but the
+        // first guid is the selected character in the transfer flow; downstream validation (VasTransferMgr)
+        // rejects a wrong guid safely.
         class BattlePayStartVasPurchase final : public ClientPacket
         {
         public:
@@ -826,7 +829,11 @@ namespace WorldPackets
 
             void Read() override;
 
-            uint32 Token = 0;
+            uint32 SequenceId = 0;
+            uint32 ServiceType = 0;
+            ObjectGuid Character;              // first guid (selected character in the PCT flow)
+            uint32 Context = 0;
+            uint32 TargetRealmAddress = 0;     // wowRealmAddress of the picked target realm (JamCliVASTargetRealm[+0])
         };
 
         // CMSG_BATTLE_PAY_DISTRIBUTION_ASSIGN_VAS (0x400167) - a large nested struct (client token, several

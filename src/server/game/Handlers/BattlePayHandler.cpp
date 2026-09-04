@@ -1652,13 +1652,15 @@ void WorldSession::HandleVasCheckTransferOk(WorldPackets::BattlePay::VasCheckTra
 
 void WorldSession::HandleBattlePayDistributionAssignVas(WorldPackets::BattlePay::BattlePayDistributionAssignVas& packet)
 {
-    // Assign a purchased VAS (transfer/rename/faction-change) entitlement to a character. VAS entitlements are
-    // created only by the web-side purchase, which this realm has none of, so there is nothing to assign -
-    // answer honestly with "distribution not found" rather than drop the packet and leave the client's VAS UI
-    // waiting. The cross-realm move itself IS implemented (VasTransferMgr / .character transfer); wiring this
-    // opcode to it needs a live capture to prove which request field carries the target realm.
-    TC_LOG_INFO("network", "BattlePay: DistributionAssignVas from {}: token={} - no VAS entitlement to assign.",
-        GetPlayerInfo(), packet.Token);
+    // Assign an ALREADY-PURCHASED VAS distribution to a target. RE of the client serializer (sub_7FF72907F4B0)
+    // showed this opcode carries a u64 DistributionID (+0x28) and target guids but NO realm address - the
+    // realm is chosen earlier, at START_VAS_PURCHASE. The distribution it references only exists after a
+    // web-side purchase settles, which this realm has none of, so there is nothing to assign: answer honestly
+    // with "distribution not found" rather than drop the packet. (The paid-character-transfer flow itself does
+    // NOT use this opcode - it drives START_VAS_PURCHASE, handled above; this is the shop's assign-a-bought-
+    // distribution path.)
+    TC_LOG_INFO("network", "BattlePay: DistributionAssignVas from {}: distributionId-token={} - no VAS "
+        "distribution to assign.", GetPlayerInfo(), packet.Token);
 
     WorldPackets::BattlePay::BattlePayDistributionAssignVasResponse response;
     response.Field1 = packet.Token;
@@ -1668,12 +1670,24 @@ void WorldSession::HandleBattlePayDistributionAssignVas(WorldPackets::BattlePay:
 
 void WorldSession::HandleBattlePayStartVasPurchase(WorldPackets::BattlePay::BattlePayStartVasPurchase& packet)
 {
-    // Begin a paid VAS purchase. Like every real-money purchase in this core the settlement is web-side, so the
-    // realm sends no game response (the client drives the web checkout); the token is logged so the reading can
-    // be confirmed against a real client. The delivered entitlement, when a payment backend confirms it, is what
-    // later reaches the assign path above.
-    TC_LOG_INFO("network", "BattlePay: StartVasPurchase from {}: token={} (settled web-side, no game response).",
-        GetPlayerInfo(), packet.Token);
+    // This is the request the paid-character-transfer flow sends (Lua AssignPCTDistribution): it carries the
+    // selected character, the VAS service type and the TARGET realm's wowRealmAddress. Resolve the target realm
+    // against the realms this server fronts and log the full transfer intent - this is the client-driven entry
+    // point to VasTransferMgr.
+    //
+    // It is not executed here yet for one honest reason: the flow calls twice - a validation pass then a commit
+    // pass - distinguished by an isValidationOnly bool that lives in this packet's bit-packed tail. Reading it
+    // needs the per-string bit-length widths (a small targeted RE still outstanding); executing on the
+    // validation pass would move the character prematurely. Until that bit is read, the reliable execution path
+    // is the .character transfer GM command, which drives the same VasTransferMgr.
+    uint32 targetRealmId = 0;
+    if (packet.TargetRealmAddress)
+        targetRealmId = Battlenet::RealmHandle(packet.TargetRealmAddress).Realm;
+
+    TC_LOG_INFO("network", "BattlePay: StartVasPurchase from {}: seq={} serviceType={} character={} "
+        "targetRealmAddress={:#x} (realm {}) - transfer intent parsed; execution gated on the isValidationOnly bit.",
+        GetPlayerInfo(), packet.SequenceId, packet.ServiceType, packet.Character.ToString(),
+        packet.TargetRealmAddress, targetRealmId);
 }
 
 void WorldSession::HandleCharacterCheckUpgrade(WorldPackets::BattlePay::CharacterCheckUpgrade& /*packet*/)
