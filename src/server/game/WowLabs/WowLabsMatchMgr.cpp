@@ -27,10 +27,32 @@
 #include <algorithm>
 #include <random>
 
-// Cadence of the out-of-ring storm damage tick.
-static constexpr uint32 DAMAGE_INTERVAL_MS = 1000;
+// Cadence of the out-of-ring storm damage tick - retail ticks every 3 seconds.
+static constexpr uint32 STORM_DAMAGE_INTERVAL_MS = 3000;
 // Plunder - the Plunderstorm match currency (CurrencyTypes.db2 id 2922).
 static constexpr uint32 PLUNDER_CURRENCY = 2922;
+// Retail: players level from 1 to 10 during a match.
+static constexpr uint8 MAX_MATCH_LEVEL = 10;
+
+// Apply the max-health bonus for a player's current match level, capturing their base health once so it can be
+// restored when the match ends. Each level adds WowLabs.HealthPercentPerLevel of the base pool; the health
+// gained is added to current health so a level-up makes the player tankier mid-fight (retail behaviour).
+static void ApplyMatchLevelHealth(Player* player, WowLabsMatchMgr::Match* match, uint8 level)
+{
+    uint64 const key = player->GetGUID().GetCounter();
+    uint64& base = match->BaseMaxHealth[key];
+    if (!base)
+        base = player->GetMaxHealth();
+
+    uint32 const pct = sConfigMgr->GetIntDefault("WowLabs.HealthPercentPerLevel", 20);
+    uint64 const newMax = base + base * uint64(level - 1) * pct / 100;
+    uint64 const oldMax = player->GetMaxHealth();
+    if (newMax == oldMax)
+        return;
+
+    player->SetMaxHealth(newMax);
+    player->SetHealth(std::min(newMax, player->GetHealth() + (newMax > oldMax ? newMax - oldMax : 0)));
+}
 
 bool WowLabsMatchMgr::Match::HasMember(ObjectGuid bnet) const
 {
@@ -363,18 +385,19 @@ void WowLabsMatchMgr::UpdateInstance(Map* map, uint32 diff)
         return;
     }
 
-    // Out-of-ring storm damage, applied on a fixed cadence regardless of the update granularity.
+    // Out-of-ring storm damage. Retail value (researched): 12% of the player's MAX health every 3 seconds -
+    // percentage-based, not a flat amount, so it scales with a levelled player's larger health pool.
     match->DamageAccumMs += diff;
-    if (match->DamageAccumMs < DAMAGE_INTERVAL_MS)
+    if (match->DamageAccumMs < STORM_DAMAGE_INTERVAL_MS)
         return;
-    match->DamageAccumMs -= DAMAGE_INTERVAL_MS;
+    match->DamageAccumMs -= STORM_DAMAGE_INTERVAL_MS;
 
     float cx, cy, radius;
     if (!ComputeCircle(match, cx, cy, radius))
         return;
 
-    uint32 const damage = sConfigMgr->GetIntDefault("WowLabs.CircleDamagePerTick", 50);
-    if (!damage)
+    uint32 const pct = sConfigMgr->GetIntDefault("WowLabs.StormDamagePercent", 12);
+    if (!pct)
         return;
 
     for (MapReference const& ref : map->GetPlayers())
@@ -383,7 +406,11 @@ void WowLabsMatchMgr::UpdateInstance(Map* map, uint32 diff)
         if (!player || !player->IsAlive() || player->IsGameMaster())
             continue;
         if (player->GetDistance2d(cx, cy) > radius)
-            player->EnvironmentalDamage(DAMAGE_FIRE, damage);
+        {
+            uint32 const damage = uint32(player->GetMaxHealth() * pct / 100);
+            if (damage)
+                player->EnvironmentalDamage(DAMAGE_FIRE, damage);
+        }
     }
 }
 
@@ -400,16 +427,27 @@ void WowLabsMatchMgr::OnPlayerKill(Player* killer, Player* killed)
     if (!match || match->MatchPhase != Phase::Active)
         return;
 
+    uint64 const key = killer->GetGUID().GetCounter();
+
+    // Retail: Plunder is collected during the match but only *counts once you finish* (win or death), so the
+    // kill bounty is tracked here and banked to the account currency in EndMatch, not granted immediately.
     uint32 const bounty = sConfigMgr->GetIntDefault("WowLabs.PlunderPerKill", 100);
-    match->Kills[killer->GetGUID().GetCounter()] += 1;
-    if (bounty)
+    match->Kills[key] += 1;
+    match->PlunderEarned[key] += bounty;
+
+    // XP -> level (1..10). The retail XP curve is server-internal; use a flat per-level threshold (config).
+    uint32 const xpPerLevel = std::max(1, sConfigMgr->GetIntDefault("WowLabs.XpPerLevel", 200));
+    match->Xp[key] += sConfigMgr->GetIntDefault("WowLabs.XpPerKill", 100);
+    uint8 const newLevel = uint8(std::min<uint32>(MAX_MATCH_LEVEL, 1 + match->Xp[key] / xpPerLevel));
+    uint8& level = match->Level[key];
+    if (newLevel > level)
     {
-        match->PlunderEarned[killer->GetGUID().GetCounter()] += bounty;
-        killer->ModifyCurrency(PLUNDER_CURRENCY, int32(bounty), CurrencyGainSource::PvPScriptedAward);
+        level = newLevel;
+        ApplyMatchLevelHealth(killer, match, level);
     }
 
-    TC_LOG_DEBUG("network", "WowLabs: match {} - {} killed {} (+{} Plunder).",
-        match->Id, killer->GetName(), killed->GetName(), bounty);
+    TC_LOG_DEBUG("network", "WowLabs: match {} - {} killed {} (+{} Plunder banked, level {}).",
+        match->Id, killer->GetName(), killed->GetName(), bounty, level);
 }
 
 void WowLabsMatchMgr::EndMatch(Map* map, Match* match, ObjectGuid winner)
@@ -428,7 +466,10 @@ void WowLabsMatchMgr::EndMatch(Map* map, Match* match, ObjectGuid winner)
     for (size_t i = 0; i < match->FinishOrder.size(); ++i)
         placement[match->FinishOrder[i].GetCounter()] = total - uint32(i);
 
-    uint32 const winReward = sConfigMgr->GetIntDefault("WowLabs.PlunderWinReward", 1000);
+    // Retail reward model: every player banks the Plunder they collected this match; ONLY the top placement gets
+    // the win bonus (500 Plunder since the 2024-03-21 hotfix, was 100) - it is a flat winner bonus, not a reward
+    // scaled per place.
+    uint32 const winBonus = sConfigMgr->GetIntDefault("WowLabs.PlunderWinBonus", 500);
     // Default on: the MATCH_END wire is RE-confirmed (GetEndOfMatchDetails reads matchType@+12 int32,
     // matchEnded@+16 bool, detailsList@+24 of 8-byte MatchDetail{int32 type, int32 value}); the JAM bool/array
     // conventions match the sibling area packets. Left as a config only so an operator can silence it.
@@ -444,18 +485,26 @@ void WowLabsMatchMgr::EndMatch(Map* map, Match* match, ObjectGuid winner)
             continue;
 
         uint64 const key = player->GetGUID().GetCounter();
+
+        // Undo the in-match level health scaling so nothing leaks back to the open world.
+        if (auto baseItr = match->BaseMaxHealth.find(key); baseItr != match->BaseMaxHealth.end() && baseItr->second)
+        {
+            player->SetMaxHealth(baseItr->second);
+            player->SetHealth(std::min<uint64>(player->GetHealth(), baseItr->second));
+        }
+
         auto itr = placement.find(key);
         uint32 const place = itr != placement.end() ? itr->second : std::max(total, 1u);   // stragglers = last
-        int32 const placementBonus = place ? int32(winReward / place) : 0;   // 1st full, 2nd half, 3rd a third...
-        if (placementBonus > 0)
-            player->ModifyCurrency(PLUNDER_CURRENCY, placementBonus, CurrencyGainSource::PvPScriptedAward);
+        int32 const collected = int32(match->PlunderEarned.count(key) ? match->PlunderEarned[key] : 0);
+        int32 const bonus = (place == 1) ? int32(winBonus) : 0;   // flat winner bonus only
+        int32 const plunderAcquired = collected + bonus;
+        if (plunderAcquired > 0)
+            player->ModifyCurrency(PLUNDER_CURRENCY, plunderAcquired, CurrencyGainSource::PvPScriptedAward);
 
-        // Per-player end-of-match summary: placement, kills scored, and total Plunder acquired this match (the
-        // in-match kill bounties already awarded plus the placement bonus).
+        // Per-player end-of-match summary: placement, kills scored, and total Plunder acquired this match.
         if (sendEnd)
         {
             uint32 const kills = match->Kills.count(key) ? match->Kills[key] : 0;
-            int32 const plunderAcquired = int32(match->PlunderEarned.count(key) ? match->PlunderEarned[key] : 0) + placementBonus;
 
             WorldPackets::WowLabs::WowLabsNotifyPlayersMatchEnd packet;
             packet.MatchType = 1;   // Plunderstorm

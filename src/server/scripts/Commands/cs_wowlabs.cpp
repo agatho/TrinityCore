@@ -149,8 +149,14 @@ public:
             default: break;
         }
 
+        uint64 const key = player->GetGUID().GetCounter();
+        uint32 const level = match->Level.count(key) ? match->Level[key] : 1;
+        uint32 const kills = match->Kills.count(key) ? match->Kills[key] : 0;
+        uint32 const plunder = match->PlunderEarned.count(key) ? match->PlunderEarned[key] : 0;
         handler->PSendSysMessage("WoW Labs match {} (instance {}): phase {}, active {}s.",
             match->Id, match->InstanceId, phase, match->ActiveElapsedMs / 1000);
+        handler->PSendSysMessage("  you: level {}, {} kills, {} Plunder banked (paid at match end).",
+            level ? level : 1, kills, plunder);
 
         float cx, cy, radius;
         if (sWowLabsMatchMgr->ComputeCircle(match, cx, cy, radius))

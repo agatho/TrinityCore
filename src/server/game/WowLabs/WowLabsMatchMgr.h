@@ -107,7 +107,13 @@ public:
 
         // Combat economy (P7).
         std::unordered_map<uint64 /*player counter*/, uint32> Kills;          // kills scored this match
-        std::unordered_map<uint64 /*player counter*/, uint32> PlunderEarned;  // Plunder gained in-match (kills)
+        std::unordered_map<uint64 /*player counter*/, uint32> PlunderEarned;  // Plunder banked at match end
+
+        // In-match leveling (retail: start level 1, up to 10; each level raises max health - ability-damage
+        // scaling is deferred until the ability system exists).
+        std::unordered_map<uint64 /*player counter*/, uint32> Xp;
+        std::unordered_map<uint64 /*player counter*/, uint8>  Level;          // 0/1 == level 1
+        std::unordered_map<uint64 /*player counter*/, uint64> BaseMaxHealth;  // captured for restore on match end
 
         bool HasMember(ObjectGuid bnet) const;
     };
