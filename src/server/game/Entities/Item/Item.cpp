@@ -1344,7 +1344,7 @@ bool Item::CanBeTraded(bool mail, bool trade) const
     if (m_lootGenerated)
         return false;
 
-    if ((!mail || !IsAccountBound()) && (IsSoulBound() && (!IsBOPTradeable() || !trade)))
+    if ((!mail || !IsBoundAccountWide()) && (IsSoulBound() && (!IsBOPTradeable() || !trade)))
         return false;
 
     if (IsBag() && (Player::IsBagPos(GetPos()) || !ToBag()->IsEmpty()))
@@ -1766,28 +1766,6 @@ Item* Item::CloneItem(uint32 count, Player const* player /*= nullptr*/) const
     return newItem;
 }
 
-bool Item::IsWarbandBound() const
-{
-    ItemBondingType bonding = GetBonding();
-    if (bonding == BIND_WOW_ACCOUNT || bonding == BIND_BNET_ACCOUNT)
-        return true;
-    if (bonding == BIND_BNET_ACCOUNT_UNTIL_EQUIPPED && !HasItemFlag(ITEM_FIELD_FLAG_CONVERTED_WARBOUND))
-        return true;
-    return false;
-}
-
-void Item::ConvertToSoulbound()
-{
-    if (GetBonding() != BIND_BNET_ACCOUNT_UNTIL_EQUIPPED)
-        return;
-    if (HasItemFlag(ITEM_FIELD_FLAG_CONVERTED_WARBOUND))
-        return;
-
-    SetBinding(true);
-    SetItemFlag(ITEM_FIELD_FLAG_CONVERTED_WARBOUND);
-    SetState(ITEM_CHANGED, GetOwner());
-}
-
 bool Item::IsBindedNotWith(Player const* player) const
 {
     // not binded item
@@ -1803,7 +1781,7 @@ bool Item::IsBindedNotWith(Player const* player) const
             return false;
 
     // BOA item case
-    if (IsAccountBound())
+    if (IsBoundAccountWide())
         return false;
 
     return true;
@@ -2106,6 +2084,8 @@ bool Item::CanTransmogrifyItemWithItem(Item const* item, ItemModifiedAppearanceE
                     return false;
                 break;
             case ITEM_CLASS_ARMOR:
+                if (source->GetSubClass() != ITEM_SUBCLASS_ARMOR_COSMETIC)
+                    return false;
                 if (source->GetInventoryType() != target->GetInventoryType())
                     if (ItemTransmogrificationSlots[source->GetInventoryType()] != ItemTransmogrificationSlots[target->GetInventoryType()])
                         return false;
@@ -2629,12 +2609,6 @@ void Item::AddBonuses(uint32 bonusListID)
     for (ItemBonusEntry const* bonus : ItemBonusMgr::GetItemBonuses(bonusListID))
         _bonusData.AddBonus(bonus->Type, bonus->Value);
     SetUpdateFieldValue(m_values.ModifyValue(&Item::m_itemData).ModifyValue(&UF::ItemData::ItemAppearanceModID), _bonusData.AppearanceModID);
-}
-
-void Item::ReplaceBonuses(std::vector<int32> bonusListIDs)
-{
-    _bonusData.Initialize(GetTemplate());
-    SetBonuses(std::move(bonusListIDs));
 }
 
 void Item::SetBonuses(std::vector<int32> bonusListIDs)

@@ -26,7 +26,6 @@
 #include "Session.h"
 #include "SslContext.h"
 #include "Timezone.h"
-#include "Util.h"
 #include <rapidjson/document.h>
 
 namespace Battlenet::Services
@@ -203,37 +202,15 @@ uint32 Authentication::HandleVerifyAuthToken(Session* session, std::string_view 
     return ERROR_OK;
 }
 
-uint32 Authentication::HandleGenerateAuthToken(Session* session, std::function<void(uint32, std::string_view)> sendResponse)
+uint32 Authentication::HandleGenerateAuthToken(Session* session, std::function<void(std::string_view)> sendResponse)
 {
-    uint32 accountId = session->GetAccountId();
-
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_EXISTING_AUTHENTICATION_BY_ID);
-    stmt->setUInt32(0, accountId);
+    stmt->setUInt32(0, session->GetAccountId());
 
-    session->QueueQuery(LoginDatabase.AsyncQuery(stmt).WithPreparedCallback([accountId, sendResponse = std::move(sendResponse)](PreparedQueryResult result)
+    session->QueueQuery(LoginDatabase.AsyncQuery(stmt).WithPreparedCallback([sendResponse = std::move(sendResponse)](PreparedQueryResult result)
     {
-        // The account row can disappear between logon and this call (deleted/merged battlenet_accounts row).
-        // Dereferencing (*result)[0] unconditionally crashed bnetserver in that case.
-        if (!result)
-        {
-            TC_LOG_ERROR("session.rpc", "[Authentication::HandleGenerateAuthToken] battlenet_accounts row for id {} vanished", accountId);
-            sendResponse(ERROR_ACCOUNT_DATA_NOT_FOUND, { });
-            return;
-        }
-
-        // Mint a fresh ticket rather than echoing the stored one back verbatim: the echoed ticket carried the
-        // original (possibly already elapsed) expiry, so a cached auth token could never be refreshed and every
-        // relaunch fell back to the web-auth portal. Same TC-<40 hex> shape LoginRESTService::HandlePostLogin mints.
-        std::string loginTicket = "TC-" + ByteArrayToHexStr(Trinity::Crypto::GetRandomBytes<20>());
-        uint32 expiry = uint32(time(nullptr) + sLoginService.GetLoginTicketDuration());
-
-        LoginDatabasePreparedStatement* update = LoginDatabase.GetPreparedStatement(LOGIN_UPD_BNET_AUTHENTICATION);
-        update->setString(0, loginTicket);
-        update->setUInt32(1, expiry);
-        update->setUInt32(2, accountId);
-        LoginDatabase.Execute(update);
-
-        sendResponse(ERROR_OK, loginTicket);
+        // just send existing credentials back (not the best but it works for now with them being stored in db)
+        sendResponse((*result)[0].GetStringView());
     }));
 
     return ERROR_OK;
@@ -315,13 +292,12 @@ uint32 Authentication::HandleGenerateWebCredentials(authentication::v1::Generate
     if (!_session->IsAuthed())
         return ERROR_DENIED;
 
-    return Shared::Authentication::HandleGenerateAuthToken(_session, [session = _session, continuation = std::move(continuation)](uint32 status, std::string_view webCredentials)
+    return Shared::Authentication::HandleGenerateAuthToken(_session, [session = _session, continuation = std::move(continuation)](std::string_view webCredentials)
     {
         Authentication asyncContinuationService(session);
         authentication::v1::GenerateWebCredentialsResponse response;
-        if (status == ERROR_OK)
-            response.set_web_credentials(webCredentials.data(), webCredentials.size());
-        continuation(&asyncContinuationService, status, &response);
+        response.set_web_credentials(webCredentials.data(), webCredentials.size());
+        continuation(&asyncContinuationService, ERROR_OK, &response);
     });
 }
 }
@@ -380,13 +356,12 @@ uint32 Authentication::HandleGenerateAuthToken(authentication::v2::client::Gener
     if (!_session->IsAuthed())
         return ERROR_DENIED;
 
-    return Shared::Authentication::HandleGenerateAuthToken(_session, [session = _session, continuation = std::move(continuation)](uint32 status, std::string_view authToken)
+    return Shared::Authentication::HandleGenerateAuthToken(_session, [session = _session, continuation = std::move(continuation)](std::string_view webCredentials)
     {
         Authentication asyncContinuationService(session);
         authentication::v2::client::GenerateAuthTokenResponse response;
-        if (status == ERROR_OK)
-            response.set_auth_token(authToken.data(), authToken.size());
-        continuation(&asyncContinuationService, status, &response);
+        response.set_auth_token(webCredentials.data(), webCredentials.size());
+        continuation(&asyncContinuationService, ERROR_OK, &response);
     });
 }
 

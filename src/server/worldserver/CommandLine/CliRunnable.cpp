@@ -22,9 +22,6 @@
 #include "CliRunnable.h"
 #include "Config.h"
 #include "Util.h"
-#include <chrono>
-#include <iostream>
-#include <thread>
 #include "World.h"
 
 #if TRINITY_PLATFORM != TRINITY_PLATFORM_WINDOWS
@@ -77,21 +74,7 @@ namespace Trinity::Impl::Readline
 void utf8print(void* /*arg*/, std::string_view str)
 {
 #if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
-    // WriteConsoleW needs a console handle exactly like ReadConsoleW does, so with stdout redirected to
-    // a file every line of command output is dropped. Fall back to stdout in that case.
-    static bool const stdoutIsConsole = []
-    {
-        DWORD consoleMode;
-        return GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &consoleMode) != FALSE;
-    }();
-
-    if (stdoutIsConsole)
-        WriteWinConsole(str);
-    else
-    {
-        printf(STRING_VIEW_FMT, STRING_VIEW_FMT_ARG(str));
-        fflush(stdout);
-    }
+    WriteWinConsole(str);
 #else
 {
     printf(STRING_VIEW_FMT, STRING_VIEW_FMT_ARG(str));
@@ -160,36 +143,8 @@ void CliThread()
         std::string command;
 
 #if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
-        // ReadConsoleW only succeeds on a real console handle. With stdin redirected from a file or a
-        // pipe it fails on every iteration and the CLI silently swallows everything it was fed, which is
-        // why `worldserver < commands.txt` does nothing on Windows. Fall back to plain stdin there.
-        static bool const stdinIsConsole = []
-        {
-            DWORD consoleMode;
-            return GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), &consoleMode) != FALSE;
-        }();
-
-        if (stdinIsConsole)
-        {
-            if (!ReadWinConsole(command))
-                continue;
-        }
-        else if (!std::getline(std::cin, command))
-        {
-            if (std::cin.eof())
-            {
-                // Everything the file held is queued, but the world thread only starts draining that
-                // queue once startup finishes - tearing the server down at EOF (which is the right
-                // response to a closed console) would throw the commands away unrun. Park instead.
-                while (!World::IsStopped())
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-                break;
-            }
-
-            std::cin.clear();
+        if (!ReadWinConsole(command))
             continue;
-        }
 #else
         char* command_str = readline(CLI_PREFIX);
         ::rl_bind_key('\t', ::rl_complete);

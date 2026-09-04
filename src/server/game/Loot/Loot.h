@@ -268,7 +268,6 @@ private:
     void SendAllPassed();
     void SendRoll(ObjectGuid const& targetGuid, int32 rollNumber, RollVote rollType, Optional<ObjectGuid> const& rollWinner);
     void SendLootRollWon(ObjectGuid const& targetGuid, int32 rollNumber, RollVote rollType);
-    void SendRollsComplete() const;
     void FillPacket(WorldPackets::Loot::LootItemData& lootItem) const;
     void Finish(RollVoteMap::const_iterator winnerItr);
     bool AllPlayerVoted(RollVoteMap::const_iterator& winnerItr);
@@ -317,10 +316,6 @@ struct TC_GAME_API Loot
     void NotifyItemRemoved(uint8 lootListId, Map const* map);
     void NotifyMoneyRemoved(Map const* map);
     void OnLootOpened(Map* map, Player* looter);
-    // Start a group roll on a single item (used when the master looter chooses to roll instead of assign).
-    bool StartRoll(Map* map, uint32 lootListId);
-    // Cancel an in-progress roll on an item (master looter aborts); the item returns to the loot pool.
-    bool CancelRoll(uint32 lootListId);
     void AddLooter(ObjectGuid GUID) { PlayersLooting.insert(GUID); }
     void RemoveLooter(ObjectGuid GUID) { PlayersLooting.erase(GUID); }
 

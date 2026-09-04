@@ -105,16 +105,6 @@ void DeleteEquipmentSet::Read()
     _worldPacket >> ID;
 }
 
-void AssignEquipmentSetSpec::Read()
-{
-    // Exactly two fields, 12 bytes. The client serializer at RVA 0x6A6E20 writes
-    // write_uint64(msg->payload[0]) then write_uint32(msg->payload[8]) and returns; the second
-    // Guid/SpecIndex pair that used to be read here had no counterpart on the wire, so the third
-    // read ran off the end of a 12-byte packet and threw before the handler could be called.
-    _worldPacket >> Guid;
-    _worldPacket >> SpecIndex;
-}
-
 void UseEquipmentSet::Read()
 {
     _worldPacket >> Inv;

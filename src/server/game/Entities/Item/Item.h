@@ -227,9 +227,6 @@ class TC_GAME_API Item : public Object
         bool IsSoulBound() const { return HasItemFlag(ITEM_FIELD_FLAG_SOULBOUND); }
         bool IsBoundAccountWide() const { return GetTemplate()->HasFlag(ITEM_FLAG_IS_BOUND_TO_ACCOUNT); }
         bool IsBattlenetAccountBound() const { return GetTemplate()->HasFlag(ITEM_FLAG2_BNET_ACCOUNT_TRADE_OK); }
-        bool IsWarbandBound() const;
-        bool IsAccountBound() const { return IsBoundAccountWide() || IsWarbandBound(); }
-        void ConvertToSoulbound();
         bool IsBindedNotWith(Player const* player) const;
         bool IsBoundByEnchant() const;
         virtual void SaveToDB(CharacterDatabaseTransaction trans);
@@ -241,9 +238,6 @@ class TC_GAME_API Item : public Object
         void AddBonuses(uint32 bonusListID);
         std::vector<int32> const& GetBonusListIDs() const { return m_itemData->ItemBonusKey->BonusListIDs; }
         void SetBonuses(std::vector<int32> bonusListIDs);
-        // Replaces the item's bonus lists wholesale: resets the accumulated bonus data before applying
-        // (SetBonuses appends). Used by the item upgrade system to swap rank bonuses in place.
-        void ReplaceBonuses(std::vector<int32> bonusListIDs);
         void ClearBonuses();
 
         static void DeleteFromDB(CharacterDatabaseTransaction trans, ObjectGuid::LowType itemGuid);

@@ -170,6 +170,7 @@ public:
     void ResetAllCooldowns();
     bool HasCooldown(SpellInfo const* spellInfo, uint32 itemId = 0) const;
     bool HasCooldown(uint32 spellId, uint32 itemId = 0) const;
+    bool HasCooldownOnHold(uint32 spellId) const;
     Duration GetRemainingCooldown(SpellInfo const* spellInfo) const;
     Duration GetRemainingCategoryCooldown(uint32 categoryId) const;
     Duration GetRemainingCategoryCooldown(SpellInfo const* spellInfo) const;
@@ -187,7 +188,6 @@ public:
     void ResetAllCharges();
     bool HasCharge(uint32 chargeCategoryId) const;
     int32 GetMaxCharges(uint32 chargeCategoryId) const;
-    int32 GetChargeCount(uint32 chargeCategoryId) const;
     int32 GetChargeRecoveryTime(uint32 chargeCategoryId) const;
 
     // Global cooldown

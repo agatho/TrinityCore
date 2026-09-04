@@ -25,17 +25,11 @@
 #include <variant>
 
 class Object;
-class Player;
 class Quest;
 class WorldSession;
 struct GossipMenuItems;
 enum class PlayerInteractionType : int32;
 enum class QuestGiverStatus : uint64;
-
-namespace WorldPackets::NPC
-{
-    struct ClientGossipText;
-}
 
 #define GOSSIP_MAX_MENU_ITEMS               32
 #define DEFAULT_GOSSIP_MESSAGE              0xffffff
@@ -294,8 +288,6 @@ public:
     void StartInteraction(ObjectGuid target, PlayerInteractionType type);
     bool IsInteractingWith(ObjectGuid target, PlayerInteractionType type) const { return SourceGuid == target && Type == type; }
     void Reset();
-    void ClearPendingAutoLaunchedQuest(Player* player = nullptr);
-    Object* ResolvePendingOfferSource(Player* player) const;
 
     ObjectGuid SourceGuid;
     PlayerInteractionType Type = { };
@@ -311,14 +303,11 @@ public:
     }
 
     bool IsLaunchedByQuest = false;
-    uint32 PendingAutoLaunchedQuestId = 0;
 
 private:
     uint16 _playerChoiceResponseIdentifierGenerator = 0; // not reset between interactions
     std::variant<std::monostate, TrainerData, PlayerChoiceData> _data;
 };
-
-TC_GAME_API bool IsPersonalQuestGiverFor(Player const* player, Object const* questGiver);
 
 class TC_GAME_API PlayerMenu
 {
@@ -342,7 +331,6 @@ class TC_GAME_API PlayerMenu
         bool IsGossipOptionCoded(uint32 selection) const { return _gossipMenu.IsMenuItemCoded(selection); }
 
         void SendGossipMenu(uint32 titleTextId, ObjectGuid objectGUID);
-        void SendGossipQuestUpdate(ObjectGuid objectGUID, Quest const* quest, uint32 questIcon) const;
         void SendCloseGossip();
         void SendPointOfInterest(uint32 poiId) const;
 
@@ -354,16 +342,12 @@ class TC_GAME_API PlayerMenu
         void SendQuestGiverQuestListMessage(Object* questgiver);
 
         void SendQuestQueryResponse(Quest const* quest) const;
-        void SendQuestGiverQuestDetails(Quest const* quest, ObjectGuid npcGUID, bool autoLaunched, bool displayPopup, uint32 questGiverCreatureIdOverride = 0, uint32 portraitGiverOverride = 0);
+        void SendQuestGiverQuestDetails(Quest const* quest, ObjectGuid npcGUID, bool autoLaunched, bool displayPopup);
 
         void SendQuestGiverOfferReward(Quest const* quest, ObjectGuid npcGUID, bool autoLaunched);
         void SendQuestGiverRequestItems(Quest const* quest, ObjectGuid npcGUID, bool canComplete, bool autoLaunched);
 
-        bool TryGrantPendingAutoLaunchedQuest(Object* packetGiver = nullptr, int32 expectedQuestId = 0);
-
     private:
-        void BuildClientGossipText(WorldPackets::NPC::ClientGossipText& text, Quest const* quest, uint32 questIcon) const;
-
         GossipMenu _gossipMenu;
         QuestMenu  _questMenu;
         WorldSession* _session;

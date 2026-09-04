@@ -16,12 +16,8 @@
  */
 
 #include "WorldSession.h"
-#include "ClubFinderMgr.h"
 #include "Common.h"
 #include "DatabaseEnv.h"
-#include "Log.h"
-#include "Player.h"
-#include "StringFormat.h"
 #include "SupportMgr.h"
 #include "TicketPackets.h"
 
@@ -85,28 +81,6 @@ void WorldSession::HandleSupportTicketSubmitComplaint(WorldPackets::Ticket::Supp
     comp->SetNote(packet.Note);
 
     sSupportMgr->AddTicket(comp);
-
-    // A reported Club Finder posting is flagged for review. The client reads this back through
-    // C_ClubFinder.GetStatusOfPostingFromClubId, so the report becomes visible state rather than only a
-    // GM ticket, and a reviewer can escalate it to Banned or a forced name/description change. Without
-    // this the posting id the client took the trouble to send is simply discarded.
-    if (packet.ClubFinderInfo)
-    {
-        ReportType const reportType = ReportType(packet.ReportType);
-        if (reportType == ReportType::ClubFinderPosting || reportType == ReportType::ClubFinderApplicant)
-        {
-            // Do not trust the posting id on its own: the old code flagged whatever posting id the
-            // packet named, so any client could push an arbitrary posting UNDER_REVIEW by supplying a
-            // posting id it has no relationship to. Resolve the posting the reported club actually owns
-            // and only flag it when the supplied posting id matches that club's real posting; a
-            // mismatched (club, posting) pair is ignored.
-            ClubFinderPosting const* posting = sClubFinderMgr->GetPostingForClub(packet.ClubFinderInfo->ClubID);
-            if (posting && posting->PostingId == uint32(packet.ClubFinderInfo->PostingID)
-                && sClubFinderMgr->AddPostingDisplayFlags(posting->PostingId, CLUB_FINDER_POSTING_FLAG_UNDER_REVIEW))
-                TC_LOG_INFO("network", "ClubFinder: posting {} (club {}) flagged under review after a report by {}.",
-                    posting->PostingId, packet.ClubFinderInfo->ClubID, GetPlayerInfo());
-        }
-    }
 }
 
 void WorldSession::HandleBugReportOpcode(WorldPackets::Ticket::BugReport& bugReport)
@@ -129,53 +103,4 @@ void WorldSession::HandleComplaint(WorldPackets::Ticket::Complaint& packet)
     result.ComplaintType = packet.ComplaintType;
     result.Result = 0;
     SendPacket(result.Write());
-}
-
-// CMSG_CRAFTING_ORDER_REPORT_PLAYER. The crafting-order UI's Report button carries the full complaint payload
-// (position header, report type/categories and a note) plus the order id. Previously Handle_NULL, so the report was
-// discarded. Route it into the same ComplaintTicket queue the in-world report flow uses, with the order id folded
-// into the note so a reviewer can find the order.
-void WorldSession::HandleCraftingOrderReportPlayer(WorldPackets::Ticket::CraftingOrderReportPlayer& packet)
-{
-    if (!sSupportMgr->GetComplaintSystemStatus())
-        return;
-
-    ComplaintTicket* comp = new ComplaintTicket(GetPlayer());
-    comp->SetPosition(packet.Header.MapID, packet.Header.Position);
-    comp->SetFacing(packet.Header.Facing);
-    comp->SetReportType(ReportType(packet.ReportType));
-    comp->SetMajorCategory(ReportMajorCategory(packet.MajorCategory));
-    comp->SetMinorCategoryFlags(ReportMinorCategory(packet.MinorCategoryFlags));
-    comp->SetNote(Trinity::StringFormat("[Crafting order {}] {}", packet.OrderID, packet.Note));
-
-    sSupportMgr->AddTicket(comp);
-}
-
-// CMSG_CHAT_REPORT_FILTERED. The client reports a chat message it filtered, identifying only the sender. Previously
-// Handle_NULL. Recorded as a chat complaint against that sender so it is reviewable; de-duplicated against this
-// reporter's existing open complaints so a client that reports repeatedly cannot flood the ticket queue.
-void WorldSession::HandleChatReportFiltered(WorldPackets::Ticket::ChatReportFiltered& packet)
-{
-    if (!sSupportMgr->GetComplaintSystemStatus())
-        return;
-
-    Player* player = GetPlayer();
-    if (!player || packet.SenderGUID.IsEmpty() || packet.SenderGUID == player->GetGUID())
-        return;
-
-    // One open filtered-chat complaint per (reporter, target).
-    for (auto const& [ticketId, ticket] : sSupportMgr->GetComplaintsByPlayerGuid(player->GetGUID()))
-        if (!ticket->IsClosed() && ticket->GetTargetCharacterGuid() == packet.SenderGUID)
-            return;
-
-    ComplaintTicket* comp = new ComplaintTicket(player);
-    comp->SetPosition(player->GetMapId(), player->GetPosition());
-    comp->SetFacing(player->GetOrientation());
-    comp->SetTargetCharacterGuid(packet.SenderGUID);
-    comp->SetReportType(ReportType::Chat);
-    comp->SetMajorCategory(ReportMajorCategory::InappropriateCommunication);
-    comp->SetMinorCategoryFlags(ReportMinorCategory::TextChat);
-    comp->SetNote("Client-side chat filter report (CMSG_CHAT_REPORT_FILTERED)");
-
-    sSupportMgr->AddTicket(comp);
 }

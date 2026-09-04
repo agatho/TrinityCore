@@ -215,7 +215,6 @@ class TC_GAME_API AuraEffect
         void HandleAuraModIncreaseSwimSpeed(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         void HandleAuraModDecreaseSpeed(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         void HandleAuraModUseNormalSpeed(AuraApplication const* aurApp, uint8 mode, bool apply) const;
-        void HandleAuraModSpeedNoControl(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         void HandleAuraModMinimumSpeedRate(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         void HandleModMovementForceMagnitude(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         void HandleAuraModAdvFlyingSpeed(AuraApplication const* aurApp, uint8 mode, bool apply) const;
@@ -250,7 +249,6 @@ class TC_GAME_API AuraEffect
         void HandleOverrideSpellPowerByAttackPower(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         void HandleOverrideAttackPowerBySpellPower(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         void HandleModVersatilityByPct(AuraApplication const* aurApp, uint8 mode, bool apply) const;
-        void HandleModSupportStat(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         void HandleAuraModMaxPower(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         void HandleConvertCritToParry(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         //   heal and energize
@@ -269,7 +267,6 @@ class TC_GAME_API AuraEffect
         void HandleAuraModOverridePowerDisplay(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         void HandleAuraModMaxPowerPct(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         void HandleTriggerSpellOnHealthPercent(AuraApplication const* aurApp, uint8 mode, bool apply) const;
-        void HandleAuraModLeech(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         //   fight
         void HandleAuraModParryPercent(AuraApplication const* aurApp, uint8 mode, bool apply) const;
         void HandleAuraModDodgePercent(AuraApplication const* aurApp, uint8 mode, bool apply) const;

@@ -459,11 +459,12 @@ namespace WorldPackets
             std::string_view LogDescription;
             std::string_view DescriptionText;
             std::vector<ConditionalQuestText> ConditionalDescriptionText;
-            bool DisplayPopup = false;
-            bool StartCheat = false;
             bool AutoLaunched = false;
             bool FromContentPush = false;
+            bool ReplayQuest = false;
             bool ResetByScheduler = false;
+            bool StartCheat = false;
+            bool DisplayPopup = false;
         };
 
         struct QuestObjectiveCollect
@@ -675,15 +676,14 @@ namespace WorldPackets
             uint32 QuestID = 0;
         };
 
-        // SMSG_DAILY_QUESTS_RESET carries an EMPTY body in 12.0.7: the client reader consumes no
-        // fields, and every occurrence in the live sniffs is 0 bytes. The old int32 Count was stale
-        // and was being transmitted on every daily reset.
         class DailyQuestsReset final : public ServerPacket
         {
         public:
-            explicit DailyQuestsReset() : ServerPacket(SMSG_DAILY_QUESTS_RESET, 0) { }
+            explicit DailyQuestsReset() : ServerPacket(SMSG_DAILY_QUESTS_RESET, 4) { }
 
             WorldPacket const* Write() override;
+
+            int32 Count = 0;
         };
 
         class QuestForceRemoved final : public ServerPacket
@@ -724,44 +724,6 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             std::vector<WorldQuestUpdateInfo> WorldQuestUpdates;
-        };
-
-        class RequestAreaPoiUpdate final : public ClientPacket
-        {
-        public:
-            explicit RequestAreaPoiUpdate(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_AREA_POI_UPDATE, std::move(packet)) { }
-
-            void Read() override { }
-        };
-
-        class RequestScheduledAreaPoiUpdate final : public ClientPacket
-        {
-        public:
-            explicit RequestScheduledAreaPoiUpdate(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_SCHEDULED_AREA_POI_UPDATE, std::move(packet)) { }
-
-            void Read() override { }
-        };
-
-        struct AreaPoiUpdateInfo
-        {
-            AreaPoiUpdateInfo(time_t lastUpdate, uint32 areaPoiID, uint32 timer, int32 variableID, int32 value) :
-                LastUpdate(lastUpdate), AreaPoiID(areaPoiID), Timer(timer), VariableID(variableID), Value(value) { }
-            Timestamp<> LastUpdate;
-            uint32 AreaPoiID;
-            uint32 Timer;
-            // WorldState
-            int32 VariableID;
-            int32 Value;
-        };
-
-        class AreaPoiUpdateResponse final : public ServerPacket
-        {
-        public:
-            explicit AreaPoiUpdateResponse() : ServerPacket(SMSG_AREA_POI_UPDATE_RESPONSE, 100) { }
-
-            WorldPacket const* Write() override;
-
-            std::vector<AreaPoiUpdateInfo> AreaPois;
         };
 
         struct PlayerChoiceResponseRewardEntry
@@ -839,8 +801,11 @@ namespace WorldPackets
             bool HideWarboardHeader = false;
             bool KeepOpenAfterChoice = false;
             bool ShowChoicesAsList = false;
-            bool ForceDontShowChoicesAsList = false;
+            bool HasPowerChoice = false;
             bool RequiresSelection = false;
+            bool ShowChoicesAsGrid = false;
+            bool HideAnswerArt = false;
+            bool ShowChoicesAsColumns = false;
         };
 
         class ChoiceResponse final : public ClientPacket
@@ -853,25 +818,6 @@ namespace WorldPackets
             int32 ChoiceID = 0;
             int32 ResponseIdentifier = 0;
             bool IsReroll = false;
-        };
-
-        // CMSG_CLOSE_QUEST_CHOICE -- the player dismisses the active PlayerChoice UI. Opcode-only (empty payload
-        // confirmed by client serializer 0x7FF729148D10, n=0). Server clears the active choice so a stale
-        // CMSG_CHOICE_RESPONSE cannot fire against a closed choice.
-        class CloseQuestChoice final : public ClientPacket
-        {
-        public:
-            explicit CloseQuestChoice(WorldPacket&& packet) : ClientPacket(CMSG_CLOSE_QUEST_CHOICE, std::move(packet)) { }
-
-            void Read() override { }
-        };
-
-        class HideQuestChoice final : public ClientPacket
-        {
-        public:
-            explicit HideQuestChoice(WorldPacket&& packet) : ClientPacket(CMSG_HIDE_QUEST_CHOICE, std::move(packet)) { }
-
-            void Read() override { }
         };
 
         class UiMapQuestLinesResponse final : public ServerPacket
@@ -942,139 +888,6 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             int32 QuestID = 0;
-        };
-
-        // ============================================================
-        // Quest Enhancement Packets
-        // ============================================================
-
-        class QueryQuestItemUsability final : public ClientPacket
-        {
-        public:
-            explicit QueryQuestItemUsability(WorldPacket&& packet) : ClientPacket(CMSG_QUERY_QUEST_ITEM_USABILITY, std::move(packet)) { }
-
-            void Read() override;
-
-            std::vector<ObjectGuid> ItemGUIDs;
-        };
-
-        class QuestItemUsabilityResponse final : public ServerPacket
-        {
-        public:
-            explicit QuestItemUsabilityResponse() : ServerPacket(SMSG_QUEST_ITEM_USABILITY_RESPONSE, 4) { }
-
-            WorldPacket const* Write() override;
-
-            std::vector<uint8> Usabilities;
-        };
-
-        // Quest Session packets
-        // ============================================================
-
-        class QuestSessionRequestStart final : public ClientPacket
-        {
-        public:
-            explicit QuestSessionRequestStart(WorldPacket&& packet) : ClientPacket(CMSG_QUEST_SESSION_REQUEST_START, std::move(packet)) { }
-
-            void Read() override { }
-        };
-
-        class DisplayQuestPopup final : public ServerPacket
-        {
-        public:
-            explicit DisplayQuestPopup() : ServerPacket(SMSG_DISPLAY_QUEST_POPUP, 4) { }
-
-            WorldPacket const* Write() override;
-
-            int32 QuestID = 0;
-        };
-
-        class ShowQuestCompletionText final : public ServerPacket
-        {
-        public:
-            explicit ShowQuestCompletionText() : ServerPacket(SMSG_SHOW_QUEST_COMPLETION_TEXT, 4) { }
-
-            WorldPacket const* Write() override;
-
-            int32 QuestID = 0;
-        };
-
-        class ResetQuestPOI final : public ServerPacket
-        {
-        public:
-            explicit ResetQuestPOI() : ServerPacket(SMSG_RESET_QUEST_POI, 0) { }
-
-            WorldPacket const* Write() override;
-        };
-
-        class GossipQuestUpdate final : public ServerPacket
-        {
-        public:
-            explicit GossipQuestUpdate() : ServerPacket(SMSG_GOSSIP_QUEST_UPDATE, 16 + 4 + 4) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid QuestGiverGUID;
-            int32 QuestID = 0;
-            int32 QuestFlags = 0;
-        };
-
-        class QuestSessionRequestStop final : public ClientPacket
-        {
-        public:
-            explicit QuestSessionRequestStop(WorldPacket&& packet) : ClientPacket(CMSG_QUEST_SESSION_REQUEST_STOP, std::move(packet)) { }
-
-            void Read() override { }
-        };
-
-        class QuestSessionBeginResponse final : public ClientPacket
-        {
-        public:
-            explicit QuestSessionBeginResponse(WorldPacket&& packet) : ClientPacket(CMSG_QUEST_SESSION_BEGIN_RESPONSE, std::move(packet)) { }
-
-            void Read() override;
-
-            bool Accept = false;
-        };
-
-        class QuestSessionResult final : public ServerPacket
-        {
-        public:
-            explicit QuestSessionResult() : ServerPacket(SMSG_QUEST_SESSION_RESULT, 1) { }
-
-            WorldPacket const* Write() override;
-
-            uint8 Result = 0; // 0 = started, 1 = stopped, other = error
-        };
-
-        class QuestSessionReadyCheck final : public ServerPacket
-        {
-        public:
-            explicit QuestSessionReadyCheck() : ServerPacket(SMSG_QUEST_SESSION_READY_CHECK, 0) { }
-
-            WorldPacket const* Write() override { return &_worldPacket; }
-        };
-
-        class QuestSessionReadyCheckResponse final : public ServerPacket
-        {
-        public:
-            explicit QuestSessionReadyCheckResponse() : ServerPacket(SMSG_QUEST_SESSION_READY_CHECK_RESPONSE, 16 + 1) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid Player;
-            bool Accept = false;
-        };
-
-        class QuestSessionInfoResponse final : public ServerPacket
-        {
-        public:
-            explicit QuestSessionInfoResponse() : ServerPacket(SMSG_QUEST_SESSION_INFO_RESPONSE, 16) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid SessionOwner;
-            std::vector<int32> QuestIDs;
         };
     }
 }

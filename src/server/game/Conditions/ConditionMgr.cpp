@@ -161,9 +161,7 @@ ConditionMgr::ConditionTypeInfo const ConditionMgr::StaticConditionTypeData[COND
     { .Name = "Private Object",            .HasConditionValue1 = false, .HasConditionValue2 = false, .HasConditionValue3 = false, .HasConditionStringValue1 = false },
     { .Name = "String ID",                 .HasConditionValue1 = false, .HasConditionValue2 = false, .HasConditionValue3 = false, .HasConditionStringValue1 =  true },
     { .Name = "Label",                     .HasConditionValue1 =  true, .HasConditionValue2 = false, .HasConditionValue3 = false, .HasConditionStringValue1 = false },
-    { .Name = "Chromie Time",              .HasConditionValue1 =  true, .HasConditionValue2 = false, .HasConditionValue3 = false, .HasConditionStringValue1 = false },
-    { .Name = "Group status",              .HasConditionValue1 =  true, .HasConditionValue2 = false, .HasConditionValue3 = false, .HasConditionStringValue1 = false },
-    { .Name = "Covenant",                  .HasConditionValue1 =  true, .HasConditionValue2 =  true, .HasConditionValue3 = false, .HasConditionStringValue1 = false }
+    { .Name = "Group status",              .HasConditionValue1 =  true, .HasConditionValue2 = false, .HasConditionValue3 = false, .HasConditionStringValue1 = false }
 };
 
 static bool MeetsGroupStatusCondition(Player const* player, GroupStatusCondition status)
@@ -702,41 +700,6 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo) const
                 condMeets = go->HasLabel(ConditionValue1);
             break;
         }
-        case CONDITION_CHROMIE_TIME:
-        {
-            if (Player const* player = object->ToPlayer())
-            {
-                int32 currentExpansion = player->m_activePlayerData->UiChromieTimeExpansionID;
-                if (ConditionValue1 == 0)
-                    condMeets = currentExpansion != 0; // any Chromie Time
-                else
-                    condMeets = currentExpansion == int32(ConditionValue1); // specific expansion
-            }
-            break;
-        }
-        case CONDITION_COVENANT:
-        {
-            // ConditionValue1 0 means "any covenant", so this doubles as the has-not-chosen-yet test when negated.
-            Player const* player = object->ToPlayer();
-            if (!player)
-                break;
-
-            if (!ConditionValue2)
-            {
-                condMeets = ConditionValue1 ? player->GetActiveCovenant() == ConditionValue1 : player->GetActiveCovenant() != 0;
-                break;
-            }
-
-            // ConditionValue2 = minimum renown level. Renown is per covenant and survives leaving one, so with the
-            // "any covenant" wildcard this asks what the 9.1.5 free-switch rule asks - "has this character ever
-            // taken a covenant to Renown N" - without requiring it to be in one right now.
-            if (ConditionValue1)
-                condMeets = player->GetActiveCovenant() == ConditionValue1
-                    && player->GetCovenantRenownLevel(ConditionValue1) >= ConditionValue2;
-            else
-                condMeets = player->GetHighestCovenantRenownLevel() >= ConditionValue2;
-            break;
-        }
         case CONDITION_GROUP_STATUS:
         {
             if (Player const* player = object->ToPlayer())
@@ -964,10 +927,6 @@ uint32 Condition::GetSearcherTypeMaskForCondition() const
         case CONDITION_LABEL:
             mask |= GRID_MAP_TYPE_MASK_CREATURE | GRID_MAP_TYPE_MASK_GAMEOBJECT;
             break;
-        case CONDITION_CHROMIE_TIME:
-            mask |= GRID_MAP_TYPE_MASK_PLAYER;
-            break;
-        case CONDITION_COVENANT:
         case CONDITION_GROUP_STATUS:
             mask |= GRID_MAP_TYPE_MASK_PLAYER;
             break;
@@ -2732,14 +2691,6 @@ bool ConditionMgr::isConditionTypeValid(Condition* cond) const
                 return false;
             }
             break;
-        case CONDITION_COVENANT:
-            // 0 is the wildcard "in any covenant", every other value must name a real Covenant.db2 row
-            if (cond->ConditionValue1 && !sCovenantStore.LookupEntry(cond->ConditionValue1))
-            {
-                TC_LOG_ERROR("sql.sql", "{} has non existing covenant ({}), skipped.", *cond, cond->ConditionValue1);
-                return false;
-            }
-            break;
         case CONDITION_AREAID:
         case CONDITION_ALIVE:
         case CONDITION_IN_WATER:
@@ -2751,16 +2702,6 @@ bool ConditionMgr::isConditionTypeValid(Condition* cond) const
         case CONDITION_STRING_ID:
         case CONDITION_LABEL:
             break;
-        case CONDITION_CHROMIE_TIME:
-        {
-            // ConditionValue1 is a UiChromieTimeExpansionInfo record id (5-16 at 12.0.7), not an Expansions enum value; 0 = "any Chromie Time"
-            if (cond->ConditionValue1 && !sUIChromieTimeExpansionInfoStore.LookupEntry(cond->ConditionValue1))
-            {
-                TC_LOG_ERROR("sql.sql", "{} has non existing UiChromieTimeExpansionInfo id in value1 ({}), skipped.", *cond, cond->ConditionValue1);
-                return false;
-            }
-            break;
-        }
         case CONDITION_DIFFICULTY_ID:
             if (!sDifficultyStore.LookupEntry(cond->ConditionValue1))
             {
@@ -3134,11 +3075,17 @@ bool ConditionMgr::IsPlayerMeetingCondition(Player const* player, PlayerConditio
     if (condition->LifetimeMaxPVPRank && player->m_activePlayerData->LifetimeMaxRank != condition->LifetimeMaxPVPRank)
         return false;
 
-    if (condition->MovementFlags[0] && !(player->GetUnitMovementFlags() & condition->MovementFlags[0]))
-        return false;
+    if (condition->MovementFlags)
+    {
+        static constexpr MovementFlags PlayerConditionSupportedMovementFlags = MOVEMENTFLAG_FORWARD | MOVEMENTFLAG_BACKWARD
+            | MOVEMENTFLAG_STRAFE_LEFT | MOVEMENTFLAG_STRAFE_RIGHT | MOVEMENTFLAG_LEFT | MOVEMENTFLAG_RIGHT
+            | MOVEMENTFLAG_PITCH_UP | MOVEMENTFLAG_PITCH_DOWN | MOVEMENTFLAG_WALKING | MOVEMENTFLAG_DISABLE_GRAVITY
+            | MOVEMENTFLAG_ROOT | MOVEMENTFLAG_FALLING | MOVEMENTFLAG_SWIMMING;
 
-    if (condition->MovementFlags[1] && !(player->GetExtraUnitMovementFlags() & condition->MovementFlags[1]))
-        return false;
+        MovementFlags requiredFlags = MovementFlags(condition->MovementFlags) & PlayerConditionSupportedMovementFlags;
+        if ((player->GetUnitMovementFlags() & requiredFlags) != requiredFlags)
+            return false;
+    }
 
     if (condition->WeaponSubclassMask)
     {

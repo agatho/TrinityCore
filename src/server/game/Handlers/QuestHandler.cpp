@@ -27,8 +27,6 @@
 #include "GameTime.h"
 #include "GossipDef.h"
 #include "Group.h"
-#include "Item.h"
-#include "ItemTemplate.h"
 #include "Log.h"
 #include "Memory.h"
 #include "ObjectAccessor.h"
@@ -42,9 +40,7 @@
 #include "QuestPools.h"
 #include "ReputationMgr.h"
 #include "ScriptMgr.h"
-#include "AreaPoiMgr.h"
 #include "World.h"
-#include "WorldQuestMgr.h"
 
 void WorldSession::HandleQuestgiverStatusQueryOpcode(WorldPackets::Quest::QuestGiverStatusQuery& packet)
 {
@@ -94,39 +90,11 @@ void WorldSession::HandleQuestgiverAcceptQuestOpcode(WorldPackets::Quest::QuestG
 {
     TC_LOG_DEBUG("network", "WORLD: Received CMSG_QUESTGIVER_ACCEPT_QUEST {}, quest = {}, startcheat = {}", packet.QuestGiverGUID.ToString(), packet.QuestID, packet.StartCheat);
 
-    InteractionData& interactionData = _player->PlayerTalkClass->GetInteractionData();
-
-    Object* object = nullptr;
-    if (packet.QuestGiverGUID == _player->GetGUID())
-    {
-        // A player is only a valid questgiver for themselves when the quest was handed out by a
-        // script-driven auto-launched offer (SPELL_EFFECT_QUEST_START and friends). Without this
-        // restriction a client could accept any quest it merely meets the prerequisites for by
-        // sending its own GUID as the questgiver.
-        if (interactionData.PendingAutoLaunchedQuestId == uint32(packet.QuestID))
-            object = _player;
-    }
-    else if (!packet.QuestGiverGUID.IsPlayer())
+    Object* object;
+    if (!packet.QuestGiverGUID.IsPlayer())
         object = ObjectAccessor::GetObjectByTypeMask(*_player, packet.QuestGiverGUID, TYPEMASK_UNIT | TYPEMASK_GAMEOBJECT | TYPEMASK_ITEM);
     else
         object = ObjectAccessor::FindPlayer(packet.QuestGiverGUID);
-
-    if (interactionData.PendingAutoLaunchedQuestId)
-    {
-        uint32 const pendingQuestId = interactionData.PendingAutoLaunchedQuestId;
-
-        TC_LOG_DEBUG("network", "Pending auto-launched quest {}: CMSG_QUESTGIVER_ACCEPT_QUEST Giver={} PacketQuest={}",
-            pendingQuestId, packet.QuestGiverGUID.ToString(), packet.QuestID);
-
-        if (!object)
-            object = interactionData.ResolvePendingOfferSource(_player);
-
-        if (_player->PlayerTalkClass->TryGrantPendingAutoLaunchedQuest(object, pendingQuestId))
-            return;
-
-        TC_LOG_DEBUG("network", "Pending auto-launched quest {}: ACCEPT_QUEST TryGrant failed - falling through to normal accept",
-            pendingQuestId);
-    }
 
     auto CLOSE_GOSSIP_CLEAR_SHARING_INFO = Trinity::make_unique_ptr_with_deleter(_player, [](Player* player)
     {
@@ -140,18 +108,17 @@ void WorldSession::HandleQuestgiverAcceptQuestOpcode(WorldPackets::Quest::QuestG
 
     if (Player* playerQuestObject = object->ToPlayer())
     {
-        // Quests offered via SPELL_EFFECT_QUEST_START use the player's own GUID as the giver.
-        if (playerQuestObject != _player)
-        {
-            if ((_player->GetPlayerSharingQuest().IsEmpty() && _player->GetPlayerSharingQuest() != packet.QuestGiverGUID) || !playerQuestObject->CanShareQuest(packet.QuestID))
-                return;
+        if ((_player->GetPlayerSharingQuest().IsEmpty() && _player->GetPlayerSharingQuest() != packet.QuestGiverGUID) || !playerQuestObject->CanShareQuest(packet.QuestID))
+            return;
 
-            if (!_player->IsInSameRaidWith(playerQuestObject))
-                return;
-        }
+        if (!_player->IsInSameRaidWith(playerQuestObject))
+            return;
     }
-    else if (!object->hasQuest(packet.QuestID))
-        return;
+    else
+    {
+        if (!object->hasQuest(packet.QuestID))
+            return;
+    }
 
     // some kind of WPE protection
     if (!_player->CanInteractWithQuestGiver(object))
@@ -180,7 +147,6 @@ void WorldSession::HandleQuestgiverAcceptQuestOpcode(WorldPackets::Quest::QuestG
 
     (void)CLOSE_GOSSIP_CLEAR_SHARING_INFO.release();
 
-    interactionData.ClearPendingAutoLaunchedQuest(_player);
     _player->AddQuestAndCheckCompletion(quest, object);
 
     if (quest->IsPushedToPartyOnAccept())
@@ -214,30 +180,6 @@ void WorldSession::HandleQuestgiverAcceptQuestOpcode(WorldPackets::Quest::QuestG
             _player->PlayerTalkClass->ClearMenus();
             _player->PrepareGossipMenu(worldObject, _player->GetGossipMenuForSource(worldObject), true);
             _player->SendPreparedGossip(worldObject);
-
-            // Retail follows the relaunched menu with SMSG_GOSSIP_QUEST_UPDATE naming the quest that
-            // was just accepted, so the client repaints that single entry instead of rebuilding the
-            // frame. Evidence from the five captured occurrences (12.0.7) that this is the branch
-            // they come from: each one sits next to an SMSG_GOSSIP_MESSAGE for the same NPC (four of
-            // them between two byte-identical ones, i.e. a menu that was resent unchanged), three
-            // carry exactly the QuestID and questgiver guid of a CMSG_QUEST_GIVER_ACCEPT_QUEST sent
-            // moments earlier, and four of the five transmit QuestFlags[0] with 0x20000000 -
-            // QUEST_FLAGS_LAUNCH_GOSSIP_ACCEPT - set, which is the flag guarding this very block.
-            // The icon is read back out of the menu PrepareGossipMenu has just rebuilt so it is the
-            // same value SendGossipMenu would emit for that quest; all five captures carry 4, the
-            // icon PrepareQuestMenu assigns to a quest the player is now on. If the quest is not in
-            // the rebuilt menu there is no entry for the client to update and nothing is sent.
-            QuestMenu const& questMenu = _player->PlayerTalkClass->GetQuestMenu();
-            for (uint8 i = 0; i < questMenu.GetMenuItemCount(); ++i)
-            {
-                QuestMenuItem const& menuItem = questMenu.GetItem(i);
-                if (menuItem.QuestId == quest->GetQuestId())
-                {
-                    _player->PlayerTalkClass->SendGossipQuestUpdate(worldObject->GetGUID(), quest, menuItem.QuestIcon);
-                    break;
-                }
-            }
-
             _player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest = true;
         };
 
@@ -616,19 +558,6 @@ void WorldSession::HandleQuestgiverCompleteQuest(WorldPackets::Quest::QuestGiver
 
 void WorldSession::HandleQuestgiverCloseQuest(WorldPackets::Quest::QuestGiverCloseQuest& questGiverCloseQuest)
 {
-    InteractionData& interactionData = _player->PlayerTalkClass->GetInteractionData();
-    uint32 const questId = uint32(questGiverCloseQuest.QuestID);
-
-    if (questId && interactionData.PendingAutoLaunchedQuestId == questId)
-    {
-        // The client declined a pending auto-launched offer - drop it, do not grant.
-        TC_LOG_DEBUG("network", "Pending auto-launched quest {}: CMSG_QUESTGIVER_CLOSE_QUEST QuestID={}",
-            interactionData.PendingAutoLaunchedQuestId, questId);
-
-        interactionData.ClearPendingAutoLaunchedQuest(_player);
-        return;
-    }
-
     if (_player->FindQuestSlot(questGiverCloseQuest.QuestID) >= MAX_QUEST_LOG_SIZE)
         return;
 
@@ -821,24 +750,10 @@ void WorldSession::HandleQuestgiverStatusMultipleQuery(WorldPackets::Quest::Ques
 void WorldSession::HandleRequestWorldQuestUpdate(WorldPackets::Quest::RequestWorldQuestUpdate& /*packet*/)
 {
     WorldPackets::Quest::WorldQuestUpdateResponse response;
-    sWorldQuestMgr->FillActiveWorldQuests(response.WorldQuestUpdates);
-    SendPacket(response.Write());
-}
 
-void WorldSession::HandleRequestAreaPoiUpdate(WorldPackets::Quest::RequestAreaPoiUpdate& /*packet*/)
-{
-    WorldPackets::Quest::AreaPoiUpdateResponse response;
-    sAreaPoiMgr->FillActiveAreaPois(response.AreaPois);
-    SendPacket(response.Write());
-}
+    /// @todo: 7.x Has to be implemented
+    //response.WorldQuestUpdates.push_back(WorldPackets::Quest::WorldQuestUpdateInfo(lastUpdate, questID, timer, variableID, value));
 
-// The client sends this variant on its own timer to refresh timed/scheduled area POIs (e.g. world-boss and
-// event countdowns). The response is identical to the on-demand request - the current active area-POI set with
-// their timers - so it mirrors HandleRequestAreaPoiUpdate exactly.
-void WorldSession::HandleRequestScheduledAreaPoiUpdate(WorldPackets::Quest::RequestScheduledAreaPoiUpdate& /*packet*/)
-{
-    WorldPackets::Quest::AreaPoiUpdateResponse response;
-    sAreaPoiMgr->FillActiveAreaPois(response.AreaPois);
     SendPacket(response.Write());
 }
 
@@ -895,26 +810,6 @@ void WorldSession::HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceRespons
 
     sScriptMgr->OnPlayerChoiceResponse(ObjectAccessor::GetWorldObject(*_player, _player->PlayerTalkClass->GetInteractionData().SourceGuid), _player,
         playerChoice, playerChoiceResponse, choiceResponse.ResponseIdentifier);
-}
-
-void WorldSession::HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& /*closeQuestChoice*/)
-{
-    // The player dismissed the PlayerChoice UI. If a PlayerChoice interaction is active, end it so a late/duplicate
-    // CMSG_CHOICE_RESPONSE can no longer be honoured against it (HandlePlayerChoiceResponse requires an active
-    // GetPlayerChoice()). Leave any other interaction type untouched.
-    InteractionData& interaction = _player->PlayerTalkClass->GetInteractionData();
-    if (interaction.Type == PlayerInteractionType::PlayerChoice)
-        interaction.Reset();
-}
-
-// The client sends this when the PlayerChoice UI is hidden rather than explicitly closed (same net effect as
-// CMSG_CLOSE_QUEST_CHOICE): end the active PlayerChoice interaction so a late CMSG_CHOICE_RESPONSE cannot be
-// honoured against a UI the player has dismissed.
-void WorldSession::HandleHideQuestChoice(WorldPackets::Quest::HideQuestChoice& /*hideQuestChoice*/)
-{
-    InteractionData& interaction = _player->PlayerTalkClass->GetInteractionData();
-    if (interaction.Type == PlayerInteractionType::PlayerChoice)
-        interaction.Reset();
 }
 
 void WorldSession::HandleUiMapQuestLinesRequest(WorldPackets::Quest::UiMapQuestLinesRequest& uiMapQuestLinesRequest)
@@ -1022,81 +917,4 @@ void WorldSession::HandleSpawnTrackingUpdate(WorldPackets::Quest::SpawnTrackingU
     }
 
     SendPacket(response.Write());
-}
-
-void WorldSession::HandleQueryQuestItemUsability(WorldPackets::Quest::QueryQuestItemUsability& queryQuestItemUsability)
-{
-    WorldPackets::Quest::QuestItemUsabilityResponse response;
-    response.Usabilities.reserve(queryQuestItemUsability.ItemGUIDs.size());
-
-    for (ObjectGuid const& itemGuid : queryQuestItemUsability.ItemGUIDs)
-    {
-        Item const* item = _player->GetItemByGuid(itemGuid);
-        if (!item)
-        {
-            response.Usabilities.push_back(0);
-            continue;
-        }
-
-        // Check if the item starts a quest or is needed for an active quest
-        uint8 usability = 0;
-        if (uint32 questId = item->GetTemplate()->GetStartQuest())
-        {
-            if (_player->CanTakeQuest(sObjectMgr->GetQuestTemplate(questId), false))
-                usability = 1;
-        }
-
-        response.Usabilities.push_back(usability);
-    }
-
-    SendPacket(response.Write());
-}
-
-void WorldSession::HandleQuestSessionRequestStart(WorldPackets::Quest::QuestSessionRequestStart& /*packet*/)
-{
-    Group* group = _player->GetGroup();
-    if (!group || group->GetLeaderGUID() != _player->GetGUID())
-    {
-        WorldPackets::Quest::QuestSessionResult result;
-        result.Result = 2; // Not group leader
-        SendPacket(result.Write());
-        return;
-    }
-
-    // Send ready check to all group members
-    WorldPackets::Quest::QuestSessionReadyCheck readyCheck;
-    group->BroadcastPacket(readyCheck.Write(), false);
-}
-
-void WorldSession::HandleQuestSessionRequestStop(WorldPackets::Quest::QuestSessionRequestStop& /*packet*/)
-{
-    Group* group = _player->GetGroup();
-    if (!group)
-        return;
-
-    // Notify all group members that quest session has ended
-    WorldPackets::Quest::QuestSessionResult result;
-    result.Result = 1; // Stopped
-    group->BroadcastPacket(result.Write(), false);
-}
-
-void WorldSession::HandleQuestSessionBeginResponse(WorldPackets::Quest::QuestSessionBeginResponse& packet)
-{
-    Group* group = _player->GetGroup();
-    if (!group)
-        return;
-
-    // Broadcast the player's response to the group
-    WorldPackets::Quest::QuestSessionReadyCheckResponse response;
-    response.Player = _player->GetGUID();
-    response.Accept = packet.Accept;
-    group->BroadcastPacket(response.Write(), false);
-
-    if (packet.Accept)
-    {
-        // If accepted, send session result success to the starter
-        WorldPackets::Quest::QuestSessionResult sessionResult;
-        sessionResult.Result = 0; // Started
-        SendPacket(sessionResult.Write());
-    }
 }

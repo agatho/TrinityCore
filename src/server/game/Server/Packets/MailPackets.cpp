@@ -62,21 +62,21 @@ ByteBuffer& operator<<(ByteBuffer& data, MailAttachedItem const& att)
 {
     data << uint8(att.Position);
     data << uint64(att.AttachID);
+    data << att.Item;
     data << int32(att.Count);
     data << int32(att.Charges);
     data << uint32(att.MaxDurability);
     data << int32(att.Durability);
-    data << att.Item;
     data << BitsSize<4>(att.Enchants);
     data << BitsSize<2>(att.Gems);
     data << Bits<1>(att.Unlocked);
     data.FlushBits();
 
-    for (Item::ItemGemData const& gem : att.Gems)
-        data << gem;
-
     for (Item::ItemEnchantData const& en : att.Enchants)
         data << en;
+
+    for (Item::ItemGemData const& gem : att.Gems)
+        data << gem;
 
     return data;
 }
@@ -150,12 +150,12 @@ ByteBuffer& operator<<(ByteBuffer& data, MailListEntry const& entry)
             break;
     }
 
+    for (MailAttachedItem const& att : entry.Attachments)
+        data << att;
+
     data << SizedString::BitsSize<8>(entry.Subject);
     data << SizedString::BitsSize<13>(entry.Body);
     data.FlushBits();
-
-    for (MailAttachedItem const& att : entry.Attachments)
-        data << att;
 
     data << SizedString::Data(entry.Subject);
     data << SizedString::Data(entry.Body);
@@ -303,44 +303,6 @@ WorldPacket const* MailQueryNextTimeResult::Write()
 WorldPacket const* NotifyReceivedMail::Write()
 {
     _worldPacket << float(Delay);
-
-    return &_worldPacket;
-}
-
-void GetRegionwideCharacterRestrictionAndMailData::Read()
-{
-    // Cap before resize (uncapped client count -> std::bad_alloc -> world-thread crash; the dispatcher only catches
-    // ByteBufferException). A count can't legitimately exceed the packet's own byte size (each GUID is >= 1 byte).
-    uint32 count = std::min<uint32>(_worldPacket.read<uint32>(), _worldPacket.size());
-    Characters.resize(count);
-    for (ObjectGuid& character : Characters)
-        _worldPacket >> character;
-}
-
-WorldPacket const* RegionwideCharacterMailData::Write()
-{
-    _worldPacket << uint32(Characters.size());
-    for (MailDataEntry const& entry : Characters)
-    {
-        _worldPacket << uint8(entry.Flags);
-        _worldPacket << entry.Character;
-        _worldPacket << uint32(entry.MailCount);
-        _worldPacket << uint32(entry.NextDeliveryTime);
-    }
-
-    return &_worldPacket;
-}
-
-WorldPacket const* RegionwideCharacterRestrictionsData::Write()
-{
-    _worldPacket << uint32(Characters.size());
-    for (RestrictionEntry const& entry : Characters)
-    {
-        _worldPacket << uint8(entry.Flags);
-        _worldPacket << entry.Character;
-        _worldPacket << uint32(entry.Restriction);
-        _worldPacket << uint32(entry.Value);
-    }
 
     return &_worldPacket;
 }

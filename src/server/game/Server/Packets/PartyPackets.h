@@ -24,7 +24,6 @@
 #include "MythicPlusPacketsCommon.h"
 #include "Optional.h"
 #include "Position.h"
-#include <array>
 
 class Player;
 struct RaidMarker;
@@ -155,8 +154,6 @@ namespace WorldPackets
         {
             uint32 Flags = 0u;
             uint16 Id = 0u;
-
-            friend bool operator==(PartyMemberPhase const& left, PartyMemberPhase const& right) = default;
         };
 
         struct PartyMemberPhaseStates
@@ -164,8 +161,6 @@ namespace WorldPackets
             uint32 PhaseShiftFlags = 0;
             ObjectGuid PersonalGUID;
             std::vector<PartyMemberPhase> List;
-
-            friend bool operator==(PartyMemberPhaseStates const& left, PartyMemberPhaseStates const& right) = default;
         };
 
         struct PartyMemberAuraStates
@@ -174,17 +169,13 @@ namespace WorldPackets
             uint16 Flags = 0;
             uint32 ActiveFlags = 0u;
             std::vector<float> Points;
-
-            friend bool operator==(PartyMemberAuraStates const& left, PartyMemberAuraStates const& right) = default;
         };
 
         struct PartyMemberPetStats
         {
             ObjectGuid GUID;
             std::string Name;
-            // display ids have long outgrown 16 bits (a hunter pet in our 12.0.7 captures carries
-            // 113609) and the wire field is 32 bits wide in both the full and the partial state
-            int32 ModelId = 0;
+            int16 ModelId = 0;
 
             int32 CurrentHealth = 0;
             int32 MaxHealth = 0;
@@ -244,109 +235,6 @@ namespace WorldPackets
             bool ForEnemy = false;
             ObjectGuid MemberGuid;
             PartyMemberStats MemberStats;
-        };
-
-        struct PartyMemberPosition
-        {
-            int16 X = 0;
-            int16 Y = 0;
-            int16 Z = 0;
-        };
-
-        // CTROptions with owning storage - CTROptions itself only borrows the player's update field data.
-        struct PartyMemberCTRState
-        {
-            std::vector<uint32> ConditionalFlags;
-            int8 FactionGroup = 0;
-            uint32 ChromieTimeExpansionMask = 0;
-        };
-
-        struct PartyMemberPetPartialStats
-        {
-            Optional<std::string> Name;
-            Optional<ObjectGuid> GUID;
-            Optional<int32> ModelId;
-            Optional<int32> CurrentHealth;
-            Optional<int32> MaxHealth;
-            Optional<std::vector<PartyMemberAuraStates>> Auras;
-
-            bool HasData() const { return Name || GUID || ModelId || CurrentHealth || MaxHealth || Auras; }
-        };
-
-        // Owning copy of the last PartyMemberStats broadcast to out of range party members.
-        // PartyMemberStats cannot be stored as-is because CTROptions::ConditionalFlags is a span into
-        // the player's update fields, which would dangle as soon as those are reallocated.
-        struct PartyMemberStatsSnapshot
-        {
-            bool Valid = false;
-
-            int8 PartyType[2] = { };
-            uint32 Status = 0;
-            uint8 PowerType = 0;
-            uint16 PowerDisplayID = 0;
-            int32 CurrentHealth = 0;
-            int32 MaxHealth = 0;
-            uint16 CurrentPower = 0;
-            uint16 MaxPower = 0;
-            uint16 Level = 0;
-            uint16 SpecID = 0;
-            uint16 ZoneID = 0;
-            uint16 WmoGroupID = 0;
-            uint32 WmoDoodadPlacementID = 0;
-            int16 PositionX = 0;
-            int16 PositionY = 0;
-            int16 PositionZ = 0;
-            int32 VehicleSeat = 0;
-
-            std::vector<PartyMemberAuraStates> Auras;
-            PartyMemberPhaseStates Phases;
-            Optional<PartyMemberPetStats> PetStats;
-            PartyMemberCTRState ChromieTime;
-
-            void Assign(PartyMemberStats const& stats);
-        };
-
-        enum class PartyMemberStateDelta : uint8
-        {
-            Unchanged,          // nothing worth sending
-            Partial,            // the difference fits in SMSG_PARTY_MEMBER_PARTIAL_STATE
-            RequiresFullState   // the difference cannot be expressed incrementally
-        };
-
-        // Incremental sibling of PartyMemberFullState. Opens with a three byte presence mask; only the
-        // fields whose bit is set follow, in mask order. The pet block is written before the member guid.
-        class PartyMemberPartialState final : public ServerPacket
-        {
-        public:
-            explicit PartyMemberPartialState() : ServerPacket(SMSG_PARTY_MEMBER_PARTIAL_STATE, 32) { }
-
-            WorldPacket const* Write() override;
-
-            // Fills in every field that differs from the previously broadcast state.
-            PartyMemberStateDelta InitializeChanged(PartyMemberStats const& current, PartyMemberStatsSnapshot const& previous);
-
-            bool ForEnemy = false;
-            ObjectGuid MemberGuid;
-
-            Optional<std::array<int8, 2>> PartyType;
-            Optional<uint32> Status;
-            Optional<uint8> PowerType;
-            Optional<uint16> PowerDisplayID;
-            Optional<int32> CurrentHealth;
-            Optional<int32> MaxHealth;
-            Optional<uint16> CurrentPower;
-            Optional<uint16> MaxPower;
-            Optional<uint16> Level;
-            Optional<uint16> SpecID;
-            Optional<uint16> ZoneID;
-            Optional<uint16> WmoGroupID;
-            Optional<uint32> WmoDoodadPlacementID;
-            Optional<PartyMemberPosition> Position;
-            Optional<int32> VehicleSeat;
-            Optional<std::vector<PartyMemberAuraStates>> Auras;
-            Optional<PartyMemberPetPartialStats> PetStats;
-            Optional<PartyMemberPhaseStates> Phases;
-            Optional<PartyMemberCTRState> ChromieTime;
         };
 
         class SetPartyLeader final : public ClientPacket
@@ -630,7 +518,7 @@ namespace WorldPackets
             int32 ConsecutiveSuccesses = 0;
             Timestamp<> LastPenaltyTime;
             Timestamp<> LeaverExpirationTime;
-            int32 Unknown_1120 = 0;
+            int32 Flags = 0;
             bool LeaverStatus = false;
         };
 
@@ -644,6 +532,7 @@ namespace WorldPackets
             uint8 Subgroup = 0u;
             uint8 Flags = 0u;
             uint8 RolesAssigned = 0u;
+            uint8 RolesUnk_1210 = 0u;   // forces role displayed to be tank if this field contains tank role and RolesAssigned is dps
             uint8 FactionGroup = 0u;
             bool FromSocialQueue = false;
             bool VoiceChatSilenced = false;
@@ -841,6 +730,9 @@ namespace WorldPackets
             PingSubjectType Type = { };
             uint32 PinFrameID = 0;
             Duration<Milliseconds, int32> PingDuration;
+            float Health = 1.0f; // range 0-1
+            float Mana = 1.0f; // range 0-1
+            bool IsUnitFrameStatusTextPing = false; // prints health (and mana if healer) in chat
             Optional<uint32> CreatureID;
             Optional<uint32> SpellOverrideNameID;
         };
@@ -848,7 +740,7 @@ namespace WorldPackets
         class ReceivePingUnit final : public ServerPacket
         {
         public:
-            explicit ReceivePingUnit() : ServerPacket(SMSG_RECEIVE_PING_UNIT, 16 + 16 + 1 + 4) { }
+            explicit ReceivePingUnit() : ServerPacket(SMSG_RECEIVE_PING_UNIT, 16 + 16 + 1 + 4 + 4 + 4 + 4) { }
 
             WorldPacket const* Write() override;
 
@@ -857,6 +749,9 @@ namespace WorldPackets
             PingSubjectType Type = { };
             uint32 PinFrameID = 0;
             Duration<Milliseconds, int32> PingDuration;
+            float Health = 1.0f; // range 0-1
+            float Mana = 1.0f; // range 0-1
+            bool IsUnitFrameStatusTextPing = false; // prints health (and mana if healer) in chat
             Optional<uint32> CreatureID;
             Optional<uint32> SpellOverrideNameID;
         };
@@ -891,6 +786,40 @@ namespace WorldPackets
             uint32 PinFrameID = 0;
             Duration<Milliseconds, int32> PingDuration;
             ObjectGuid Transport;
+        };
+
+        class SendPingCooldown final : public ClientPacket
+        {
+        public:
+            explicit SendPingCooldown(WorldPacket&& packet) : ClientPacket(CMSG_SEND_PING_COOLDOWN, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid SenderGUID;
+            uint32 PinFrameID = 0;
+            uint32 SpellID = 0;
+            uint32 ItemID = 0;
+            WorldPackets::Duration<Milliseconds, int32> Duration;
+            WorldPackets::Duration<Milliseconds, int32> Remaining;
+            PingSubjectType Type = { };
+            uint32 SpellCategoryID = 0;
+        };
+
+        class ReceivePingCooldown final : public ServerPacket
+        {
+        public:
+            explicit ReceivePingCooldown() : ServerPacket(SMSG_RECEIVE_PING_COOLDOWN, 16 + 4 + 4 + 4 + 4 + 4 + 1 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid SenderGUID;
+            uint32 PinFrameID = 0;
+            uint32 SpellID = 0;
+            uint32 ItemID = 0;
+            WorldPackets::Duration<Milliseconds, int32> Duration;
+            WorldPackets::Duration<Milliseconds, int32> Remaining;
+            PingSubjectType Type = { };
+            uint32 SpellCategoryID = 0;
         };
 
         class CancelPingPin final : public ServerPacket

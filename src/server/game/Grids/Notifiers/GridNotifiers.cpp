@@ -232,8 +232,10 @@ void DelayedUnitRelocation::Visit(PlayerMapType &m)
         if (player != viewPoint && !viewPoint->IsPositionValid())
             continue;
 
+        i_map.LoadGridsInRange(viewPoint->GetPositionX(), viewPoint->GetPositionY(), i_radius + viewPoint->GetCombatReach());
+
         PlayerRelocationNotifier relocate(*player);
-        Cell::VisitAllObjects(viewPoint, relocate, i_radius, false);
+        Cell::VisitAllObjects(viewPoint, relocate, i_radius);
         relocate.SendToSelf();
     }
 }
@@ -323,5 +325,3 @@ template void ObjectUpdater::Visit<DynamicObject>(DynamicObjectMapType&);
 template void ObjectUpdater::Visit<AreaTrigger>(AreaTriggerMapType &);
 template void ObjectUpdater::Visit<SceneObject>(SceneObjectMapType &);
 template void ObjectUpdater::Visit<Conversation>(ConversationMapType &);
-template void ObjectUpdater::Visit<MeshObject>(MeshObjectMapType &);
-template void ObjectUpdater::Visit<HousingRoomEntity>(HousingRoomEntityMapType &);

@@ -171,20 +171,21 @@ namespace WorldPackets
             bool LfgRequireAuthenticatorEnabled      = false;
             bool ScriptsDisallowedForBeta            = false;
             bool TimerunningEnabled                  = false;
-            bool PlayerIdentityOptionsEnabled                     = false; // classic only
+            bool PlayerIdentityOptionsEnabled        = false; // classic only
             bool IsPlayerContentTrackingEnabled      = false;
-            bool LfdEnabled                  = false;
-            bool LfrEnabled                  = true;  // classic only
-            bool PetHappinessEnabled               = true;  // classic only
+            bool LfdEnabled                          = false;
+            bool LfrEnabled                          = true;  // classic only
+            bool PetHappinessEnabled                 = true;  // classic only
             bool GuildEventsEditsEnabled             = true;
             bool GuildTradeSkillsEnabled             = true;
             bool IsAccountCurrencyTransferEnabled    = false;
             bool NetEaseChatTelemetryEnabled         = false;
             bool LobbyMatchmakerQueueFromMainlineEnabled = false;
             bool CanSendLobbyMatchmakerPartyCustomizations = false;
-            bool AddonProfilingEnabled                = false;
+            bool AddonProfilingEnabled               = false;
             bool GlobalUserGeneratedContentMuteEnabled = false;
-            bool AccountUserGeneratedContentIsRisky   = false;
+            bool AccountUserGeneratedContentIsRisky  = false;
+            bool FriendsDisabled                     = false;
 
             SocialQueueConfig QuickJoinConfig;
             SquelchInfo Squelch;
@@ -227,7 +228,7 @@ namespace WorldPackets
             bool KioskModeEnabled                    = false; // NYI
             bool CompetitiveModeEnabled              = false; // NYI
             bool BoostEnabled                        = false; // classic only
-            bool TrialBoostEnabled                   = false; // set while the account owns an unapplied character boost
+            bool TrialBoostEnabled                   = false; // NYI
             bool RedeemForBalanceAvailable           = false; // NYI
             bool LiveRegionCharacterListEnabled      = false; // NYI
             bool LiveRegionCharacterCopyEnabled      = false; // NYI
@@ -252,8 +253,8 @@ namespace WorldPackets
             uint32 CommercePricePollTimeSeconds      = 0;     // NYI
             int64 RedeemForBalanceAmount             = 0;     // NYI
             int32 MaxCharactersOnThisRealm           = 0;
-            int32 ActiveBoostType                    = 0;     // Shop.CharacterBoost.BoostType while TrialBoostEnabled
-            int32 TrialBoostType                     = 0;     // same value; the client reads both
+            int32 ActiveBoostType                    = 0;     // NYI
+            int32 TrialBoostType                     = 0;     // NYI
             int32 MinimumExpansionLevel              = 0;
             int32 MaximumExpansionLevel              = 0;
             uint32 KioskSessionDurationMinutes       = 0;

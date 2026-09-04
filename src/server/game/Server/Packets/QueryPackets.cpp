@@ -267,46 +267,6 @@ WorldPacket const* QueryPlayerNamesResponse::Write()
     return &_worldPacket;
 }
 
-ByteBuffer& operator>>(ByteBuffer& data, BNetAccountAndCommunityID& member)
-{
-    data >> member.BnetAccountGUID;
-    data >> member.CommunityID;
-
-    return data;
-}
-
-ByteBuffer& operator<<(ByteBuffer& data, BNetAccountAndCommunityID const& member)
-{
-    data << member.BnetAccountGUID;
-    data << uint64(member.CommunityID);
-
-    return data;
-}
-
-void QueryPlayerNameByCommunityId::Read()
-{
-    _worldPacket >> Member;
-}
-
-void QueryPlayerNamesForCommunity::Read()
-{
-    _worldPacket >> ClubID;
-    _worldPacket >> Size<uint32>(Members);
-    for (BNetAccountAndCommunityID& member : Members)
-        _worldPacket >> member;
-}
-
-WorldPacket const* QueryPlayerNameByCommunityIdResponse::Write()
-{
-    _worldPacket << uint8(Result);
-    _worldPacket << Member;
-
-    if (Data)
-        _worldPacket << *Data;
-
-    return &_worldPacket;
-}
-
 void QueryPageText::Read()
 {
     _worldPacket >> PageTextID;
@@ -548,8 +508,8 @@ WorldPacket const* QueryItemTextResponse::Write()
 {
     _worldPacket << Bits<1>(Valid);
     _worldPacket.FlushBits();
-    _worldPacket << Item;
     _worldPacket << Id;
+    _worldPacket << Item;
 
     return &_worldPacket;
 }
@@ -606,8 +566,6 @@ ByteBuffer& operator<<(ByteBuffer& data, TreasurePickerBonus const& treasurePick
     data << Size<uint32>(treasurePickerBonus.ItemPicks);
     data << Size<uint32>(treasurePickerBonus.CurrencyPicks);
     data << uint64(treasurePickerBonus.Gold);
-    data << Bits<1>(treasurePickerBonus.Context);
-    data.FlushBits();
 
     for (TreasurePickItem const& treasurePickerItem : treasurePickerBonus.ItemPicks)
         data << treasurePickerItem;
@@ -615,7 +573,10 @@ ByteBuffer& operator<<(ByteBuffer& data, TreasurePickerBonus const& treasurePick
     for (TreasurePickCurrency const& treasurePickCurrency : treasurePickerBonus.CurrencyPicks)
         data << treasurePickCurrency;
 
-    return data;
+    data << Bits<1>(treasurePickerBonus.Context);
+    data.FlushBits();
+
+   return data;
 }
 
 ByteBuffer& operator<<(ByteBuffer& data, TreasurePickerPick const& treasurePickerPick)
@@ -625,8 +586,6 @@ ByteBuffer& operator<<(ByteBuffer& data, TreasurePickerPick const& treasurePicke
     data << uint64(treasurePickerPick.Gold);
     data << Size<uint32>(treasurePickerPick.Bonuses);
     data << int32(treasurePickerPick.Flags);
-    data << Bits<1>(treasurePickerPick.IsChoice);
-    data.FlushBits();
 
     for (TreasurePickItem const& treasurePickItem : treasurePickerPick.ItemPicks)
         data << treasurePickItem;
@@ -636,6 +595,9 @@ ByteBuffer& operator<<(ByteBuffer& data, TreasurePickerPick const& treasurePicke
 
     for (TreasurePickerBonus const& treasurePickerBonus : treasurePickerPick.Bonuses)
         data << treasurePickerBonus;
+
+    data << Bits<1>(treasurePickerPick.IsChoice);
+    data.FlushBits();
 
     return data;
 }

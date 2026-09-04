@@ -196,77 +196,6 @@ namespace WorldPackets
             std::vector<AuraInfo> Auras;
         };
 
-        class AuraPointsDepleted final : public ServerPacket
-        {
-        public:
-            explicit AuraPointsDepleted() : ServerPacket(SMSG_AURA_POINTS_DEPLETED, 16 + 2 + 1) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid Unit;
-            uint16 Slot = 0;
-            uint8 EffectIndex = 0;
-        };
-
-        class DiminishingReturnStart final : public ServerPacket
-        {
-        public:
-            explicit DiminishingReturnStart() : ServerPacket(SMSG_UNIT_DIMINISHING_RETURN_START, 16 + 1 + 1) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid Unit;
-            uint8 Category = 0;         ///< DiminishingGroup of the applied crowd-control aura
-            bool ShowCountdown = false;
-            bool IsImmune = false;
-        };
-
-        class AddLossOfControl final : public ServerPacket
-        {
-        public:
-            explicit AddLossOfControl() : ServerPacket(SMSG_ADD_LOSS_OF_CONTROL, 16 + 4 + 16 + 4 + 4 + 4 + 1 + 1) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid Target;
-            ObjectGuid Caster;
-            int32 SpellID = 0;
-            int32 Duration = 0;              ///< total lockout duration in ms
-            int32 DurationLeft = 0;          ///< remaining lockout in ms (== Duration on apply)
-            uint32 LockoutSchoolMask = 0;    ///< SpellSchoolMask of the interrupted spell
-            uint8 Type = 0;                  ///< LossOfControlType (11 = school interrupt)
-            uint8 DisplayType = 0;
-        };
-
-        // SMSG_LOSS_OF_CONTROL_AURA_UPDATE (0x420119): the aura-driven loss-of-control notification.
-        // Each entry references an active aura on the unit (by client aura slot) whose effect applies a
-        // control mechanic; the client derives the LoC display category from the referenced aura.
-        // Wire element = { u32 TimeRemaining, u16 AuraSlot, u8 EffectIndex, u8 Mechanic, u8 Mechanic2 }.
-        class LossOfControlAuraUpdate final : public ServerPacket
-        {
-        public:
-            struct LossOfControlInfo
-            {
-                uint32 TimeRemaining = 0;    ///< remaining CC duration in ms
-                uint16 AuraSlot = 0;         ///< AuraApplication::GetSlot() of the referenced aura
-                uint8 EffectIndex = 0;       ///< aura effect index that applies the control mechanic
-                uint8 Mechanic = 0;          ///< effect-level SpellMechanic (Mechanics enum)
-                uint8 Mechanic2 = 0;         ///< spell-level SpellMechanic (Mechanics enum)
-            };
-
-            explicit LossOfControlAuraUpdate() : ServerPacket(SMSG_LOSS_OF_CONTROL_AURA_UPDATE) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid Unit;
-            uint16 Slot = 0;
-            uint8 EffectIndex = 0;
-            uint8 Category = 0;         ///< DiminishingGroup of the applied crowd-control aura
-            bool ShowCountdown = false;
-            bool IsImmune = false;
-            std::vector<LossOfControlInfo> Infos;
-        };
-
         struct TargetLocation
         {
             ObjectGuid Transport;
@@ -697,8 +626,6 @@ namespace WorldPackets
             Optional<int32> CategoryRecoveryTimeStartOffset;
         };
 
-        ByteBuffer& operator<<(ByteBuffer& data, SpellHistoryEntry const& historyEntry);
-
         class SendSpellHistory final : public ServerPacket
         {
         public:
@@ -764,8 +691,6 @@ namespace WorldPackets
             float ChargeModRate = 1.0f;
             uint8 ConsumedCharges = 0;
         };
-
-        ByteBuffer& operator<<(ByteBuffer& data, SpellChargeEntry const& chargeEntry);
 
         class SendSpellCharges final : public ServerPacket
         {
@@ -874,19 +799,6 @@ namespace WorldPackets
             bool MountedVisual = false;
         };
 
-        class GameObjectPlaySpellVisualKit final : public ServerPacket
-        {
-        public:
-            explicit GameObjectPlaySpellVisualKit() : ServerPacket(SMSG_GAME_OBJECT_PLAY_SPELL_VISUAL_KIT, 16 + 4 + 4 + 4) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid Object;
-            int32 KitRecID = 0;
-            int32 KitType = 0;
-            uint32 Duration = 0;
-        };
-
         class SpellVisualLoadScreen final : public ServerPacket
         {
         public:
@@ -898,6 +810,7 @@ namespace WorldPackets
             int32 SpellVisualKitID = 0;
             WorldPackets::Duration<Milliseconds, int32> Duration;
             int32 Delay = 0;
+            bool Unknown_1210 = false;
         };
 
         class CancelCast final : public ClientPacket
@@ -959,48 +872,6 @@ namespace WorldPackets
             ObjectGuid CasterGUID;
             int32 TimeRemaining = 0;
             ObjectGuid FailedBy;            ///< Unit that caused the spell to fail, set for SPELL_FAILED_INTERRUPTED_COMBAT
-        };
-
-        // Sent to a client that is being shown a unit which is already casting, so the spell visual
-        // is picked up mid-flight instead of the cast appearing out of nowhere when it completes.
-        class ResumeCast final : public ServerPacket
-        {
-        public:
-            explicit ResumeCast() : ServerPacket(SMSG_RESUME_CAST, 18 + 4 + 4 + 18 + 18 + 4) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid CasterUnit;
-            SpellCastVisual Visual;
-            ObjectGuid CastID;
-            ObjectGuid Target;
-            int32 SpellID = 0;
-        };
-
-        // The cast bar half of the pair above: carries how far the cast or channel has already
-        // progressed so the client draws a partially filled bar instead of restarting it.
-        class ResumeCastBar final : public ServerPacket
-        {
-        public:
-            explicit ResumeCastBar() : ServerPacket(SMSG_RESUME_CAST_BAR, 18 + 18 + 4 + 4 + 4 + 4 + 4 + 1) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid CasterUnit;
-            ObjectGuid Target;
-            int32 SpellID = 0;
-            SpellCastVisual Visual;
-            int32 TimeElapsed = 0;      ///< milliseconds already spent, -1 when the cast has no fixed duration
-            int32 TotalTime = 0;        ///< milliseconds the whole cast takes, -1 when it has no fixed duration
-            struct UnknownTrailer
-            {
-                int32 Unknown1 = 0;
-                int32 Unknown2 = 0;
-            };
-            /// One capture in 424 set the trailing bit and appended two int32 (0, 2), on an empowered
-            /// cast. A single sample cannot name those two fields, so nothing populates them here and
-            /// the bit is always written clear - see Unit::SendResumeCastTo, which skips empowers.
-            Optional<UnknownTrailer> Unknown;
         };
 
         class SpellEmpowerStart final : public ServerPacket
@@ -1138,7 +1009,7 @@ namespace WorldPackets
             ObjectGuid UnitGUID;
             int32 ChrModelID = 0;
             int32 SpellVisualKitID = 0;
-            int32 Unused_1115 = 0;
+            float DisplayScale = 1.0f;
             uint8 RaceID = 0;
             uint8 Gender = 0;
             uint8 ClassID = 0;
@@ -1295,12 +1166,10 @@ namespace WorldPackets
         class ApplyMountEquipmentResult final : public ServerPacket
         {
         public:
-            // Wire bit maps directly to the Lua MOUNT_EQUIPMENT_APPLY_RESULT event's `success: bool`
-            // payload (Blizzard_APIDocumentationGenerated/MountJournalDocumentation.lua), so 1 = success.
             enum ApplyResult : int32
             {
-                Failure = 0,
-                Success = 1
+                Success = 0,
+                Failure = 1
             };
 
             explicit ApplyMountEquipmentResult() : ServerPacket(SMSG_APPLY_MOUNT_EQUIPMENT_RESULT, 16 + 4 + 1) { }
@@ -1335,23 +1204,6 @@ namespace WorldPackets
             bool IsFavorite = false;
         };
 
-        // CMSG_OPEN_TRADESKILL_NPC (0x3A01E9): the client telling the server a trade-skill window opened.
-        // Wire: PackedGuid NpcGUID - a PackedGuid, so 2 bytes when empty, NOT a fixed 16.
-        //
-        // Across 124 captured instances the guid is EMPTY in 123 of them (the player's own profession
-        // window) and a real creature guid in 1 (crafting at an NPC, preceded by CMSG_SET_SELECTION on the
-        // same guid). Both shapes are handled: an empty guid clears any stale crafter binding, a real one
-        // establishes the interaction the later profession opcodes are validated against.
-        class OpenTradeSkillNpc final : public ClientPacket
-        {
-        public:
-            explicit OpenTradeSkillNpc(WorldPacket&& packet) : ClientPacket(CMSG_OPEN_TRADESKILL_NPC, std::move(packet)) { }
-
-            void Read() override;
-
-            ObjectGuid NpcGUID;
-        };
-
         class KeyboundOverride final : public ClientPacket
         {
         public:
@@ -1370,85 +1222,7 @@ namespace WorldPackets
             void Read() override { }
         };
 
-        // CMSG_REQUEST_CROWD_CONTROL_SPELL (0x3B00CA): in arenas the client asks which spell is currently
-        // crowd-controlling a target so it can display it. Wire is a single PackedGuid (client serializer
-        // sub_7FF729153490). Answered with SMSG_ARENA_CROWD_CONTROL_SPELL_RESULT.
-        class RequestCrowdControlSpell final : public ClientPacket
-        {
-        public:
-            explicit RequestCrowdControlSpell(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_CROWD_CONTROL_SPELL, std::move(packet)) { }
-
-            void Read() override;
-
-            ObjectGuid Target;
-        };
-
-        // SMSG_ARENA_CROWD_CONTROL_SPELL_RESULT (0x4200DA): { PackedGuid Guid; uint32 SpellID }. Wire confirmed from
-        // the client reader sub_7FF729094FC0 (PackedGuid read via sub_7FF72BEBDEA0 + a uint32). SpellID 0 = no active
-        // crowd-control on the target.
-        class ArenaCrowdControlSpellResult final : public ServerPacket
-        {
-        public:
-            explicit ArenaCrowdControlSpellResult() : ServerPacket(SMSG_ARENA_CROWD_CONTROL_SPELL_RESULT, 16 + 4) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid Guid;
-            int32 SpellID = 0;
-        };
-
         ByteBuffer& operator>>(ByteBuffer& buffer, SpellCastRequest& request);
-
-        // ============================================================
-        // Spell Category Cooldown
-        // ============================================================
-
-        struct SpellCategoryCooldownEntry
-        {
-            int32 Category = 0;
-            int32 ModCooldown = 0; // in ms
-        };
-
-        class SpellCategoryCooldown final : public ServerPacket
-        {
-        public:
-            explicit SpellCategoryCooldown() : ServerPacket(SMSG_SPELL_CATEGORY_COOLDOWN, 4) { }
-
-            WorldPacket const* Write() override;
-
-            std::vector<SpellCategoryCooldownEntry> CategoryCooldowns;
-        };
-
-        class SpellFailureMessage final : public ServerPacket
-        {
-        public:
-            explicit SpellFailureMessage() : ServerPacket(SMSG_SPELL_FAILURE_MESSAGE, 16 + 4 + 1) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid CasterUnit;
-            int32 SpellID = 0;
-            uint8 Reason = 0;
-        };
-
-        // SMSG_RESTART_GLOBAL_COOLDOWN wire (12.0.7.68275, client deserializer 0x7ff72913eff0 case
-        // 0x620054): { PackedGuid CasterGUID, uint32 SpellID }. Confirmed against live sniffs — the
-        // observed 16..21 byte bodies are exactly a variable-length PackedGuid followed by a uint32,
-        // and that trailing uint32 is the cast spell id. The previous int32 SpellID + Duration layout
-        // was stale and would have put a malformed 8-byte packet on the wire.
-        // NOTE: no send-site yet. Retail emits this only ~15 times across 1.3M sniffed records
-        // (between SMSG_SPELL_PREPARE and SMSG_SPELL_START), so the trigger is conditional and is
-        // deliberately not guessed here.
-        class RestartGlobalCooldown final : public ServerPacket
-        {
-        public:
-            explicit RestartGlobalCooldown() : ServerPacket(SMSG_RESTART_GLOBAL_COOLDOWN, 16 + 4) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid CasterGUID;
-            int32 SpellID = 0;
-        };
     }
 }
 

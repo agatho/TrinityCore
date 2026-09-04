@@ -19,7 +19,6 @@
 #define SpellCastRequest_h__
 
 #include "SpellPackets.h"
-#include <utility>
 
 struct SpellCastRequestItemData
 {
@@ -34,7 +33,7 @@ struct SpellCastRequestItemData
 struct SpellCastRequest
 {
     SpellCastRequest(WorldPackets::Spells::SpellCastRequest&& castRequest, ObjectGuid castingUnitGUID, Optional<SpellCastRequestItemData> itemData = {}) :
-        CastRequest(std::move(castRequest)), CastingUnitGUID(castingUnitGUID), ItemData(itemData) { }
+        CastRequest(castRequest), CastingUnitGUID(castingUnitGUID), ItemData(itemData) { }
 
     WorldPackets::Spells::SpellCastRequest CastRequest;
     ObjectGuid CastingUnitGUID;

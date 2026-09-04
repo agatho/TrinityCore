@@ -18,7 +18,6 @@
 #include "CollectionMgr.h"
 #include "CollectionPackets.h"
 #include "DatabaseEnv.h"
-#include "GameTime.h"
 #include "DB2Stores.h"
 #include "Item.h"
 #include "Log.h"
@@ -122,7 +121,6 @@ void CollectionMgr::SaveToDB(LoginDatabaseTransaction trans)
     SaveAccountHeirlooms(trans);
     SaveAccountMounts(trans);
     SaveAccountItemAppearances(trans);
-    SaveAccountFavoriteTransmogSets(trans);
     SaveAccountTransmogIllusions(trans);
     SaveAccountTransmogOutfits(trans);
     SaveAccountWarbandScenes(trans);
@@ -139,11 +137,6 @@ bool CollectionMgr::AddToy(uint32 itemId, bool isFavourite, bool hasFanfare)
     if (UpdateAccountToys(itemId, isFavourite, hasFanfare))
     {
         _owner->GetPlayer()->AddToy(itemId, GetToyFlags(isFavourite, hasFanfare).AsUnderlyingType());
-        // CriteriaType::LearnToy (185, Asset = ItemID) and CriteriaType::LearnAnyToy (186, "Collect 25 Toys").
-        // UpdateAccountToys returns false for an already-known toy, so this only fires on a genuinely new one
-        // - same guarantee AddHeirloom relies on for LearnHeirloom/LearnAnyHeirloom below.
-        _owner->GetPlayer()->UpdateCriteria(CriteriaType::LearnToy, itemId);
-        _owner->GetPlayer()->UpdateCriteria(CriteriaType::LearnAnyToy, 1);
         return true;
     }
 
@@ -180,117 +173,6 @@ void CollectionMgr::SaveAccountToys(LoginDatabaseTransaction trans)
 bool CollectionMgr::UpdateAccountToys(uint32 itemId, bool isFavourite, bool hasFanfare)
 {
     return _toys.insert(ToyBoxContainer::value_type(itemId, GetToyFlags(isFavourite, hasFanfare))).second;
-}
-
-void CollectionMgr::LoadAccountStorePurchases(PreparedQueryResult result)
-{
-    if (!result)
-        return;
-
-    do
-    {
-        Field* fields = result->Fetch();
-        AccountStorePurchase purchase;
-        purchase.PurchaseTime = fields[1].GetUInt32();
-        purchase.PayerGuid = fields[2].GetUInt64();
-        purchase.Granted = fields[3].GetBool();
-        _accountStoreItems.emplace(fields[0].GetUInt32(), purchase);
-    } while (result->NextRow());
-}
-
-uint32 CollectionMgr::GetAccountStorePurchaseTime(uint32 accountStoreItemId) const
-{
-    auto itr = _accountStoreItems.find(accountStoreItemId);
-    return itr != _accountStoreItems.end() ? itr->second.PurchaseTime : 0;
-}
-
-CollectionMgr::AccountStorePurchase const* CollectionMgr::GetAccountStorePurchase(uint32 accountStoreItemId) const
-{
-    auto itr = _accountStoreItems.find(accountStoreItemId);
-    return itr != _accountStoreItems.end() ? &itr->second : nullptr;
-}
-
-bool CollectionMgr::AddAccountStorePurchase(uint32 accountStoreItemId, uint64 payerGuid, bool granted)
-{
-    AccountStorePurchase purchase;
-    purchase.PurchaseTime = uint32(GameTime::GetGameTime());
-    purchase.PayerGuid = payerGuid;
-    purchase.Granted = granted;
-    if (!_accountStoreItems.emplace(accountStoreItemId, purchase).second)
-        return false;
-
-    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_ACCOUNT_STORE_PURCHASE);
-    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
-    stmt->setUInt32(1, accountStoreItemId);
-    stmt->setUInt32(2, purchase.PurchaseTime);
-    stmt->setUInt64(3, payerGuid);
-    stmt->setBool(4, granted);
-    LoginDatabase.Execute(stmt);
-    return true;
-}
-
-bool CollectionMgr::RemoveAccountStorePurchase(uint32 accountStoreItemId)
-{
-    if (_accountStoreItems.erase(accountStoreItemId) == 0)
-        return false;
-
-    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_STORE_PURCHASE);
-    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
-    stmt->setUInt32(1, accountStoreItemId);
-    LoginDatabase.Execute(stmt);
-    return true;
-}
-
-bool CollectionMgr::RemoveToy(uint32 itemId)
-{
-    if (_toys.erase(itemId) == 0)
-        return false;
-
-    if (Player* player = _owner->GetPlayer())
-        player->RemoveToy(int32(itemId));
-
-    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_TOYS);
-    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
-    stmt->setUInt32(1, itemId);
-    LoginDatabase.Execute(stmt);
-    return true;
-}
-
-bool CollectionMgr::RemoveMount(uint32 spellId)
-{
-    auto itr = _mounts.find(spellId);
-    if (itr == _mounts.end())
-        return false;
-
-    // Erase FIRST, then revoke the paired faction mount. The FactionSpecificMounts mapping is symmetric (A<->B),
-    // so recursing before the erase re-enters RemoveMount(A) from RemoveMount(B) - which still finds A present -
-    // and loops forever until the stack overflows. Removing A up front makes the recursive call short-circuit at
-    // the find() guard above. (AddMount avoids this with a factionMount bool; erase-first is the equivalent here.)
-    _mounts.erase(itr);
-
-    // Mirror AddMount's faction-specific pairing: revoke the paired faction mount too.
-    MountDefinitionMap::const_iterator defItr = FactionSpecificMounts.find(spellId);
-    if (defItr != FactionSpecificMounts.end())
-        RemoveMount(defItr->second);
-
-    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_MOUNT);
-    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
-    stmt->setUInt32(1, spellId);
-    LoginDatabase.Execute(stmt);
-
-    if (Player* player = _owner->GetPlayer())
-    {
-        if (player->HasSpell(spellId))
-            player->RemoveSpell(spellId);
-
-        // No single-mount-remove opcode exists; resync the whole account mount list so the client drops it.
-        WorldPackets::Misc::AccountMountUpdate mountUpdate;
-        mountUpdate.IsFullUpdate = true;
-        mountUpdate.Mounts = &_mounts;
-        player->SendDirectMessage(mountUpdate.Write());
-    }
-
-    return true;
 }
 
 void CollectionMgr::ToySetFavorite(uint32 itemId, bool favorite)
@@ -574,17 +456,6 @@ void CollectionMgr::MountSetFavorite(uint32 spellId, bool favorite)
     SendSingleMountUpdate(*itr);
 }
 
-void CollectionMgr::MountClearFanfare(uint32 spellId)
-{
-    auto itr = _mounts.find(spellId);
-    if (itr == _mounts.end())
-        return;
-
-    // Drop the "new mount" fanfare flag so the client stops replaying the acquisition flourish.
-    // Mirrors ToyClearFanfare: the flag change is persisted by SaveAccountMounts, no packet echo needed.
-    itr->second = MountStatusFlags(itr->second & ~MOUNT_NEEDS_FANFARE);
-}
-
 void CollectionMgr::SendSingleMountUpdate(std::pair<uint32, MountStatusFlags> mount)
 {
     Player* player = _owner->GetPlayer();
@@ -599,63 +470,6 @@ void CollectionMgr::SendSingleMountUpdate(std::pair<uint32, MountStatusFlags> mo
     mountUpdate.IsFullUpdate = false;
     mountUpdate.Mounts = &tempMounts;
     player->SendDirectMessage(mountUpdate.Write());
-}
-
-void CollectionMgr::LoadPerksProgramPurchases(PreparedQueryResult result)
-{
-    if (!result)
-        return;
-
-    do
-    {
-        Field* fields = result->Fetch();
-        PerksProgramPurchaseData data;
-        int32 perksVendorItemId = fields[0].GetInt32();
-        data.Price = fields[1].GetInt32();
-        data.PurchaseTime = fields[2].GetUInt32();
-        data.MountID = fields[3].GetInt32();
-        data.ToyID = fields[4].GetInt32();
-        data.BuyerGuid = fields[5].GetUInt64();
-        _perksPurchases[perksVendorItemId] = data;
-    } while (result->NextRow());
-}
-
-void CollectionMgr::AddPerksProgramPurchase(int32 perksVendorItemId, int32 price, int32 mountId, int32 toyId, uint64 buyerGuid)
-{
-    PerksProgramPurchaseData& data = _perksPurchases[perksVendorItemId];
-    data.Price = price;
-    data.PurchaseTime = uint32(GameTime::GetGameTime());
-    data.MountID = mountId;
-    data.ToyID = toyId;
-    data.BuyerGuid = buyerGuid;
-
-    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_ACCOUNT_PERKS_PURCHASE);
-    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
-    stmt->setInt32(1, perksVendorItemId);
-    stmt->setInt32(2, price);
-    stmt->setUInt32(3, data.PurchaseTime);
-    stmt->setInt32(4, mountId);
-    stmt->setInt32(5, toyId);
-    stmt->setUInt64(6, buyerGuid);
-    LoginDatabase.Execute(stmt);
-}
-
-bool CollectionMgr::RemovePerksProgramPurchase(int32 perksVendorItemId)
-{
-    if (_perksPurchases.erase(perksVendorItemId) == 0)
-        return false;
-
-    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_PERKS_PURCHASE);
-    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
-    stmt->setInt32(1, perksVendorItemId);
-    LoginDatabase.Execute(stmt);
-    return true;
-}
-
-PerksProgramPurchaseData const* CollectionMgr::GetPerksProgramPurchase(int32 perksVendorItemId) const
-{
-    auto itr = _perksPurchases.find(perksVendorItemId);
-    return itr != _perksPurchases.end() ? &itr->second : nullptr;
 }
 
 template <std::invocable<uint32> OutputAction>
@@ -955,9 +769,6 @@ void CollectionMgr::AddItemAppearance(ItemModifiedAppearanceEntry const* itemMod
     }
 
     owner->UpdateCriteria(CriteriaType::LearnAnyTransmog, 1);
-    // CriteriaType::LearnTransmog (192, Asset = ItemModifiedAppearanceID). CanAddAppearance/_appearances->test
-    // already rejected known appearances, so this is a genuinely new one.
-    owner->UpdateCriteria(CriteriaType::LearnTransmog, itemModifiedAppearance->ID);
 
     if (ItemEntry const* item = sItemStore.LookupEntry(itemModifiedAppearance->ItemID))
     {
@@ -1003,23 +814,6 @@ void CollectionMgr::RemoveTemporaryAppearance(Item* item)
         _owner->GetPlayer()->RemoveConditionalTransmog(itemModifiedAppearance->ID);
         _temporaryAppearances.erase(itr);
     }
-}
-
-bool CollectionMgr::MakeAppearancePermanent(uint32 itemModifiedAppearanceId)
-{
-    // Only an appearance the player currently holds *conditionally* (granted by an equipped/held item) may be
-    // promoted - this backs the client's "make appearance permanent" action on a temporary appearance.
-    if (_temporaryAppearances.find(itemModifiedAppearanceId) == _temporaryAppearances.end())
-        return false;
-
-    ItemModifiedAppearanceEntry const* itemModifiedAppearance = sItemModifiedAppearanceStore.LookupEntry(itemModifiedAppearanceId);
-    if (!itemModifiedAppearance)
-        return false;
-
-    // AddItemAppearance sets the permanent appearance bit, clears the conditional-transmog flag + temporary
-    // entry, and fires the LearnAnyTransmog criteria.
-    AddItemAppearance(itemModifiedAppearance);
-    return true;
 }
 
 std::pair<bool, bool> CollectionMgr::HasItemAppearance(uint32 itemModifiedAppearanceId) const
@@ -1097,90 +891,6 @@ void CollectionMgr::SendFavoriteAppearances() const
     _owner->SendPacket(accountTransmogUpdate.Write());
 }
 
-void CollectionMgr::LoadAccountFavoriteTransmogSets(PreparedQueryResult favoriteTransmogSets)
-{
-    if (!favoriteTransmogSets)
-        return;
-
-    do
-    {
-        _favoriteTransmogSets[favoriteTransmogSets->Fetch()[0].GetUInt32()] = CollectionItemState::Unchanged;
-    } while (favoriteTransmogSets->NextRow());
-}
-
-void CollectionMgr::SaveAccountFavoriteTransmogSets(LoginDatabaseTransaction trans)
-{
-    LoginDatabasePreparedStatement* stmt;
-    for (auto itr = _favoriteTransmogSets.begin(); itr != _favoriteTransmogSets.end();)
-    {
-        switch (itr->second)
-        {
-            case CollectionItemState::New:
-                stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_BNET_ITEM_FAVORITE_TRANSMOG_SET);
-                stmt->setUInt32(0, _owner->GetBattlenetAccountId());
-                stmt->setUInt32(1, itr->first);
-                trans->Append(stmt);
-                itr->second = CollectionItemState::Unchanged;
-                ++itr;
-                break;
-            case CollectionItemState::Removed:
-                stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_BNET_ITEM_FAVORITE_TRANSMOG_SET);
-                stmt->setUInt32(0, _owner->GetBattlenetAccountId());
-                stmt->setUInt32(1, itr->first);
-                trans->Append(stmt);
-                itr = _favoriteTransmogSets.erase(itr);
-                break;
-            case CollectionItemState::Unchanged:
-            case CollectionItemState::Changed:
-                ++itr;
-                break;
-        }
-    }
-}
-
-void CollectionMgr::SetTransmogSetIsFavorite(uint32 transmogSetId, bool apply)
-{
-    auto itr = _favoriteTransmogSets.find(transmogSetId);
-    if (apply)
-    {
-        if (itr == _favoriteTransmogSets.end())
-            _favoriteTransmogSets[transmogSetId] = CollectionItemState::New;
-        else if (itr->second == CollectionItemState::Removed)
-            itr->second = CollectionItemState::Unchanged;
-        else
-            return;
-    }
-    else if (itr != _favoriteTransmogSets.end())
-    {
-        if (itr->second == CollectionItemState::New)
-            _favoriteTransmogSets.erase(transmogSetId);
-        else
-            itr->second = CollectionItemState::Removed;
-    }
-    else
-        return;
-
-    // Incremental form: IsFullUpdate false, and IsSetFavorite selects insert versus erase on the client.
-    WorldPackets::Transmogrification::AccountTransmogSetFavoritesUpdate update;
-    update.IsFullUpdate = false;
-    update.IsSetFavorite = apply;
-    update.FavoriteTransmogSets.push_back(transmogSetId);
-
-    _owner->SendPacket(update.Write());
-}
-
-void CollectionMgr::SendFavoriteTransmogSets() const
-{
-    WorldPackets::Transmogrification::AccountTransmogSetFavoritesUpdate update;
-    update.IsFullUpdate = true;
-    update.FavoriteTransmogSets.reserve(_favoriteTransmogSets.size());
-    for (auto [transmogSetId, state] : _favoriteTransmogSets)
-        if (state != CollectionItemState::Removed)
-            update.FavoriteTransmogSets.push_back(transmogSetId);
-
-    _owner->SendPacket(update.Write());
-}
-
 void CollectionMgr::LoadTransmogIllusions()
 {
     Player* owner = _owner->GetPlayer();
@@ -1252,8 +962,6 @@ void CollectionMgr::SaveAccountTransmogIllusions(LoginDatabaseTransaction trans)
 void CollectionMgr::AddTransmogIllusion(uint32 transmogIllusionId)
 {
     Player* owner = _owner->GetPlayer();
-    // Count the acquisition only when it is genuinely new - this function is not otherwise idempotent.
-    bool const alreadyKnown = HasTransmogIllusion(transmogIllusionId);
     if (_transmogIllusions->size() <= transmogIllusionId)
     {
         std::size_t numBlocks = _transmogIllusions->num_blocks();
@@ -1268,10 +976,6 @@ void CollectionMgr::AddTransmogIllusion(uint32 transmogIllusionId)
     uint32 bitIndex = transmogIllusionId % 32;
 
     owner->AddIllusionFlag(blockIndex, 1 << bitIndex);
-
-    // CriteriaType::LearnAnyTransmogIllusion (224) - plain counter over newly learned illusions.
-    if (!alreadyKnown)
-        owner->UpdateCriteria(CriteriaType::LearnAnyTransmogIllusion, 1);
 }
 
 bool CollectionMgr::HasTransmogIllusion(uint32 transmogIllusionId) const

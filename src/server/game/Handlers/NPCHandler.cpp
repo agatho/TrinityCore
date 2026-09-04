@@ -190,26 +190,6 @@ void WorldSession::HandleGossipHelloOpcode(WorldPackets::NPC::Hello& packet)
     }
 }
 
-void WorldSession::HandleGossipRefreshOptions(WorldPackets::NPC::GossipRefreshOptions& /*packet*/)
-{
-    // The client asks the server to re-send the currently open gossip menu (e.g. after a state change
-    // that could alter the available options). Re-prepare and re-send the menu for the interacting NPC.
-    InteractionData const& interaction = _player->PlayerTalkClass->GetInteractionData();
-    if (interaction.Type != PlayerInteractionType::Gossip || interaction.SourceGuid.IsEmpty())
-        return;
-
-    Creature* unit = _player->GetNPCIfCanInteractWith(interaction.SourceGuid, UNIT_NPC_FLAG_GOSSIP, UNIT_NPC_FLAG_2_NONE);
-    if (!unit)
-        return;
-
-    _player->PlayerTalkClass->ClearMenus();
-    if (!unit->AI()->OnGossipHello(_player))
-    {
-        _player->PrepareGossipMenu(unit, _player->GetGossipMenuForSource(unit), true);
-        _player->SendPreparedGossip(unit);
-    }
-}
-
 void WorldSession::HandleGossipSelectOptionOpcode(WorldPackets::NPC::GossipSelectOption& packet)
 {
     GossipMenuItem const* gossipMenuItem = _player->PlayerTalkClass->GetGossipMenu().GetItem(packet.GossipOptionID);
@@ -404,31 +384,6 @@ void WorldSession::HandleSetPetSlot(WorldPackets::NPC::SetPetSlot& setPetSlot)
     }
 
     _player->SetPetSlot(setPetSlot.PetNumber, PetSaveMode(setPetSlot.DestSlot));
-}
-
-void WorldSession::HandleSetPetFavorite(WorldPackets::NPC::SetPetFavorite& setPetFavorite)
-{
-    // The client addresses the pet by its stable slot (C_StableInfo.SetPetFavorite(slotID, ...)); resolve it
-    // to the occupying pet and pin/unpin by that pet's persistent number so the star follows the pet.
-    PetStable* stable = _player->GetPetStable();
-    if (!stable)
-        return;
-
-    PetStable::PetInfo const* pet = nullptr;
-    PetSaveMode slot = PetSaveMode(setPetFavorite.SlotID);
-    if (slot >= PET_SAVE_FIRST_ACTIVE_SLOT && slot < PET_SAVE_LAST_ACTIVE_SLOT)
-    {
-        if (stable->ActivePets[slot])
-            pet = &stable->ActivePets[slot].value();
-    }
-    else if (slot >= PET_SAVE_FIRST_STABLE_SLOT && slot < PET_SAVE_LAST_STABLE_SLOT)
-    {
-        if (stable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT])
-            pet = &stable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT].value();
-    }
-
-    if (pet)
-        _player->SetPetFavorite(pet->PetNumber, setPetFavorite.IsFavorite);
 }
 
 void WorldSession::HandleRepairItemOpcode(WorldPackets::Item::RepairItem& packet)

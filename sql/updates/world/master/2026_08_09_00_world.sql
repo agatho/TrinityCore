@@ -1,73 +1,41 @@
--- In-game Shop (BattlePay) catalog administration - replaces battlepay_product.
---
--- The shipped catalog blob (data/battlepay/product_list_68275.bin) is now a TEMPLATE. At startup and
--- on `.reload shop_catalog`, BattlePayMgr reskins its 9 simple-shape slots from `shop_product` via the
--- byte-exact BattlePayCatalogWriter and records a slot->product routing map. Everything the wire cannot
--- express (enable/disable, windows, level/faction/owned/condition gates) is enforced server-side at
--- purchase time. See src/server/game/BattlePay/ and BattlePay/README_DEPLOY.md.
+SET @CGUID := 10006983; -- Need 1
+SET @OGUID := 10001996; -- Need 7
 
-CREATE TABLE IF NOT EXISTS `shop_product` (
-  `productId`         INT UNSIGNED     NOT NULL,           -- catalog productId (routing frees it from blob slot ids)
-  `enabled`           TINYINT UNSIGNED NOT NULL DEFAULT 1, -- 0 = withheld from assembly + purchase-gated
-  `name`              VARCHAR(255)     NOT NULL,           -- card title (wire name1)
-  `description`       VARCHAR(1000)    NOT NULL DEFAULT '',-- card body (wire name2)
-  `currency`          TINYINT UNSIGNED NOT NULL DEFAULT 1, -- 0 free | 1 gold(copper) | 2 item-token | 3 custom-currency
-  `price`             BIGINT UNSIGNED  NOT NULL DEFAULT 0, -- copper (currency 1) or currency amount (3)
-  `priceItemId`       INT UNSIGNED     NOT NULL DEFAULT 0, -- currency 2: token item
-  `priceItemCount`    INT UNSIGNED     NOT NULL DEFAULT 0,
-  `displayPrice`      BIGINT UNSIGNED  DEFAULT NULL,       -- wire fixed-point /100000 override; NULL = derived
-  `displayFlags`      INT UNSIGNED     NOT NULL DEFAULT 0, -- BattlepayDisplayFlags (8=HiddenPrice, 256=HideWhenOwned)
-  `groupId`           INT UNSIGNED     NOT NULL DEFAULT 0, -- desired category (rendered after ShopEntry crack, SH-7)
-  `ordering`          INT              NOT NULL DEFAULT 0, -- slot-assignment priority (lower = earlier slot)
-  `featured`          TINYINT UNSIGNED NOT NULL DEFAULT 0, -- claim on prominent slots
-  `availableFrom`     TIMESTAMP        NULL DEFAULT NULL,  -- NULL = always
-  `availableUntil`    TIMESTAMP        NULL DEFAULT NULL,
-  `reqLevel`          TINYINT UNSIGNED NOT NULL DEFAULT 0,
-  `reqFaction`        TINYINT          NOT NULL DEFAULT -1,-- -1 any, else TeamId (0 alliance, 1 horde)
-  `hideIfOwned`       TINYINT UNSIGNED NOT NULL DEFAULT 0, -- sets wire flag 256 + purchase gate
-  `playerConditionId` INT UNSIGNED     NOT NULL DEFAULT 0, -- 0 = none; server-side PlayerCondition check
-  `comment`           VARCHAR(255)     NOT NULL DEFAULT '',
-  PRIMARY KEY (`productId`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- Quest
+UPDATE `creature_queststarter` SET `VerifiedBuild`=68887 WHERE `id`=252312 AND `quest`=92572;
+UPDATE `creature_questender` SET `VerifiedBuild`=68887 WHERE `id`=252312 AND `quest`=92572;
 
-CREATE TABLE IF NOT EXISTS `shop_product_deliverable` (
-  `productId` INT UNSIGNED     NOT NULL,
-  `seq`       TINYINT UNSIGNED NOT NULL DEFAULT 0,
-  `type`      TINYINT UNSIGNED NOT NULL,             -- 1 item | 2 spell | 3 WoW Token | 4 game-time (reserved) | 5 service (reserved)
-  `id`        INT UNSIGNED     NOT NULL DEFAULT 0,   -- itemId / spellId / 0 (token) / days / serviceType
-  `count`     INT UNSIGNED     NOT NULL DEFAULT 1,
-  PRIMARY KEY (`productId`, `seq`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+DELETE FROM `quest_offer_reward` WHERE `ID`=92572;
+INSERT INTO `quest_offer_reward` (`ID`, `Emote1`, `Emote2`, `Emote3`, `Emote4`, `EmoteDelay1`, `EmoteDelay2`, `EmoteDelay3`, `EmoteDelay4`, `RewardText`, `VerifiedBuild`) VALUES
+(92572, 1, 0, 0, 0, 0, 0, 0, 0, 'Oh my, the crate you describe does indeed seem quite great. The joy of placing them will know no bounds.\n\nThank you for finding this! For your time, might I present you with this rare piece from our collection.\n\nIt is no ordinary barrel, to be sure! I hope that you enjoy it thoroughly.', 68887); -- Furniture Favor
 
-CREATE TABLE IF NOT EXISTS `shop_slot_override` (
-  `slotIndex` TINYINT UNSIGNED NOT NULL,             -- 0..N-1 (N = simple-shape slots in the template, 9 @68275)
-  `productId` INT UNSIGNED     NOT NULL,             -- 0 = force the slot to the inert placeholder
-  PRIMARY KEY (`slotIndex`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- Creature
+DELETE FROM `creature` WHERE `guid`=@CGUID+0;
+INSERT INTO `creature` (`guid`, `id`, `map`, `zoneId`, `areaId`, `spawnDifficulties`, `PhaseId`, `PhaseGroup`, `modelid`, `equipment_id`, `position_x`, `position_y`, `position_z`, `orientation`, `spawntimesecs`, `wander_distance`, `currentwaypoint`, `MovementType`, `npcflag`, `unit_flags`, `unit_flags2`, `unit_flags3`, `VerifiedBuild`) VALUES
+(@CGUID+0, 252312, 1, 1637, 11386, '0', '0', 0, 0, 0, 1454.7586669921875, -4426.79541015625, 25.53692436218261718, 1.721196174621582031, 120, 0, 0, 0, NULL, NULL, NULL, NULL, 68887); -- Second Chair Pawdo (Area: -Unknown- - Difficulty: 0) CreateObject1
 
--- Seed = the 9 slots of the shipped 68275 template, so assembly reproduces the shipped catalog with no
--- placeholders. Slots 0-3 are the former battlepay_product rows (real deliverables); slots 4-8 are the
--- template's display-only mounts/pets (no deliverable yet -> visible but purchase returns 57, exactly as
--- before). Idempotent restore of exactly these rows.
-DELETE FROM `shop_product` WHERE `productId` IN (1616893,1616898,841541,132620,574806,254652,666530,874857,576138);
-INSERT INTO `shop_product`
-  (`productId`,`enabled`,`name`,`description`,`currency`,`price`,`priceItemId`,`priceItemCount`,`displayPrice`,`displayFlags`,`groupId`,`ordering`,`featured`,`availableFrom`,`availableUntil`,`reqLevel`,`reqFaction`,`hideIfOwned`,`playerConditionId`,`comment`) VALUES
-(1616893, 1, 'Traveler''s Tundra Pack', 'A roomy 16-slot backpack for the road.', 1, 500000, 0, 0, NULL, 10, 0, 0, 0, NULL, NULL, 0, -1, 0, 0, 'migrated from battlepay_product'),
-(1616898, 1, 'Crate of Linen Cloth', 'A bundle of 20 bolts of linen cloth.', 1, 10000, 0, 0, NULL, 78, 0, 1, 0, NULL, NULL, 0, -1, 0, 0, 'migrated from battlepay_product'),
-(841541, 1, 'Case of Spring Water', '20 flasks of refreshing spring water.', 1, 5000, 0, 0, NULL, 81, 0, 2, 0, NULL, NULL, 0, -1, 0, 0, 'migrated from battlepay_product'),
-(132620, 1, 'Reins of the Brown Horse', 'A sturdy brown riding horse.', 1, 1000000, 0, 0, NULL, 10, 0, 3, 0, NULL, NULL, 0, -1, 1, 0, 'migrated from battlepay_product'),
-(574806, 1, 'Soul of the Aspects', 'Untamed but friendly, this golden dragon will fly the skies with you.', 1, 0, 0, 0, 100000, 10, 0, 4, 0, NULL, NULL, 0, -1, 0, 0, 'display-only template slot (no deliverable)'),
-(254652, 1, 'Lil'' Ragnaros', 'Your foes will be purged by fire with Lil'' Ragnaros on your team.', 1, 0, 0, 0, 100000, 72, 0, 5, 0, NULL, NULL, 0, -1, 0, 0, 'display-only template slot (no deliverable)'),
-(666530, 1, 'Cinder Kitten', 'This Cinder Kitten will char your face off with cuteness.', 1, 0, 0, 0, 100000, 10, 0, 6, 0, NULL, NULL, 0, -1, 0, 0, 'display-only template slot (no deliverable)'),
-(874857, 1, 'Blossoming Ancient', 'Grow your collection with the life-giving Blossoming Ancient.', 1, 0, 0, 0, 100000, 72, 0, 7, 0, NULL, NULL, 0, -1, 0, 0, 'display-only template slot (no deliverable)'),
-(576138, 1, 'Heart of the Aspects', 'Glowing with inner light, this luminous flying dragon defies the darkness.', 1, 0, 0, 0, 250000, 83, 0, 8, 0, NULL, NULL, 0, -1, 0, 0, 'display-only template slot (no deliverable)');
+-- Gameobject
+DELETE FROM `gameobject` WHERE `guid` BETWEEN @OGUID+0 AND @OGUID+6;
+INSERT INTO `gameobject` (`guid`, `id`, `map`, `zoneId`, `areaId`, `spawnDifficulties`, `PhaseId`, `PhaseGroup`, `position_x`, `position_y`, `position_z`, `orientation`, `rotation0`, `rotation1`, `rotation2`, `rotation3`, `spawntimesecs`, `animprogress`, `state`, `VerifiedBuild`) VALUES
+(@OGUID+0, 576463, 1, 1637, 11386, '0', '0', 0, 1458.2586669921875, -4425.6630859375, 26.3734130859375, 2.192635536193847656, 0.430280685424804687, -0.21508693695068359, 0.781162261962890625, 0.397971987724304199, 120, 255, 1, 68887), -- Fishing Pole (Area: -Unknown- - Difficulty: 0) CreateObject1
+(@OGUID+1, 576391, 1, 1637, 11386, '0', '0', 0, 1452.467041015625, -4426.87841796875, 25.45359039306640625, 1.449574708938598632, 0, 0, 0.662976264953613281, 0.748640418052673339, 120, 255, 1, 68887), -- Bookshelf (Area: -Unknown- - Difficulty: 0) CreateObject1
+(@OGUID+2, 576392, 1, 1637, 11386, '0', '0', 0, 1458.1961669921875, -4425.8505859375, 26.16607284545898437, 4.14076089859008789, 0, 0, -0.87778186798095703, 0.479060530662536621, 120, 255, 1, 68887), -- Keg (Area: -Unknown- - Difficulty: 0) CreateObject1
+(@OGUID+3, 576393, 1, 1637, 11386, '0', '0', 0, 1452.3941650390625, -4426.955078125, 26.62620353698730468, 1.430541396141052246, 0, 0, 0.655821800231933593, 0.754915714263916015, 120, 255, 1, 68887), -- Coil (Area: -Unknown- - Difficulty: 0) CreateObject1
+(@OGUID+4, 576394, 1, 1637, 11386, '0', '0', 0, 1454.5989990234375, -4425.3056640625, 25.45358657836914062, 1.684096932411193847, 0, 0, 0.746008872985839843, 0.665935993194580078, 120, 255, 1, 68887), -- Table (Area: -Unknown- - Difficulty: 0) CreateObject1
+(@OGUID+5, 576395, 1, 1637, 11386, '0', '0', 0, 1457.4288330078125, -4424.548828125, 26.15361404418945312, 4.14076089859008789, 0, 0, -0.87778186798095703, 0.479060530662536621, 120, 255, 1, 68887), -- Chandelier (Area: -Unknown- - Difficulty: 0) CreateObject1
+(@OGUID+6, 576396, 1, 1637, 11386, '0', '0', 0, 1458.1961669921875, -4425.8505859375, 25.45359992980957031, 2.442975282669067382, 0, 0, 0.939609527587890625, 0.342248320579528808, 120, 255, 1, 68887); -- Furniture Cart (Area: -Unknown- - Difficulty: 0) CreateObject1
 
-DELETE FROM `shop_product_deliverable` WHERE `productId` IN (1616893,1616898,841541,132620);
-INSERT INTO `shop_product_deliverable` (`productId`,`seq`,`type`,`id`,`count`) VALUES
-(1616893, 0, 1, 4500, 1),
-(1616898, 0, 1, 2589, 20),
-(841541, 0, 1, 159, 20),
-(132620, 0, 2, 458, 1);
+-- Gameobject template addon
+DELETE FROM `gameobject_template_addon` WHERE `entry` IN (576396 /*Furniture Cart*/, 576463 /*Fishing Pole*/);
+INSERT INTO `gameobject_template_addon` (`entry`, `faction`, `flags`, `WorldEffectID`, `AIAnimKitID`) VALUES
+(576396, 1375, 0x0, 0, 0), -- Furniture Cart
+(576463, 1375, 0x0, 0, 0); -- Fishing Pole
 
--- battlepay_product's only reader (BattlePayMgr::LoadProducts) has been re-targeted to shop_product.
-DROP TABLE IF EXISTS `battlepay_product`;
+-- Creature difficulty update
+UPDATE `creature_template_difficulty` SET `VerifiedBuild`=68887 WHERE `DifficultyID`=0 AND `Entry`=252312;
+
+-- Gossip update
+UPDATE `creature_template_gossip` SET `VerifiedBuild`=68887 WHERE `CreatureID`=252312 AND `MenuID`=40669;
+
+-- Vendor update
+UPDATE `npc_vendor` SET `VerifiedBuild`=68887 WHERE (`entry`=252312 AND `item`=247915 AND `ExtendedCost`=0 AND `type`=1) OR (`entry`=252312 AND `item`=247908 AND `ExtendedCost`=10726 AND `type`=1) OR (`entry`=252312 AND `item`=246487 AND `ExtendedCost`=0 AND `type`=1) OR (`entry`=252312 AND `item`=246601 AND `ExtendedCost`=10727 AND `type`=1) OR (`entry`=252312 AND `item`=248116 AND `ExtendedCost`=0 AND `type`=1) OR (`entry`=252312 AND `item`=256168 AND `ExtendedCost`=7827 AND `type`=1) OR (`entry`=252312 AND `item`=245259 AND `ExtendedCost`=0 AND `type`=1) OR (`entry`=252312 AND `item`=245655 AND `ExtendedCost`=10723 AND `type`=1);

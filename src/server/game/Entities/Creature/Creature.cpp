@@ -18,8 +18,6 @@
 #include "Creature.h"
 #include "BattlegroundMgr.h"
 #include "CellImpl.h"
-#include "ChallengeMode.h"
-#include "ChallengeModeMgr.h"
 #include "CharmInfo.h"
 #include "CombatPackets.h"
 #include "Containers.h"
@@ -37,7 +35,6 @@
 #include "Log.h"
 #include "Loot.h"
 #include "LootMgr.h"
-#include "Map.h"
 #include "MapManager.h"
 #include "MapUtils.h"
 #include "MiscPackets.h"
@@ -675,7 +672,7 @@ bool Creature::UpdateEntry(uint32 entry, CreatureData const* data /*= nullptr*/,
         SetPvP((factionTemplate->Flags & FACTION_TEMPLATE_FLAG_PVP) != 0);
         if (IsTaxi())
         {
-            uint32 taxiNodesId = sObjectMgr->GetTaxiNodeForFlightMaster(GetEntry(), GetPositionX(), GetPositionY(), GetPositionZ(), GetMapId(),
+            uint32 taxiNodesId = sObjectMgr->GetNearestTaxiNode(GetPositionX(), GetPositionY(), GetPositionZ(), GetMapId(),
                 factionTemplate->FactionGroup & FACTION_MASK_ALLIANCE ? ALLIANCE : HORDE);
             SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::TaxiNodesID), taxiNodesId);
         }
@@ -1683,11 +1680,6 @@ void Creature::SelectWildBattlePetLevel()
     }
 }
 
-// Wild battle pet level is assigned at spawn/respawn for creatures that already have
-// UNIT_NPC_FLAG_WILD_BATTLE_PET in their creature_template npcflag.
-// Spawning wild battle pets requires proper spawn groups with type 14 (CREATURE_TYPE_WILD_PET)
-// creature entries — these are separate from type 8 critters.
-
 float Creature::GetHealthMod(CreatureClassifications classification)
 {
     switch (classification)
@@ -2180,17 +2172,14 @@ float Creature::GetAttackDistance(Unit const* player) const
     float maxRadius = 45.0f * aggroRate;
     float minRadius = 5.0f * aggroRate;
 
-    int32 expansionMaxLevel = int32(GetMaxLevelForExpansion(GetCreatureTemplate()->RequiredExpansion));
+    int32 expansionMaxLevel = int32(GetMaxLevelForExpansion(GetCreatureDifficulty()->GetHealthScalingExpansion()));
     int32 playerLevel = player->GetLevelForTarget(this);
     int32 creatureLevel = GetLevelForTarget(player);
-    int32 levelDifference = creatureLevel - playerLevel;
 
-    // The aggro radius for creatures with equal level as the player is 20 yards.
+    // The aggro radius for creatures with equal level as the player is 15 yards.
     // The combatreach should not get taken into account for the distance so we drop it from the range (see Supremus as expample)
-    float baseAggroDistance = 20.0f - GetCombatReach();
-
-    // + - 1 yard for each level difference between player and creature
-    float aggroRadius = baseAggroDistance + float(levelDifference);
+    float baseAggroDistance = 15.0f - GetCombatReach();
+    float aggroRadius = baseAggroDistance;
 
     // detect range auras
     if (uint32(creatureLevel + 5) <= sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL))
@@ -2204,6 +2193,8 @@ float Creature::GetAttackDistance(Unit const* player) const
     // The following code is used for blizzlike behaviour such as skippable bosses
     if (creatureLevel > expansionMaxLevel)
         aggroRadius = baseAggroDistance + float(expansionMaxLevel - playerLevel);
+    else // + - 1 yard for each level difference between player and creature
+        aggroRadius += float(creatureLevel - playerLevel);
 
     // Make sure that we wont go over the total range limits
     if (aggroRadius > maxRadius)
@@ -2358,7 +2349,6 @@ void Creature::Respawn(bool force)
             SelectLevel();
 
             setDeathState(JUST_RESPAWNED);
-            SelectWildBattlePetLevel();
 
             CreatureModel display(GetNativeDisplayId(), GetNativeDisplayScale(), 1.0f);
             if (sObjectMgr->GetCreatureModelRandomGender(&display, GetCreatureTemplate()))
@@ -2940,9 +2930,13 @@ void Creature::InitializeMovementCapabilities()
     SetDisableGravity(IsFloating());
     SetControlled(IsSessile(), UNIT_STATE_ROOT);
 
-    // If an amphibious creatures was swimming while engaged, disable swimming again
-    if (IsAmphibious() && !_staticFlags.HasFlag(CREATURE_STATIC_FLAG_CAN_SWIM))
-        RemoveUnitFlag(UNIT_FLAG_CAN_SWIM);
+    if (CanOnlySwimIfTargetSwims())
+    {
+        SetUnitFlag2(UNIT_FLAG2_AI_WILL_ONLY_SWIM_IF_TARGET_SWIMS);
+        SetSwim(false);
+    }
+    else
+        RemoveUnitFlag2(UNIT_FLAG2_AI_WILL_ONLY_SWIM_IF_TARGET_SWIMS);
 
     UpdateMovementCapabilities();
 }
@@ -2959,12 +2953,14 @@ void Creature::UpdateMovementCapabilities()
     if (!isInAir)
         RemoveUnitMovementFlag(MOVEMENTFLAG_FALLING);
 
-    // Some Amphibious creatures toggle swimming while engaged
-    if (IsAmphibious() && !HasUnitFlag(UNIT_FLAG_CANT_SWIM) && !HasUnitFlag(UNIT_FLAG_CAN_SWIM) && IsEngaged())
-        if (!CanOnlySwimIfTargetSwims() || (GetVictim() && !GetVictim()->IsOnOceanFloor()))
-            SetUnitFlag(UNIT_FLAG_CAN_SWIM);
+    if (HasUnitFlag2(UNIT_FLAG2_AI_WILL_ONLY_SWIM_IF_TARGET_SWIMS))
+        if (GetVictim() && GetVictim()->IsInWater() && !GetVictim()->IsOnOceanFloor())
+            RemoveUnitFlag2(UNIT_FLAG2_AI_WILL_ONLY_SWIM_IF_TARGET_SWIMS);
 
-    SetSwim(IsInWater() && CanSwim());
+    if (IsInWater() && CanSwim())
+        SetSwim(true);
+    else if (!IsInWater()) // We do not want to disable swimming again when a creature is in water - may to lead some nasty bugs
+        SetSwim(false);
 }
 
 CreatureMovementData const& Creature::GetMovementTemplate() const
@@ -3067,21 +3063,6 @@ bool Creature::HasScalableLevels() const
     return m_unitData->ContentTuningID != 0;
 }
 
-uint32 Creature::GetContentTuningIdForTarget(WorldObject const* target) const
-{
-    CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
-    if (Player const* playerTarget = target ? target->ToPlayer() : nullptr)
-    {
-        if (!playerTarget->m_playerData->CtrOptions->ConditionalFlags.empty()
-            && (playerTarget->m_playerData->CtrOptions->ConditionalFlags[0] & 1))
-        {
-            return sDB2Manager.GetRedirectedContentTuningId(
-                creatureDifficulty->ContentTuningID, playerTarget->m_playerData->CtrOptions->ConditionalFlags);
-        }
-    }
-    return creatureDifficulty->ContentTuningID;
-}
-
 void Creature::ApplyLevelScaling()
 {
     CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
@@ -3135,28 +3116,10 @@ void Creature::ApplyLevelScaling(int32 contentTuningId, int32 scalingLevelDelta)
 
 uint64 Creature::GetMaxHealthByLevel(uint8 level) const
 {
-    CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
-    return GetMaxHealthByLevel(level, creatureDifficulty->ContentTuningID);
-}
-
-uint64 Creature::GetMaxHealthByLevel(uint8 level, uint32 contentTuningId) const
-{
     CreatureTemplate const* cInfo = GetCreatureTemplate();
     CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
-    double baseHealth = sDB2Manager.EvaluateExpectedStat(ExpectedStatType::CreatureHealth, level, creatureDifficulty->GetHealthScalingExpansion(), contentTuningId, Classes(cInfo->unit_class), 0);
-    double health = baseHealth * creatureDifficulty->HealthModifier;
-
-    // Mythic Keystone: scale creature health by the per-level challenge curve (GlobalCurve ChallengeModeHealth).
-    if (InstanceMap* instanceMap = GetMap()->ToInstanceMap())
-        if (ChallengeMode* challenge = instanceMap->GetChallengeMode())
-            if (uint32 keystoneLevel = challenge->GetKeystoneLevel())
-            {
-                health *= sChallengeModeMgr.GetHealthMultiplier(keystoneLevel);
-                // Fortified (non-boss) / Tyrannical (boss) scale on top of the per-level curve.
-                health *= sChallengeModeMgr.GetAffixHealthMultiplier(challenge->GetAffixes(), IsDungeonBoss());
-            }
-
-    return std::ceil(health);
+    double baseHealth = sDB2Manager.EvaluateExpectedStat(ExpectedStatType::CreatureHealth, level, creatureDifficulty->GetHealthScalingExpansion(), m_unitData->ContentTuningID, Classes(cInfo->unit_class), 0);
+    return std::ceil(baseHealth * creatureDifficulty->HealthModifier);
 }
 
 float Creature::GetHealthMultiplierForTarget(WorldObject const* target) const
@@ -3165,34 +3128,15 @@ float Creature::GetHealthMultiplierForTarget(WorldObject const* target) const
         return 1.0f;
 
     uint8 levelForTarget = GetLevelForTarget(target);
-    uint32 contentTuningId = GetContentTuningIdForTarget(target);
 
-    return double(GetMaxHealthByLevel(levelForTarget, contentTuningId)) / double(GetCreateHealth());
+    return double(GetMaxHealthByLevel(levelForTarget)) / double(GetCreateHealth());
 }
 
 float Creature::GetBaseDamageForLevel(uint8 level) const
 {
-    CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
-    return GetBaseDamageForLevel(level, creatureDifficulty->ContentTuningID);
-}
-
-float Creature::GetBaseDamageForLevel(uint8 level, uint32 contentTuningId) const
-{
     CreatureTemplate const* cInfo = GetCreatureTemplate();
     CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
-    float baseDamage = sDB2Manager.EvaluateExpectedStat(ExpectedStatType::CreatureAutoAttackDps, level, creatureDifficulty->GetHealthScalingExpansion(), contentTuningId, Classes(cInfo->unit_class), 0);
-
-    // Mythic Keystone: scale creature damage by the per-level challenge curve (GlobalCurve ChallengeModeDamage).
-    if (InstanceMap* instanceMap = GetMap()->ToInstanceMap())
-        if (ChallengeMode* challenge = instanceMap->GetChallengeMode())
-            if (uint32 keystoneLevel = challenge->GetKeystoneLevel())
-            {
-                baseDamage *= sChallengeModeMgr.GetDamageMultiplier(keystoneLevel);
-                // Fortified (non-boss) / Tyrannical (boss) scale on top of the per-level curve.
-                baseDamage *= sChallengeModeMgr.GetAffixDamageMultiplier(challenge->GetAffixes(), IsDungeonBoss());
-            }
-
-    return baseDamage;
+    return sDB2Manager.EvaluateExpectedStat(ExpectedStatType::CreatureAutoAttackDps, level, creatureDifficulty->GetHealthScalingExpansion(), m_unitData->ContentTuningID, Classes(cInfo->unit_class), 0);
 }
 
 float Creature::GetDamageMultiplierForTarget(WorldObject const* target) const
@@ -3201,22 +3145,15 @@ float Creature::GetDamageMultiplierForTarget(WorldObject const* target) const
         return 1.0f;
 
     uint8 levelForTarget = GetLevelForTarget(target);
-    uint32 contentTuningId = GetContentTuningIdForTarget(target);
 
-    return GetBaseDamageForLevel(levelForTarget, contentTuningId) / GetBaseDamageForLevel(GetLevel());
+    return GetBaseDamageForLevel(levelForTarget) / GetBaseDamageForLevel(GetLevel());
 }
 
 float Creature::GetBaseArmorForLevel(uint8 level) const
 {
-    CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
-    return GetBaseArmorForLevel(level, creatureDifficulty->ContentTuningID);
-}
-
-float Creature::GetBaseArmorForLevel(uint8 level, uint32 contentTuningId) const
-{
     CreatureTemplate const* cInfo = GetCreatureTemplate();
     CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
-    float baseArmor = sDB2Manager.EvaluateExpectedStat(ExpectedStatType::CreatureArmor, level, creatureDifficulty->GetHealthScalingExpansion(), contentTuningId, Classes(cInfo->unit_class), 0);
+    float baseArmor = sDB2Manager.EvaluateExpectedStat(ExpectedStatType::CreatureArmor, level, creatureDifficulty->GetHealthScalingExpansion(), m_unitData->ContentTuningID, Classes(cInfo->unit_class), 0);
     return baseArmor * creatureDifficulty->ArmorModifier;
 }
 
@@ -3226,9 +3163,8 @@ float Creature::GetArmorMultiplierForTarget(WorldObject const* target) const
         return 1.0f;
 
     uint8 levelForTarget = GetLevelForTarget(target);
-    uint32 contentTuningId = GetContentTuningIdForTarget(target);
 
-    return GetBaseArmorForLevel(levelForTarget, contentTuningId) / GetBaseArmorForLevel(GetLevel());
+    return GetBaseArmorForLevel(levelForTarget) / GetBaseArmorForLevel(GetLevel());
 }
 
 uint8 Creature::GetLevelForTarget(WorldObject const* target) const
@@ -3239,7 +3175,6 @@ uint8 Creature::GetLevelForTarget(WorldObject const* target) const
         // between UNIT_FIELD_SCALING_LEVEL_MIN and UNIT_FIELD_SCALING_LEVEL_MAX
         if (HasScalableLevels())
         {
-            CreatureDifficulty const* creatureDifficulty = GetCreatureDifficulty();
             int32 scalingLevelMin = m_unitData->ScalingLevelMin;
             int32 scalingLevelMax = m_unitData->ScalingLevelMax;
             int32 scalingLevelDelta = m_unitData->ScalingLevelDelta;
@@ -3250,18 +3185,6 @@ uint8 Creature::GetLevelForTarget(WorldObject const* target) const
 
             if (Player const* playerTarget = target->ToPlayer())
             {
-                // Chromie Time: redirect ContentTuning to get expansion-specific level range
-                if (!playerTarget->m_playerData->CtrOptions->ConditionalFlags.empty()
-                    && (playerTarget->m_playerData->CtrOptions->ConditionalFlags[0] & 1))
-                {
-                    if (Optional<ContentTuningLevels> levels = sDB2Manager.GetContentTuningData(
-                            creatureDifficulty->ContentTuningID, playerTarget->m_playerData->CtrOptions->ConditionalFlags))
-                    {
-                        scalingLevelMin = levels->MinLevel;
-                        scalingLevelMax = levels->MaxLevel;
-                    }
-                }
-
                 if (scalingFactionGroup && sFactionTemplateStore.AssertEntry(sChrRacesStore.AssertEntry(playerTarget->GetRace())->FactionID)->FactionGroup != scalingFactionGroup)
                     scalingLevelMin = scalingLevelMax;
 

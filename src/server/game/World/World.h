@@ -36,7 +36,6 @@
 #include <map>
 #include <memory>
 #include <unordered_map>
-#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -97,7 +96,6 @@ enum WorldTimers
     WUPDATE_CHECK_FILECHANGES,
     WUPDATE_WHO_LIST,
     WUPDATE_CHANNEL_SAVE,
-    WUPDATE_GAMETIME,
     WUPDATE_COUNT
 };
 
@@ -140,7 +138,6 @@ enum WorldBoolConfigs : uint32
     CONFIG_BATTLEGROUND_QUEUE_ANNOUNCER_ENABLE,
     CONFIG_BATTLEGROUND_QUEUE_ANNOUNCER_PLAYERONLY,
     CONFIG_BATTLEGROUND_STORE_STATISTICS_ENABLE,
-    CONFIG_BRAWL_ENABLED,
     CONFIG_BG_XP_FOR_KILL,
     CONFIG_ARENA_QUEUE_ANNOUNCER_ENABLE,
     CONFIG_ARENA_SEASON_IN_PROGRESS,
@@ -201,21 +198,6 @@ enum WorldBoolConfigs : uint32
     CONFIG_BATTLEGROUNDMAP_LOAD_GRIDS,
     CONFIG_ENABLE_AE_LOOT,
     CONFIG_LOAD_LOCALES,
-    CONFIG_HOUSING_ENABLE_BUY_HOUSE,
-    CONFIG_HOUSING_ENABLE_DELETE_HOUSE,
-    CONFIG_HOUSING_ENABLE_MOVE_HOUSE,
-    CONFIG_HOUSING_ENABLE_CREATE_CHARTER_NEIGHBORHOOD,
-    CONFIG_HOUSING_ENABLE_CREATE_GUILD_NEIGHBORHOOD,
-    CONFIG_HOUSING_TUTORIALS_ENABLED,
-    CONFIG_FEATURE_RAF_ENABLED,
-    CONFIG_FEATURE_RAF_RECRUITING_ENABLED,
-    CONFIG_FEATURE_WARGAMES_ENABLED,
-    CONFIG_SHOP_ENABLED,
-    CONFIG_SHOP_SHOP2_ENABLED,
-    CONFIG_SHOP_PURCHASE_CONFIRMATION,
-    CONFIG_SHOP_ENTITLEMENTS_ENABLED,
-    CONFIG_SHOP_ENTITLEMENT_ASSIGN_ENABLED,
-    CONFIG_WOW_TOKEN_MARKET_ENABLED,
     BOOL_CONFIG_VALUE_COUNT
 };
 
@@ -353,10 +335,6 @@ enum WorldIntConfigs : uint32
     CONFIG_DEATH_SICKNESS_LEVEL,
     CONFIG_DISABLE_BREATHING,
     CONFIG_BATTLEGROUND_INVITATION_TYPE,
-    CONFIG_BATTLEGROUND_BLITZ_TANKS_PER_TEAM,
-    CONFIG_BATTLEGROUND_BLITZ_HEALERS_PER_TEAM,
-    CONFIG_BRAWL_PVP_BRAWL_ID,
-    CONFIG_BRAWL_BATTLEMASTER_LIST_ID,
     CONFIG_BATTLEGROUND_PREMATURE_FINISH_TIMER,
     CONFIG_BATTLEGROUND_PREMADE_GROUP_WAIT_FOR_MATCH,
     CONFIG_BATTLEGROUND_REPORT_AFK,
@@ -369,7 +347,6 @@ enum WorldIntConfigs : uint32
     CONFIG_ARENA_START_MATCHMAKER_RATING,
     CONFIG_MAX_WHO,
     CONFIG_WHO_LIST_UPDATE_INTERVAL,
-    CONFIG_GAMETIME_UPDATE_INTERVAL,
     CONFIG_HONOR_AFTER_DUEL,
     CONFIG_PVP_TOKEN_MAP_TYPE,
     CONFIG_PVP_TOKEN_ID,
@@ -382,8 +359,6 @@ enum WorldIntConfigs : uint32
     CONFIG_GUILD_NEWS_LOG_COUNT,
     CONFIG_GUILD_EVENT_LOG_COUNT,
     CONFIG_GUILD_BANK_EVENT_LOG_COUNT,
-    CONFIG_CLUB_STREAM_HISTORY_MAX_MESSAGES,
-    CONFIG_CLUB_STREAM_HISTORY_MAX_DAYS,
     CONFIG_MIN_LEVEL_STAT_SAVE,
     CONFIG_RANDOM_BG_RESET_HOUR,
     CONFIG_CALENDAR_DELETE_OLD_EVENTS_HOUR,
@@ -457,14 +432,6 @@ enum WorldIntConfigs : uint32
     CONFIG_VISIBILITY_NOTIFY_PERIOD_INSTANCE,
     CONFIG_VISIBILITY_NOTIFY_PERIOD_BATTLEGROUND,
     CONFIG_VISIBILITY_NOTIFY_PERIOD_ARENA,
-    CONFIG_RAF_MAX_RECRUITS,
-    CONFIG_RAF_MAX_RECRUIT_MONTHS,
-    CONFIG_RAF_MAX_RECRUITMENT_USES,
-    CONFIG_RAF_DAYS_IN_CYCLE,
-    CONFIG_HOUSING_MAX_HOUSES_PER_ACCOUNT,
-    CONFIG_RETURNING_PLAYER_EXPERIENCE_INACTIVE_DAYS,
-    CONFIG_SHOP_CHARACTER_BOOST_LEVEL,
-    CONFIG_SHOP_CHARACTER_BOOST_TYPE,
     INT_CONFIG_VALUE_COUNT
 };
 
@@ -799,25 +766,6 @@ class TC_GAME_API World
         void UpdateAreaDependentAuras();
 
         bool IsBattlePetJournalLockAcquired(ObjectGuid battlenetAccountGuid);
-        bool IsAccountInventoryLockAcquired(ObjectGuid battlenetAccountGuid, WorldSession const* exclude = nullptr);
-
-        // Account-wide (warband) bank exclusivity lock. The account bank is shared across
-        // every character of a Battle.net account, and on this realm several of those
-        // characters may be online at once. Mutation is therefore serialised through a
-        // single-holder, server-side reservation: exactly one session per Bnet account may
-        // hold it, the acquisition is atomic (test-and-set under a mutex), and every account
-        // bank mutation opcode is refused unless the caller holds it. This makes concurrent
-        // same-bnet mutation impossible and closes the item/coinage duplication vectors.
-        bool TryAcquireAccountInventoryLock(ObjectGuid battlenetAccountGuid, WorldSession* session);
-        void ReleaseAccountInventoryLock(ObjectGuid battlenetAccountGuid, WorldSession const* session);
-
-        // Serialises account currency transfers by SOURCE character GUID. A transfer reads the
-        // offline source balance asynchronously and then debits it, so two overlapping transfers
-        // from the same source (same session burst or two same-bnet sessions) would otherwise
-        // both act on the same stale balance and dupe the currency (CR-4). BeginCurrencyTransfer
-        // is an atomic test-and-set: only one transfer per source may be in flight at a time.
-        bool BeginCurrencyTransfer(ObjectGuid sourceCharacterGuid);
-        void EndCurrencyTransfer(ObjectGuid sourceCharacterGuid);
 
         uint32 GetCleaningFlags() const { return m_CleaningFlags; }
         void SetCleaningFlags(uint32 flags) { m_CleaningFlags = flags; }
@@ -883,18 +831,9 @@ class TC_GAME_API World
         time_t mail_timer;
         time_t mail_timer_expires;
         time_t blackmarket_timer;
-        time_t m_lastGameTimeBroadcast;
 
         SessionMap m_sessions;
         std::unordered_multimap<ObjectGuid, WorldSession*> m_sessionsByBnetGuid;
-        // Owner of the account-wide bank lock, keyed by Battle.net account GUID. Guarded by
-        // m_accountInventoryLockMutex so the test-and-set on acquisition is atomic against
-        // two same-bnet sessions entering the world simultaneously.
-        std::unordered_map<ObjectGuid, WorldSession*> m_accountInventoryLockOwners;
-        std::mutex m_accountInventoryLockMutex;
-        // Source character GUIDs with an account currency transfer currently in flight.
-        std::unordered_set<ObjectGuid> m_currencyTransfersInProgress;
-        std::mutex m_currencyTransferMutex;
         typedef std::unordered_map<uint32, time_t> DisconnectMap;
         DisconnectMap m_disconnects;
         uint32 m_maxActiveSessionCount;
@@ -951,8 +890,6 @@ class TC_GAME_API World
         AutobroadcastContainer m_Autobroadcasts;
 
         void ProcessQueryCallbacks();
-
-        void BroadcastGameTime();
 
         void SendGuidWarning();
         void DoGuidWarningRestart();

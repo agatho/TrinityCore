@@ -176,7 +176,7 @@ namespace WorldPackets
             std::string _Channel;   ///< Channel Name
             std::string ChatText;
             uint32 AchievementID = 0;
-            uint16 _ChatFlags = 0;   ///< @see enum ChatFlags
+            uint32 _ChatFlags = 0;   ///< @see enum ChatFlags
             float DisplayTime = 0.0f;
             int32 SpellID = 0;
             Optional<uint32> BroadcastTextID;
@@ -337,16 +337,6 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             int32 Reason = 0;
-        };
-
-        class ChatNotInParty final : public ServerPacket
-        {
-        public:
-            explicit ChatNotInParty(ChatMsg chatType) : ServerPacket(SMSG_CHAT_NOT_IN_PARTY, 4), ChatType(chatType) { }
-
-            WorldPacket const* Write() override;
-
-            ChatMsg ChatType;
         };
 
         class CanLocalWhisperTargetRequest final : public ClientPacket

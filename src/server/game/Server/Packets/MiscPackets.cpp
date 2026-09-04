@@ -56,26 +56,6 @@ WorldPacket const* LoginSetTimeSpeed::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* GameTimeSet::Write()
-{
-    _worldPacket << ServerTime;
-    _worldPacket << GameTime;
-    _worldPacket << int32(ServerTimeHolidayOffset);
-    _worldPacket << int32(GameTimeHolidayOffset);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* GameTimeUpdate::Write()
-{
-    _worldPacket << ServerTime;
-    _worldPacket << GameTime;
-    _worldPacket << int32(ServerTimeHolidayOffset);
-    _worldPacket << int32(GameTimeHolidayOffset);
-
-    return &_worldPacket;
-}
-
 WorldPacket const* SetCurrency::Write()
 {
     _worldPacket << int32(Type);
@@ -147,11 +127,6 @@ void SetSelection::Read()
     _worldPacket >> Selection;
 }
 
-void SetPreferredCemetery::Read()
-{
-    _worldPacket >> CemeteryID;
-}
-
 WorldPacket const* SetupCurrency::Write()
 {
     _worldPacket << Size<uint32>(Data);
@@ -190,16 +165,6 @@ WorldPacket const* SetupCurrency::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* ReattachResurrect::Write()
-{
-    _worldPacket << uint8(Unknown1);
-    _worldPacket << uint8(Unknown2);
-
-    return &_worldPacket;
-}
-
-
-
 void ViolenceLevel::Read()
 {
     _worldPacket >> ViolenceLvl;
@@ -216,11 +181,6 @@ void TimeSyncResponse::Read()
 {
     _worldPacket >> SequenceIndex;
     _worldPacket >> ClientTime;
-}
-
-void DiscardedTimeSyncAcks::Read()
-{
-    _worldPacket >> MaxSequenceIndex;
 }
 
 WorldPacket const* TriggerCinematic::Write()
@@ -298,40 +258,6 @@ void SetRaidDifficulty::Read()
     _worldPacket >> DifficultyID;
 }
 
-WorldPacket const* ChangePlayerDifficultyResult::Write()
-{
-    // The client reads one byte and splits it Result = b >> 4, InCombat = (b >> 3) & 1, which is
-    // what these two bit writes plus the flush produce. Both captured bodies open with exactly
-    // this: 0xC0 = Result 12 / InCombat 0, and 0x60 = Result 6 / InCombat 0.
-    _worldPacket << Bits<4>(Result);
-    _worldPacket << Bits<1>(InCombat);
-    _worldPacket.FlushBits();
-
-    // Which trailing fields exist is decided by Result in the client's own reader; everything
-    // not listed here is the leading byte and nothing else.
-    switch (Result)
-    {
-        case ChangePlayerDifficultyResultCode::Cooldown:
-        case ChangePlayerDifficultyResultCode::Pending:
-            _worldPacket << int64(Cooldown);
-            break;
-        case ChangePlayerDifficultyResultCode::MapDifficultyMessage:
-            _worldPacket << int32(MapDifficultyID);
-            break;
-        case ChangePlayerDifficultyResultCode::OtherHeroic:
-            _worldPacket << PlayerGUID;
-            break;
-        case ChangePlayerDifficultyResultCode::Success:
-            _worldPacket << int32(MapID);
-            _worldPacket << uint16(DifficultyID);
-            break;
-        default:
-            break;
-    }
-
-    return &_worldPacket;
-}
-
 WorldPacket const* DungeonDifficultySet::Write()
 {
     _worldPacket << int16(DifficultyID);
@@ -387,13 +313,6 @@ WorldPacket const* RequestCemeteryListResponse::Write()
     _worldPacket << Size<uint32>(CemeteryID);
     for (uint32 cemetery : CemeteryID)
         _worldPacket << cemetery;
-
-    return &_worldPacket;
-}
-
-WorldPacket const* AccountNotificationsResponse::Write()
-{
-    _worldPacket << uint32(0); // notification count - TrinityCore has no account notifications (empty list)
 
     return &_worldPacket;
 }
@@ -804,13 +723,6 @@ WorldPacket const* OverrideLight::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* StartLightningStorm::Write()
-{
-    _worldPacket << int32(LightningID);
-
-    return &_worldPacket;
-}
-
 WorldPacket const* DisplayGameError::Write()
 {
     _worldPacket << uint32(Error);
@@ -849,11 +761,6 @@ void MountSetFavorite::Read()
     _worldPacket >> Bits<1>(IsFavorite);
 }
 
-void MountClearFanfare::Read()
-{
-    _worldPacket >> MountSpellID;
-}
-
 void CloseInteraction::Read()
 {
     _worldPacket >> SourceGuid;
@@ -873,79 +780,9 @@ WorldPacket const* StartTimer::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* StopTimer::Write()
-{
-    _worldPacket << int32(Type);
-
-    return &_worldPacket;
-}
-
-// Duration first, then the id - see the ElapsedTimer comment in MiscPackets.h.
-ByteBuffer& operator<<(ByteBuffer& data, ElapsedTimer const& timer)
-{
-    data << timer.CurrentDuration;
-    data << uint32(timer.TimerID);
-
-    return data;
-}
-
-WorldPacket const* StartElapsedTimer::Write()
-{
-    _worldPacket << Timer;
-
-    return &_worldPacket;
-}
-
-WorldPacket const* StartElapsedTimers::Write()
-{
-    _worldPacket << uint32(Timers.size());
-    for (ElapsedTimer const& timer : Timers)
-        _worldPacket << timer;
-
-    return &_worldPacket;
-}
-
-WorldPacket const* StopElapsedTimer::Write()
-{
-    _worldPacket << uint32(TimerID);
-    _worldPacket.WriteBit(KeepTimer);
-    _worldPacket.FlushBits();
-
-    return &_worldPacket;
-}
-
 void QueryCountdownTimer::Read()
 {
     _worldPacket >> As<int32>(TimerType);
-}
-
-void DoCountdown::Read()
-{
-    // Wire (client serializer 0x5DDE90): bit HasType, bit Flag, FlushBits, uint32 TotalTime, [uint8 Type if HasType]
-    bool hasType = _worldPacket.ReadBit();
-    Flag = _worldPacket.ReadBit();
-    _worldPacket >> TotalTime;
-    if (hasType)
-    {
-        uint8 type;
-        _worldPacket >> type;
-        Type = type;
-    }
-}
-
-WorldPacket const* GetRemainingGameTimeResponse::Write()
-{
-    _worldPacket << uint32(SecondsRemaining);
-    _worldPacket << uint32(GameTimeParam);
-    _worldPacket.WriteBit(Unlimited);
-    _worldPacket.FlushBits();
-
-    return &_worldPacket;
-}
-
-void SetStopConversation::Read()
-{
-    _worldPacket >> ConversationGUID;
 }
 
 void ConversationLineStarted::Read()
@@ -964,7 +801,7 @@ WorldPacket const* SplashScreenShowLatest::Write()
 WorldPacket const* DisplayToast::Write()
 {
     _worldPacket << uint64(Quantity);
-    _worldPacket << As<uint8>(DisplayToastMethod);
+    _worldPacket << As<uint32>(DisplayToastMethod);
     _worldPacket << uint32(QuestID);
 
     _worldPacket << Bits<1>(Mailed);
@@ -1009,130 +846,6 @@ WorldPacket const* AccountWarbandSceneUpdate::Write()
         _worldPacket << Bits<1>(data.Flags.HasFlag(WarbandSceneCollectionFlags::HasFanfare));
 
     _worldPacket.FlushBits();
-
-    return &_worldPacket;
-}
-
-void ChromieTimeSelectExpansion::Read()
-{
-    _worldPacket >> Vendor;
-    _worldPacket >> ExpansionID;
-}
-
-WorldPacket const* TimerunningSeasonEnded::Write()
-{
-    _worldPacket << uint32(SeasonID);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* MultiFloorNewFloor::Write()
-{
-    _worldPacket << int32(MapID);
-    _worldPacket << int32(FloorIndex);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* SetCtrOptions::Write()
-{
-    auto writeBlock = [&](CTROptionsBlock const& block)
-    {
-        _worldPacket << uint32(block.ConditionalFlags.size());
-        _worldPacket << uint8(block.FactionGroup);
-        _worldPacket << uint32(block.ChromieTimeExpansionMask);
-        for (uint32 flag : block.ConditionalFlags)
-            _worldPacket << uint32(flag);
-    };
-
-    writeBlock(Previous);
-    writeBlock(Current);
-
-    return &_worldPacket;
-}
-
-void TransferCurrencyFromAccountCharacter::Read()
-{
-    _worldPacket >> SourceCharacterGUID;
-    _worldPacket >> CurrencyID;
-    _worldPacket >> Quantity;
-}
-
-WorldPacket const* AccountCharacterCurrencyLists::Write()
-{
-    _worldPacket << Size<uint32>(Characters);
-    _worldPacket << Size<uint32>(CurrencyData);
-
-    for (CharacterCurrencyData const& character : Characters)
-    {
-        _worldPacket << character.CharacterGUID;
-        _worldPacket << uint8(character.ClassID);
-        _worldPacket << int32(character.Level);
-        _worldPacket << SizedString::BitsSize<6>(character.CharacterName);
-    }
-
-    _worldPacket.FlushBits();
-
-    for (CharacterCurrencyData const& character : Characters)
-        _worldPacket << SizedString::Data(character.CharacterName);
-
-    for (CurrencyQuantityData const& currency : CurrencyData)
-    {
-        _worldPacket << currency.CharacterGUID;
-        _worldPacket << int32(currency.CurrencyTypeID);
-        _worldPacket << int32(currency.Quantity);
-    }
-
-    return &_worldPacket;
-}
-
-WorldPacket const* MultiFloorLeaveFloor::Write()
-{
-    _worldPacket << int32(MapID);
-    _worldPacket << int32(FloorIndex);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* CurrencyTransferResult::Write()
-{
-    _worldPacket << int32(CurrencyID);
-    _worldPacket << int32(Quantity);
-    _worldPacket << int32(TotalQuantity);
-    _worldPacket << uint32(Result);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* CurrencyTransferLog::Write()
-{
-    _worldPacket << Size<uint32>(Entries);
-
-    // Retail 12.0.7 entry layout (verified against sniff SMSG_CURRENCY_TRANSFER_LOG):
-    // Source, Dest, CurrencyTypeID, QuantityReceived, QuantitySent, Timestamp, trailing int32(0).
-    for (CurrencyTransferLogEntry const& entry : Entries)
-    {
-        _worldPacket << entry.SourceCharacterGUID;
-        _worldPacket << entry.DestCharacterGUID;
-        _worldPacket << int32(entry.CurrencyTypeID);
-        _worldPacket << int32(entry.QuantityReceived);
-        _worldPacket << int32(entry.QuantitySent);
-        _worldPacket << uint32(entry.Timestamp);
-        _worldPacket << int32(0);
-    }
-
-    return &_worldPacket;
-}
-
-WorldPacket const* DisplayWorldText::Write()
-{
-    _worldPacket << Guid;
-    _worldPacket << uint32(Arg1);
-    _worldPacket << uint32(Arg2);
-    _worldPacket << SizedString::BitsSize<12>(Text);
-    _worldPacket.FlushBits();
-
-    _worldPacket << SizedString::Data(Text);
 
     return &_worldPacket;
 }

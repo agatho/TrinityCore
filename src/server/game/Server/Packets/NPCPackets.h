@@ -50,15 +50,6 @@ namespace WorldPackets
             ObjectGuid Unit;
         };
 
-        // Empty client request asking the server to re-send the currently open gossip menu.
-        class GossipRefreshOptions final : public ClientPacket
-        {
-        public:
-            explicit GossipRefreshOptions(WorldPacket&& packet) : ClientPacket(CMSG_GOSSIP_REFRESH_OPTIONS, std::move(packet)) { }
-
-            void Read() override { }
-        };
-
         class TC_GAME_API NPCInteractionOpenResult final : public ServerPacket
         {
         public:
@@ -107,7 +98,7 @@ namespace WorldPackets
             int32 QuestID = 0;
             int32 ContentTuningID = 0;
             int32 QuestType = 0;
-            int32 Unused1102 = 0;
+            int32 QuestInfoID = 0;
             bool Repeatable = false;
             bool ResetByScheduler = false;
             bool Important = false;
@@ -133,20 +124,6 @@ namespace WorldPackets
             Optional<int32> BroadcastTextID;
             int32 GossipID = 0;
             int32 LfgDungeonsID = 0;
-        };
-
-        // Wire verified against all 5 captured occurrences (12.0.7 builds 68453/68974), zero
-        // leftover bytes on each: a PackedGuid naming the gossip source followed by exactly one
-        // ClientGossipText, i.e. the same per-quest block SMSG_GOSSIP_MESSAGE carries in a list.
-        class GossipQuestUpdate final : public ServerPacket
-        {
-        public:
-            explicit GossipQuestUpdate() : ServerPacket(SMSG_GOSSIP_QUEST_UPDATE, 18 + 32 + 2 + 32) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid GossipGUID;
-            ClientGossipText TextData;
         };
 
         class GossipSelectOption final : public ClientPacket
@@ -317,17 +294,6 @@ namespace WorldPackets
             ObjectGuid StableMaster;
             uint32 PetNumber = 0;
             uint8 DestSlot = 0;
-        };
-
-        class SetPetFavorite final : public ClientPacket
-        {
-        public:
-            explicit SetPetFavorite(WorldPacket&& packet) : ClientPacket(CMSG_SET_PET_FAVORITE, std::move(packet)) { }
-
-            void Read() override;
-
-            uint8 SlotID = 0;       // stable slot (PetSaveMode), matches C_StableInfo.SetPetFavorite(slotID, ...)
-            bool IsFavorite = false;
         };
     }
 }

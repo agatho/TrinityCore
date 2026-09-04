@@ -21,7 +21,6 @@
 #include "DB2Stores.h"
 #include "Language.h"
 #include "Log.h"
-#include "MajorFactionMgr.h"
 #include "MapUtils.h"
 #include "ObjectMgr.h"
 #include "Player.h"
@@ -380,12 +379,6 @@ void ReputationMgr::SendInitialReputations()
     }
 
     _player->SendDirectMessage(initFactions.Write());
-
-    // 12.x reads the bonus list from the split-out SMSG_FACTION_BONUS_INFO at login (sniff 68275:
-    // one full-roster list per login, every flag 0 outside a reputation-bonus event).
-    WorldPackets::Reputation::FactionBonusInfo bonusInfo;
-    bonusInfo.Bonuses = std::move(initFactions.Bonuses);
-    _player->SendDirectMessage(bonusInfo.Write());
 }
 
 void ReputationMgr::SendVisible(FactionState const* faction, bool visible) const
@@ -594,13 +587,7 @@ bool ReputationMgr::SetOneFactionReputation(FactionEntry const* factionEntry, in
 
                 // If the reputation is decreased by command, we will send CurrencyDestroyReason::Cheat
                 if (oldRenownLevel != newRenownLevel)
-                {
                     _player->ModifyCurrency(currency->ID, newRenownLevel - oldRenownLevel, CurrencyGainSource::RenownRepGain, CurrencyDestroyReason::Cheat);
-
-                    // Phase 10C: dispatch renown rewards for every level crossed (only on increase).
-                    if (newRenownLevel > oldRenownLevel && sMajorFactionMgr->IsMajorFaction(factionEntry))
-                        sMajorFactionMgr->GrantRenownLevelRewards(_player, factionEntry->ID, uint32(oldRenownLevel), uint32(newRenownLevel), false);
-                }
             }
         }
 
@@ -618,22 +605,9 @@ bool ReputationMgr::SetOneFactionReputation(FactionEntry const* factionEntry, in
             int32 oldParagonLevel = oldStanding / paragonReputation->LevelThreshold;
             int32 newParagonLevel = standing / paragonReputation->LevelThreshold;
             if (oldParagonLevel != newParagonLevel)
-            {
                 if (Quest const* paragonRewardQuest = sObjectMgr->GetQuestTemplate(paragonReputation->QuestID))
                     _player->AddQuestAndCheckCompletion(paragonRewardQuest, nullptr);
-
-                // CriteriaType::ParagonLevelIncreaseWithFaction (206, Asset = FactionID).
-                // miscValue2 = the paragon level reached.
-                if (newParagonLevel > oldParagonLevel)
-                    _player->UpdateCriteria(CriteriaType::ParagonLevelIncreaseWithFaction, factionEntry->ID, newParagonLevel);
-            }
         }
-
-        // CriteriaType::ReputationAmountGained (243, Asset = FactionID) - "accumulate, not highest", so this
-        // is the per-event GAIN (reputationChange), not the absolute standing that ReputationGained (46) uses.
-        // Only a positive change counts; losses must not be accumulated as gains.
-        if (reputationChange > 0)
-            _player->UpdateCriteria(CriteriaType::ReputationAmountGained, factionEntry->ID, uint32(reputationChange));
 
         _player->UpdateCriteria(CriteriaType::TotalFactionsEncountered, factionEntry->ID);
         _player->UpdateCriteria(CriteriaType::ReputationGained,         factionEntry->ID);
@@ -815,206 +789,6 @@ void ReputationMgr::LoadFromDB(PreparedQueryResult result)
         }
         while (result->NextRow());
     }
-}
-
-void ReputationMgr::LoadAccountWideFromDB(PreparedQueryResult result)
-{
-    if (!result)
-        return;
-
-    do
-    {
-        Field* fields = result->Fetch();
-        uint32 factionId = fields[0].GetUInt16();
-        int32 accountStanding = fields[1].GetInt32();
-        int32 accountRenownLevel = fields[2].GetInt32();
-
-        // Cache for later save comparison
-        AccountReputationState& accountState = _accountReputation[factionId];
-        accountState.standing = accountStanding;
-        accountState.renownLevel = accountRenownLevel;
-
-        FactionEntry const* factionEntry = sFactionStore.LookupEntry(factionId);
-        if (!factionEntry || !factionEntry->CanHaveReputation())
-            continue;
-
-        FactionState* state = &_factions[factionEntry->ReputationIndex];
-
-        if (IsRenownReputation(factionEntry))
-        {
-            // Renown faction: compare renown level first, then standing as tiebreaker
-            int32 charRenownLevel = GetRenownLevel(factionEntry);
-            int32 charStanding = state->Standing;
-
-            bool shouldSync = false;
-            if (accountRenownLevel > charRenownLevel)
-                shouldSync = true;
-            else if (accountRenownLevel == charRenownLevel && accountStanding > charStanding)
-                shouldSync = true;
-
-            if (shouldSync)
-            {
-                // Set renown currency to account level
-                if (accountRenownLevel != charRenownLevel)
-                {
-                    if (CurrencyTypesEntry const* currency = sCurrencyTypesStore.LookupEntry(factionEntry->RenownCurrencyID))
-                        _player->ModifyCurrency(currency->ID, accountRenownLevel - charRenownLevel, CurrencyGainSource::RenownRepGain, CurrencyDestroyReason::Cheat);
-
-                    // Phase 10C: dispatch character-bound rewards for the inherited renown
-                    // span. accountSync=true skips account-wide rewards which were already
-                    // granted on the original toon and live in warband_renown_rewards_granted.
-                    if (sMajorFactionMgr->IsMajorFaction(factionEntry))
-                        sMajorFactionMgr->GrantRenownLevelRewards(_player, factionEntry->ID, uint32(charRenownLevel), uint32(accountRenownLevel), true);
-                }
-
-                state->Standing = accountStanding;
-                state->needSave = true;
-                state->needSend = true;
-
-                SetVisible(state);
-            }
-        }
-        else
-        {
-            // Regular faction: higher standing delta wins
-            if (accountStanding > state->Standing)
-            {
-                int32 baseRep = GetBaseReputation(factionEntry);
-                ReputationRank oldRank = ReputationToRank(factionEntry, baseRep + state->Standing);
-                ReputationRank newRank = ReputationToRank(factionEntry, baseRep + accountStanding);
-
-                if (!factionEntry->FriendshipRepID)
-                    UpdateRankCounters(oldRank, newRank);
-
-                state->Standing = accountStanding;
-                state->needSave = true;
-                state->needSend = true;
-
-                SetVisible(state);
-            }
-        }
-    }
-    while (result->NextRow());
-}
-
-void ReputationMgr::SaveAccountWideToDB(CharacterDatabaseTransaction trans)
-{
-    uint32 bnetAccountId = _player->GetSession()->GetBattlenetAccountId();
-
-    for (auto& [reputationIndex, state] : _factions)
-    {
-        if (!state.needSave)
-            continue;
-
-        if (!sObjectMgr->IsWarbandReputationFaction(state.ID))
-            continue;
-
-        FactionEntry const* factionEntry = sFactionStore.LookupEntry(state.ID);
-        if (!factionEntry)
-            continue;
-
-        int32 currentStanding = state.Standing;
-        int32 currentRenownLevel = 0;
-
-        if (IsRenownReputation(factionEntry))
-            currentRenownLevel = GetRenownLevel(factionEntry);
-
-        // Only write if our value is higher than what's stored
-        auto itr = _accountReputation.find(state.ID);
-        if (itr != _accountReputation.end())
-        {
-            AccountReputationState const& cached = itr->second;
-
-            if (IsRenownReputation(factionEntry))
-            {
-                if (currentRenownLevel < cached.renownLevel)
-                    continue;
-                if (currentRenownLevel == cached.renownLevel && currentStanding <= cached.standing)
-                    continue;
-            }
-            else
-            {
-                if (currentStanding <= cached.standing)
-                    continue;
-            }
-        }
-
-        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_ACCOUNT_REPUTATION);
-        stmt->setUInt32(0, bnetAccountId);
-        stmt->setUInt16(1, uint16(state.ID));
-        stmt->setInt32(2, currentStanding);
-        stmt->setInt32(3, currentRenownLevel);
-        trans->Append(stmt);
-
-        // Update cache
-        _accountReputation[state.ID] = { currentStanding, currentRenownLevel };
-    }
-}
-
-void ReputationMgr::LoadRenownRewardsGrantedFromDB(PreparedQueryResult charResult, PreparedQueryResult accountResult)
-{
-    _grantedRenownRewardsChar.clear();
-    _grantedRenownRewardsAccount.clear();
-
-    if (charResult)
-    {
-        do
-        {
-            _grantedRenownRewardsChar.insert(charResult->Fetch()[0].GetUInt32());
-        } while (charResult->NextRow());
-    }
-
-    if (accountResult)
-    {
-        do
-        {
-            _grantedRenownRewardsAccount.insert(accountResult->Fetch()[0].GetUInt32());
-        } while (accountResult->NextRow());
-    }
-}
-
-int32 ReputationMgr::GetAccountRenownLevel(uint32 factionId) const
-{
-    auto itr = _accountReputation.find(factionId);
-    if (itr != _accountReputation.end())
-        return itr->second.renownLevel;
-
-    // Fallback: not in account-wide cache (faction is not warband-shared,
-    // or no row exists yet). Caller should treat this as "no catchup data".
-    return -1;
-}
-
-bool ReputationMgr::IsRenownRewardGranted(uint32 renownRewardId, bool accountWide) const
-{
-    if (accountWide)
-        return _grantedRenownRewardsAccount.contains(renownRewardId);
-    return _grantedRenownRewardsChar.contains(renownRewardId);
-}
-
-void ReputationMgr::MarkRenownRewardGranted(uint32 renownRewardId, bool accountWide)
-{
-    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
-
-    if (accountWide)
-    {
-        _grantedRenownRewardsAccount.insert(renownRewardId);
-
-        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_WARBAND_RENOWN_REWARD_GRANTED);
-        stmt->setUInt32(0, _player->GetSession()->GetBattlenetAccountId());
-        stmt->setUInt32(1, renownRewardId);
-        trans->Append(stmt);
-    }
-    else
-    {
-        _grantedRenownRewardsChar.insert(renownRewardId);
-
-        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHAR_RENOWN_REWARD_GRANTED);
-        stmt->setUInt64(0, _player->GetGUID().GetCounter());
-        stmt->setUInt32(1, renownRewardId);
-        trans->Append(stmt);
-    }
-
-    CharacterDatabase.CommitTransaction(trans);
 }
 
 void ReputationMgr::SaveToDB(CharacterDatabaseTransaction trans)

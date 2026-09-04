@@ -16,9 +16,7 @@
  */
 
 // This is where scripts' loading functions should be declared:
-void AddSC_archaeology_spell_scripts();
 void AddSC_deathknight_spell_scripts();
-void AddSC_dragonriding_spell_scripts();
 void AddSC_demon_hunter_spell_scripts();
 void AddSC_druid_spell_scripts();
 void AddSC_evoker_spell_scripts();
@@ -35,16 +33,13 @@ void AddSC_warrior_spell_scripts();
 void AddSC_quest_spell_scripts();
 void AddSC_item_spell_scripts();
 void AddSC_azerite_item_spell_scripts();
-void AddSC_housing_spell_scripts();
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
 void AddSpellsScripts()
 {
-    AddSC_archaeology_spell_scripts();
     AddSC_deathknight_spell_scripts();
     AddSC_demon_hunter_spell_scripts();
-    AddSC_dragonriding_spell_scripts();
     AddSC_druid_spell_scripts();
     AddSC_evoker_spell_scripts();
     AddSC_generic_spell_scripts();
@@ -60,5 +55,4 @@ void AddSpellsScripts()
     AddSC_quest_spell_scripts();
     AddSC_item_spell_scripts();
     AddSC_azerite_item_spell_scripts();
-    AddSC_housing_spell_scripts();
 }

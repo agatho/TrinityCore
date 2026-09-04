@@ -440,8 +440,7 @@ uint32 Quest::XPValue(Player const* player, uint32 contentTuningId, uint32 xpDif
             return 0;
 
         uint32 xp = questXp->Difficulty[xpDifficulty];
-        uint32 redirectedContentTuningId = sDB2Manager.GetRedirectedContentTuningId(contentTuningId, player->m_playerData->CtrOptions->ConditionalFlags);
-        if (ContentTuningEntry const* contentTuning = sContentTuningStore.LookupEntry(redirectedContentTuningId))
+        if (ContentTuningEntry const* contentTuning = sContentTuningStore.LookupEntry(contentTuningId))
             xp = xp * contentTuning->QuestXpMultiplier;
 
         int32 diffFactor = 2 * (questLevel - player->GetLevel()) + 12;

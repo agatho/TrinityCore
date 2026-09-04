@@ -323,7 +323,9 @@ ByteBuffer& operator<<(ByteBuffer& data, EnumCharactersResult::ClassUnlock const
 {
     data << int8(classUnlock.ClassID);
     data << uint32(classUnlock.AchievementID);
+    data << Bits<1>(classUnlock.HasExpansion);
     data << Bits<1>(classUnlock.HasUnlockedAchievement);
+    data << Bits<1>(classUnlock.HasEntitlement);
     data.FlushBits();
 
     return data;
@@ -333,15 +335,18 @@ ByteBuffer& operator<<(ByteBuffer& data, EnumCharactersResult::RaceUnlock const&
 {
     data << int8(raceUnlock.RaceID);
     data << Size<uint32>(raceUnlock.ClassUnlocks);
-    data << Bits<1>(raceUnlock.HasUnlockedLicense);
-    data << Bits<1>(raceUnlock.HasUnlockedAchievement);
-    data << Bits<1>(raceUnlock.HasHeritageArmorUnlockAchievement);
-    data << Bits<1>(raceUnlock.HideRaceOnClient);
-    data << Bits<1>(raceUnlock.FactionBalanceDisabled);
-    data.FlushBits();
 
     for (EnumCharactersResult::ClassUnlock const& classUnlock : raceUnlock.ClassUnlocks)
         data << classUnlock;
+
+    data << Bits<1>(raceUnlock.HasUnlockedLicense);
+    data << Bits<1>(raceUnlock.HasUnlockedAchievement);
+    data << Bits<1>(raceUnlock.HasHeritageArmorUnlockAchievement);
+    data << Bits<1>(raceUnlock.HasEntitlement);
+    data << Bits<1>(raceUnlock.HideRaceOnClient);
+    data << Bits<1>(raceUnlock.FactionBalanceDisabled);
+    data << Bits<1>(raceUnlock.DoesNotHaveAvailableClasses);
+    data.FlushBits();
 
     return data;
 }
@@ -426,12 +431,6 @@ WorldPacket const* EnumCharactersResult::Write()
     if (ClassDisableMask)
         _worldPacket << uint32(*ClassDisableMask);
 
-    for (UnlockedConditionalAppearance const& unlockedConditionalAppearance : UnlockedConditionalAppearances)
-        _worldPacket << unlockedConditionalAppearance;
-
-    for (RaceLimitDisableInfo const& raceLimitDisableInfo : RaceLimitDisables)
-        _worldPacket << raceLimitDisableInfo;
-
     for (CharacterInfo const& charInfo : Characters)
         _worldPacket << charInfo;
 
@@ -440,6 +439,12 @@ WorldPacket const* EnumCharactersResult::Write()
 
     for (RaceUnlock const& raceUnlock : RaceUnlockData)
         _worldPacket << raceUnlock;
+
+    for (UnlockedConditionalAppearance const& unlockedConditionalAppearance : UnlockedConditionalAppearances)
+        _worldPacket << unlockedConditionalAppearance;
+
+    for (RaceLimitDisableInfo const& raceLimitDisableInfo : RaceLimitDisables)
+        _worldPacket << raceLimitDisableInfo;
 
     for (WarbandGroup const& warbandGroup : WarbandGroups)
         _worldPacket << warbandGroup;
@@ -827,16 +832,6 @@ WorldPacket const* LogXPGain::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* XPGainAborted::Write()
-{
-    _worldPacket << Victim;
-    _worldPacket << int32(Amount);
-    _worldPacket << int32(Unused1);
-    _worldPacket << int32(Unused2);
-
-    return &_worldPacket;
-}
-
 WorldPacket const* TitleEarned::Write()
 {
     _worldPacket << uint32(Index);
@@ -900,99 +895,6 @@ void SavePersonalEmblem::Read()
 WorldPacket const* PlayerSavePersonalEmblem::Write()
 {
     _worldPacket << int32(Error);
-
-    return &_worldPacket;
-}
-
-void ConvertTimerunningCharacter::Read()
-{
-    _worldPacket >> CharacterGuid;
-    _worldPacket >> RaceAndFaction;
-}
-
-void SetupWarbandGroups::Read()
-{
-    _worldPacket >> BitsSize<5>(Groups);
-    _worldPacket.ResetBitPos();
-
-    for (WarbandGroupSetup& group : Groups)
-    {
-        _worldPacket >> group.GroupID;
-        _worldPacket >> group.OrderIndex;
-        _worldPacket >> group.WarbandSceneID;
-        _worldPacket >> group.Flags;
-        _worldPacket >> group.ContentSetID;
-        _worldPacket >> Size<uint32>(group.Members);
-
-        for (WarbandGroupSetupMember& member : group.Members)
-        {
-            _worldPacket >> member.WarbandScenePlacementID;
-            _worldPacket >> member.Type;
-            _worldPacket >> member.ContentSetID;
-            if (member.Type == 0)
-                _worldPacket >> member.Guid;
-        }
-
-        _worldPacket >> SizedString::BitsSize<9>(group.Name);
-        _worldPacket.ResetBitPos();
-
-        _worldPacket >> SizedString::Data(group.Name);
-    }
-}
-
-void NeutralPlayerSelectFaction::Read()
-{
-    _worldPacket >> FactionIndex;
-}
-
-WorldPacket const* NeutralPlayerFactionSelectResult::Write()
-{
-    _worldPacket.WriteBit(Success);
-    _worldPacket.FlushBits();
-    _worldPacket << uint8(Faction);
-
-    return &_worldPacket;
-}
-
-void GetAccountCharacterList::Read()
-{
-    _worldPacket >> Token;
-    _worldPacket >> Bits<1>(Unknown);
-    _worldPacket.ResetBitPos();
-}
-
-ByteBuffer& operator<<(ByteBuffer& data, GetAccountCharacterListResult::AccountCharacter const& character)
-{
-    data << character.Unused;
-    data << character.CharacterGUID;
-    data << uint32(character.VirtualRealmAddress);
-    data << uint8(character.RaceID);
-    data << uint8(character.ClassID);
-    data << uint8(character.SexID);
-    data << uint8(character.ExperienceLevel);
-    data << uint64(character.Unused1);
-    data << uint32(character.Unused2);
-    // 6 + 9 bits of string lengths, then one pad bit to the byte boundary, then the raw (unterminated) bytes -
-    // the client appends its own NUL after reading exactly `length` bytes.
-    data << SizedString::BitsSize<6>(character.Name);
-    data << SizedString::BitsSize<9>(character.RealmName);
-    data.FlushBits();
-
-    data << SizedString::Data(character.Name);
-    data << SizedString::Data(character.RealmName);
-
-    return data;
-}
-
-WorldPacket const* GetAccountCharacterListResult::Write()
-{
-    _worldPacket << uint32(Token);
-    _worldPacket << Size<uint32>(Characters);   // the count is read before the Success bit
-    _worldPacket << Bits<1>(Success);
-    _worldPacket.FlushBits();
-
-    for (AccountCharacter const& character : Characters)
-        _worldPacket << character;
 
     return &_worldPacket;
 }

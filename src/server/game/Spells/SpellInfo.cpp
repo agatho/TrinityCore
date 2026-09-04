@@ -16,7 +16,6 @@
  */
 
 #include "SpellInfo.h"
-#include "ChallengeMode.h"
 #include "Battleground.h"
 #include "Containers.h"
 #include "Corpse.h"
@@ -1284,7 +1283,7 @@ std::array<SpellEffectInfo::StaticData, TOTAL_SPELL_EFFECTS> SpellEffectInfo::_d
     {EFFECT_IMPLICIT_TARGET_NONE,     TARGET_OBJECT_TYPE_NONE}, // 321 SPELL_EFFECT_321
     {EFFECT_IMPLICIT_TARGET_NONE,     TARGET_OBJECT_TYPE_NONE}, // 322 SPELL_EFFECT_322
     {EFFECT_IMPLICIT_TARGET_NONE,     TARGET_OBJECT_TYPE_NONE}, // 323 SPELL_EFFECT_323
-    {EFFECT_IMPLICIT_TARGET_NONE,     TARGET_OBJECT_TYPE_UNIT}, // 324 SPELL_EFFECT_COLLECT_HOUSING_DECOR
+    {EFFECT_IMPLICIT_TARGET_NONE,     TARGET_OBJECT_TYPE_NONE}, // 324 SPELL_EFFECT_324
     {EFFECT_IMPLICIT_TARGET_NONE,     TARGET_OBJECT_TYPE_NONE}, // 325 SPELL_EFFECT_325
     {EFFECT_IMPLICIT_TARGET_NONE,     TARGET_OBJECT_TYPE_NONE}, // 326 SPELL_EFFECT_326
     {EFFECT_IMPLICIT_TARGET_NONE,     TARGET_OBJECT_TYPE_NONE}, // 327 SPELL_EFFECT_327
@@ -1316,6 +1315,10 @@ std::array<SpellEffectInfo::StaticData, TOTAL_SPELL_EFFECTS> SpellEffectInfo::_d
     {EFFECT_IMPLICIT_TARGET_NONE,     TARGET_OBJECT_TYPE_DEST}, // 353 SPELL_EFFECT_CREATE_AREATRIGGER_2
     {EFFECT_IMPLICIT_TARGET_NONE,     TARGET_OBJECT_TYPE_NONE}, // 354 SPELL_EFFECT_SET_NEIGHBORHOOD_INITIATIVE
     {EFFECT_IMPLICIT_TARGET_NONE,     TARGET_OBJECT_TYPE_NONE}, // 355 SPELL_EFFECT_LEARN_HOUSE_TYPE
+    {EFFECT_IMPLICIT_TARGET_NONE,     TARGET_OBJECT_TYPE_NONE}, // 356 SPELL_EFFECT_356
+    {EFFECT_IMPLICIT_TARGET_EXPLICIT, TARGET_OBJECT_TYPE_ITEM}, // 357 SPELL_EFFECT_357
+    {EFFECT_IMPLICIT_TARGET_EXPLICIT, TARGET_OBJECT_TYPE_ITEM}, // 358 SPELL_EFFECT_358
+    {EFFECT_IMPLICIT_TARGET_EXPLICIT, TARGET_OBJECT_TYPE_ITEM}, // 359 SPELL_EFFECT_359
 } };
 
 SpellInfo::SpellInfo(SpellNameEntry const* spellName, ::Difficulty difficulty, SpellInfoLoadHelper const& data)
@@ -1566,16 +1569,6 @@ bool SpellInfo::HasAura(AuraType aura) const
             return true;
 
     return false;
-}
-
-bool SpellInfo::IsDashMovementBundle() const
-{
-    // Many spells share HasAura(SPELL_AURA_MOD_SPEED_NO_CONTROL) && HasAura(SPELL_AURA_DISABLE_GRAVITY)
-    // (Evoker Hover, Void Dash, Crane Rush, ...), but FinalizeDashMovementSpeedUpdates and
-    // PrepareDashMovementState model the Fel Rush *air* dash specifically and must not fire on the
-    // others. Keep this an explicit allowlist rather than an aura-shape test.
-    return Id == 197923  // Fel Rush air bundle
-        || Id == 389659; // Fel Rush air bundle (variant)
 }
 
 bool SpellInfo::HasAreaAuraEffect() const
@@ -2427,9 +2420,8 @@ SpellCastResult SpellInfo::CheckTarget(WorldObject const* caster, WorldObject co
             if (unitTarget->GetSpellOtherImmunityMask().HasFlag(SpellOtherImmunity::AoETarget))
                 return SPELL_FAILED_BAD_TARGETS;
 
-        if (HasAttribute(SPELL_ATTR9_TARGET_MUST_BE_GROUNDED) &&
-            (unitTarget->HasUnitMovementFlag(MOVEMENTFLAG_FALLING | MOVEMENTFLAG_SWIMMING | MOVEMENTFLAG_FLYING | MOVEMENTFLAG_HOVER) ||
-                unitTarget->HasExtraUnitMovementFlag2(MOVEMENTFLAG3_ADV_FLYING)))
+        if (HasAttribute(SPELL_ATTR9_TARGET_MUST_BE_GROUNDED)
+            && unitTarget->HasUnitMovementFlag(MOVEMENTFLAG_FALLING | MOVEMENTFLAG_SWIMMING | MOVEMENTFLAG_FLYING | MOVEMENTFLAG_HOVER | MOVEMENTFLAG_ADV_FLYING))
             return SPELL_FAILED_TARGET_NOT_GROUNDED;
     }
     // corpse specific target checks
@@ -2532,14 +2524,8 @@ SpellCastResult SpellInfo::CheckTarget(WorldObject const* caster, WorldObject co
         if (Map* map = caster->GetMap())
             if (InstanceMap* iMap = map->ToInstanceMap())
                 if (InstanceScript* instance = iMap->GetInstanceScript())
-                {
-                    // The limit applies during raid encounters, and for the whole run in Mythic Keystone
-                    // dungeons (dungeon-wide charge pool, retail 12.x).
-                    bool const limitActive = instance->IsEncounterInProgress()
-                        || (iMap->GetChallengeMode() && iMap->GetChallengeMode()->IsActive());
-                    if (limitActive && instance->GetCombatResurrectionCharges() == 0)
+                    if (instance->GetCombatResurrectionCharges() == 0 && instance->IsEncounterInProgress())
                         return SPELL_FAILED_TARGET_CANNOT_BE_RESURRECTED;
-                }
 
     return SPELL_CAST_OK;
 }

@@ -65,13 +65,6 @@ void DFTeleport::Read()
     _worldPacket >> Bits<1>(TeleportOut);
 }
 
-void DFConfirmExpandSearch::Read()
-{
-    _worldPacket >> Ticket;
-    _worldPacket >> Bits<1>(Accepted);
-    _worldPacket.ResetBitPos();
-}
-
 void DFGetSystemInfo::Read()
 {
     _worldPacket >> Bits<1>(Player);
@@ -177,13 +170,14 @@ ByteBuffer& operator<<(ByteBuffer& data, LfgPlayerDungeonInfo const& playerDunge
     data << uint32(playerDungeonInfo.CompletedMask);
     data << uint32(playerDungeonInfo.EncounterMask);
     data << Size<uint32>(playerDungeonInfo.ShortageReward);
+    data << playerDungeonInfo.Rewards;
+
+    for (LfgPlayerQuestReward const& shortageReward : playerDungeonInfo.ShortageReward)
+        data << shortageReward;
+
     data << Bits<1>(playerDungeonInfo.FirstReward);
     data << Bits<1>(playerDungeonInfo.ShortageEligible);
     data.FlushBits();
-
-    data << playerDungeonInfo.Rewards;
-    for (LfgPlayerQuestReward const& shortageReward : playerDungeonInfo.ShortageReward)
-        data << shortageReward;
 
     return data;
 }
@@ -194,19 +188,6 @@ WorldPacket const* LfgPlayerInfo::Write()
     _worldPacket << BlackList;
     for (LfgPlayerDungeonInfo const& playerDungeonInfo : Dungeon)
         _worldPacket << playerDungeonInfo;
-
-    return &_worldPacket;
-}
-
-WorldPacket const* RequestPvpRewardsResponse::Write()
-{
-    // Block 0, then the two loose flag bytes, then blocks 1..12. The two bytes sit AFTER the first block,
-    // not at the head of the packet - that ordering is what makes the captured bodies balance exactly.
-    _worldPacket << Activity[RandomBattleground];
-    _worldPacket << uint8(BrawlFlags);
-    _worldPacket << uint8(ExtraFlags);
-    for (std::size_t slot = 1; slot < Activity.size(); ++slot)
-        _worldPacket << Activity[slot];
 
     return &_worldPacket;
 }
@@ -236,8 +217,8 @@ WorldPacket const* LFGUpdateStatus::Write()
     for (ObjectGuid const& suspendedPlayer : SuspendedPlayers)
         _worldPacket << suspendedPlayer;
 
-    _worldPacket << Bits<1>(IsParty);
     _worldPacket << Bits<1>(NotifyUI);
+    _worldPacket << Bits<1>(IsParty);
     _worldPacket << Bits<1>(Joined);
     _worldPacket << Bits<1>(LfgJoined);
     _worldPacket << Bits<1>(Queued);
@@ -283,12 +264,12 @@ WorldPacket const* LFGRoleCheckUpdate::Write()
     for (uint64 bgQueueID : BgQueueIDs)
         _worldPacket << uint64(bgQueueID);
 
+    for (LFGRoleCheckUpdateMember const& member : Members)
+        _worldPacket << member;
+
     _worldPacket << Bits<1>(IsBeginning);
     _worldPacket << Bits<1>(IsRequeue);
     _worldPacket.FlushBits();
-
-    for (LFGRoleCheckUpdateMember const& member : Members)
-        _worldPacket << member;
 
     return &_worldPacket;
 }
@@ -334,11 +315,12 @@ ByteBuffer& operator<<(ByteBuffer& data, LFGPlayerRewards const& lfgPlayerReward
 {
     data << OptionalInit(lfgPlayerRewards.RewardItem);
     data << OptionalInit(lfgPlayerRewards.RewardCurrency);
+    data << uint32(lfgPlayerRewards.Quantity);
+    data << int32(lfgPlayerRewards.BonusQuantity);
+
     if (lfgPlayerRewards.RewardItem)
         data << *lfgPlayerRewards.RewardItem;
 
-    data << uint32(lfgPlayerRewards.Quantity);
-    data << int32(lfgPlayerRewards.BonusQuantity);
     if (lfgPlayerRewards.RewardCurrency)
         data << int32(*lfgPlayerRewards.RewardCurrency);
 
@@ -429,30 +411,6 @@ WorldPacket const* LFGTeleportDenied::Write()
 {
     _worldPacket << Bits<4>(Reason);
     _worldPacket.FlushBits();
-
-    return &_worldPacket;
-}
-
-WorldPacket const* OpenLfgDungeonFinder::Write()
-{
-    // INFERRED (needs sniff validation) - single uint32 LFGDungeons.db2 id. See the class comment in LFGPackets.h.
-    _worldPacket << uint32(DungeonID);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* LFGExpandSearchPrompt::Write()
-{
-    _worldPacket << Ticket;
-
-    return &_worldPacket;
-}
-
-WorldPacket const* LFGSlotInvalid::Write()
-{
-    _worldPacket << uint32(Reason);
-    _worldPacket << int32(SubReason1);
-    _worldPacket << int32(SubReason2);
 
     return &_worldPacket;
 }

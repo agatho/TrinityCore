@@ -28,7 +28,6 @@ EndScriptData */
 #include "BattlegroundMgr.h"
 #include "CellImpl.h"
 #include "Channel.h"
-#include "CharacterCache.h"
 #include "ChannelPackets.h"
 #include "Chat.h"
 #include "ChatCommand.h"
@@ -45,16 +44,12 @@ EndScriptData */
 #include "M2Stores.h"
 #include "MapManager.h"
 #include "MovementPackets.h"
+#include "MovementTypedefs.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "PhasingHandler.h"
-#include "Player.h"
-#include "PlayerTaxi.h"
 #include "PoolMgr.h"
 #include "RBAC.h"
-#include "StringFormat.h"
-#include "TaxiPackets.h"
-#include "TaxiPathGraph.h"
 #include "SpellMgr.h"
 #include "SpellPackets.h"
 #include "Transport.h"
@@ -130,7 +125,6 @@ public:
             { "modifiertree",       HandleDebugModifierTreeCommand,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "wsexpression",       HandleDebugWSExpressionCommand,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "playercondition",    HandleDebugPlayerConditionCommand,     rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
-            { "taxinodes",          HandleDebugTaxiNodesCommand,           rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "pvp warmode",        HandleDebugWarModeBalanceCommand,      rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "dummy",              HandleDebugDummyCommand,               rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "asan memoryleak",    HandleDebugMemoryLeak,                 rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
@@ -138,9 +132,7 @@ public:
             { "guidlimits",         HandleDebugGuidLimitsCommand,          rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "objectcount",        HandleDebugObjectCountCommand,         rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "questreset",         HandleDebugQuestResetCommand,          rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
-            { "personalclone",      HandleDebugBecomePersonalClone,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
-            { "encountertimeline",  HandleDebugEncounterTimelineCommand,   rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
-            { "encountertimelineexpire", HandleDebugEncounterTimelineExpireCommand, rbac::RBAC_PERM_COMMAND_DEBUG, Console::No }
+            { "personalclone",      HandleDebugBecomePersonalClone,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No }
         };
         static ChatCommandTable commandTable =
         {
@@ -1206,7 +1198,7 @@ public:
         return true;
     }
 
-    static bool HandleDebugMoveflagsCommand(ChatHandler* handler, Optional<uint32> moveFlags, Optional<uint32> moveFlagsExtra, Optional<uint32> moveFlagsExtra2)
+    static bool HandleDebugMoveflagsCommand(ChatHandler* handler, Optional<uint64> moveFlags)
     {
         Unit* target = handler->getSelectedUnit();
         if (!target)
@@ -1215,17 +1207,11 @@ public:
         if (!moveFlags)
         {
             //! Display case
-            handler->PSendSysMessage(LANG_MOVEFLAGS_GET, target->GetUnitMovementFlags(), target->GetExtraUnitMovementFlags());
+            handler->PSendSysMessage(LANG_MOVEFLAGS_GET, target->GetUnitMovementFlags(), Movement::MovementFlags_ToString(target->GetUnitMovementFlags()));
         }
         else
         {
-            target->SetUnitMovementFlags(*moveFlags);
-
-            if (moveFlagsExtra)
-                target->SetExtraUnitMovementFlags(*moveFlagsExtra);
-
-            if (moveFlagsExtra2)
-                target->SetExtraUnitMovementFlags2(*moveFlagsExtra2);
+            target->SetUnitMovementFlags(MovementFlags(*moveFlags));
 
             if (target->GetTypeId() != TYPEID_PLAYER)
                 target->DestroyForNearbyPlayers();  // Force new SMSG_UPDATE_OBJECT:CreateObject
@@ -1236,7 +1222,7 @@ public:
                 target->SendMessageToSet(moveUpdate.Write(), true);
             }
 
-            handler->PSendSysMessage(LANG_MOVEFLAGS_SET, target->GetUnitMovementFlags(), target->GetExtraUnitMovementFlags());
+            handler->PSendSysMessage(LANG_MOVEFLAGS_SET, target->GetUnitMovementFlags(), Movement::MovementFlags_ToString(target->GetUnitMovementFlags()));
         }
 
         return true;
@@ -1321,7 +1307,7 @@ public:
         {
             handler->PSendSysMessage("Loading all cells (mapId: %u). Current GameObjects " SZFMTD ", Creatures " SZFMTD, map->GetId(), map->GetObjectsStore().Size<GameObject>(), map->GetObjectsStore().Size<Creature>());
 
-            map->LoadAllCells();
+            map->LoadAllGrids();
 
             handler->PSendSysMessage("Cells loaded (mapId: %u) After load - GameObject " SZFMTD ", Creatures " SZFMTD, map->GetId(), map->GetObjectsStore().Size<GameObject>(), map->GetObjectsStore().Size<Creature>());
         }
@@ -1366,66 +1352,6 @@ public:
             handler->PSendSysMessage("Target creature's PhaseGroup in DB: %d", abs(target->GetDBPhase()));
 
         PhasingHandler::PrintToChat(handler, target);
-        return true;
-    }
-
-    // .debug encountertimeline <dungeonEncounterId> <encounterEventId> <spellId> <timeToCastMs> [severity] [iconFileId]
-    //
-    // Pushes one event onto the instance's encounter timeline, exactly as a boss script would. This exists
-    // because SMSG_INSTANCE_ENCOUNTER_EVENT_APPEND and _CAST_UPDATE have complete, byte-verified senders in
-    // InstanceScript but no caller: retail drives the timeline from its own encounter scripts plus
-    // EncounterEvent.db2, and this core has neither, so without a way to schedule an event by hand the two
-    // opcodes could never be observed on a live client at all.
-    //
-    // It is a test harness, not a substitute for the missing content - it invents no boss behaviour and
-    // guesses no timings; every value that reaches the wire is one the GM typed. Scheduling sends APPEND
-    // immediately; CAST_UPDATE follows on its own when the countdown reaches zero.
-    static bool HandleDebugEncounterTimelineCommand(ChatHandler* handler, uint32 dungeonEncounterId, uint32 encounterEventId,
-        uint32 spellId, uint32 timeToCastMs, Optional<uint8> severity, Optional<int32> iconFileId)
-    {
-        Player* player = handler->GetSession()->GetPlayer();
-        InstanceScript* instance = player->GetInstanceScript();
-        if (!instance)
-        {
-            handler->PSendSysMessage("You are not in an instance with an InstanceScript.");
-            return false;
-        }
-
-        // The caster GUID is what the client attaches the timeline entry to, so it has to be a real unit in
-        // the instance rather than a synthesised guid - selection is the only honest source for it here.
-        Unit* caster = handler->getSelectedUnit();
-        if (!caster)
-        {
-            handler->PSendSysMessage("Select the unit that should own the timeline event first.");
-            return false;
-        }
-
-        uint32 eventId = instance->ScheduleEncounterTimelineEvent(caster->GetGUID(), dungeonEncounterId, encounterEventId,
-            spellId, iconFileId.value_or(0), severity.value_or(1), Milliseconds(timeToCastMs));
-
-        handler->PSendSysMessage("Scheduled encounter timeline event %u (dungeonEncounter %u, encounterEvent %u, spell %u) "
-            "on %s in %u ms. APPEND sent now, CAST_UPDATE follows when the countdown expires.",
-            eventId, dungeonEncounterId, encounterEventId, spellId, caster->GetName().c_str(), timeToCastMs);
-        return true;
-    }
-
-    // .debug encountertimelineexpire <eventId>
-    //
-    // Reports a live timeline event as EncounterEventCastState::Expired instead of waiting for its
-    // countdown. This exists so the Expired branch of CAST_UPDATE - which normally only happens when the
-    // caster dies or leaves before its countdown runs out - can be exercised on demand.
-    static bool HandleDebugEncounterTimelineExpireCommand(ChatHandler* handler, uint32 eventId)
-    {
-        Player* player = handler->GetSession()->GetPlayer();
-        InstanceScript* instance = player->GetInstanceScript();
-        if (!instance)
-        {
-            handler->PSendSysMessage("You are not in an instance with an InstanceScript.");
-            return false;
-        }
-
-        instance->ExpireEncounterTimelineEvent(eventId);
-        handler->PSendSysMessage("Sent CAST_UPDATE with CastState 3 (Expired) for timeline event %u.", eventId);
         return true;
     }
 
@@ -1717,119 +1643,6 @@ public:
         else
             handler->PSendSysMessage("PlayerCondition %u not met", playerConditionId);
 
-        return true;
-    }
-
-    // .debug taxinodes [taxiNodeId]
-    // Replays exactly what WorldSession::SendTaxiMenu would compute for the selected player at the given
-    // node (default: the flight master / taxi node the player is standing at), and reports, per gated node,
-    // whether TaxiPathGraph could route to it, whether the discovery mask already had it, what
-    // PlayerTaxi::IsNodeUnlockedByCondition decided, and whether the bit ended up set in the outgoing masks.
-    static bool HandleDebugTaxiNodesCommand(ChatHandler* handler, Optional<uint32> taxiNodeId)
-    {
-        Player* target = handler->getSelectedPlayerOrSelf();
-        if (!target)
-        {
-            handler->SendSysMessage(LANG_PLAYER_NOT_FOUND);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-
-        return PrintTaxiDiagnostics(handler, target, taxiNodeId);
-    }
-
-    static bool PrintTaxiDiagnostics(ChatHandler* handler, Player* target, Optional<uint32> taxiNodeId)
-    {
-        uint32 curloc = taxiNodeId.value_or(0);
-        if (!curloc)
-        {
-            if (Creature* flightMaster = handler->getSelectedCreature())
-                curloc = sObjectMgr->GetTaxiNodeForFlightMaster(flightMaster->GetEntry(), flightMaster->GetPositionX(),
-                    flightMaster->GetPositionY(), flightMaster->GetPositionZ(), flightMaster->GetMapId(), target->GetTeam());
-
-            if (!curloc)
-                curloc = sObjectMgr->GetNearestTaxiNode(target->GetPositionX(), target->GetPositionY(),
-                    target->GetPositionZ(), target->GetMapId(), target->GetTeam());
-        }
-
-        TaxiNodesEntry const* current = sTaxiNodesStore.LookupEntry(curloc);
-        if (!current)
-        {
-            handler->PSendSysMessage("No taxi node %u (and none could be resolved from the current position).", curloc);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-
-        bool taxiCheater = target->isTaxiCheater();
-        handler->PSendSysMessage("Taxi diagnostics for %s at node %u (%s), taxiCheater=%u, team=%u",
-            target->GetName().c_str(), curloc, current->Name[handler->GetSessionDbcLocale()], uint32(taxiCheater), target->GetTeam());
-
-        WorldPackets::Taxi::ShowTaxiNodes data;
-        target->m_taxi.AppendTaximaskTo(data, taxiCheater);
-
-        TaxiMask reachableNodes;
-        TaxiPathGraph::GetReachableNodesMask(current, &reachableNodes);
-        for (std::size_t i = 0; i < reachableNodes.size(); ++i)
-        {
-            data.CanLandNodes[i] &= reachableNodes[i];
-            data.CanUseNodes[i] &= reachableNodes[i];
-        }
-
-        std::vector<TaxiConditionUnlockReport> report;
-        if (!taxiCheater)
-            PlayerTaxi::AppendConditionUnlockedNodesTo(data.CanLandNodes, data.CanUseNodes, reachableNodes, target, &report);
-        else
-            handler->SendSysMessage("Player is a taxi cheater - the condition-unlock pass is skipped entirely.");
-
-        // The client keeps a node's pin only while the node's UiMap can be related to the UiMap of the node
-        // the window was opened at, so the resolved UiMap is part of "why is this pin missing".
-        auto resolveUiMap = [](TaxiNodesEntry const* node)
-        {
-            uint32 uiMapId = uint32(-1);
-            if (!DB2Manager::GetUiMapPosition(node->Pos.X, node->Pos.Y, node->Pos.Z, node->ContinentID, 0, 0, 0,
-                UI_MAP_SYSTEM_ADVENTURE, false, &uiMapId))
-                DB2Manager::GetUiMapPosition(node->Pos.X, node->Pos.Y, node->Pos.Z, node->ContinentID, 0, 0, 0,
-                    UI_MAP_SYSTEM_TAXI, false, &uiMapId);
-            return uiMapId;
-        };
-
-        handler->PSendSysMessage("current node %u uiMap=%d", curloc, int32(resolveUiMap(current)));
-
-        for (TaxiConditionUnlockReport const& entry : report)
-        {
-            TaxiNodesEntry const* node = sTaxiNodesStore.LookupEntry(entry.NodeID);
-            handler->PSendSysMessage("node %u %s: cond=%d viscond=%u flags=0x%X uiMap=%d reachable=%u known=%u passed=%u bitSet=%u",
-                entry.NodeID, node ? node->Name[handler->GetSessionDbcLocale()] : "?", entry.ConditionID,
-                entry.VisibilityConditionID, uint32(entry.Flags), node ? int32(resolveUiMap(node)) : -1,
-                uint32(entry.InReachableMask), uint32(entry.AlreadyOffered), uint32(entry.ConditionPassed),
-                uint32(entry.BitSet));
-        }
-
-        // The masks the client would actually receive, so a "the server did set it" claim can be checked
-        // against the wire rather than inferred.
-        std::string land, use;
-        for (TaxiNodesEntry const* node : sTaxiNodesStore)
-        {
-            uint32 field = uint32((node->ID - 1) / (sizeof(TaxiMask::value_type) * 8));
-            TaxiMask::value_type submask = TaxiMask::value_type(1 << ((node->ID - 1) % (sizeof(TaxiMask::value_type) * 8)));
-            if (field >= data.CanLandNodes.size())
-                continue;
-            if (data.CanLandNodes[field] & submask)
-                land += Trinity::StringFormat("{} ", node->ID);
-            if (data.CanUseNodes[field] & submask)
-                use += Trinity::StringFormat("{} ", node->ID);
-        }
-        handler->PSendSysMessage("mask bytes=%u (qwords=%u), TaxiNodes index size=%u",
-            uint32(data.CanLandNodes.size()), uint32(data.CanLandNodes.size() / 8), sTaxiNodesStore.GetNumRows());
-
-        // The wire-level view: the uint64 block the current node lives in, for both masks. This is the one
-        // line that separates "the server never set the bit" from "the client dropped a bit that shipped".
-        uint32 const qword = PlayerTaxi::QwordIndexForNode(curloc);
-        handler->PSendSysMessage("CanLandNodes %s", PlayerTaxi::DescribeMaskQword(data.CanLandNodes, qword).c_str());
-        handler->PSendSysMessage("CanUseNodes  %s", PlayerTaxi::DescribeMaskQword(data.CanUseNodes, qword).c_str());
-
-        handler->PSendSysMessage("CanLandNodes (all): %s", land.c_str());
-        handler->PSendSysMessage("CanUseNodes  (all): %s", use.c_str());
         return true;
     }
 

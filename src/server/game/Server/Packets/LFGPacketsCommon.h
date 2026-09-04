@@ -29,9 +29,7 @@ namespace WorldPackets
         {
             None = 0,
             Battlegrounds = 1,
-            Lfg = 2,
-            LfgListListing = 4,         // premade group listing tickets (sniff-verified, 68275)
-            LfgListApplication = 6      // premade group application tickets (sniff-verified, 68275)
+            Lfg = 2
         };
 
         struct RideTicket

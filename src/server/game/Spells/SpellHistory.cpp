@@ -32,7 +32,6 @@
 #include "SpellMgr.h"
 #include "SpellPackets.h"
 #include "World.h"
-#include <algorithm>
 #include <boost/container/small_vector.hpp>
 
 template<>
@@ -700,6 +699,13 @@ bool SpellHistory::HasCooldown(uint32 spellId, uint32 itemId /*= 0*/) const
     return HasCooldown(sSpellMgr->AssertSpellInfo(spellId, _owner->GetMap()->GetDifficultyID()), itemId);
 }
 
+bool SpellHistory::HasCooldownOnHold(uint32 spellId) const
+{
+    // TODO: Delete this function and make SpellHistory::IsReady return enum with reason instead of bool
+    auto itr = _spellCooldowns.find(spellId);
+    return itr != _spellCooldowns.end() && itr->second.OnHold;
+}
+
 SpellHistory::Duration SpellHistory::GetRemainingCooldown(SpellInfo const* spellInfo) const
 {
     TimePoint end;
@@ -971,20 +977,6 @@ int32 SpellHistory::GetMaxCharges(uint32 chargeCategoryId) const
     uint32 charges = chargeCategoryEntry->MaxCharges;
     charges += _owner->GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_MAX_CHARGES, chargeCategoryId);
     return charges;
-}
-
-int32 SpellHistory::GetChargeCount(uint32 chargeCategoryId) const
-{
-    int32 maxCharges = GetMaxCharges(chargeCategoryId);
-    auto itr = _categoryCharges.find(chargeCategoryId);
-    if (itr == _categoryCharges.end())
-        return maxCharges;
-
-    // entries whose recharge already finished are only popped lazily in Update(), skip them here
-    TimePoint now = time_point_cast<Duration>(GameTime::GetTime<Clock>());
-    int32 used = int32(std::count_if(itr->second.begin(), itr->second.end(),
-        [now](ChargeEntry const& charge) { return charge.RechargeEnd > now; }));
-    return std::max(maxCharges - used, 0);
 }
 
 int32 SpellHistory::GetChargeRecoveryTime(uint32 chargeCategoryId) const

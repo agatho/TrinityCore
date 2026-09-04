@@ -234,13 +234,7 @@ void SessionService::KillInactiveSessions()
         for (auto itr = inactiveSessions.begin(); itr != inactiveSessions.end(); )
         {
             auto sessionItr = _sessions.find(*itr);
-            if (sessionItr == _sessions.end())
-            {
-                // id was marked inactive without ever being registered in _sessions (or was already
-                // removed) - only drop the stale id, erasing an end() iterator is undefined behavior
-                itr = inactiveSessions.erase(itr);
-            }
-            else if (sessionItr->second->InactiveTimestamp < now)
+            if (sessionItr == _sessions.end() || sessionItr->second->InactiveTimestamp < now)
             {
                 _sessions.erase(sessionItr);
                 itr = inactiveSessions.erase(itr);

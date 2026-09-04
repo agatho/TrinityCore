@@ -56,8 +56,8 @@ bool WorldSession::ValidateMovementInfo(Unit const* mover, MovementInfo* mi) con
         if (check) \
         { \
             TC_LOG_DEBUG("entities.unit", "Player::ValidateMovementInfo: Violation of MovementFlags found ({}). " \
-                "MovementFlags: {}, MovementFlags2: {}, MovementFlags3: {} for player {}. Mask {} will be removed.", \
-                STRINGIZE(check), mi->GetMovementFlags(), mi->GetExtraMovementFlags(), mi->GetExtraMovementFlags2(), GetPlayer()->GetGUID(), maskToRemove); \
+                "MovementFlags: {} for player {}. Mask {} will be removed.", \
+                STRINGIZE(check), mi->GetMovementFlags(), GetPlayer()->GetGUID(), maskToRemove); \
             mi->RemoveMovementFlag((maskToRemove)); \
         } \
     } while (0)
@@ -295,22 +295,11 @@ void WorldSession::HandleMoveWorldportAck()
     }
 
     if (!seamlessTeleport)
-    {
         player->SendInitialPacketsAfterAddToMap();
-
-        // Any pending resurrect offer is void once the world port completes; 68275 sends the clear
-        // right after MOVE_UPDATE_TELEPORT on (non-seamless) map entry regardless of pending state.
-        player->ClearResurrectRequestData();
-        player->SendDirectMessage(WorldPackets::Misc::ClearResurrect().Write());
-    }
     else
     {
         player->UpdateVisibilityForPlayer();
-        // The non-seamless path (Player::SendInitialPacketsAfterAddToMap) loops every garrison; this branch only
-        // ever announced the WoD one, so an order-hall / covenant owner arriving by a seamless transfer never got
-        // its GarrisonRemoteInfo. Garrison::SendRemoteInfo self-guards on the site's ParentMapID, so looping is
-        // behaviour-identical for a WoD-only owner.
-        for (auto const& [garrType, garrison] : player->GetGarrisons())
+        if (Garrison* garrison = player->GetGarrison())
             garrison->SendRemoteInfo();
     }
 
@@ -492,9 +481,9 @@ void WorldSession::HandleMovementOpcode(OpcodeClient opcode, MovementInfo& movem
 
     Player* plrMover = mover->ToPlayer();
 
-    TC_LOG_TRACE("opcodes.movement", "HandleMovementOpcode Name {}: opcode {} {} Flags {} Flags2 {} Flags3 {} Pos {}",
+    TC_LOG_TRACE("opcodes.movement", "HandleMovementOpcode Name {}: opcode {} {} Flags {} Pos {}",
         mover->GetName(), opcode, GetOpcodeNameForLogging(opcode),
-        movementInfo.flags, movementInfo.flags2, movementInfo.flags3, movementInfo.pos);
+        movementInfo.flags, movementInfo.pos);
 
     // ignore, waiting processing in WorldSession::HandleMoveWorldportAckOpcode and WorldSession::HandleMoveTeleportAck
     if (plrMover && plrMover->IsBeingTeleported())
@@ -553,20 +542,6 @@ void WorldSession::HandleMovementOpcode(OpcodeClient opcode, MovementInfo& movem
     else if (plrMover && plrMover->GetTransport())                // if we were on a transport, leave
         plrMover->GetTransport()->RemovePassenger(plrMover);
 
-    // fall damage generation (ignore in flight case that can be triggered also at lags in moment teleportation to another map).
-    if (opcode == CMSG_MOVE_FALL_LAND && plrMover && !plrMover->IsInFlight())
-        plrMover->HandleFall(movementInfo);
-
-    // interrupt parachutes upon falling or landing in water
-    if (opcode == CMSG_MOVE_FALL_LAND || opcode == CMSG_MOVE_START_SWIM || opcode == CMSG_MOVE_SET_FLY)
-        mover->RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags::LandingOrFlight); // Parachutes
-
-    if (opcode == CMSG_MOVE_SET_FLY || opcode == CMSG_MOVE_SET_ADV_FLY)
-    {
-        _player->UnsummonPetTemporaryIfAny(); // always do the pet removal on current client activeplayer only
-        _player->UnsummonBattlePetTemporaryIfAny(true);
-    }
-
     /* process position-change */
     movementInfo.guid = mover->GetGUID();
     movementInfo.time = AdjustClientMovementTime(movementInfo.time);
@@ -594,6 +569,20 @@ void WorldSession::HandleMovementOpcode(OpcodeClient opcode, MovementInfo& movem
     WorldPackets::Movement::MoveUpdate moveUpdate;
     moveUpdate.Status = &mover->m_movementInfo;
     mover->SendMessageToSet(moveUpdate.Write(), _player);
+
+    // fall damage generation (ignore in flight case that can be triggered also at lags in moment teleportation to another map).
+    if (opcode == CMSG_MOVE_FALL_LAND && plrMover && !plrMover->IsInFlight())
+        plrMover->HandleFall();
+
+    // interrupt parachutes upon falling or landing in water
+    if (opcode == CMSG_MOVE_FALL_LAND || opcode == CMSG_MOVE_START_SWIM)
+        mover->RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags::LandingOrFlight); // Parachutes
+
+    if (opcode == CMSG_MOVE_SET_FLY || opcode == CMSG_MOVE_SET_ADV_FLY)
+    {
+        _player->UnsummonPetTemporaryIfAny(); // always do the pet removal on current client activeplayer only
+        _player->UnsummonBattlePetTemporaryIfAny(true);
+    }
 
     if (plrMover)                                            // nothing is charmed, or player charmed
     {
@@ -864,6 +853,43 @@ void WorldSession::HandleMoveSetModMovementForceMagnitudeAck(WorldPackets::Movem
     mover->SendMessageToSet(updateModMovementForceMagnitude.Write(), false);
 }
 
+void WorldSession::HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyInertiaAck& moveApplyInertiaAck)
+{
+    Unit* mover = ValidateAndGetUnitBeingMoved(moveApplyInertiaAck.Ack.Status.guid, moveApplyInertiaAck.GetOpcode(), true);
+    if (!mover)
+        return;
+
+    if (!ValidateMovementInfo(mover, &moveApplyInertiaAck.Ack.Status))
+        return;
+
+    moveApplyInertiaAck.Ack.Status.time = AdjustClientMovementTime(moveApplyInertiaAck.Ack.Status.time);
+    mover->m_movementInfo = moveApplyInertiaAck.Ack.Status;
+
+    WorldPackets::Movement::MoveUpdateApplyInertia updateApplyInertia;
+    updateApplyInertia.Status = &mover->m_movementInfo;
+    updateApplyInertia.InertiaID = moveApplyInertiaAck.InertiaID;
+    updateApplyInertia.LifetimeMs = moveApplyInertiaAck.LifetimeMs;
+    mover->SendMessageToSet(updateApplyInertia.Write(), false);
+}
+
+void WorldSession::HandleMoveRemoveInertiaAck(WorldPackets::Movement::MoveRemoveInertiaAck& moveRemoveInertiaAck)
+{
+    Unit* mover = ValidateAndGetUnitBeingMoved(moveRemoveInertiaAck.Ack.Status.guid, moveRemoveInertiaAck.GetOpcode(), true);
+    if (!mover)
+        return;
+
+    if (!ValidateMovementInfo(mover, &moveRemoveInertiaAck.Ack.Status))
+        return;
+
+    moveRemoveInertiaAck.Ack.Status.time = AdjustClientMovementTime(moveRemoveInertiaAck.Ack.Status.time);
+    mover->m_movementInfo = moveRemoveInertiaAck.Ack.Status;
+
+    WorldPackets::Movement::MoveUpdateRemoveInertia updateRemoveInertia;
+    updateRemoveInertia.Status = &mover->m_movementInfo;
+    updateRemoveInertia.InertiaID = moveRemoveInertiaAck.InertiaID;
+    mover->SendMessageToSet(updateRemoveInertia.Write(), false);
+}
+
 void WorldSession::HandleMoveSplineDoneOpcode(WorldPackets::Movement::MoveSplineDone& moveSplineDone)
 {
     Unit* mover = ValidateAndGetUnitBeingMoved(moveSplineDone.Status.guid, moveSplineDone.GetOpcode(), false);
@@ -967,28 +993,9 @@ void WorldSession::HandleTimeSyncResponse(WorldPackets::Misc::TimeSyncResponse c
     HandleTimeSync(timeSyncResponse.SequenceIndex, timeSyncResponse.ClientTime, timeSyncResponse.GetReceivedTime());
 }
 
-void WorldSession::HandleDiscardedTimeSyncAcks(WorldPackets::Misc::DiscardedTimeSyncAcks const& discardedTimeSyncAcks)
-{
-    // The client is telling us that it dropped the time sync work it still had queued, so nothing at
-    // or below this sequence index will ever be answered. Without this, those requests sit in
-    // _pendingTimeSyncRequests for the rest of the session - the map is only ever shrunk by a
-    // matching response or by ResetTimeSync - and every one of them is a sample we keep waiting for.
-    // The two special counters live at the top of the range and are deliberately out of reach of
-    // this sweep, which only ever walks up to a real sequence index.
-    _pendingTimeSyncRequests.erase(_pendingTimeSyncRequests.begin(),
-        _pendingTimeSyncRequests.upper_bound(discardedTimeSyncAcks.MaxSequenceIndex));
-}
-
 void WorldSession::HandleQueuedMessagesEnd(WorldPackets::Auth::QueuedMessagesEnd const& queuedMessagesEnd)
 {
     HandleTimeSync(SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER, queuedMessagesEnd.Timestamp, queuedMessagesEnd.GetRawPacket()->GetReceivedTime());
-}
-
-void WorldSession::HandleSuspendCommsAck(WorldPackets::Auth::SuspendCommsAck const& suspendCommsAck)
-{
-    // Same shape and same clock as CMSG_TIME_SYNC_RESPONSE, so it is one more clock delta sample,
-    // taken at the earliest possible moment on the instance connection.
-    HandleTimeSync(suspendCommsAck.SerialNumber, suspendCommsAck.Timestamp, suspendCommsAck.GetRawPacket()->GetReceivedTime());
 }
 
 void WorldSession::HandleMoveInitActiveMoverComplete(WorldPackets::Movement::MoveInitActiveMoverComplete const& moveInitActiveMoverComplete)
@@ -1037,77 +1044,4 @@ void WorldSession::ComputeNewClockDelta()
         _player->SetPlayerLocalFlag(PLAYER_LOCAL_FLAG_OVERRIDE_TRANSPORT_SERVER_TIME);
         _player->SetTransportServerTime(int32(_timeSyncClockDelta));
     }
-}
-
-void WorldSession::HandleMoveApplyInertiaAck(WorldPackets::Movement::MoveApplyInertiaAck& moveApplyInertiaAck)
-{
-    Unit* mover = _player->m_unitMovedByMe;
-    ASSERT(mover != nullptr);
-    ValidateMovementInfo(mover, &moveApplyInertiaAck.Ack.Status);
-
-    if (moveApplyInertiaAck.Ack.Status.guid != mover->GetGUID())
-    {
-        TC_LOG_ERROR("network", "HandleMoveApplyInertiaAck: guid error, expected {}, got {}",
-            mover->GetGUID().ToString(), moveApplyInertiaAck.Ack.Status.guid.ToString());
-        return;
-    }
-
-    moveApplyInertiaAck.Ack.Status.time = AdjustClientMovementTime(moveApplyInertiaAck.Ack.Status.time);
-
-    WorldPackets::Movement::MoveUpdateApplyInertia updateApplyInertia;
-    updateApplyInertia.Status = &moveApplyInertiaAck.Ack.Status;
-    updateApplyInertia.MovementInertiaID = moveApplyInertiaAck.MovementInertiaID;
-    updateApplyInertia.LifetimeMs = moveApplyInertiaAck.LifetimeMs;
-    mover->SendMessageToSet(updateApplyInertia.Write(), false);
-}
-
-void WorldSession::HandleMoveRemoveInertiaAck(WorldPackets::Movement::MoveRemoveInertiaAck& moveRemoveInertiaAck)
-{
-    Unit* mover = _player->m_unitMovedByMe;
-    ASSERT(mover != nullptr);
-    ValidateMovementInfo(mover, &moveRemoveInertiaAck.Ack.Status);
-
-    if (moveRemoveInertiaAck.Ack.Status.guid != mover->GetGUID())
-    {
-        TC_LOG_ERROR("network", "HandleMoveRemoveInertiaAck: guid error, expected {}, got {}",
-            mover->GetGUID().ToString(), moveRemoveInertiaAck.Ack.Status.guid.ToString());
-        return;
-    }
-
-    moveRemoveInertiaAck.Ack.Status.time = AdjustClientMovementTime(moveRemoveInertiaAck.Ack.Status.time);
-
-    WorldPackets::Movement::MoveUpdateRemoveInertia updateRemoveInertia;
-    updateRemoveInertia.Status = &moveRemoveInertiaAck.Ack.Status;
-    updateRemoveInertia.MovementInertiaID = moveRemoveInertiaAck.MovementInertiaID;
-    mover->SendMessageToSet(updateRemoveInertia.Write(), false);
-}
-
-void WorldSession::HandleMoveAddImpulseAck(WorldPackets::Movement::MoveAddImpulseAck& moveAddImpulseAck)
-{
-    Unit* mover = _player->m_unitMovedByMe;
-    ASSERT(mover != nullptr);
-    ValidateMovementInfo(mover, &moveAddImpulseAck.Ack.Status);
-
-    if (moveAddImpulseAck.Ack.Status.guid != mover->GetGUID())
-    {
-        TC_LOG_ERROR("network", "HandleMoveAddImpulseAck: guid error, expected {}, got {}",
-            mover->GetGUID().ToString(), moveAddImpulseAck.Ack.Status.guid.ToString());
-        return;
-    }
-
-    moveAddImpulseAck.Ack.Status.time = AdjustClientMovementTime(moveAddImpulseAck.Ack.Status.time);
-
-    WorldPackets::Movement::MoveUpdateAddImpulse updateAddImpulse;
-    updateAddImpulse.Status = &moveAddImpulseAck.Ack.Status;
-    mover->SendMessageToSet(updateAddImpulse.Write(), false);
-}
-
-void WorldSession::HandleMoveSetCanDriveAck(WorldPackets::Movement::MoveSetCanDriveAck& moveSetCanDriveAck)
-{
-    ValidateMovementInfo(_player->m_unitMovedByMe, &moveSetCanDriveAck.Ack.Status);
-}
-
-void WorldSession::HandleMoveStartDriveForward(WorldPackets::Movement::MoveStartDriveForward& moveStartDriveForward)
-{
-    HandleMovementOpcode(CMSG_MOVE_START_DRIVE_FORWARD, moveStartDriveForward.Status);
 }

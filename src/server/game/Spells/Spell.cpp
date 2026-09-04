@@ -35,8 +35,6 @@
 #include "DynamicObject.h"
 #include "G3DPosition.hpp"
 #include "GameObjectAI.h"
-#include "Garrison.h"
-#include "GarrisonMgr.h"
 #include "GridNotifiersImpl.h"
 #include "Guild.h"
 #include "InstanceLockMgr.h"
@@ -492,15 +490,11 @@ m_spellValue(new SpellValue(m_spellInfo, caster)), _spellEvent(nullptr)
     // Get data for type of attack
     m_attackType = info->GetAttackType();
 
-    // Base school, then SPELL_AURA_MOD_ABILITY_SCHOOL_MASK (220) when present on the caster
-    if (Unit const* unitCaster = m_caster->ToUnit())
-        m_spellSchoolMask = unitCaster->GetSchoolMaskForSpell(info);
-    else
-        m_spellSchoolMask = info->GetSchoolMask();
+    m_spellSchoolMask = info->GetSchoolMask();           // Can be override for some spell (wand shoot for example)
 
     if (Player const* playerCaster = m_caster->ToPlayer())
     {
-        // wand case (overrides ability school mask — wand damage type is authoritative)
+        // wand case
         if (m_attackType == RANGED_ATTACK)
             if ((playerCaster->GetClassMask() & CLASSMASK_WAND_USERS) != 0)
                 if (Item* pItem = playerCaster->GetWeaponForAttack(RANGED_ATTACK))
@@ -1542,7 +1536,7 @@ void Spell::SelectImplicitCasterDestTargets(SpellEffectInfo const& spellEffectIn
             {
                 angle = [&]()
                 {
-                    switch (m_caster->m_movementInfo.GetMovementFlags() & (MOVEMENTFLAG_FORWARD | MOVEMENTFLAG_BACKWARD | MOVEMENTFLAG_STRAFE_LEFT | MOVEMENTFLAG_STRAFE_RIGHT))
+                    switch (uint64(m_caster->m_movementInfo.GetMovementFlags() & (MOVEMENTFLAG_FORWARD | MOVEMENTFLAG_BACKWARD | MOVEMENTFLAG_STRAFE_LEFT | MOVEMENTFLAG_STRAFE_RIGHT)))
                     {
                         case MOVEMENTFLAG_NONE:
                         case MOVEMENTFLAG_FORWARD:
@@ -2176,13 +2170,8 @@ void Spell::SearchTargets(SEARCHER& searcher, uint32 containerMask, WorldObject*
     bool searchInWorld = (containerMask & (GRID_MAP_TYPE_MASK_CREATURE | GRID_MAP_TYPE_MASK_PLAYER | GRID_MAP_TYPE_MASK_CORPSE)) != 0;
     if (searchInGrid || searchInWorld)
     {
-        float x, y;
-        x = pos->GetPositionX();
-        y = pos->GetPositionY();
-
-        CellCoord p(Trinity::ComputeCellCoord(x, y));
-        Cell cell(p);
-        cell.SetNoCreate();
+        float x = pos->GetPositionX();
+        float y = pos->GetPositionY();
 
         Map* map = referer->GetMap();
 
@@ -2900,7 +2889,6 @@ void Spell::TargetInfo::DoDamageAndTriggers(Spell* spell)
 
             healInfo = std::make_unique<HealInfo>(caster, spell->unitTarget, addhealth, spell->m_spellInfo, spell->m_spellInfo->GetSchoolMask());
             caster->HealBySpell(*healInfo, IsCrit);
-            caster->ContributeLeech(healInfo->GetHeal(), spell->m_spellInfo);
             spell->unitTarget->GetThreatManager().ForwardThreatForAssistingMe(caster, float(healInfo->GetEffectiveHeal()) * 0.5f, spell->m_spellInfo);
             spell->m_healing = healInfo->GetEffectiveHeal();
 
@@ -2943,7 +2931,6 @@ void Spell::TargetInfo::DoDamageAndTriggers(Spell* spell)
                 spell->m_damage = damageInfo.damage;
 
                 caster->DealSpellDamage(&damageInfo, true);
-                caster->ContributeLeech(damageInfo.damage, spell->m_spellInfo);
 
                 // Send log damage message to client
                 caster->SendSpellNonMeleeDamageLog(&damageInfo);
@@ -3223,19 +3210,9 @@ SpellMissInfo Spell::PreprocessSpellHit(Unit* unit, TargetInfo& hitInfo)
             hitInfo.AuraDuration = Aura::CalcMaxDuration(m_spellInfo, origCaster, &m_powerCost);
 
         // unit is immune to aura if it was diminished to 0 duration
-        if (!hitInfo.Positive)
-        {
-            bool const notImmune = unit->ApplyDiminishingToDuration(m_spellInfo, hitInfo.AuraDuration, origCaster, diminishLevel);
-
-            // Notify observers that a diminishing-returns category has (re)started on the target so the
-            // client's DR tracker can start/refresh its countdown for that category (SMSG_UNIT_DIMINISHING_RETURN_START).
-            if (hitInfo.DRGroup)
-                unit->SendDiminishingReturnStart(hitInfo.DRGroup, diminishLevel > DIMINISHING_LEVEL_1, !notImmune);
-
-            if (!notImmune)
-                if (std::all_of(std::begin(m_spellInfo->GetEffects()), std::end(m_spellInfo->GetEffects()), [](SpellEffectInfo const& effInfo) { return !effInfo.IsEffect() || effInfo.Effect == SPELL_EFFECT_APPLY_AURA; }))
-                    return SPELL_MISS_IMMUNE;
-        }
+        if (!hitInfo.Positive && !unit->ApplyDiminishingToDuration(m_spellInfo, hitInfo.AuraDuration, origCaster, diminishLevel))
+            if (std::all_of(std::begin(m_spellInfo->GetEffects()), std::end(m_spellInfo->GetEffects()), [](SpellEffectInfo const& effInfo) { return !effInfo.IsEffect() || effInfo.Effect == SPELL_EFFECT_APPLY_AURA; }))
+                return SPELL_MISS_IMMUNE;
     }
 
     return SPELL_MISS_NONE;
@@ -3872,14 +3849,6 @@ void Spell::_cast(bool skipCheck)
         player->FailCriteria(CriteriaFailEvent::CastSpell, m_spellInfo->Id);
         player->StartCriteria(CriteriaStartEvent::CastSpell, m_spellInfo->Id);
         player->UpdateCriteria(CriteriaType::CastSpell, m_spellInfo->Id);
-
-        // Abominable Stitching (Necrolord covenant sanctum, GarrTalentTree 321): a "Construct Body: X" recipe is
-        // an ordinary reagent-consuming cast, so this is where the sanctum records the new construct in the
-        // owner's stable. The membership test is one hash lookup against a set that is empty on any build whose
-        // client data does not publish SkillLine 2787.
-        if (sGarrisonMgr.IsAbominationConstructRecipe(m_spellInfo->Id))
-            if (Garrison* sanctum = player->GetGarrison(GARRISON_TYPE_COVENANT))
-                sanctum->GetAbominationFactory().BuildConstruct(m_spellInfo->Id);
     }
 
     // Spells that don't create items can have this attribute - handle here
@@ -4433,10 +4402,7 @@ void Spell::finish(SpellCastResult result)
     {
         // Empower spells trigger gcd at the end of cast instead of at start
         if (SpellInfo const* gcd = sSpellMgr->GetSpellInfo(SPELL_EMPOWER_HARDCODED_GCD, DIFFICULTY_NONE))
-        {
             unitCaster->GetSpellHistory()->AddGlobalCooldown(gcd, Milliseconds(gcd->StartRecoveryTime));
-            unitCaster->RewardLeech();
-        }
     }
 
     if (result != SPELL_CAST_OK)
@@ -5820,10 +5786,10 @@ SpellCastResult Spell::CheckCast(bool strict, int32* param1 /*= nullptr*/, int32
         {
             if (!m_caster->ToUnit()->GetSpellHistory()->IsReady(m_spellInfo, m_castItemEntry))
             {
-                if (m_triggeredByAuraSpell || m_spellInfo->IsCooldownStartedOnEvent())
+                if (m_triggeredByAuraSpell || (m_spellInfo->IsCooldownStartedOnEvent() && !m_caster->ToUnit()->GetSpellHistory()->HasCooldownOnHold(m_spellInfo->Id)))
                     return SPELL_FAILED_DONT_REPORT;
-                else
-                    return SPELL_FAILED_NOT_READY;
+
+                return SPELL_FAILED_NOT_READY;
             }
 
             if ((IsAutoRepeat() || m_spellInfo->CategoryId == 76) && !m_caster->ToUnit()->isAttackReady(RANGED_ATTACK))
@@ -9251,8 +9217,6 @@ void Spell::TriggerGlobalCooldown()
     }
 
     m_caster->ToUnit()->GetSpellHistory()->AddGlobalCooldown(m_spellInfo, gcd);
-    // Retail leech is GCD-batched (SimC / Nyr97 on TC#30385) — grant stored heal when a GCD starts
-    m_caster->ToUnit()->RewardLeech();
 }
 
 void Spell::CancelGlobalCooldown()

@@ -23,7 +23,6 @@
 #include "Battleground.h"
 #include "BattlegroundMgr.h"
 #include "BattlePetMgr.h"
-#include "BattlePetPackets.h"
 #include "CellImpl.h"
 #include "CharmInfo.h"
 #include "CombatLogPackets.h"
@@ -35,7 +34,6 @@
 #include "CreatureTextMgr.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
-#include "DB2Structure.h"
 #include "DuelPackets.h"
 #include "DynamicObject.h"
 #include "GameEventSender.h"
@@ -43,18 +41,13 @@
 #include "GameObjectAI.h"
 #include "GameTime.h"
 #include "Garrison.h"
-#include "GarrisonMgr.h"
 #include "GossipDef.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
 #include "Guild.h"
-#include "Housing.h"
-#include "HousingMgr.h"
-#include "HousingPackets.h"
 #include "InstanceScript.h"
 #include "Item.h"
-#include "ItemUpgradeMgr.h"
 #include "Language.h"
 #include "Log.h"
 #include "Loot.h"
@@ -63,17 +56,13 @@
 #include "MiscPackets.h"
 #include "MotionMaster.h"
 #include "MoveSpline.h"
-#include "Neighborhood.h"
-#include "NeighborhoodMgr.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "OutdoorPvPMgr.h"
 #include "PathGenerator.h"
 #include "Pet.h"
 #include "PhasingHandler.h"
-#include "Account.h"
 #include "Player.h"
-#include "RealmList.h"
 #include "QuestMgr.h"
 #include "ReputationMgr.h"
 #include "RestMgr.h"
@@ -180,7 +169,7 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectScriptEffect,                             // 77 SPELL_EFFECT_SCRIPT_EFFECT
     &Spell::EffectUnused,                                   // 78 SPELL_EFFECT_ATTACK
     &Spell::EffectSanctuary,                                // 79 SPELL_EFFECT_SANCTUARY
-    &Spell::EffectModifyFollowerItemLevel,                   // 80 SPELL_EFFECT_MODIFY_FOLLOWER_ITEM_LEVEL
+    &Spell::EffectNULL,                                     // 80 SPELL_EFFECT_MODIFY_FOLLOWER_ITEM_LEVEL
     &Spell::EffectNULL,                                     // 81 SPELL_EFFECT_PUSH_ABILITY_TO_ACTION_BAR
     &Spell::EffectNULL,                                     // 82 SPELL_EFFECT_BIND_SIGHT
     &Spell::EffectDuel,                                     // 83 SPELL_EFFECT_DUEL
@@ -246,7 +235,7 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectUnused,                                   //143 SPELL_EFFECT_APPLY_AREA_AURA_OWNER
     &Spell::EffectKnockBack,                                //144 SPELL_EFFECT_KNOCK_BACK_DEST
     &Spell::EffectPullTowardsDest,                          //145 SPELL_EFFECT_PULL_TOWARDS_DEST        Black Hole Effect
-    &Spell::EffectRestoreGarrisonTroopVitality,              //146 SPELL_EFFECT_RESTORE_GARRISON_TROOP_VITALITY
+    &Spell::EffectNULL,                                     //146 SPELL_EFFECT_RESTORE_GARRISON_TROOP_VITALITY
     &Spell::EffectQuestFail,                                //147 SPELL_EFFECT_QUEST_FAIL               quest fail
     &Spell::EffectTriggerMissileSpell,                      //148 SPELL_EFFECT_TRIGGER_MISSILE_SPELL_WITH_VALUE
     &Spell::EffectChargeDest,                               //149 SPELL_EFFECT_CHARGE_DEST
@@ -311,17 +300,17 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectNULL,                                     //208 SPELL_EFFECT_SET_REPUTATION
     &Spell::EffectUnused,                                   //209 SPELL_EFFECT_209
     &Spell::EffectLearnGarrisonBuilding,                    //210 SPELL_EFFECT_LEARN_GARRISON_BUILDING
-    &Spell::EffectLearnGarrisonSpecialization,               //211 SPELL_EFFECT_LEARN_GARRISON_SPECIALIZATION
+    &Spell::EffectNULL,                                     //211 SPELL_EFFECT_LEARN_GARRISON_SPECIALIZATION
     &Spell::EffectRemoveAuraBySpellLabel,                   //212 SPELL_EFFECT_REMOVE_AURA_BY_SPELL_LABEL
     &Spell::EffectJumpDest,                                 //213 SPELL_EFFECT_JUMP_DEST_2
     &Spell::EffectCreateGarrison,                           //214 SPELL_EFFECT_CREATE_GARRISON
     &Spell::EffectNULL,                                     //215 SPELL_EFFECT_UPGRADE_CHARACTER_SPELLS
-    &Spell::EffectCreateShipment,                            //216 SPELL_EFFECT_CREATE_SHIPMENT
-    &Spell::EffectUpgradeGarrison,                           //217 SPELL_EFFECT_UPGRADE_GARRISON
+    &Spell::EffectNULL,                                     //216 SPELL_EFFECT_CREATE_SHIPMENT
+    &Spell::EffectNULL,                                     //217 SPELL_EFFECT_UPGRADE_GARRISON
     &Spell::EffectNULL,                                     //218 SPELL_EFFECT_218
     &Spell::EffectCreateConversation,                       //219 SPELL_EFFECT_CREATE_CONVERSATION
     &Spell::EffectAddGarrisonFollower,                      //220 SPELL_EFFECT_ADD_GARRISON_FOLLOWER
-    &Spell::EffectAddGarrisonMission,                        //221 SPELL_EFFECT_ADD_GARRISON_MISSION
+    &Spell::EffectNULL,                                     //221 SPELL_EFFECT_ADD_GARRISON_MISSION
     &Spell::EffectCreateHeirloomItem,                       //222 SPELL_EFFECT_CREATE_HEIRLOOM_ITEM
     &Spell::EffectNULL,                                     //223 SPELL_EFFECT_CHANGE_ITEM_BONUSES
     &Spell::EffectActivateGarrisonBuilding,                 //224 SPELL_EFFECT_ACTIVATE_GARRISON_BUILDING
@@ -329,29 +318,29 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectNULL,                                     //226 SPELL_EFFECT_TRIGGER_ACTION_SET
     &Spell::EffectNULL,                                     //227 SPELL_EFFECT_TELEPORT_TO_LFG_DUNGEON
     &Spell::EffectNULL,                                     //228 SPELL_EFFECT_228
-    &Spell::EffectSetFollowerQuality,                        //229 SPELL_EFFECT_SET_FOLLOWER_QUALITY
+    &Spell::EffectNULL,                                     //229 SPELL_EFFECT_SET_FOLLOWER_QUALITY
     &Spell::EffectNULL,                                     //230 SPELL_EFFECT_230
-    &Spell::EffectIncreaseFollowerExperience,                //231 SPELL_EFFECT_INCREASE_FOLLOWER_EXPERIENCE
+    &Spell::EffectNULL,                                     //231 SPELL_EFFECT_INCREASE_FOLLOWER_EXPERIENCE
     &Spell::EffectNULL,                                     //232 SPELL_EFFECT_REMOVE_PHASE
-    &Spell::EffectRandomizeFollowerAbilities,                //233 SPELL_EFFECT_RANDOMIZE_FOLLOWER_ABILITIES
+    &Spell::EffectNULL,                                     //233 SPELL_EFFECT_RANDOMIZE_FOLLOWER_ABILITIES
     &Spell::EffectNULL,                                     //234 SPELL_EFFECT_234
     &Spell::EffectUnused,                                   //235 SPELL_EFFECT_235
     &Spell::EffectGiveExperience,                           //236 SPELL_EFFECT_GIVE_EXPERIENCE
     &Spell::EffectGiveRestedExperience,                     //237 SPELL_EFFECT_GIVE_RESTED_EXPERIENCE_BONUS
     &Spell::EffectNULL,                                     //238 SPELL_EFFECT_INCREASE_SKILL
-    &Spell::EffectEndGarrisonBuildingConstruction,            //239 SPELL_EFFECT_END_GARRISON_BUILDING_CONSTRUCTION
+    &Spell::EffectNULL,                                     //239 SPELL_EFFECT_END_GARRISON_BUILDING_CONSTRUCTION
     &Spell::EffectGiveArtifactPower,                        //240 SPELL_EFFECT_GIVE_ARTIFACT_POWER
     &Spell::EffectUnused,                                   //241 SPELL_EFFECT_241
     &Spell::EffectGiveArtifactPowerNoBonus,                 //242 SPELL_EFFECT_GIVE_ARTIFACT_POWER_NO_BONUS
     &Spell::EffectApplyEnchantIllusion,                     //243 SPELL_EFFECT_APPLY_ENCHANT_ILLUSION
-    &Spell::EffectLearnFollowerAbility,                      //244 SPELL_EFFECT_LEARN_FOLLOWER_ABILITY
+    &Spell::EffectNULL,                                     //244 SPELL_EFFECT_LEARN_FOLLOWER_ABILITY
     &Spell::EffectUpgradeHeirloom,                          //245 SPELL_EFFECT_UPGRADE_HEIRLOOM
-    &Spell::EffectFinishGarrisonMission,                     //246 SPELL_EFFECT_FINISH_GARRISON_MISSION
-    &Spell::EffectAddGarrisonMissionSet,                     //247 SPELL_EFFECT_ADD_GARRISON_MISSION_SET
-    &Spell::EffectFinishShipment,                            //248 SPELL_EFFECT_FINISH_SHIPMENT
+    &Spell::EffectNULL,                                     //246 SPELL_EFFECT_FINISH_GARRISON_MISSION
+    &Spell::EffectNULL,                                     //247 SPELL_EFFECT_ADD_GARRISON_MISSION_SET
+    &Spell::EffectNULL,                                     //248 SPELL_EFFECT_FINISH_SHIPMENT
     &Spell::EffectNULL,                                     //249 SPELL_EFFECT_FORCE_EQUIP_ITEM
     &Spell::EffectNULL,                                     //250 SPELL_EFFECT_TAKE_SCREENSHOT
-    &Spell::EffectSetGarrisonCacheSize,                      //251 SPELL_EFFECT_SET_GARRISON_CACHE_SIZE
+    &Spell::EffectNULL,                                     //251 SPELL_EFFECT_SET_GARRISON_CACHE_SIZE
     &Spell::EffectTeleportUnits,                            //252 SPELL_EFFECT_TELEPORT_UNITS
     &Spell::EffectGiveHonor,                                //253 SPELL_EFFECT_GIVE_HONOR
     &Spell::EffectJumpCharge,                               //254 SPELL_EFFECT_JUMP_CHARGE
@@ -366,28 +355,28 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectNULL,                                     //263 SPELL_EFFECT_REPAIR_ITEM
     &Spell::EffectNULL,                                     //264 SPELL_EFFECT_REMOVE_GEM
     &Spell::EffectLearnAzeriteEssencePower,                 //265 SPELL_EFFECT_LEARN_AZERITE_ESSENCE_POWER
-    &Spell::EffectSetItemBonusListGroupEntry,               //266 SPELL_EFFECT_SET_ITEM_BONUS_LIST_GROUP_ENTRY
+    &Spell::EffectNULL,                                     //266 SPELL_EFFECT_SET_ITEM_BONUS_LIST_GROUP_ENTRY
     &Spell::EffectCreatePrivateConversation,                //267 SPELL_EFFECT_CREATE_PRIVATE_CONVERSATION
     &Spell::EffectApplyMountEquipment,                      //268 SPELL_EFFECT_APPLY_MOUNT_EQUIPMENT
-    &Spell::EffectIncreaseItemBonusListGroupStep,           //269 SPELL_EFFECT_INCREASE_ITEM_BONUS_LIST_GROUP_STEP
+    &Spell::EffectNULL,                                     //269 SPELL_EFFECT_INCREASE_ITEM_BONUS_LIST_GROUP_STEP
     &Spell::EffectNULL,                                     //270 SPELL_EFFECT_270
     &Spell::EffectUnused,                                   //271 SPELL_EFFECT_APPLY_AREA_AURA_PARTY_NONRANDOM
-    &Spell::EffectSetCovenant,                              //272 SPELL_EFFECT_SET_COVENANT
+    &Spell::EffectNULL,                                     //272 SPELL_EFFECT_SET_COVENANT
     &Spell::EffectNULL,                                     //273 SPELL_EFFECT_CRAFT_RUNEFORGE_LEGENDARY
     &Spell::EffectUnused,                                   //274 SPELL_EFFECT_274
     &Spell::EffectUnused,                                   //275 SPELL_EFFECT_275
     &Spell::EffectLearnTransmogIllusion,                    //276 SPELL_EFFECT_LEARN_TRANSMOG_ILLUSION
-    &Spell::EffectSetChromieTime,                           //277 SPELL_EFFECT_SET_CHROMIE_TIME
+    &Spell::EffectNULL,                                     //277 SPELL_EFFECT_SET_CHROMIE_TIME
     &Spell::EffectNULL,                                     //278 SPELL_EFFECT_278
-    &Spell::EffectLearnGarrTalent,                           //279 SPELL_EFFECT_LEARN_GARR_TALENT
+    &Spell::EffectNULL,                                     //279 SPELL_EFFECT_LEARN_GARR_TALENT
     &Spell::EffectUnused,                                   //280 SPELL_EFFECT_280
-    &Spell::EffectLearnSoulbindConduit,                     //281 SPELL_EFFECT_LEARN_SOULBIND_CONDUIT
+    &Spell::EffectNULL,                                     //281 SPELL_EFFECT_LEARN_SOULBIND_CONDUIT
     &Spell::EffectNULL,                                     //282 SPELL_EFFECT_CONVERT_ITEMS_TO_CURRENCY
     &Spell::EffectSkipCampaign,                             //283 SPELL_EFFECT_COMPLETE_CAMPAIGN
     &Spell::EffectSendChatMessage,                          //284 SPELL_EFFECT_SEND_CHAT_MESSAGE
     &Spell::EffectNULL,                                     //285 SPELL_EFFECT_MODIFY_KEYSTONE_2
     &Spell::EffectGrantBattlePetExperience,                 //286 SPELL_EFFECT_GRANT_BATTLEPET_EXPERIENCE
-    &Spell::EffectSetGarrisonFollowerLevel,                  //287 SPELL_EFFECT_SET_GARRISON_FOLLOWER_LEVEL
+    &Spell::EffectNULL,                                     //287 SPELL_EFFECT_SET_GARRISON_FOLLOWER_LEVEL
     &Spell::EffectNULL,                                     //288 SPELL_EFFECT_CRAFT_ITEM
     &Spell::EffectModifyAuraStacks,                         //289 SPELL_EFFECT_MODIFY_AURA_STACKS
     &Spell::EffectModifyCooldown,                           //290 SPELL_EFFECT_MODIFY_COOLDOWN
@@ -408,8 +397,8 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectNULL,                                     //305 SPELL_EFFECT_305
     &Spell::EffectUpdateInteractions,                       //306 SPELL_EFFECT_UPDATE_INTERACTIONS
     &Spell::EffectNULL,                                     //307 SPELL_EFFECT_307
-    &Spell::EffectCancelPreloadWorld,                       //308 SPELL_EFFECT_CANCEL_PRELOAD_WORLD
-    &Spell::EffectPreloadWorld,                             //309 SPELL_EFFECT_PRELOAD_WORLD
+    &Spell::EffectNULL,                                     //308 SPELL_EFFECT_CANCEL_PRELOAD_WORLD
+    &Spell::EffectNULL,                                     //309 SPELL_EFFECT_PRELOAD_WORLD
     &Spell::EffectNULL,                                     //310 SPELL_EFFECT_310
     &Spell::EffectSkipQuestLine,                            //311 SPELL_EFFECT_SKIP_QUESTLINE
     &Spell::EffectNULL,                                     //312 SPELL_EFFECT_312
@@ -424,7 +413,7 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectNULL,                                     //321 SPELL_EFFECT_321
     &Spell::EffectNULL,                                     //322 SPELL_EFFECT_322
     &Spell::EffectNULL,                                     //323 SPELL_EFFECT_323
-    &Spell::EffectCollectHousingDecor,                       //324 SPELL_EFFECT_COLLECT_HOUSING_DECOR
+    &Spell::EffectNULL,                                     //324 SPELL_EFFECT_324
     &Spell::EffectNULL,                                     //325 SPELL_EFFECT_325
     &Spell::EffectNULL,                                     //326 SPELL_EFFECT_326
     &Spell::EffectNULL,                                     //327 SPELL_EFFECT_327
@@ -448,14 +437,18 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectNULL,                                     //345 SPELL_EFFECT_ASSIST_ACTION
     &Spell::EffectNULL,                                     //346 SPELL_EFFECT_346
     &Spell::EffectEquipTransmogOutfit,                      //347 SPELL_EFFECT_EQUIP_TRANSMOG_OUTFIT
-    &Spell::EffectGiveHouseLevel,                            //348 SPELL_EFFECT_GIVE_HOUSE_LEVEL
-    &Spell::EffectLearnHouseRoom,                            //349 SPELL_EFFECT_LEARN_HOUSE_ROOM
-    &Spell::EffectLearnHouseExteriorComponent,               //350 SPELL_EFFECT_LEARN_HOUSE_EXTERIOR_COMPONENT
-    &Spell::EffectLearnHouseTheme,                           //351 SPELL_EFFECT_LEARN_HOUSE_THEME
-    &Spell::EffectLearnHouseRoomComponentTexture,            //352 SPELL_EFFECT_LEARN_HOUSE_ROOM_COMPONENT_TEXTURE
+    &Spell::EffectNULL,                                     //348 SPELL_EFFECT_GIVE_HOUSE_LEVEL
+    &Spell::EffectNULL,                                     //349 SPELL_EFFECT_LEARN_HOUSE_ROOM
+    &Spell::EffectNULL,                                     //350 SPELL_EFFECT_LEARN_HOUSE_EXTERIOR_COMPONENT
+    &Spell::EffectNULL,                                     //351 SPELL_EFFECT_LEARN_HOUSE_THEME
+    &Spell::EffectNULL,                                     //352 SPELL_EFFECT_LEARN_HOUSE_ROOM_COMPONENT_TEXTURE
     &Spell::EffectCreateAreaTrigger,                        //353 SPELL_EFFECT_CREATE_AREATRIGGER_2
-    &Spell::EffectSetNeighborhoodInitiative,                 //354 SPELL_EFFECT_SET_NEIGHBORHOOD_INITIATIVE
+    &Spell::EffectNULL,                                     //354 SPELL_EFFECT_SET_NEIGHBORHOOD_INITIATIVE
     &Spell::EffectNULL,                                     //355 SPELL_EFFECT_LEARN_HOUSE_TYPE
+    &Spell::EffectNULL,                                     //356 SPELL_EFFECT_356
+    &Spell::EffectNULL,                                     //357 SPELL_EFFECT_357
+    &Spell::EffectNULL,                                     //358 SPELL_EFFECT_358
+    &Spell::EffectNULL,                                     //359 SPELL_EFFECT_359
 };
 
 void Spell::EffectNULL()
@@ -2644,16 +2637,11 @@ void Spell::EffectTameCreature()
     // "kill" original creature
     creatureTarget->DespawnOrUnsummon();
 
-    uint8 level = (creatureTarget->GetLevelForTarget(m_caster) < (m_caster->GetLevelForTarget(creatureTarget) - 5)) ? (m_caster->GetLevelForTarget(creatureTarget) - 5) : creatureTarget->GetLevelForTarget(m_caster);
-
-    // prepare visual effect for levelup
-    pet->SetLevel(level - 1);
-
     // add to world
     pet->GetMap()->AddToMap(pet->ToCreature());
 
     // visual effect for levelup
-    pet->SetLevel(level);
+    pet->SendNewlyTamed();
 
     // caster have pet now
     unitCaster->SetMinion(pet, true);
@@ -3022,9 +3010,6 @@ void Spell::EffectInterruptCast()
                 int32 duration = m_spellInfo->GetDuration();
                 duration = unitTarget->ModSpellDuration(m_spellInfo, unitTarget, duration, false, 1 << effectInfo->EffectIndex);
                 unitTarget->GetSpellHistory()->LockSpellSchool(curSpellInfo->GetSchoolMask(), Milliseconds(duration));
-                // Drive the client's loss-of-control UI: a school interrupt locks the interrupted spell's
-                // school for the lockout duration (SMSG_ADD_LOSS_OF_CONTROL, LossOfControlType school-interrupt).
-                unitTarget->SendAddLossOfControl(m_caster->GetGUID(), m_spellInfo->Id, curSpellInfo->GetSchoolMask(), duration);
                 std::ranges::find(m_UniqueTargetInfo, unitTarget->GetGUID(), &TargetInfo::TargetGUID)->ProcHitMask |= PROC_HIT_INTERRUPT;
                 SendSpellInterruptLog(unitTarget, curSpellInfo->Id);
                 unitTarget->InterruptSpell(CurrentSpellTypes(i), false, false, SPELL_FAILED_INTERRUPTED_COMBAT, SPELL_FAILED_DONT_REPORT, m_caster->GetGUID());
@@ -4944,6 +4929,8 @@ void Spell::EffectCreateTamedPet()
     // add to world
     pet->GetMap()->AddToMap(pet->ToCreature());
 
+    pet->SendNewlyTamed();
+
     // unitTarget has pet now
     unitTarget->SetMinion(pet, true);
 
@@ -5475,14 +5462,7 @@ void Spell::EffectLearnGarrisonBuilding()
     if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
         return;
 
-    // Same defect (and same fix) as EffectAddGarrisonFollower above: GetGarrison() resolves the WoD garrison,
-    // so a blueprint belonging to any other garrison type was learned into the wrong (or a missing) garrison.
-    // GarrBuilding.db2 publishes the owning type.
-    GarrisonType garrType = GARRISON_TYPE_GARRISON;
-    if (GarrBuildingEntry const* building = sGarrBuildingStore.LookupEntry(uint32(effectInfo->MiscValue)))
-        garrType = GarrisonType(building->GarrTypeID);
-
-    if (Garrison* garrison = unitTarget->ToPlayer()->GetGarrison(garrType))
+    if (Garrison* garrison = unitTarget->ToPlayer()->GetGarrison())
         garrison->LearnBlueprint(effectInfo->MiscValue);
 }
 
@@ -5548,16 +5528,8 @@ void Spell::EffectAddGarrisonFollower()
     if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
         return;
 
-    // Route to the follower's own garrison type. GetGarrison() defaults to the WoD garrison (type 2),
-    // so without this every Legion/BfA/Shadowlands follower-granting spell silently failed with
-    // GARRISON_ERROR_INVALID_GARRISON (follower GarrTypeID != garrison type).
-    uint32 garrFollowerId = effectInfo->MiscValue;
-    GarrisonType garrType = GARRISON_TYPE_GARRISON;
-    if (GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(garrFollowerId))
-        garrType = GarrisonType(followerEntry->GarrTypeID);
-
-    if (Garrison* garrison = unitTarget->ToPlayer()->GetGarrison(garrType))
-        garrison->AddFollower(garrFollowerId);
+    if (Garrison* garrison = unitTarget->ToPlayer()->GetGarrison())
+        garrison->AddFollower(effectInfo->MiscValue);
 }
 
 void Spell::EffectCreateHeirloomItem()
@@ -5642,12 +5614,7 @@ void Spell::EffectHealBattlePetPct()
         return;
 
     if (BattlePets::BattlePetMgr* battlePetMgr = unitTarget->ToPlayer()->GetSession()->GetBattlePetMgr())
-    {
         battlePetMgr->HealBattlePetsPct(GetEffectValueAsInt());
-
-        WorldPackets::BattlePet::BattlePetsHealed healed;
-        unitTarget->ToPlayer()->SendDirectMessage(healed.Write());
-    }
 }
 
 void Spell::EffectEnableBattlePets()
@@ -6110,25 +6077,6 @@ void Spell::EffectSkipCampaign()
     QuestMgr::SkipCampaignForPlayer(effectInfo->MiscValue, target);
 }
 
-void Spell::EffectSetChromieTime()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    Player* target = Object::ToPlayer(unitTarget);
-    if (!target)
-        return;
-
-    // MiscValue is a UiChromieTimeExpansionInfo record id (row SpellIDs 325400..452212 map
-    // 1:1 to rows); validate like the CMSG select path. 0 clears. No sniff shows
-    // spell-driven toggles - semantics inferred from the effect/DB2 pairing (audit R9/i2).
-    int32 expansionId = effectInfo->MiscValue;
-    if (expansionId != 0 && !sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId)))
-        return;
-
-    target->SetChromieTime(expansionId);
-}
-
 void Spell::EffectSendChatMessage()
 {
     if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
@@ -6288,18 +6236,7 @@ void Spell::EffectCreateTraitTreeConfig()
     }).first;
 
     if (!existingConfigIdForSystem)
-    {
         target->CreateTraitConfig(newConfig);
-
-        // CreateTraitConfig only writes the granted entries into the update fields, it never learns the
-        // TraitDefinition spells - without this the grants (e.g. tree 672 granting 376359) stay unlearned
-        // until the next login, when the _LoadTraits sweep applies every config. Skipped while that sweep
-        // has not run yet, because it would then apply this very config a second time.
-        if (target->AreTraitConfigsApplied())
-            target->ApplyTraitConfig(newConfig.ID, true);
-    }
-    else
-        target->SyncGrantedTraitEntries(*existingConfigIdForSystem);
 }
 
 void Spell::EffectChangeActiveCombatTraitConfig()
@@ -6340,43 +6277,6 @@ void Spell::EffectUpdateInteractions()
         return;
 
     target->UpdateVisibleObjectInteractions(true, false, true, true);
-}
-
-// MiscValue is the map the client should start streaming. Every SpellEffect.db2 row using
-// this effect targets the caster and names a map that is one seamless step away from where
-// the spell is cast (e.g. "Leave Delves" -> Khaz Algar surface).
-void Spell::EffectPreloadWorld()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    Player* target = Object::ToPlayer(unitTarget);
-    if (!target)
-        return;
-
-    if (!sMapStore.LookupEntry(effectInfo->MiscValue))
-        return;
-
-    // The spell names only the destination map - it carries no arrival position - so the
-    // client is asked to stream around the coordinates the player already occupies. That is
-    // exact for map pairs sharing a coordinate frame, which is how seamless transfers are
-    // set up here; callers that do know the arrival spot can pass it instead.
-    target->SendPreloadWorld(effectInfo->MiscValue, *target);
-}
-
-void Spell::EffectCancelPreloadWorld()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    Player* target = Object::ToPlayer(unitTarget);
-    if (!target)
-        return;
-
-    if (!sMapStore.LookupEntry(effectInfo->MiscValue))
-        return;
-
-    target->SendCancelPreloadWorld(effectInfo->MiscValue);
 }
 
 void Spell::EffectSkipQuestLine()
@@ -6476,725 +6376,4 @@ void Spell::EffectEquipTransmogOutfit()
     }
 
     target->EquipTransmogOutfit(m_misc.EquipTransmogOutfit.TransmogOutfitId, static_cast<TransmogSituationTrigger>(m_misc.EquipTransmogOutfit.SituationTrigger), locked);
-}
-
-void Spell::EffectGiveHouseLevel()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    Player* player = Object::ToPlayer(unitTarget);
-    if (!player)
-        return;
-
-    Housing* housing = player->GetHousing();
-    if (!housing)
-        return;
-
-    uint32 levelsToAdd = std::max(GetEffectValueAsInt(), 1);
-
-    TC_LOG_DEBUG("spells", "Spell::EffectGiveHouseLevel: Adding {} level(s) to house for player {} (house {}, current level {})",
-        levelsToAdd, player->GetName(), housing->GetHouseGuid().ToString(), housing->GetLevel());
-
-    housing->AddLevel(levelsToAdd);
-}
-
-void Spell::EffectCollectHousingDecor()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    Player* player = Object::ToPlayer(unitTarget);
-    if (!player)
-        return;
-
-    Housing* housing = player->GetHousing();
-    if (!housing)
-        return;
-
-    uint32 decorEntryId = effectInfo->MiscValue;
-    if (!decorEntryId)
-        return;
-
-    HouseDecorData const* decorData = sHousingMgr.GetHouseDecorData(decorEntryId);
-    if (!decorData)
-    {
-        TC_LOG_ERROR("spells", "Spell::EffectCollectHousingDecor: Invalid HouseDecor ID {} from spell {}",
-            decorEntryId, m_spellInfo->Id);
-        return;
-    }
-
-    HousingResult result = housing->AddToCatalog(decorEntryId, DECOR_SOURCE_SPELL,
-        std::to_string(m_spellInfo->Id));
-
-    if (result != HOUSING_RESULT_SUCCESS)
-    {
-        TC_LOG_ERROR("spells", "Spell::EffectCollectHousingDecor: AddToCatalog failed (result={}) for decor {} spell {}",
-            uint32(result), decorEntryId, m_spellInfo->Id);
-        return;
-    }
-
-    // Notify client of the new decor acquisition
-    WorldPackets::Housing::HousingFirstTimeDecorAcquisition decorAcq;
-    decorAcq.DecorEntryID = decorEntryId;
-    player->SendDirectMessage(decorAcq.Write());
-
-    // If the Account entity's FHousingStorage_C has already been populated (player opened
-    // edit mode), add the new catalog entry directly and send a VALUES_UPDATE so the client's
-    // decor list refreshes without requiring a relog or mode toggle.
-    if (housing->IsStoragePopulated())
-    {
-        Housing::CatalogEntry const* catEntry = nullptr;
-        for (Housing::CatalogEntry const* entry : housing->GetCatalogEntries())
-        {
-            if (entry->DecorEntryId == decorEntryId)
-            {
-                catEntry = entry;
-                break;
-            }
-        }
-        if (catEntry)
-        {
-            // Generate a unique GUID for the new storage entry (same scheme as PopulateCatalogStorageEntries)
-            uint64 catalogGuidBase = player->GetGUID().GetCounter() * 100000;
-            uint32 storageIdx = catEntry->Count > 0 ? catEntry->Count - 1 : 0;
-            uint64 uniqueId = catalogGuidBase + decorEntryId * 100 + storageIdx;
-            ObjectGuid catalogDecorGuid = ObjectGuid::Create<HighGuid::Housing>(
-                /*subType*/ 1,
-                /*arg1*/ sRealmList->GetCurrentRealmId().Realm,
-                /*arg2*/ decorEntryId,
-                uniqueId);
-
-            Battlenet::Account& account = player->GetSession()->GetBattlenetAccount();
-            account.SetHousingDecorStorageEntry(catalogDecorGuid, ObjectGuid::Empty,
-                catEntry->SourceType, catEntry->SourceValue);
-            account.SendUpdateToPlayer(player);
-        }
-    }
-
-    TC_LOG_DEBUG("spells", "Spell::EffectCollectHousingDecor: Player {} learned decor '{}' (ID: {}) from spell {}",
-        player->GetName(), decorData->Name, decorEntryId, m_spellInfo->Id);
-}
-
-void Spell::EffectLearnHouseRoom()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    Player* player = Object::ToPlayer(unitTarget);
-    if (!player)
-        return;
-
-    Housing* housing = player->GetHousing();
-    if (!housing)
-        return;
-
-    uint32 houseRoomId = effectInfo->MiscValue;
-    if (!houseRoomId)
-        return;
-
-    HouseRoomData const* roomData = sHousingMgr.GetHouseRoomData(houseRoomId);
-    if (!roomData)
-    {
-        TC_LOG_ERROR("spells", "Spell::EffectLearnHouseRoom: Invalid HouseRoom ID {} from spell {}",
-            houseRoomId, m_spellInfo->Id);
-        return;
-    }
-
-    TC_LOG_DEBUG("spells", "Spell::EffectLearnHouseRoom: Player {} learned house room '{}' (ID: {})",
-        player->GetName(), roomData->Name, houseRoomId);
-
-    // Send collection update to the client
-    WorldPackets::Housing::AccountRoomCollectionUpdate collectionUpdate;
-    collectionUpdate.AddSingle(houseRoomId);
-    player->SendDirectMessage(collectionUpdate.Write());
-}
-
-void Spell::EffectLearnHouseExteriorComponent()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    Player* player = Object::ToPlayer(unitTarget);
-    if (!player)
-        return;
-
-    Housing* housing = player->GetHousing();
-    if (!housing)
-        return;
-
-    uint32 exteriorComponentId = effectInfo->MiscValue;
-    if (!exteriorComponentId)
-        return;
-
-    TC_LOG_DEBUG("spells", "Spell::EffectLearnHouseExteriorComponent: Player {} learned exterior component ID {} from spell {}",
-        player->GetName(), exteriorComponentId, m_spellInfo->Id);
-
-    // Send collection update to the client
-    WorldPackets::Housing::AccountExteriorFixtureCollectionUpdate collectionUpdate;
-    collectionUpdate.AddSingle(exteriorComponentId);
-    player->SendDirectMessage(collectionUpdate.Write());
-}
-
-void Spell::EffectLearnHouseTheme()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    Player* player = Object::ToPlayer(unitTarget);
-    if (!player)
-        return;
-
-    Housing* housing = player->GetHousing();
-    if (!housing)
-        return;
-
-    uint32 houseThemeId = effectInfo->MiscValue;
-    if (!houseThemeId)
-        return;
-
-    HouseThemeData const* themeData = sHousingMgr.GetHouseThemeData(houseThemeId);
-    if (!themeData)
-    {
-        TC_LOG_ERROR("spells", "Spell::EffectLearnHouseTheme: Invalid HouseTheme ID {} from spell {}",
-            houseThemeId, m_spellInfo->Id);
-        return;
-    }
-
-    TC_LOG_DEBUG("spells", "Spell::EffectLearnHouseTheme: Player {} learned house theme '{}' (ID: {})",
-        player->GetName(), themeData->Name, houseThemeId);
-
-    // Send collection update to the client
-    WorldPackets::Housing::AccountRoomThemeCollectionUpdate collectionUpdate;
-    collectionUpdate.AddSingle(houseThemeId);
-    player->SendDirectMessage(collectionUpdate.Write());
-}
-
-void Spell::EffectLearnHouseRoomComponentTexture()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    Player* player = Object::ToPlayer(unitTarget);
-    if (!player)
-        return;
-
-    Housing* housing = player->GetHousing();
-    if (!housing)
-        return;
-
-    uint32 textureId = effectInfo->MiscValue;
-    if (!textureId)
-        return;
-
-    TC_LOG_DEBUG("spells", "Spell::EffectLearnHouseRoomComponentTexture: Player {} learned room component texture ID {} from spell {}",
-        player->GetName(), textureId, m_spellInfo->Id);
-
-    // Send collection update to the client (texture = material in the collection system)
-    WorldPackets::Housing::AccountRoomMaterialCollectionUpdate collectionUpdate;
-    collectionUpdate.AddSingle(textureId);
-    player->SendDirectMessage(collectionUpdate.Write());
-}
-
-void Spell::EffectSetNeighborhoodInitiative()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    Player* player = Object::ToPlayer(unitTarget);
-    if (!player)
-        return;
-
-    Housing* housing = player->GetHousing();
-    if (!housing)
-        return;
-
-    uint32 initiativeId = effectInfo->MiscValue;
-    if (!initiativeId)
-        return;
-
-    NeighborhoodInitiativeData const* initiativeData = sHousingMgr.GetNeighborhoodInitiativeData(initiativeId);
-    if (!initiativeData)
-    {
-        TC_LOG_ERROR("spells", "Spell::EffectSetNeighborhoodInitiative: Invalid NeighborhoodInitiative ID {} from spell {}",
-            initiativeId, m_spellInfo->Id);
-        return;
-    }
-
-    // Resolve the player's neighborhood
-    ObjectGuid neighborhoodGuid = housing->GetNeighborhoodGuid();
-    Neighborhood* neighborhood = sNeighborhoodMgr.GetNeighborhood(neighborhoodGuid);
-    if (!neighborhood)
-    {
-        TC_LOG_ERROR("spells", "Spell::EffectSetNeighborhoodInitiative: Player {} has no valid neighborhood (guid: {})",
-            player->GetName(), neighborhoodGuid.ToString());
-        return;
-    }
-
-    // Only the neighborhood owner or managers should be able to set initiatives
-    if (!neighborhood->IsOwner(player->GetGUID()) && !neighborhood->IsManager(player->GetGUID()))
-    {
-        TC_LOG_DEBUG("spells", "Spell::EffectSetNeighborhoodInitiative: Player {} is not owner/manager of neighborhood {}",
-            player->GetName(), neighborhoodGuid.ToString());
-        return;
-    }
-
-    TC_LOG_DEBUG("spells", "Spell::EffectSetNeighborhoodInitiative: Player {} set initiative '{}' (ID: {}) on neighborhood {}",
-        player->GetName(), initiativeData->Name, initiativeId, neighborhoodGuid.ToString());
-}
-
-void Spell::EffectRestoreGarrisonTroopVitality()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    // Troops are an order-hall concept and the effect carries no discriminator, so restore vitality in every
-    // garrison the character owns instead of only the WoD one (which a class-hall-only owner does not have).
-    for (auto const& [garrType, garrison] : unitTarget->ToPlayer()->GetGarrisons())
-        garrison->HealAllFollowers();
-}
-
-void Spell::EffectLearnGarrisonSpecialization()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    // Garrison::LearnSpecialization rejects a specialization whose GarrTypeID does not match the garrison, so
-    // resolving the WoD garrison made this a guaranteed no-op for every non-WoD specialization.
-    GarrisonType garrType = GARRISON_TYPE_GARRISON;
-    if (GarrSpecializationEntry const* spec = sGarrSpecializationStore.LookupEntry(uint32(effectInfo->MiscValue)))
-        garrType = GarrisonType(spec->GarrTypeID);
-
-    if (Garrison* garrison = unitTarget->ToPlayer()->GetGarrison(garrType))
-        garrison->LearnSpecialization(effectInfo->MiscValue);
-}
-
-void Spell::EffectCreateShipment()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    // Resolve the shipment's garrison from the casting NPC, exactly as the CMSG path already does
-    // (ResolveShipmentGarrison in GarrisonHandler.cpp): an NPC registered as a shipment container belongs to the
-    // class order hall, everything else to the WoD garrison. Without this an order-hall work order cast from a
-    // trainer landed in (or silently missed) the WoD garrison.
-    Player* shipmentOwner = unitTarget->ToPlayer();
-    Garrison* garrison = nullptr;
-    if (Creature const* casterNpc = m_caster->ToCreature())
-        if (sGarrisonMgr.GetShipmentContainerForNpc(casterNpc->GetEntry()))
-            garrison = shipmentOwner->GetGarrison(GARRISON_TYPE_CLASS_ORDER);
-    if (!garrison)
-        garrison = shipmentOwner->GetGarrison();
-
-    if (garrison)
-        garrison->CreateShipment(m_caster->GetGUID(), effectInfo->MiscValue > 0 ? effectInfo->MiscValue : 1);
-}
-
-void Spell::EffectUpgradeGarrison()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    if (Garrison* garrison = unitTarget->ToPlayer()->GetGarrison())
-        garrison->Upgrade();
-}
-
-void Spell::EffectAddGarrisonMission()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    // Garrison::AddMission announces GarrTypeID = missionEntry->GarrTypeID, so adding a type-111 mission from
-    // the WoD garrison produced a mission the covenant UI could never show. GarrMission.db2 publishes the type.
-    GarrisonType garrType = GARRISON_TYPE_GARRISON;
-    if (GarrMissionEntry const* mission = sGarrMissionStore.LookupEntry(uint32(effectInfo->MiscValue)))
-        garrType = GarrisonType(mission->GarrTypeID);
-
-    if (Garrison* garrison = unitTarget->ToPlayer()->GetGarrison(garrType))
-        garrison->AddMission(effectInfo->MiscValue);
-}
-
-void Spell::EffectSetFollowerQuality()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    Player* player = unitTarget->ToPlayer();
-    Garrison* garrison = player->GetGarrison();
-    if (!garrison)
-        return;
-
-    // MiscValue = quality to set, the targeted follower is determined by the spell target
-    // For item-cast spells, the follower dbId is typically stored in the spell's misc data
-    // Iterate followers and set quality on the first one found that matches (or use generic approach)
-    // In practice, these spells are cast on a specific follower via the garrison UI
-    uint32 quality = effectInfo->MiscValue;
-    for (auto& [dbId, follower] : garrison->GetFollowerMap())
-    {
-        // This effect is typically cast via items targeting a specific follower
-        // Since we don't have a direct follower target, apply to all active non-troop followers
-        // In a real scenario, the UI sends the follower context
-        garrison->SetFollowerQuality(dbId, quality);
-        break; // Apply to first eligible follower (placeholder - needs UI integration)
-    }
-}
-
-void Spell::EffectIncreaseFollowerExperience()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    Player* player = unitTarget->ToPlayer();
-    Garrison* garrison = player->GetGarrison();
-    if (!garrison)
-        return;
-
-    int32 effectDamage = GetEffectValueAsInt();
-    uint32 xp = effectDamage > 0 ? uint32(effectDamage) : effectInfo->MiscValue;
-    for (auto& [dbId, follower] : garrison->GetFollowerMap())
-    {
-        garrison->AddFollowerXP(dbId, xp);
-        break; // Apply to first eligible follower
-    }
-}
-
-void Spell::EffectRandomizeFollowerAbilities()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    Player* player = unitTarget->ToPlayer();
-    Garrison* garrison = player->GetGarrison();
-    if (!garrison)
-        return;
-
-    for (auto& [dbId, follower] : garrison->GetFollowerMap())
-    {
-        garrison->RandomizeFollowerAbilities(dbId);
-        break;
-    }
-}
-
-void Spell::EffectEndGarrisonBuildingConstruction()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    Player* player = unitTarget->ToPlayer();
-    Garrison* garrison = player->GetGarrison();
-    if (!garrison)
-        return;
-
-    // MiscValue = plot instance ID, or 0 to complete all buildings
-    if (effectInfo->MiscValue > 0)
-    {
-        garrison->EndBuildingConstruction(effectInfo->MiscValue);
-    }
-    else
-    {
-        for (Garrison::Plot* plot : garrison->GetPlots())
-            if (plot->BuildingInfo.PacketInfo && !plot->BuildingInfo.PacketInfo->Active)
-                garrison->EndBuildingConstruction(plot->PacketInfo.GarrPlotInstanceID);
-    }
-}
-
-void Spell::EffectLearnFollowerAbility()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    Player* player = unitTarget->ToPlayer();
-
-    // GarrAbility.db2 -> GarrFollowerType.db2 gives the garrison type the ability belongs to. Resolving the WoD
-    // garrison meant an order-hall / covenant follower ability was learned onto the wrong roster or nothing.
-    // NOTE: which follower receives it is still "the first one in the map" - a separate, unresolved defect
-    // (the effect carries no follower id); see SANCTUM_INERT_SWEEP_68275.md.
-    GarrisonType garrType = GARRISON_TYPE_GARRISON;
-    if (GarrAbilityEntry const* ability = sGarrAbilityStore.LookupEntry(uint32(effectInfo->MiscValue)))
-        if (GarrFollowerTypeEntry const* followerType = sGarrFollowerTypeStore.LookupEntry(uint32(ability->GarrFollowerTypeID)))
-            garrType = GarrisonType(followerType->GarrTypeID);
-
-    Garrison* garrison = player->GetGarrison(garrType);
-    if (!garrison)
-        return;
-
-    uint32 abilityId = effectInfo->MiscValue;
-    for (auto& [dbId, follower] : garrison->GetFollowerMap())
-    {
-        garrison->LearnFollowerAbility(dbId, abilityId);
-        break;
-    }
-}
-
-void Spell::EffectFinishGarrisonMission()
-{
-    // SPELL_EFFECT_FINISH_GARRISON_MISSION (246) force-completes a mission with a GUARANTEED success
-    // (Garrison::FinishMission now pins ResultDetermined + Succeeded) and hands it straight to the reward
-    // path. That is an instant free mission reward, so this effect is intended for GM / script use ONLY -
-    // it must NEVER be attached to a player-castable or lootable spell/item. If you author a spell with
-    // this effect, keep it flagged GM-only (or fire it exclusively from server scripts); a data audit of
-    // the spell/item tables for effect 246 should confirm nothing player-reachable carries it.
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    // The mission recID alone identifies the garrison holding it (Player::GetGarrisonWithMission), which is what
-    // the CMSG mission handlers already use. GetGarrison() could only ever finish a WoD mission.
-    if (Garrison* garrison = unitTarget->ToPlayer()->GetGarrisonWithMission(effectInfo->MiscValue))
-        garrison->FinishMission(effectInfo->MiscValue);
-}
-
-void Spell::EffectAddGarrisonMissionSet()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    // GarrMissionSet.db2 publishes the owning garrison type; adding a non-WoD set into the WoD garrison
-    // produced missions the owning UI could never show.
-    GarrisonType garrType = GARRISON_TYPE_GARRISON;
-    if (GarrMissionSetEntry const* missionSet = sGarrMissionSetStore.LookupEntry(uint32(effectInfo->MiscValue)))
-        garrType = GarrisonType(missionSet->GarrTypeID);
-
-    Garrison* garrison = unitTarget->ToPlayer()->GetGarrison(garrType);
-    if (!garrison)
-        return;
-
-    // MiscValue = GarrMissionSetID -- add all missions that belong to this set
-    uint32 missionSetId = effectInfo->MiscValue;
-    for (GarrMissionEntry const* mission : sGarrMissionStore)
-        if (mission->GarrMissionSetID == missionSetId)
-            garrison->AddMission(mission->ID);
-}
-
-void Spell::EffectFinishShipment()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    Garrison* garrison = unitTarget->ToPlayer()->GetGarrison();
-    if (!garrison)
-        return;
-
-    // Complete the next pending shipment across all plots
-    for (Garrison::Plot* plot : garrison->GetPlots())
-    {
-        if (plot->BuildingInfo.PacketInfo)
-        {
-            garrison->FinishShipment(plot->PacketInfo.GarrPlotInstanceID);
-            break; // Only finish one shipment per cast
-        }
-    }
-}
-
-void Spell::EffectSetGarrisonCacheSize()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    if (Garrison* garrison = unitTarget->ToPlayer()->GetGarrison())
-        garrison->SetGarrisonCacheSize(effectInfo->MiscValue);
-}
-
-void Spell::EffectLearnGarrTalent()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    // Find the correct garrison type for this talent
-    GarrTalentEntry const* talentEntry = sGarrTalentStore.LookupEntry(effectInfo->MiscValue);
-    if (!talentEntry)
-        return;
-
-    GarrTalentTreeEntry const* treeEntry = sGarrTalentTreeStore.LookupEntry(talentEntry->GarrTalentTreeID);
-    if (!treeEntry)
-        return;
-
-    Garrison* garrison = unitTarget->ToPlayer()->GetGarrison(static_cast<GarrisonType>(treeEntry->GarrTypeID));
-    if (!garrison)
-        return;
-
-    garrison->LearnTalent(effectInfo->MiscValue, false);
-}
-
-void Spell::EffectSetCovenant()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    // MiscValue = Covenant.db2 id chosen by the covenant-choice quest's reward spell. Joining a covenant
-    // is the Blizzlike entry point (soulbinds unlock afterwards) - there is no dedicated covenant opcode.
-    //
-    // MiscValue 0 is the RESET, and it is a published mechanism rather than an edge case: spell 338503 "Reset
-    // Covenant" is SPELL_EFFECT_SET_COVENANT with MiscValue 0 followed by SPELL_EFFECT_QUEST_FAIL on all four
-    // covenant-choice quests (56066/56069/56068/56067) and the two phase-refresh effects 170/167 - i.e. "leave
-    // the covenant and re-arm the choice". Player::SetActiveCovenant keeps every covenant's renown, anima,
-    // researched talents, companions and conduits; only the active pledge goes away.
-    int32 covenantId = effectInfo->MiscValue;
-    if (covenantId < 0)
-        return;
-
-    if (covenantId && !sCovenantStore.LookupEntry(uint32(covenantId)))
-        return;
-
-    unitTarget->ToPlayer()->SetActiveCovenant(uint32(covenantId));
-}
-
-void Spell::EffectLearnSoulbindConduit()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    // MiscValue = SoulbindConduit.db2 id; the rank comes from the spell's base points (MiscValueB is unused
-    // for conduit grants). A negative/zero rank falls back to the conduit's lowest defined rank.
-    int32 conduitId = effectInfo->MiscValue;
-    if (conduitId <= 0)
-        return;
-
-    int32 rankValue = GetEffectValueAsInt();                    // spell base points = 1-based conduit rank (0 when unspecified)
-    int32 rank = rankValue > 0 ? rankValue - 1 : -1;            // CollectConduit wants a 0-based index (<0 = lowest defined rank)
-    unitTarget->ToPlayer()->CollectConduit(uint32(conduitId), rank);
-}
-
-void Spell::EffectSetGarrisonFollowerLevel()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    Player* player = unitTarget->ToPlayer();
-    Garrison* garrison = player->GetGarrison();
-    if (!garrison)
-        return;
-
-    uint32 level = effectInfo->MiscValue;
-    for (auto& [dbId, follower] : garrison->GetFollowerMap())
-    {
-        garrison->SetFollowerLevel(dbId, level);
-        break;
-    }
-}
-
-void Spell::EffectModifyFollowerItemLevel()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
-        return;
-
-    Player* player = unitTarget->ToPlayer();
-
-    // GarrItemLevelUpgradeData.db2 -> GarrFollowerType.db2 gives the owning garrison type. Same defect and same
-    // caveat as EffectLearnFollowerAbility: the type is now correct, the arbitrary-follower pick is not.
-    GarrisonType garrType = GARRISON_TYPE_GARRISON;
-    if (GarrItemLevelUpgradeDataEntry const* upgrade = sGarrItemLevelUpgradeDataStore.LookupEntry(uint32(effectInfo->MiscValue)))
-        if (GarrFollowerTypeEntry const* followerType = sGarrFollowerTypeStore.LookupEntry(uint32(upgrade->FollowerTypeID)))
-            garrType = GarrisonType(followerType->GarrTypeID);
-
-    Garrison* garrison = player->GetGarrison(garrType);
-    if (!garrison)
-        return;
-
-    // MiscValue contains GarrItemLevelUpgradeData ID or direct iLevel delta
-    // MiscValueB: 0 = weapon, 1 = armor, other = both
-    int32 miscValue = effectInfo->MiscValue;
-    int32 miscValueB = effectInfo->MiscValueB;
-    int32 iLevelDelta = GetEffectValueAsInt();
-
-    // Try to look up GarrItemLevelUpgradeData entry
-    GarrItemLevelUpgradeDataEntry const* upgradeData = sGarrItemLevelUpgradeDataStore.LookupEntry(miscValue);
-
-    // The target follower is typically determined by the garrison UI interaction.
-    // When cast from items, the follower dbId is passed via the spell's target info.
-    // For now, we apply to the first eligible non-inactive, non-troop follower.
-    // TODO: When proper follower targeting is available, use that instead.
-    for (auto const& [dbId, follower] : garrison->GetFollowerMap())
-    {
-        if (follower.PacketInfo.FollowerStatus & FOLLOWER_STATUS_INACTIVE)
-            continue;
-        if (follower.PacketInfo.FollowerStatus & FOLLOWER_STATUS_TROOP)
-            continue;
-
-        garrison->UpgradeFollowerItemLevel(dbId, iLevelDelta, miscValueB, upgradeData);
-        break;
-    }
-}
-
-void Spell::EffectSetItemBonusListGroupEntry()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    Player* player = m_caster->ToPlayer();
-    if (!player || !itemTarget)
-        return;
-
-    // MiscValue = the ItemBonusListGroupEntry to set the item to (no cost; used by scripted conversions).
-    sItemUpgradeMgr.SetGroupEntry(player, itemTarget, uint32(effectInfo->MiscValue));
-}
-
-void Spell::EffectIncreaseItemBonusListGroupStep()
-{
-    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
-        return;
-
-    // The retail 12.x gear-upgrade transaction: the client casts the item's upgrade spell once per rank
-    // (C_ItemUpgrade.UpgradeItem); the effect advances the track one step, charging crests + gold.
-    Player* player = m_caster->ToPlayer();
-    if (!player || !itemTarget)
-        return;
-
-    sItemUpgradeMgr.PerformUpgrade(player, itemTarget);
 }

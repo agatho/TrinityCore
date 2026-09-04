@@ -21,7 +21,6 @@
 #include "WorldserverService.h"
 #include "Client/game_utilities_service.pb.h"
 #include "Client/api/client/v2/game_utilities_service.pb.h"
-#include <variant>
 
 namespace Battlenet::Services
 {
@@ -42,7 +41,6 @@ namespace Battlenet::Services
             static uint32 HandleGetAllValuesForAttribute(WorldSession const* session, std::string_view command, std::vector<Variant>& responseValues);
 
         private:
-            static std::string_view GetPresentedRealmListTicket(std::vector<std::pair<std::string_view, Variant>>& params);
             static uint32 GetRealmList(WorldSession const* session, std::vector<std::pair<std::string_view, Variant>>& params,
                 std::vector<std::pair<std::string_view, Variant>>& responseValues);
             static uint32 JoinRealm(WorldSession const* session, std::vector<std::pair<std::string_view, Variant>>& params,

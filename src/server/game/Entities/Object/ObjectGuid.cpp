@@ -1016,21 +1016,9 @@ ObjectGuid ObjectGuidFactory::CreateClient(HighGuid type, uint32 realmId, uint32
 
 ObjectGuid ObjectGuidFactory::CreateClubFinder(uint32 realmId, uint8 type, uint32 clubFinderId, ObjectGuid::LowType dbId)
 {
-    // The type shift of 33 is correct: the client decodes this field with `hi >> 33` in both
-    // C_ClubFinder.GetClubTypeFromFinderGUID (0x7FF729683580) and the posting-refresh path
-    // (0x7FF72ACB18F0), reading 1 = Guild and 2 = Community and rejecting anything else.
-    //
-    // Real 12.0.7 (68275) clubFinderGUIDs additionally set bit 32 - 0xC41644030002B3A7 /
-    // 0xC41644030000A2EC / 0xC4164C030003907E all read 0x3 across bits 32-39 for a guild posting.
-    // Neither client path looks at bit 32 (both shift right by 33 first) so it is not load-bearing,
-    // but setting it makes our GUIDs byte-identical to retail's. Its meaning is unidentified, and
-    // every captured sample is a guild posting, so it is set unconditionally on the strength of
-    // "observed in 100% of samples" rather than on an understood rule.
-    // See c:/dumps/CLUB_FINDER_SCOPING_68275.md.
     return ObjectGuid(uint64((uint64(HighGuid::ClubFinder) << 58)
         | (type == 1 ? (uint64(GetRealmIdForObjectGuid(realmId) & 0x1FFF) << 42) : UI64LIT(0))
         | (uint64(type & 0xFF) << 33)
-        | (UI64LIT(1) << 32)
         | (uint64(clubFinderId & 0xFFFFFFFF))),
         dbId);
 }
@@ -1068,12 +1056,6 @@ ObjectGuid ObjectGuidFactory::CreateHousing(uint32 subType, uint32 arg1, uint32 
     {
         case 1:
         case 4:
-        case 5: // Housing/sub5: cross-sniff analysis shows ZERO wire CREATEs
-                // across all retail captures. Likely session-local state for
-                // user interaction on a plot (editor/placement mode) â€” never
-                // shipped as a standalone wire entity. Encoding kept here as
-                // a pass-through in case callers construct an in-memory GUID;
-                // it will never reach the client as a CREATE block.
             return ObjectGuid(uint64((uint64(HighGuid::Housing) << 58)
                 | (uint64(subType & 0x1F) << 53)
                 | (uint64(arg1 & 0xFFFF) << 32)

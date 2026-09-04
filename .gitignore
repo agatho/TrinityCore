@@ -23,6 +23,3 @@ nbproject/*
 cmake-build-*/*
 .vs
 *.user
-build_game*.log
-# build/cmake output logs dropped at the repo root
-/*.log

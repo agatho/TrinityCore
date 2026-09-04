@@ -38,7 +38,6 @@
 #define ARTIFACTS_ALL_WEAPONS_GENERAL_WEAPON_EQUIPPED_PASSIVE 197886
 #define SPELL_DH_DOUBLE_JUMP 196055
 #define DISPLAYID_HIDDEN_MOUNT 73200
-#define SPELL_LEECH 143924
 
 #define WARMODE_ENLISTED_SPELL_OUTSIDE 269083
 
@@ -702,10 +701,7 @@ class TC_GAME_API Unit : public WorldObject
         void IncrDiminishing(SpellInfo const* auraSpellInfo);
         bool ApplyDiminishingToDuration(SpellInfo const* auraSpellInfo, int32& duration, WorldObject* caster, DiminishingLevels previousLevel) const;
         void ApplyDiminishingAura(DiminishingGroup group, bool apply);
-        void SendDiminishingReturnStart(DiminishingGroup group, bool showCountdown, bool isImmune) const;
         void ClearDiminishings();
-        void SendAddLossOfControl(ObjectGuid caster, uint32 spellId, SpellSchoolMask lockoutSchoolMask, int32 durationMs);
-        void SendLossOfControlAuraUpdate();
 
         virtual void Update(uint32 time) override;
 
@@ -755,7 +751,6 @@ class TC_GAME_API Unit : public WorldObject
         Unit* SelectNearbyTarget(Unit* exclude = nullptr, float dist = NOMINAL_MELEE_RANGE) const;
         void SendMeleeAttackStop(Unit const* victim = nullptr) const;
         void SendMeleeAttackStart(Unit* victim);
-        void SendResumeCastTo(Player const* receiver) const;
 
         void AddUnitState(uint32 f) { m_state |= f; }
         bool HasUnitState(const uint32 f) const { return (m_state & f) != 0; }
@@ -953,9 +948,6 @@ class TC_GAME_API Unit : public WorldObject
         static void Kill(Unit* attacker, Unit* victim, bool durabilityLoss = true, bool skipSettingDeathState = false);
         void KillSelf(bool durabilityLoss = true, bool skipSettingDeathState = false) { Unit::Kill(this, this, durabilityLoss, skipSettingDeathState); }
         static void DealHeal(HealInfo& healInfo);
-        // Leech (SPELL_AURA_MOD_LEECH / CR_LIFESTEAL): accumulate on damage/heal, reward on GCD
-        void ContributeLeech(uint32 amount, SpellInfo const* spellInfo = nullptr);
-        void RewardLeech();
 
         static void ProcSkillsAndAuras(Unit* actor, Unit* actionTarget, ProcFlagsInit const& typeMaskActor, ProcFlagsInit const& typeMaskActionTarget,
                                 ProcFlagsSpellType spellTypeMask, ProcFlagsSpellPhase spellPhaseMask, ProcFlagsHit hitMask, Spell* spell,
@@ -1135,7 +1127,6 @@ class TC_GAME_API Unit : public WorldObject
 
         void SendPlaySpellVisualKit(uint32 id, uint32 type, uint32 duration) const;
         void SendCancelSpellVisualKit(uint32 id);
-        void SendAuraPointsDepleted(uint16 slot, uint8 effectIndex) const;
 
         void CancelSpellMissiles(uint32 spellId, bool reverseMissile = false, bool abortSpell = false);
 
@@ -1159,9 +1150,6 @@ class TC_GAME_API Unit : public WorldObject
         void UpdateHeight(float newZ);
 
         void SendMoveKnockBack(Player* player, float speedXY, float speedZ, float vcos, float vsin);
-        void SendApplyInertia(int32 movementInertiaID, uint32 lifetimeMs);
-        void SendRemoveInertia(int32 movementInertiaID);
-        void SendAddImpulse(Position const& direction);
         void KnockbackFrom(Position const& origin, float speedXY, float speedZ, float angle = M_PI, Movement::SpellEffectExtraData const* spellEffectExtraData = nullptr);
 
         void MonsterMoveWithSpeed(float x, float y, float z, float speed, bool generatePath = false, bool forceDestination = false);
@@ -1176,14 +1164,6 @@ class TC_GAME_API Unit : public WorldObject
         bool IsHovering() const { return m_movementInfo.HasMovementFlag(MOVEMENTFLAG_HOVER); }
         bool SetWalk(bool enable);
         bool SetDisableGravity(bool disable, bool updateAnimTier = true);
-        void BeginDeferDashMovementSpeedUpdates();
-        void EndDeferDashMovementSpeedUpdates();
-        bool IsDeferringDashMovementSpeedUpdates() const { return _deferDashMovementSpeedUpdates > 0; }
-        void FinalizeDashMovementSpeedUpdates();
-        void PrepareDashMovementState();
-        void CleanupDashMovementAfterAuraEnd();
-        void DeferDashGravityRestore();
-        void RestoreDeferredDashGravity();
         bool SetFall(bool enable);
         bool SetSwim(bool enable);
         bool SetCanFly(bool enable);
@@ -1209,6 +1189,9 @@ class TC_GAME_API Unit : public WorldObject
         void RemoveMovementForce(ObjectGuid id);
         bool SetIgnoreMovementForces(bool ignore);
         void UpdateMovementForcesModMagnitude();
+
+        void ApplyInertia(int32 id, Milliseconds duration);
+        void RemoveInertia(int32 id);
 
         void SetInFront(WorldObject const* target);
         void SetFacingTo(float ori, bool force = true, uint32 movementId = EVENT_FACE);
@@ -1488,6 +1471,8 @@ class TC_GAME_API Unit : public WorldObject
             SpellCastResult result = SPELL_FAILED_INTERRUPTED, Optional<SpellCastResult> resultOther = {}, ObjectGuid const& interrupter = ObjectGuid::Empty);
         void FinishSpell(CurrentSpellTypes spellType, SpellCastResult result = SPELL_CAST_OK);
 
+        void CancelAutoRepeatSpell();
+
         // set withDelayed to true to account delayed spells as cast
         // delayed+channeled spells are always accounted as cast
         // we can skip channeled or delayed checks using flags
@@ -1499,7 +1484,6 @@ class TC_GAME_API Unit : public WorldObject
         void InterruptNonMeleeSpells(bool withDelayed, uint32 spellid = 0, bool withInstant = true);
 
         Spell* GetCurrentSpell(CurrentSpellTypes spellType) const { return m_currentSpells[spellType]; }
-        Spell* GetCurrentSpell(uint32 spellType) const { return m_currentSpells[spellType]; }
         Spell* FindCurrentSpellBySpellId(uint32 spell_id) const;
         int32 GetCurrentSpellCastTime(uint32 spell_id) const;
         struct GetCastSpellInfoContext
@@ -1699,8 +1683,6 @@ class TC_GAME_API Unit : public WorldObject
         bool IsMagnet() const;
         Unit* GetMeleeHitRedirectTarget(Unit* victim, SpellInfo const* spellInfo = nullptr);
 
-        // SPELL_AURA_MOD_ABILITY_SCHOOL_MASK (220): MiscValue = replacement school mask for spells matching EffectClassMask
-        SpellSchoolMask GetSchoolMaskForSpell(SpellInfo const* spellInfo) const;
         int32 SpellBaseDamageBonusDone(SpellSchoolMask schoolMask) const;
         int32 SpellDamageBonusDone(Unit* victim, SpellInfo const* spellProto, int32 pdamage, DamageEffectType damagetype, SpellEffectInfo const& spellEffectInfo, uint32 stack = 1, Spell* spell = nullptr, AuraEffect const* aurEff = nullptr) const;
         float SpellDamagePctDone(Unit* victim, SpellInfo const* spellProto, DamageEffectType damagetype, SpellEffectInfo const& spellEffectInfo) const;
@@ -1751,14 +1733,11 @@ class TC_GAME_API Unit : public WorldObject
 
         int32 GetFlightCapabilityID() const { return m_unitData->FlightCapabilityID; }
         void SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate);
-        int32 GetDriveCapabilityID() const { return m_unitData->DriveCapabilityID; }
-        void SetDriveCapabilityID(int32 driveCapabilityId, bool clientUpdate);
         float GetAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType) const { return m_advFlyingSpeed[speedType]; }
         float GetAdvFlyingSpeedMin(AdvFlyingRateTypeRange speedType) const { return m_advFlyingSpeed[speedType]; }
         float GetAdvFlyingSpeedMax(AdvFlyingRateTypeRange speedType) const { return m_advFlyingSpeed[speedType + 1]; }
-        void UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUpdate, bool force = false);
-        void UpdateAdvFlyingSpeed(AdvFlyingRateTypeRange speedType, bool clientUpdate, bool force = false);
-        void SendAdvFlyingSpeedBurst();
+        void UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUpdate);
+        void UpdateAdvFlyingSpeed(AdvFlyingRateTypeRange speedType, bool clientUpdate);
 
         void FollowerAdded(AbstractFollower* f);
         void FollowerRemoved(AbstractFollower* f);
@@ -1773,23 +1752,11 @@ class TC_GAME_API Unit : public WorldObject
         void PauseMovement(uint32 timer = 0, uint8 slot = 0, bool forced = true); // timer in ms
         void ResumeMovement(uint32 timer = 0, uint8 slot = 0); // timer in ms
 
-        void AddUnitMovementFlag(uint32 f) { m_movementInfo.AddMovementFlag(f); }
-        void RemoveUnitMovementFlag(uint32 f) { m_movementInfo.RemoveMovementFlag(f); }
-        bool HasUnitMovementFlag(uint32 f) const { return m_movementInfo.HasMovementFlag(f); }
-        uint32 GetUnitMovementFlags() const { return m_movementInfo.GetMovementFlags(); }
-        void SetUnitMovementFlags(uint32 f) { m_movementInfo.SetMovementFlags(f); }
-
-        void AddExtraUnitMovementFlag(uint32 f) { m_movementInfo.AddExtraMovementFlag(f); }
-        void RemoveExtraUnitMovementFlag(uint32 f) { m_movementInfo.RemoveExtraMovementFlag(f); }
-        bool HasExtraUnitMovementFlag(uint32 f) const { return m_movementInfo.HasExtraMovementFlag(f); }
-        uint32 GetExtraUnitMovementFlags() const { return m_movementInfo.GetExtraMovementFlags(); }
-        void SetExtraUnitMovementFlags(uint32 f) { m_movementInfo.SetExtraMovementFlags(f); }
-
-        void AddExtraUnitMovementFlag2(uint32 f) { m_movementInfo.AddExtraMovementFlag2(f); }
-        void RemoveExtraUnitMovementFlag2(uint32 f) { m_movementInfo.RemoveExtraMovementFlag2(f); }
-        bool HasExtraUnitMovementFlag2(uint32 f) const { return m_movementInfo.HasExtraMovementFlag2(f); }
-        uint32 GetExtraUnitMovementFlags2() const { return m_movementInfo.GetExtraMovementFlags2(); }
-        void SetExtraUnitMovementFlags2(uint32 f) { m_movementInfo.SetExtraMovementFlags2(f); }
+        void AddUnitMovementFlag(MovementFlags f) { m_movementInfo.AddMovementFlag(f); }
+        void RemoveUnitMovementFlag(MovementFlags f) { m_movementInfo.RemoveMovementFlag(f); }
+        bool HasUnitMovementFlag(MovementFlags f) const { return m_movementInfo.HasMovementFlag(f); }
+        MovementFlags GetUnitMovementFlags() const { return m_movementInfo.GetMovementFlags(); }
+        void SetUnitMovementFlags(MovementFlags f) { m_movementInfo.SetMovementFlags(f); }
 
         bool IsSplineEnabled() const;
 
@@ -1991,10 +1958,6 @@ class TC_GAME_API Unit : public WorldObject
         std::array<float, MAX_MOVE_TYPE> m_speed_rate;
         std::array<float, ADV_FLYING_MAX_SPEED_TYPE> m_advFlyingSpeed;
 
-        uint32 _deferDashMovementSpeedUpdates = 0;
-        bool _dashMovementSpeedUpdatesFinalized = false;
-        bool _deferDashGravityRestore = false;
-
         Unit* m_unitMovedByMe;    // only ever set for players, and only for direct client control
         Player* m_playerMovingMe; // only set for direct client control (possess effects, vehicles and similar)
         Unit* m_charmer; // Unit that is charming ME
@@ -2054,7 +2017,6 @@ class TC_GAME_API Unit : public WorldObject
         void SetRooted(bool apply);
 
         uint32 m_movementCounter;       ///< Incrementing counter used in movement packets
-        float m_pendingLeechHeal = 0.0f;                     // SPELL_AURA_MOD_LEECH / CR_LIFESTEAL — flushed on GCD
 
     private:
 

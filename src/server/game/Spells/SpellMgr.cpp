@@ -553,19 +553,16 @@ bool SpellMgr::CanSpellTriggerProcOnEvent(SpellProcEntry const& procEntry, ProcE
         return false;
 
     // check spell family name/flags (if set) for spells
-    // Gate this on the event actually carrying a spell, not on SPELL_PROC_FLAG_MASK. Spell-bearing
-    // events outside that mask - PROC_FLAG_CAST_ENDED is dispatched from Spell::finish with the
-    // spell attached - skipped the family filter entirely, so a spell_proc entry that declares a
-    // SpellFamilyName procced off every spell's cast-ended. Entries that declare no family are
-    // unaffected: SpellInfo::IsAffected returns true for familyName 0.
-    if (SpellInfo const* eventSpellInfo = eventInfo.GetSpellInfo())
-        if (!eventSpellInfo->IsAffected(procEntry.SpellFamilyName, procEntry.SpellFamilyMask))
-            return false;
-
-    // check spell type mask (if set) - still only meaningful for the hit-style proc events
     if (eventInfo.GetTypeMask() & SPELL_PROC_FLAG_MASK)
+    {
+        if (SpellInfo const* eventSpellInfo = eventInfo.GetSpellInfo())
+            if (!eventSpellInfo->IsAffected(procEntry.SpellFamilyName, procEntry.SpellFamilyMask))
+                return false;
+
+        // check spell type mask (if set)
         if (procEntry.SpellTypeMask && !(eventInfo.GetSpellTypeMask() & procEntry.SpellTypeMask))
             return false;
+    }
 
     // check spell phase mask
     if (eventInfo.GetTypeMask() & REQ_SPELL_PHASE_PROC_FLAG_MASK)
@@ -5217,18 +5214,10 @@ void SpellMgr::LoadSpellInfoCorrections()
         spellInfo->AttributesEx4 |= SPELL_ATTR4_AURA_IS_BUFF;
     });
 
-    // 404468 - Disable Skyriding (used by SwapDynamicFlightMode to opt back into static flight)
-    // Don't persist across logins so players default to skyriding.
+    // TODO: temporary, remove with dragonriding
     ApplySpellFix({ 404468 }, [](SpellInfo* spellInfo)
     {
         spellInfo->AttributesCu |= SPELL_ATTR0_CU_AURA_CANNOT_BE_SAVED;
-    });
-
-    // 436854 - Switch Flight Style: retail toggles the flight style while mounted (the current
-    // mount changes mode live), but the spell data lacks the allow-while-mounted attribute.
-    ApplySpellFix({ 436854 }, [](SpellInfo* spellInfo)
-    {
-        spellInfo->Attributes |= SPELL_ATTR0_ALLOW_WHILE_MOUNTED;
     });
 
     // Sigil of Flame
@@ -5315,25 +5304,6 @@ void SpellMgr::LoadSpellInfoCorrections()
         if (spellInfo->IsSingleTarget() && !spellInfo->MaxAffectedTargets)
             spellInfo->MaxAffectedTargets = 1;
     }
-
-    // Fel Rush air dash (197923): the client-side bundle triggers the momentum/dash-end helpers from
-    // effects 8 and 10 while effect 6 points at a dead trigger. UNVERIFIED against a live sniff -
-    // ported from the source branch, re-check the trigger ids if air Fel Rush misbehaves.
-    ApplySpellFix({ 197923 }, [](SpellInfo* spellInfo)
-    {
-        ApplySpellEffectFix(spellInfo, EFFECT_6, [](SpellEffectInfo* spellEffectInfo)
-        {
-            spellEffectInfo->TriggerSpell = 0;
-        });
-        ApplySpellEffectFix(spellInfo, EFFECT_8, [](SpellEffectInfo* spellEffectInfo)
-        {
-            spellEffectInfo->TriggerSpell = 199737;
-        });
-        ApplySpellEffectFix(spellInfo, EFFECT_10, [](SpellEffectInfo* spellEffectInfo)
-        {
-            spellEffectInfo->TriggerSpell = 346123;
-        });
-    });
 
     DB2HotfixGenerator summonProperties(sSummonPropertiesStore);
     summonProperties.ApplyHotfix(121, [](SummonPropertiesEntry* properties)

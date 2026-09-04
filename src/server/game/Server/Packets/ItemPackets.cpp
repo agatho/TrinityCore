@@ -30,11 +30,11 @@ void BuyItem::Read()
 {
     _worldPacket >> VendorGUID;
     _worldPacket >> ContainerGUID;
+    _worldPacket >> Item;
     _worldPacket >> Quantity;
     _worldPacket >> Muid;
     _worldPacket >> Slot;
     _worldPacket >> As<int32>(ItemType);
-    _worldPacket >> Item;
 }
 
 WorldPacket const* BuySucceeded::Write()
@@ -259,6 +259,7 @@ WorldPacket const* ItemPushResult::Write()
     _worldPacket << PlayerGUID;
     _worldPacket << uint8(Slot);
     _worldPacket << int32(SlotInBag);
+    _worldPacket << Item;
     _worldPacket << int32(ProxyItemID);
     _worldPacket << int32(Quantity);
     _worldPacket << int32(QuantityInInventory);
@@ -283,13 +284,11 @@ WorldPacket const* ItemPushResult::Write()
     _worldPacket << OptionalInit(FirstCraftOperationID);
     _worldPacket.FlushBits();
 
-    _worldPacket << Item;
+    if (CraftingData)
+        _worldPacket << *CraftingData;
 
     if (FirstCraftOperationID)
         _worldPacket << uint32(*FirstCraftOperationID);
-
-    if (CraftingData)
-        _worldPacket << *CraftingData;
 
     return &_worldPacket;
 }
@@ -390,26 +389,9 @@ void ChangeBagSlotFlag::Read()
     _worldPacket >> Bits<1>(On);
 }
 
-void ChangeBankBagSlotFlag::Read()
-{
-    _worldPacket >> BagIndex;
-    _worldPacket >> As<uint32>(FlagToChange);
-    _worldPacket >> Bits<1>(On);
-}
-
 void SetBackpackAutosortDisabled::Read()
 {
     _worldPacket >> Bits<1>(Disable);
-}
-
-void SetSortBagsRightToLeft::Read()
-{
-    _worldPacket >> Bits<1>(Enable);
-}
-
-void SetInsertItemsLeftToRight::Read()
-{
-    _worldPacket >> Bits<1>(Enable);
 }
 
 void SetBackpackSellJunkDisabled::Read()
@@ -441,63 +423,6 @@ WorldPacket const* SendItemPassives::Write()
     _worldPacket << Size<uint32>(SpellID);
     if (!SpellID.empty())
         _worldPacket.append(SpellID.data(), SpellID.size());
-
-    return &_worldPacket;
-}
-
-void PerformItemInteraction::Read()
-{
-    _worldPacket >> ItemGuid;
-    _worldPacket >> AgentGuid;
-    _worldPacket >> InteractionType;
-    _worldPacket >> BaseItemId;
-}
-
-WorldPacket const* ItemInteractionComplete::Write()
-{
-    _worldPacket << Bits<1>(Error);
-    _worldPacket.FlushBits();
-
-    return &_worldPacket;
-}
-
-void ConvertItemToBindToAccount::Read()
-{
-    _worldPacket >> ItemIndex;      // see ItemPackets.h - a client-side list index, not a guid
-    _worldPacket >> Flag;
-}
-
-WorldPacket const* ItemChanged::Write()
-{
-    _worldPacket << ItemGuid;
-    _worldPacket << int32(ChangeType);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* SocketGemsFailure::Write()
-{
-    _worldPacket << Item;
-
-    return &_worldPacket;
-}
-
-WorldPacket const* BackpackDefaultSizeChanged::Write()
-{
-    _worldPacket << int32(Size);
-
-    return &_worldPacket;
-}
-
-WorldPacket const* InventoryFixupComplete::Write()
-{
-    return &_worldPacket;
-}
-
-WorldPacket const* ConvertItemsToCurrencyValue::Write()
-{
-    _worldPacket << int32(CurrencyType);
-    _worldPacket << uint64(Quantity);
 
     return &_worldPacket;
 }

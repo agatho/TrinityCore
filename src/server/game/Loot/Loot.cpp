@@ -434,29 +434,6 @@ void LootRoll::SendLootRollWon(ObjectGuid const& targetGuid, int32 rollNumber, R
     }
 }
 
-// Tells every participant that this item's roll is settled, so the client can retire the roll frame
-// instead of leaving it up until its own local timer lapses.
-void LootRoll::SendRollsComplete() const
-{
-    WorldPackets::Loot::LootRollsComplete lootRollsComplete;
-    lootRollsComplete.LootObj = m_loot->GetGUID();
-    lootRollsComplete.LootListID = m_lootItem->LootListId;
-    lootRollsComplete.DungeonEncounterID = m_loot->GetDungeonEncounterId();
-    lootRollsComplete.Write();
-
-    for (auto const& [playerGuid, roll] : m_rollVoteMap)
-    {
-        if (roll.Vote == RollVote::NotValid)
-            continue;
-
-        Player* player = ObjectAccessor::GetPlayer(m_map, playerGuid);
-        if (!player)
-            continue;
-
-        player->SendDirectMessage(lootRollsComplete.GetRawPacket());
-    }
-}
-
 void LootRoll::FillPacket(WorldPackets::Loot::LootItemData& lootItem) const
 {
     lootItem.Quantity = m_lootItem->count;
@@ -734,11 +711,6 @@ void LootRoll::Finish(RollVoteMap::const_iterator winnerItr)
                 player->StoreLootItem(m_loot->GetOwnerGUID(), m_lootItem->LootListId, m_loot);
         }
     }
-
-    // Both outcomes above (all passed / a winner) end the roll, so the completion notice belongs here
-    // rather than in either branch.
-    SendRollsComplete();
-
     m_isStarted = false;
 }
 
@@ -817,47 +789,6 @@ void Loot::NotifyMoneyRemoved(Map const* map)
         else
             itr = PlayersLooting.erase(itr);
     }
-}
-
-bool Loot::StartRoll(Map* map, uint32 lootListId)
-{
-    if (lootListId >= items.size())
-        return false;
-
-    // Already rolling on this item.
-    if (_rolls.find(lootListId) != _rolls.end())
-        return false;
-
-    uint16 maxEnchantingSkill = 0;
-    for (ObjectGuid allowedLooterGuid : _allowedLooters)
-        if (Player* allowedLooter = ObjectAccessor::GetPlayer(map, allowedLooterGuid))
-            maxEnchantingSkill = std::max(maxEnchantingSkill, allowedLooter->GetSkillValue(SKILL_ENCHANTING));
-
-    auto&& [itr, inserted] = _rolls.try_emplace(lootListId);
-    if (!itr->second.TryToStart(map, *this, lootListId, maxEnchantingSkill))
-    {
-        _rolls.erase(itr);
-        return false;
-    }
-
-    _changed = true;
-    return true;
-}
-
-bool Loot::CancelRoll(uint32 lootListId)
-{
-    auto itr = _rolls.find(lootListId);
-    if (itr == _rolls.end())
-        return false;
-
-    // Unblock the item so it returns to the master-loot pool (the normal end paths clear this, but tearing the
-    // roll down early does not). Erasing the roll runs ~LootRoll, which sends LootAllPassed to notify clients.
-    if (lootListId < items.size())
-        items[lootListId].is_blocked = false;
-
-    _rolls.erase(itr);
-    _changed = true;
-    return true;
 }
 
 void Loot::OnLootOpened(Map* map, Player* looter)

@@ -18,15 +18,8 @@
 #include "Player.h"
 #include "AreaTrigger.h"
 #include "Account.h"
-#include "QueryPackets.h"
-#include "HousingDefines.h"
-#include "HousingMirrorEntity.h"
-#include "HousingNeighborhoodMirrorEntity.h"
-#include "HousingPlayerHouseEntity.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
-#include "ArchaeologyMgr.h"
-#include "ArchaeologyPackets.h"
 #include "ArenaTeam.h"
 #include "ArenaTeamMgr.h"
 #include "AzeriteEmpoweredItem.h"
@@ -38,7 +31,6 @@
 #include "BattlegroundMgr.h"
 #include "BattlegroundPackets.h"
 #include "BattlegroundScore.h"
-#include "BnetPresenceMgr.h"
 #include "BattlePetMgr.h"
 #include "CellImpl.h"
 #include "Channel.h"
@@ -58,16 +50,11 @@
 #include "Common.h"
 #include "ConditionMgr.h"
 #include "Containers.h"
-#include "CovenantPackets.h"
 #include "CreatureAI.h"
 #include "DB2Stores.h"
 #include "DatabaseEnv.h"
-#include "DelvesCompanion.h"
-#include "DelvesDefines.h"
-#include "DelvesRewards.h"
 #include "DisableMgr.h"
 #include "DuelPackets.h"
-#include "ElapsedTimerMgr.h"
 #include "EquipmentSetPackets.h"
 #include "Formulas.h"
 #include "GameEventMgr.h"
@@ -75,21 +62,8 @@
 #include "GameObjectAI.h"
 #include "Garrison.h"
 #include "GarrisonMgr.h"
-#include "GarrisonPackets.h"
-#include "MythicPlusData.h"
-#include "MythicPlusPacketsCommon.h"
 #include "GitRevision.h"
-#include "HouseInteriorMap.h"
-#include "Housing.h"
-#include "HousingMap.h"
-#include "HousingRoomEntity.h"
-#include "HousingMgr.h"
-#include "HousingPackets.h"
-#include "InitiativeManager.h"
-#include "Neighborhood.h"
-#include "NeighborhoodMgr.h"
 #include "GossipDef.h"
-#include "GridDefines.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
@@ -105,7 +79,6 @@
 #include "Language.h"
 #include "LanguageMgr.h"
 #include "LFGMgr.h"
-#include "LFGPackets.h"
 #include "ListUtils.h"
 #include "Log.h"
 #include "Loot.h"
@@ -113,11 +86,9 @@
 #include "LootMgr.h"
 #include "LootPackets.h"
 #include "Mail.h"
-#include "ManagedWorldStateMgr.h"
 #include "MailPackets.h"
 #include "MapManager.h"
 #include "MapUtils.h"
-#include "MeshObject.h"
 #include "MiscPackets.h"
 #include "MotionMaster.h"
 #include "MovementPackets.h"
@@ -133,14 +104,11 @@
 #include "PetitionMgr.h"
 #include "PhasingHandler.h"
 #include "PlayerChoice.h"
-#include "PreyMgr.h"
-#include "QuaternionData.h"
 #include "QueryCallback.h"
 #include "QueryHolder.h"
 #include "QueryResultStructured.h"
 #include "QuestDef.h"
 #include "QuestMgr.h"
-#include "PerksProgramActivityMgr.h"
 #include "QuestObjectiveCriteriaMgr.h"
 #include "QuestPackets.h"
 #include "RealmList.h"
@@ -172,7 +140,6 @@
 #include "VehiclePackets.h"
 #include "Vignette.h"
 #include "VignettePackets.h"
-#include "WeeklyRewardsMgr.h"
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
@@ -180,7 +147,6 @@
 #include "WorldStatePackets.h"
 #include <boost/dynamic_bitset.hpp>
 #include <G3D/g3dmath.h>
-#include <cmath>
 #include <sstream>
 
 // corpse reclaim times
@@ -190,7 +156,6 @@
 enum PlayerSpells
 {
     SPELL_EXPERIENCE_ELIMINATED = 206662,
-    SPELL_ARCHAEOLOGY_STANDING_ON_IT = 210837,
 };
 
 static uint32 corpseReclaimDelay[MAX_DEATH_COUNT] = { 30, 60, 120 };
@@ -274,7 +239,6 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
     m_drunkTimer = 0;
     m_deathTimer = 0;
     m_deathExpireTime = 0;
-    m_preferredGraveyardId = 0;
 
     for (uint8 j = 0; j < PLAYER_MAX_BATTLEGROUND_QUEUES; ++j)
     {
@@ -380,7 +344,6 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
     m_achievementMgr = std::make_unique<PlayerAchievementMgr>(this);
     m_reputationMgr = std::make_unique<ReputationMgr>(this);
     m_questObjectiveCriteriaMgr = std::make_unique<QuestObjectiveCriteriaMgr>(this);
-    m_perksActivityMgr = std::make_unique<PerksProgramActivityMgr>(this);
 
     for (uint8 i = 0; i < MAX_CUF_PROFILES; ++i)
         _CUFProfiles[i] = nullptr;
@@ -418,10 +381,6 @@ void Player::CleanupsBeforeDelete(bool finalCleanup)
 {
     TradeCancel(false);
     DuelComplete(DUEL_INTERRUPTED);
-
-    // Elapsed timers are per-session bookkeeping keyed by player GUID; drop ours so the manager
-    // does not accumulate entries for characters that are gone.
-    sElapsedTimerMgr->RemoveAllTimers(GetGUID());
 
     Unit::CleanupsBeforeDelete(finalCleanup);
 }
@@ -539,9 +498,9 @@ bool Player::Create(ObjectGuid::LowType guidlow, WorldPackets::Character::Charac
     UpdateMaxHealth();                                      // Update max Health (for add bonus from stamina)
     SetFullHealth();
 
-    for (PowerTypeEntry const* powerType : sPowerTypeStore)
-        if (powerType->GetFlags().HasFlag(PowerTypeFlags::SetToMaxOnInitialLogIn))
-            SetFullPower(Powers(powerType->PowerTypeEnum));
+    for (Powers power : GetPowerTypes())
+        if (sDB2Manager.GetPowerTypeEntry(power)->GetFlags().HasFlag(PowerTypeFlags::SetToMaxOnInitialLogIn))
+            SetFullPower(power);
 
     // original spells
     LearnDefaultSkills();
@@ -1085,10 +1044,6 @@ void Player::Update(uint32 p_time)
             m_nextSave -= p_time;
     }
 
-    // Update garrison timers (building completion, shipments, talent research, mission expiry)
-    for (auto& [type, garrison] : _garrisons)
-        garrison->Update(p_time);
-
     //Handle Water/drowning
     HandleDrowning(p_time);
 
@@ -1239,9 +1194,9 @@ void Player::ToggleDND()
         SetPlayerFlag(PLAYER_FLAGS_DND);
 }
 
-uint16 Player::GetChatFlags() const
+uint32 Player::GetChatFlags() const
 {
-    uint16 tag = CHAT_FLAG_NONE;
+    uint32 tag = CHAT_FLAG_NONE;
 
     if (isGMChat())
         tag |= CHAT_FLAG_GM;
@@ -1573,10 +1528,6 @@ void Player::AddToWorld()
             m_items[i]->AddToWorld();
 
     GetSession()->GetBattlenetAccount().AddToWorld();
-    if (GetSession()->HasHousingPlayerHouseEntity())
-        GetSession()->GetHousingPlayerHouseEntity().AddToWorld();
-    if (GetSession()->HasHousingNeighborhoodMirrorEntity())
-        GetSession()->GetHousingNeighborhoodMirrorEntity().AddToWorld();
 }
 
 void Player::RemoveFromWorld()
@@ -1596,10 +1547,6 @@ void Player::RemoveFromWorld()
         sBattlefieldMgr->HandlePlayerLeaveZone(this, m_zoneUpdateId);
     }
 
-    if (GetSession()->HasHousingNeighborhoodMirrorEntity())
-        GetSession()->GetHousingNeighborhoodMirrorEntity().RemoveFromWorld();
-    if (GetSession()->HasHousingPlayerHouseEntity())
-        GetSession()->GetHousingPlayerHouseEntity().RemoveFromWorld();
     GetSession()->GetBattlenetAccount().RemoveFromWorld();
 
     // Remove items from world before self - player must be found in Item::RemoveFromObjectUpdate
@@ -1652,12 +1599,9 @@ void Player::RegenerateAll()
         if (power != POWER_RUNES)
             Regenerate(power);
 
+    // Runes act as cooldowns, and they don't need to send any data
     if (GetClass() == CLASS_DEATH_KNIGHT)
     {
-        // Draining a rune is announced through the cast packets' rune list, but a rune coming back is not:
-        // SetRuneCooldown only republishes the POWER_RUNES count, which says how many are ready and never
-        // which ones. Collect the runes that finished this tick and name them.
-        uint32 addedRunesMask = 0;
         uint32 regeneratedRunes = 0;
         uint32 regenIndex = 0;
         while (regeneratedRunes < MAX_RECHARGING_RUNES && m_runes->CooldownOrder.size() > regenIndex)
@@ -1670,19 +1614,9 @@ void Player::RegenerateAll()
                 ++regenIndex;
             }
             else
-            {
                 SetRuneCooldown(runeToRegen, 0);
-                addedRunesMask |= 1u << runeToRegen;
-            }
 
             ++regeneratedRunes;
-        }
-
-        if (addedRunesMask)
-        {
-            WorldPackets::Spells::AddRunePower addRunePower;
-            addRunePower.AddedRunesMask = addedRunesMask;
-            SendDirectMessage(addRunePower.Write());
         }
     }
 
@@ -1708,15 +1642,6 @@ void Player::Regenerate(Powers power)
     PowerTypeEntry const* powerType = sDB2Manager.GetPowerTypeEntry(power);
     if (!powerType)
         return;
-
-    // Vigor (Skyriding) is not a value-regenerating power: it is a mirror of the SpellCategory 2391
-    // charge state (PowerType 25 has zero base regen in every build's data). Keep the mirror and
-    // the speed-scaled recharge pacing in sync from the regen tick instead.
-    if (power == POWER_ALTERNATE_MOUNT)
-    {
-        UpdateVigor(m_regenTimer);
-        return;
-    }
 
     int32 curValue = GetPower(power);
     float addvalue = GetPowerRegen(power) * 0.001f * m_regenTimer;
@@ -1811,53 +1736,6 @@ void Player::InterruptPowerRegen(Powers power)
     m_regenInterruptTimestamp = GameTime::Now();
     m_powerFraction[powerIndex] = 0.0f;
     SendDirectMessage(WorldPackets::Combat::InterruptPowerRegen(power).Write());
-}
-
-void Player::UpdateVigor(uint32 elapsedMs /*= 0*/)
-{
-    // Vigor (Skyriding) = the charge state of SpellCategory 2391. Since 11.2.7 retail shows it only
-    // as the charge count on the ability icons (no bar), so the server work is: mirror the count
-    // into POWER_ALTERNATE_MOUNT, and pace the recharge with forward speed - retail recovers a
-    // charge in ~12s when slow and ~6s at high speed; the flat data value (15s scaled by the
-    // Skyriding aura's recovery multiplier) covers the slow case, and FlightCapability's
-    // VigorRegenMaxVelCoefficient supplies the velocity scaling on top.
-    constexpr uint32 SPELL_CATEGORY_SKYRIDING_VIGOR = 2391;
-
-    if (!GetFlightCapabilityID())
-        return;
-
-    SpellHistory* history = GetSpellHistory();
-    int32 maxVigor = history->GetMaxCharges(SPELL_CATEGORY_SKYRIDING_VIGOR);
-    if (maxVigor <= 0)
-        return;
-
-    int32 vigor = history->GetChargeCount(SPELL_CATEGORY_SKYRIDING_VIGOR);
-    SetPower(POWER_ALTERNATE_MOUNT, vigor);
-
-    if (!elapsedMs || vigor >= maxVigor)
-        return;
-
-    if (!m_movementInfo.HasExtraMovementFlag2(MOVEMENTFLAG3_ADV_FLYING) || !m_movementInfo.advFlying)
-        return;
-
-    FlightCapabilityEntry const* flightCapability = sFlightCapabilityStore.LookupEntry(GetFlightCapabilityID());
-    if (!flightCapability || flightCapability->VigorRegenMaxVelCoefficient <= 0.0f || flightCapability->MaxVel <= 0.0f)
-        return;
-
-    uint32 powerIndex = GetPowerIndex(POWER_ALTERNATE_MOUNT);
-    if (powerIndex == MAX_POWERS || powerIndex >= MAX_POWERS_PER_CLASS)
-        return;
-
-    // m_powerFraction is free for this power (vigor never regenerates fractional power) - repurpose
-    // it to accumulate the earned bonus recovery, and shift the recharge queue in >=500ms steps so
-    // the SetSpellCharges resyncs stay infrequent.
-    float velocityPct = std::min(m_movementInfo.advFlying->forwardVelocity / flightCapability->MaxVel, 1.0f);
-    m_powerFraction[powerIndex] += float(elapsedMs) * velocityPct * flightCapability->VigorRegenMaxVelCoefficient;
-    if (m_powerFraction[powerIndex] >= 500.0f)
-    {
-        history->ModifyChargeRecoveryTime(SPELL_CATEGORY_SKYRIDING_VIGOR, Milliseconds(-int64(m_powerFraction[powerIndex])));
-        m_powerFraction[powerIndex] = 0.0f;
-    }
 }
 
 void Player::RegenerateHealth()
@@ -2045,20 +1923,7 @@ GameObject* Player::GetGameObjectIfCanInteractWith(ObjectGuid const& guid) const
         return nullptr;
 
     if (!go->IsWithinDistInMap(this))
-    {
-        // Debug: log interaction failures for housing cornerstones (type 48 = UI_LINK)
-        if (go->GetGoType() == GAMEOBJECT_TYPE_UI_LINK)
-        {
-            TC_LOG_DEBUG("housing", "Player::GetGameObjectIfCanInteractWith FAILED (distance/phase): "
-                "player={} go entry={} guid={} displayId={} dist={:.1f} "
-                "inMap={} inPhase={} atInteractDist={}",
-                GetGUID().ToString(), go->GetEntry(), go->GetGUID().ToString(),
-                go->GetGOInfo()->displayId, GetExactDist(go),
-                go->IsInMap(this), go->InSamePhase(this),
-                go->IsAtInteractDistance(this));
-        }
         return nullptr;
-    }
 
     return go;
 }
@@ -2296,15 +2161,7 @@ void Player::GiveXP(uint32 xp, Unit* victim, float group_rate)
 
     // XP to money conversion processed in Player::RewardQuest
     if (IsMaxLevel())
-    {
-        // The kill was eligible for XP but the award is aborted at max level. Notify the client so its
-        // XP UI can reflect the aborted gain (SMSG_XP_GAIN_ABORTED, observed for max-level kills in 12.0.7).
-        WorldPackets::Character::XPGainAborted xpGainAborted;
-        xpGainAborted.Victim = victim ? victim->GetGUID() : ObjectGuid::Empty;
-        xpGainAborted.Amount = xp;
-        SendDirectMessage(xpGainAborted.Write());
         return;
-    }
 
     uint32 bonus_xp;
     bool recruitAFriend = GetsRecruitAFriendBonus(true);
@@ -2412,9 +2269,9 @@ void Player::GiveLevel(uint8 level)
 
     // Only health and mana are set to maximum.
     SetFullHealth();
-    for (PowerTypeEntry const* powerType : sPowerTypeStore)
-        if (powerType->GetFlags().HasFlag(PowerTypeFlags::SetToMaxOnLevelUp))
-            SetFullPower(Powers(powerType->PowerTypeEnum));
+    for (Powers power : GetPowerTypes())
+        if (sDB2Manager.GetPowerTypeEntry(power)->GetFlags().HasFlag(PowerTypeFlags::SetToMaxOnLevelUp))
+            SetFullPower(power);
 
     // update level to hunter/summon pet
     if (Pet* pet = GetPet())
@@ -2435,19 +2292,6 @@ void Player::GiveLevel(uint8 level)
         UpdateCriteria(CriteriaType::GainLevels, level - oldLevel);
     if (IsMaxLevel())
         UpdateCriteria(CriteriaType::ReachMaxLevel);
-
-    // Retail 12.0.x hard-exits Chromie Time at the deactivation level (81): the state is
-    // force-cleared and the player is returned to their faction capital (audit R10/M7;
-    // 12.0.1 patch note moved the threshold 61 -> 71 -> 81). The level-80 soft exit
-    // (auto-accepted return quest + capital auto-exit) is NYI - data unmined, see Player.h.
-    if (level >= ChromieTimeDeactivationLevel && m_activePlayerData->UiChromieTimeExpansionID != 0)
-    {
-        SetChromieTime(0);
-        if (GetTeam() == ALLIANCE)
-            TeleportTo(0, -8833.38f, 628.628f, 94.0066f, 1.06535f); // Stormwind
-        else
-            TeleportTo(1, 1569.97f, -4397.41f, 16.0472f, 0.543025f); // Orgrimmar
-    }
 
     PushQuests();
 
@@ -3686,141 +3530,6 @@ void Player::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
                 item->BuildCreateUpdateBlockForPlayer(data, target);
 
         GetSession()->GetBattlenetAccount().BuildCreateUpdateBlockForPlayer(data, target);
-        GetSession()->GetHousingPlayerHouseEntity().BuildCreateUpdateBlockForPlayer(data, target);
-        GetSession()->GetHousingNeighborhoodMirrorEntity().BuildCreateUpdateBlockForPlayer(data, target);
-
-        // The own HousingPlayerHouseEntity is sent via the session entity above.
-        // That entity's GUID is constructed by Housing::Create as
-        //   subType=3, arg1=realmId, arg2=7 (hardcoded), counter=bnetAccountId
-        // and is the canonical HouseGuid advertised by the AT, CURRENT_HOUSE_INFO
-        // and CMSG/SMSG_HOUSING_* packets. A previous implementation here emitted a
-        // second "mapHouseEntity" with arg2=neighborhoodMapID, producing a ghost
-        // GUID (Housing-3-<mapID>-<bnet>-1) that the client's world-map icon
-        // picker could never resolve against the AT's HouseGUID field. Retail
-        // sniff dump_12.0.1.66838_2026-04-15_09-35-59 idx 9984 confirms every
-        // Housing/3 CREATE has arg2=7 - no map-ID-keyed variant is ever sent.
-        // The duplicate has been removed; proxy entities for neighbour plots
-        // are bundled below using each plot's real HouseGuid.
-        if (GetMap() && (GetMap()->IsHouseInterior() || (GetMap()->GetEntry() && GetMap()->GetEntry()->IsNeighborhood())))
-        {
-            // Bundle HousingPlayerHouse proxy entities for all OTHER occupied plots in
-            // the same UPDATE_OBJECT. Retail sniff dump_12.0.1.66838_2026-04-15_09-35-59
-            // idx 9984 contains 46 Housing/3 CREATE blocks (one per occupied neighborhood
-            // plot). The world-map icon picker (client sub_7FF624BB1880) iterates these to
-            // resolve each plot's HouseGUID -> entity -> BnetAccount mapping for the
-            // "owned / friend / stranger" icon choice and tooltip. Without them every
-            // neighbour plot renders as "unowned".
-            uint8 ownPlotIndex = INVALID_PLOT_INDEX;
-            if (Housing const* ownHousing = GetHousing())
-                ownPlotIndex = ownHousing->GetPlotIndex();
-
-            uint32 proxyCount = 0;
-            uint32 mirrorCount = 0;
-            uint32 skipOwn = 0, skipEmpty = 0, skipUnoccupied = 0;
-            HousingMap* hmap = dynamic_cast<HousingMap*>(GetMap());
-            Neighborhood const* nbh = hmap ? hmap->GetNeighborhood() : nullptr;
-            if (nbh)
-            {
-                for (Neighborhood::PlotInfo const& plot : nbh->GetPlots())
-                {
-                    if (!plot.IsOccupied()) { ++skipUnoccupied; continue; }
-                    if (plot.PlotIndex == ownPlotIndex) { ++skipOwn; continue; }
-                    if (plot.HouseGuid.IsEmpty()) { ++skipEmpty; continue; }
-
-                    uint32 bnetId = static_cast<uint32>(plot.OwnerBnetGuid.GetCounter());
-                    ObjectGuid mirrorGuid = hmap->GetHouseMirrorGuid(plot.PlotIndex);
-                    if (mirrorGuid.IsEmpty())
-                        mirrorGuid = hmap->MakeHouseMirrorGuid(plot.PlotIndex, bnetId);
-
-                    HousingPlayerHouseEntity proxy(GetSession(), plot.HouseGuid);
-                    proxy.SetObjectType(TYPEID_HOUSING_ENTITY);
-                    proxy.SetBnetAccount(plot.OwnerBnetGuid);
-                    proxy.SetPlotIndex(static_cast<int32>(plot.PlotIndex));
-                    proxy.SetLevel(plot.HouseLevel);
-                    proxy.SetFavor(plot.HouseFavor);
-                    // Retail-verified (idx 9984, n=47): every Housing/3 block sets
-                    // all 4 budgets matching the plot's HouseLevel â€” proxies are
-                    // not a reduced form. Without budgets, the client still has
-                    // PlotIndex/Level to render the plot, but Lua queries like
-                    // GetCurrentHouseLevelFavor / GetPlayerOwnedHouses read
-                    // budget fields as part of the house summary and return
-                    // default/zero for uninitialised fields.
-                    proxy.SetBudgets(
-                        sHousingMgr.GetInteriorDecorBudgetForLevel(plot.HouseLevel),
-                        sHousingMgr.GetExteriorDecorBudgetForLevel(plot.HouseLevel),
-                        sHousingMgr.GetRoomBudgetForLevel(plot.HouseLevel),
-                        sHousingMgr.GetFixtureBudgetForLevel(plot.HouseLevel));
-                    // Point EntityGUID at the paired HighGuid::Entity mirror so the
-                    // client's icon picker can chase EntityGUID -> position data.
-                    proxy.SetEntityGUID(mirrorGuid);
-                    proxy.BuildCreateUpdateBlockForPlayer(data, target);
-                    ++proxyCount;
-
-                    // Bundle every Group A per-piece mirror's CREATE into the same
-                    // UPDATE_OBJECT. Retail emits 4 (one per visible exterior fixture
-                    // â€” Base/Roof/Door/Window). Index 0 is the Type-9 root mirror
-                    // referenced by FHousingPlayerHouse_C.EntityGUID.
-                    for (HousingMirrorEntity* m : hmap->GetHouseMirrors(plot.PlotIndex))
-                    {
-                        m->BuildCreateUpdateBlockForPlayer(data, target);
-                        ++mirrorCount;
-                    }
-                    // Group B per-piece mirrors (untagged, AttachParent=fixture
-                    // MeshObject). Retail emits one per visible exterior fixture
-                    // (Base/Roof/Door/Window â€” typically 4 per plot).
-                    for (HousingMirrorEntity* bm : hmap->GetHouseMeshMirrors(plot.PlotIndex))
-                    {
-                        bm->BuildCreateUpdateBlockForPlayer(data, target);
-                        ++mirrorCount;
-                    }
-                }
-            }
-            TC_LOG_DEBUG("housing", "Player::BuildCreateUpdateBlockForPlayer: housing-map proxies for {} â€” "
-                "hmap={} nbh={} proxies={} mirrors={} skipOwn={} skipEmpty={} skipUnocc={} ownPlotIdx={}",
-                target->GetGUID().ToString(),
-                hmap ? "yes" : "no",
-                nbh ? "yes" : "no",
-                proxyCount, mirrorCount, skipOwn, skipEmpty, skipUnoccupied, uint32(ownPlotIndex));
-
-            // Also emit the own-plot mirror alongside the session HousingPlayerHouse
-            // entity (the session entity was bundled a few lines above via
-            // GetSession()->GetHousingPlayerHouseEntity().BuildCreateUpdateBlockForPlayer).
-            // The session entity's EntityGUID is refreshed to the own mirror in
-            // HousingMap::AddPlayerToMap, but the mirror itself needs to ride
-            // the initial UPDATE_OBJECT so the client registry has it when it
-            // resolves EntityGUID.
-            if (hmap && ownPlotIndex != INVALID_PLOT_INDEX)
-            {
-                for (HousingMirrorEntity* ownMirror : hmap->GetHouseMirrors(ownPlotIndex))
-                    ownMirror->BuildCreateUpdateBlockForPlayer(data, target);
-                for (HousingMirrorEntity* ownMeshMirror : hmap->GetHouseMeshMirrors(ownPlotIndex))
-                    ownMeshMirror->BuildCreateUpdateBlockForPlayer(data, target);
-            }
-
-            // Retail 66838 sniff analysis shows Housing/sub2 Room entities embedded
-            // in the initial Player CREATE bundle (interrior_exterrior_advanced_editor,
-            // LVW+262, position 226311+ with typeByte=18). The previous April-3rd
-            // comment "crashes the client because the housing UI context isn't
-            // established yet" predates ~3 weeks of housing rework â€” the specific
-            // crash conditions may no longer apply. Re-enabling per user's blizzlike
-            // guardrail: "we want to fully align with the Blizzard flow".
-            //
-            // Emit 1 HousingRoomEntity per occupied plot that has one registered
-            // (offline-owner plots spawned their room identity via SpawnRoomForPlot
-            // at map preload). If this reintroduces the crash, revert this block
-            // and document the exact crash stack so we can fix the root cause
-            // rather than skipping the entity.
-            if (hmap && nbh)
-            {
-                for (Neighborhood::PlotInfo const& plot : nbh->GetPlots())
-                {
-                    if (!plot.IsOccupied() || plot.HouseGuid.IsEmpty())
-                        continue;
-                    if (HousingRoomEntity* roomId = hmap->GetRoomIdentityEntity(plot.PlotIndex))
-                        roomId->BuildCreateUpdateBlockForPlayer(data, target);
-                }
-            }
-        }
     }
 
     Unit::BuildCreateUpdateBlockForPlayer(data, target);
@@ -3951,8 +3660,6 @@ void Player::ClearValuesChangesMask()
 {
     m_values.ClearChangesMask(&Player::m_playerData);
     m_values.ClearChangesMask(&Player::m_activePlayerData);
-    m_values.ClearChangesMask(&Player::m_playerHouseInfoComponentData);
-    m_values.ClearChangesMask(&Player::m_playerInitiativeComponentData);
     Unit::ClearValuesChangesMask();
 }
 
@@ -4202,13 +3909,6 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
 
-            // In-game Shop boost record. Only on a real delete: an UNLINKed character can be restored,
-            // and it must come back still marked as boosted (or still a class trial), or deleting and
-            // undeleting would launder a spent boost into a fresh one.
-            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_SHOP_BOOST);
-            stmt->setUInt64(0, guid);
-            trans->Append(stmt);
-
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_PLAYER_ACCOUNT_DATA);
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
@@ -4426,18 +4126,6 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
 
-            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_RESEARCH_SITE);
-            stmt->setUInt64(0, guid);
-            trans->Append(stmt);
-
-            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_RESEARCH_PROJECT);
-            stmt->setUInt64(0, guid);
-            trans->Append(stmt);
-
-            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_RESEARCH_HISTORY);
-            stmt->setUInt64(0, guid);
-            trans->Append(stmt);
-
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_STATS);
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
@@ -4468,20 +4156,6 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
 
             Garrison::DeleteFromDB(guid, trans);
 
-            // Covenant state is guid-keyed and TC recycles character GUIDs, so leaving these behind is not merely
-            // untidy: a new character created on a deleted character's guid would load the old m_covenantSoulbinds,
-            // read as HasEverJoinedAnyCovenant(), and be treated as a SWITCHER on its very first pledge - receiving
-            // the ability-talent grant reserved for switchers, and inheriting a renown and soulbind history that
-            // was never its own.
-            for (CharacterDatabaseStatements delCovenantStmt : { CHAR_DEL_CHARACTER_COVENANT, CHAR_DEL_CHARACTER_COVENANT_RENOWN,
-                CHAR_DEL_CHARACTER_COVENANT_SOULBIND, CHAR_DEL_CHARACTER_COVENANT_CALLINGS,
-                CHAR_DEL_CHARACTER_SOULBIND_CONDUITS, CHAR_DEL_CHARACTER_SOULBIND_CONDUIT_SOCKETS })
-            {
-                stmt = CharacterDatabase.GetPreparedStatement(delCovenantStmt);
-                stmt->setUInt64(0, guid);
-                trans->Append(stmt);
-            }
-
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_TRAIT_ENTRIES_BY_CHAR);
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
@@ -4499,10 +4173,6 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
             trans->Append(stmt);
 
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_BANK_TAB_SETTINGS);
-            stmt->setUInt64(0, guid);
-            trans->Append(stmt);
-
-            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_WARBAND_MEMBER_BY_GUID);
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
 
@@ -4730,9 +4400,6 @@ void Player::KillPlayer()
 
     setDeathState(CORPSE);
     //SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_IN_PVP);
-
-    // Delve death tracking is handled via InstanceScript::OnUnitDeath
-    // in DelveInstanceScript (see delves_common.cpp)
 
     ReplaceAllDynamicFlags(UNIT_DYNFLAG_NONE);
     if (!sMapStore.LookupEntry(GetMapId())->Instanceable() && !HasAuraType(SPELL_AURA_PREVENT_RESURRECTION))
@@ -5072,16 +4739,7 @@ void Player::RepopAtGraveyard()
         closestGrave = sObjectMgr->GetWorldSafeLoc(instance->GetEntranceLocation());
 
     if (!closestGrave)
-    {
-        // Honor a player-chosen preferred graveyard, but only when it is actually a graveyard linked to the
-        // player's current zone (guards against a spoofed id); otherwise fall back to the nearest one.
-        if (m_preferredGraveyardId)
-            if (sObjectMgr->FindGraveyardData(m_preferredGraveyardId, GetZoneId()))
-                closestGrave = sObjectMgr->GetWorldSafeLoc(m_preferredGraveyardId);
-
-        if (!closestGrave)
-            closestGrave = sObjectMgr->GetClosestGraveyard(*this, GetTeam(), this);
-    }
+        closestGrave = sObjectMgr->GetClosestGraveyard(*this, GetTeam(), this);
 
     // stop countdown until repop
     m_deathTimer = 0;
@@ -5671,9 +5329,7 @@ void Player::UpdateRating(CombatRating cr)
         case CR_SPEED:
         case CR_RESILIENCE_PLAYER_DAMAGE:
         case CR_RESILIENCE_CRIT_TAKEN:
-            break;
         case CR_LIFESTEAL:
-            UpdateLeech();
             break;
         case CR_HASTE_MELEE:
         case CR_HASTE_RANGED:
@@ -6520,7 +6176,6 @@ bool Player::UpdatePosition(float x, float y, float z, float orientation, bool t
         SetGroupUpdateFlag(GROUP_UPDATE_FLAG_POSITION);
 
     CheckAreaExplore();
-    _UpdateArchaeologySurveyIndicator();
 
     return true;
 }
@@ -6769,78 +6424,6 @@ uint8 Player::GetFactionGroupForRace(uint8 race)
             return faction->FactionGroup;
 
     return 1;
-}
-
-void Player::SetChromieTime(int32 expansionId)
-{
-    // Snapshot the pre-change CtrOptions so the SMSG can carry [previous, current].
-    WorldPackets::Misc::CTROptionsBlock previous;
-    previous.ConditionalFlags.assign(m_playerData->CtrOptions->ConditionalFlags.begin(),
-        m_playerData->CtrOptions->ConditionalFlags.end());
-    previous.FactionGroup = m_playerData->CtrOptions->FactionGroup;
-    previous.ChromieTimeExpansionMask = m_playerData->CtrOptions->ChromieTimeExpansionMask;
-
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::UiChromieTimeExpansionID), expansionId);
-
-    // ChromieTimeExpansionMask comes from the DB2 entry's ExpansionMask, not 1 << id.
-    // Confirmed via 12.0.5 sniff: Pandaria (id=8) -> mask 0x10, Legion (id=10) -> mask 0x40.
-    uint32 expansionMask = 0;
-    if (expansionId > 0)
-        if (UIChromieTimeExpansionInfoEntry const* entry = sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId)))
-            expansionMask = uint32(entry->ExpansionMask);
-
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
-        .ModifyValue(&UF::PlayerData::CtrOptions)
-        .ModifyValue(&UF::CTROptions::ChromieTimeExpansionMask), expansionMask);
-
-    SetChromieTimeConditionalFlags(expansionId > 0);
-
-    // Retail keeps FactionGroup populated from the player's faction independent of chromie
-    // state and never resets it on deselect (capture A rec 2149: fg 0->3 with mask 0 before
-    // any chromie interaction; equivalents B 2229 / C 1462). Alliance = 3 (Player|Alliance)
-    // is sniff-verified; the Horde value (expected 5 = Player|Horde per FactionTemplate)
-    // is unverified - no Horde 12.0.5+ sniff exists (audit R5 deferral).
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
-        .ModifyValue(&UF::PlayerData::CtrOptions)
-        .ModifyValue(&UF::CTROptions::FactionGroup), GetFactionGroupForRace(GetRace()));
-
-    SendCtrOptions(&previous);
-    PhasingHandler::OnConditionChange(this);
-}
-
-void Player::SetChromieTimeConditionalFlags(bool enabled)
-{
-    // Read current flags, modify, and write back as a whole
-    std::vector<uint32> conditionalFlags(m_playerData->CtrOptions->ConditionalFlags.begin(),
-        m_playerData->CtrOptions->ConditionalFlags.end());
-
-    if (conditionalFlags.empty())
-        conditionalFlags.push_back(0);
-
-    if (enabled)
-        conditionalFlags[0] |= 1;
-    else
-        conditionalFlags[0] &= ~1u;
-
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
-        .ModifyValue(&UF::PlayerData::CtrOptions)
-        .ModifyValue(&UF::CTROptions::ConditionalFlags), std::move(conditionalFlags));
-}
-
-void Player::SendCtrOptions(WorldPackets::Misc::CTROptionsBlock const* previous /*= nullptr*/) const
-{
-    WorldPackets::Misc::SetCtrOptions ctrOptions;
-    ctrOptions.Current.ConditionalFlags.assign(m_playerData->CtrOptions->ConditionalFlags.begin(),
-        m_playerData->CtrOptions->ConditionalFlags.end());
-    ctrOptions.Current.FactionGroup = m_playerData->CtrOptions->FactionGroup;
-    ctrOptions.Current.ChromieTimeExpansionMask = m_playerData->CtrOptions->ChromieTimeExpansionMask;
-
-    // Sniffs show retail always sends two blocks: previous + current. With no transition
-    // (e.g. login pulse) both blocks are identical to the current state.
-    ctrOptions.Previous = previous ? *previous : ctrOptions.Current;
-
-    SendDirectMessage(ctrOptions.Write());
 }
 
 void Player::SetFactionForRace(uint8 race)
@@ -7213,13 +6796,6 @@ bool Player::RewardHonor(Unit* victim, uint32 groupsize, int32 honor, HonorGainS
 
     AddHonorXP(honor);
 
-    // CriteriaType::PlayerHasEarnedHonor (207) - no asset; the real Criteria rows accumulate an honor total
-    // ("Earn 1500 Honor in the 3v3 bracket") and gate the bracket through ModifierTree
-    // (PlayerInArenaWithTeamSize 24 / PlayerInRankedArenaMatch 60 / PlayerInRatedBattleground 63), so
-    // miscValue1 must be the honor amount actually awarded.
-    if (honor > 0)
-        UpdateCriteria(CriteriaType::PlayerHasEarnedHonor, uint32(honor));
-
     if (InBattleground() && honor > 0)
     {
         if (Battleground* bg = GetBattleground())
@@ -7363,35 +6939,6 @@ void Player::_LoadCurrency(PreparedQueryResult result)
         _currencyStorage.insert(PlayerCurrenciesMap::value_type(currencyID, cur));
 
     } while (result->NextRow());
-
-    // Trader's Tender (currency 2032) is account-wide: its authoritative balance lives in the login DB and was
-    // cached at session init. Override the per-character row with the shared balance so earn/spend/refund all act
-    // on one wallet. A missing account row (cache == -1) means this is the first login since the account-wide
-    // wallet was introduced -> seed the shared balance from this character's existing per-character amount.
-    {
-        PlayerCurrenciesMap::iterator itr = _currencyStorage.find(CURRENCY_TYPE_TRADERS_TENDER);
-        int64 accountTender = GetSession()->GetAccountPerksTender();
-        if (accountTender < 0)
-        {
-            uint32 seed = (itr != _currencyStorage.end()) ? itr->second.Quantity : 0u;
-            GetSession()->StoreAccountPerksTender(seed);
-            accountTender = int64(seed);
-        }
-
-        if (itr == _currencyStorage.end())
-        {
-            PlayerCurrency cur{};
-            cur.state = PLAYERCURRENCY_UNCHANGED;
-            cur.Quantity = uint32(accountTender);
-            _currencyStorage.emplace(CURRENCY_TYPE_TRADERS_TENDER, cur);
-        }
-        else
-            itr->second.Quantity = uint32(accountTender);
-    }
-
-    // Mirror the Trader's Tender balance into the perks-program field the Trading Post UI reads.
-    if (PlayerCurrenciesMap::const_iterator itr = _currencyStorage.find(CURRENCY_TYPE_TRADERS_TENDER); itr != _currencyStorage.end())
-        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::PerksProgramCurrency), int32(itr->second.Quantity));
 }
 
 void Player::_SaveCurrency(CharacterDatabaseTransaction trans)
@@ -7402,14 +6949,6 @@ void Player::_SaveCurrency(CharacterDatabaseTransaction trans)
         CurrencyTypesEntry const* entry = sCurrencyTypesStore.LookupEntry(itr->first);
         if (!entry) // should never happen
             continue;
-
-        // Trader's Tender is account-wide (persisted to the login DB by StoreAccountPerksTender); never write it
-        // to the per-character character_currency table, which would create a divergent second source of truth.
-        if (itr->first == CURRENCY_TYPE_TRADERS_TENDER)
-        {
-            itr->second.state = PLAYERCURRENCY_UNCHANGED;
-            continue;
-        }
 
         switch (itr->second.state)
         {
@@ -7494,80 +7033,10 @@ void Player::SendCurrencies() const
     SendDirectMessage(packet.Write());
 }
 
-// SMSG_REQUEST_PVP_REWARDS_RESPONSE (0x480014) is decoded but DELIBERATELY not sent. The layout is recorded
-// here so the decode is not repeated; what blocks it is reward data this core does not have.
-//
-// The wire form was pinned from all 6 occurrences in the 12.0.7 family of captures (build-filtered to
-// 68275/68453/68974 and content-hash deduplicated - "rbg rated BG 12.0.7.pkt" is a byte-identical copy of
-// "rated BG 12.0.7.pkt", so the rated Blitz session counts once, not twice). Bodies are 304, 304, 348, 348,
-// 584 and 592 bytes. The shape is fixed, not counted:
-//
-//     RewardBlock[0]
-//     uint8  A            // 2 in the two small captures, 3 in the rated Blitz one
-//     uint8  B            // 0xC0 in all six
-//     RewardBlock[1] .. RewardBlock[12]        // 13 blocks in total, always all 13 present
-//
-// where RewardBlock is byte for byte the existing WorldPackets::LFG::LfgPlayerQuestReward and its
-// operator<< in LFGPackets.cpp - uint8 Mask, int32 RewardMoney, int32 RewardXP, the three uint32 counts up
-// front, then Item[]/Currency[]/BonusCurrency[] as {int32,int32} pairs, then one byte of MSB-first
-// OptionalInit bits (0x80 RewardSpellID, 0x40 ArtifactXPCategory, 0x20 ArtifactXP, 0x10 Honor) and the
-// present optionals in that order. That parser consumes all six bodies with ZERO bytes left over, which is
-// what settles the 13-block count: the client reader sub_7FF7290FB600 likewise calls the per-block reader
-// sub_7FF7291DAB70 thirteen times with two loose u8 reads after the first, and the two agree exactly.
-// Unpopulated activities are sent as all-zero blocks - retail itself left blocks 8 and 10 empty in the rated
-// Blitz capture, and left all but four blocks empty for a levelling character.
-//
-// Decoded values, for anyone verifying this later (currency 1792 = Honor, 1602 = Conquest): the rated Blitz
-// session carried e.g. Honor 300 + Conquest 8000 in block 0, Conquest 29800 + Honor 850 in block 1, and
-// Honor 200 with item 135539 in block 12; several blocks carry RewardSpellID 192953. The two non-PvP
-// captures are a levelling character and carry RewardXP (2150, 12250) where the max-level one carries none.
-//
-// The request side is already correct and needs no new trigger: CMSG_REQUEST_PVP_REWARDS (0x3A0041) has an
-// empty body, matching RequestPVPRewards, and every response in the captures is a direct 1:1 reply to it
-// 100-250 ms later. WorldSession::HandleRequestPvpReward -> here is exactly where retail answers.
-//
-// Only what this core will actually pay is published, and it is read from the same configuration the award
-// path reads, so the advertised figure cannot drift from the received one:
-//   - Honour is the winner's bonus from Battleground::EndBattleground, obtained by calling the very
-//     function that path calls - Battleground::GetBattlegroundCompletionHonor - instead of re-deriving it
-//     here. It was re-derived once, and that was a live drift hazard rather than a theoretical one: the
-//     award path treated the config value as an honorable-kill COUNT, and when that was fixed a
-//     re-derivation here would have gone on advertising ceil(270 * 80 * 1.55) = 33,480 for a win that
-//     pays 270. The first-win-of-the-day distinction is the player's own GetRandomWinner() flag, exactly
-//     as it is there. Rate.Honor IS applied to the advertised figure, because the award path's
-//     Player::RewardHonor applies it before the player receives anything and this frame states what the
-//     player receives; the shared function does that arithmetic so both sites agree by construction.
-//   - Conquest is deliberately NOT advertised. CONFIG_BG_REWARD_WINNER_CONQUEST_FIRST/LAST are declared in
-//     World.cpp and read by nothing at all, so this core awards no Conquest; publishing a figure would
-//     promise a payout that never arrives.
-//   - No item or spell rewards are advertised, because nothing in this core grants the ones retail sends.
-//   - The arena blocks stay empty on purpose rather than by omission: RewardHonor returns early in arenas,
-//     so 2v2, 3v3 and Skirmish genuinely pay no honour here and empty is the truthful answer.
-//   - The remaining blocks are activities this core does not run, and retail itself transmits those as
-//     all-zero blocks, so they are left zero rather than filled with something invented.
-//
-// Note on the opcode table: retail sends 0x480014 on connection index 1, while it is declared
-// CONNECTION_TYPE_REALM here. That difference is intentional and must not be "fixed". REALM always has a
-// socket, this frame is opened in the open world where an instance socket need not exist, and
-// SMSG_BATTLEFIELD_STATUS_QUEUED is likewise declared REALM on this branch and works live despite retail
-// also sending it on index 1.
 void Player::SendPvpRewards() const
 {
-    WorldPackets::LFG::RequestPvpRewardsResponse response;
-
-    // The same function Battleground::EndBattleground pays out of, with Rate.Honor applied because that
-    // path's RewardHonor applies it before the player sees the honor. Never re-derive this here.
-    uint32 const winnerHonor = Battleground::GetBattlegroundCompletionHonor(true, GetRandomWinner(), true);
-
-    // Every battleground pays this same bonus - EndBattleground does not vary it by bracket - so the
-    // battleground-shaped activities this core actually queues for all advertise it, and nothing else does.
-    for (uint8 slot : { uint8(WorldPackets::LFG::RequestPvpRewardsResponse::RandomBattleground),
-                        uint8(WorldPackets::LFG::RequestPvpRewardsResponse::RatedBattleground),
-                        uint8(WorldPackets::LFG::RequestPvpRewardsResponse::BrawlBattleground),
-                        uint8(WorldPackets::LFG::RequestPvpRewardsResponse::BattlegroundBlitz) })
-        response.Activity[slot].Honor = int32(winnerHonor);
-
-    SendDirectMessage(response.Write());
+    //WorldPacket packet(SMSG_REQUEST_PVP_REWARDS_RESPONSE, 24);
+    //GetSession()->SendPacket(&packet);
 }
 
 void Player::SetCreateCurrency(uint32 id, uint32 amount)
@@ -7677,14 +7146,6 @@ void Player::ModifyCurrency(uint32 id, int32 amount, CurrencyGainSource gainSour
         itr->second.state = PLAYERCURRENCY_CHANGED;
 
     itr->second.Quantity += amount;
-
-    // Keep the perks-program field the Trading Post UI reads in sync with the tender balance, and persist the
-    // shared account-wide balance to the login DB (Trader's Tender is never written to character_currency).
-    if (id == CURRENCY_TYPE_TRADERS_TENDER)
-    {
-        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::PerksProgramCurrency), int32(itr->second.Quantity));
-        GetSession()->StoreAccountPerksTender(itr->second.Quantity);
-    }
 
     if (amount > 0 && !ignoreCaps) // Ignore total values update for refund
     {
@@ -8048,11 +7509,6 @@ void Player::UpdateArea(uint32 newArea)
         UpdateCriteria(CriteriaType::EnterArea, newArea);
         UpdateCriteria(CriteriaType::LeaveArea, oldArea);
     }
-
-    // Battle.net presence: zone changes are one of the four events presence.v1/v2 subscribers are
-    // pushed on. UpdateArea covers both a subzone change and the tail of a full UpdateZone, and it is
-    // reached even when the zone id has no AreaTable entry, unlike UpdateZone's own body.
-    sBnetPresenceMgr->OnZoneChanged(this, m_zoneUpdateId, newArea);
 }
 
 void Player::UpdateZone(uint32 newZone, uint32 newArea)
@@ -8821,8 +8277,6 @@ void Player::UpdateWeaponDependentCritAuras(WeaponAttackType attackType)
 
     // these auras don't have item requirement (only Combat Expertise in 3.3.5a)
     amount += GetTotalAuraModifier(SPELL_AURA_MOD_CRIT_PCT);
-    // SPELL_AURA_MOD_SUPPORT_STAT misc 5 (e.g. Prescience) — percent crit from support
-    amount += GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_SUPPORT_STAT, 5);
 
     SetBaseModFlatValue(modGroup, amount);
 }
@@ -9581,15 +9035,6 @@ void Player::RemoveLootRoll(LootRoll* roll)
     m_lootRolls.erase(std::remove(m_lootRolls.begin(), m_lootRolls.end(), roll), m_lootRolls.end());
 }
 
-void Player::SetOfferedScriptQuestID(int32 questId)
-{
-    if (m_playerData->OfferedScriptQuestID == questId)
-        return;
-
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::OfferedScriptQuestID), questId);
-    SendUpdateToPlayer(this);
-}
-
 /*  If in a battleground a player dies, and an enemy removes the insignia, the player's bones is lootable
     Called by remove insignia spell effect    */
 void Player::RemovedInsignia(Player* looterPlr)
@@ -9726,16 +9171,7 @@ void Player::SendInitWorldStates(uint32 zoneId, uint32 areaId) const
 
     WorldStateMgr::FillInitialWorldStates(packet, GetMap(), areaId);
 
-    TC_LOG_INFO("housing", "Player::SendInitWorldStates: Map={} Zone={} Area={} WorldStateCount={}",
-        mapId, zoneId, areaId, uint32(packet.Worldstates.size()));
-
     SendDirectMessage(packet.Write());
-
-    // The rotating world states go out with the static ones, which is where the 12.0.7 captures show
-    // them: SMSG_ACTIVE_SCHEDULED_WORLD_STATE_INFO sits in the same burst as SMSG_INIT_WORLD_STATES.
-    // Realm-global content, but the client needs it before it can put a countdown on any widget the
-    // zone it just entered shows.
-    WorldStateMgr::SendActiveScheduledWorldStateInfo(this);
 }
 
 void Player::SetBindPoint(ObjectGuid guid) const
@@ -10105,122 +9541,6 @@ std::vector<Item*> Player::GetCraftingReagentItemsToDeposit()
     return itemList;
 }
 
-std::vector<Item*> Player::GetWarboundItemsToDeposit()
-{
-    std::vector<Item*> itemList;
-    ForEachItem(ItemSearchLocation::Inventory, [&itemList](Item* item)
-    {
-        // Only deposit warbound/BoA items, not character-soulbound
-        if (item->IsAccountBound() || !item->IsSoulBound())
-        {
-            // Skip quest items and bags
-            if (item->GetTemplate()->GetClass() != ITEM_CLASS_QUEST && !item->IsNotEmptyBag())
-                itemList.push_back(item);
-        }
-
-        return ItemSearchCallbackResult::Continue;
-    });
-
-    return itemList;
-}
-
-BagSlotFlags Player::GetItemAutoDepositCategory(Item const* item)
-{
-    ItemTemplate const* proto = item->GetTemplate();
-    if (!proto)
-        return BagSlotFlags::None;
-
-    // Junk takes precedence (ITEM_QUALITY_POOR is grey items the user wants to vendor)
-    if (proto->GetQuality() == ITEM_QUALITY_POOR)
-        return BagSlotFlags::PriorityJunk;
-
-    // Crafting reagents (items flagged USED_IN_A_TRADESKILL) get their own bin
-    if (proto->IsCraftingReagent())
-        return BagSlotFlags::PriorityReagents;
-
-    switch (proto->GetClass())
-    {
-        case ITEM_CLASS_WEAPON:
-        case ITEM_CLASS_ARMOR:
-            return BagSlotFlags::PriorityEquipment;
-        case ITEM_CLASS_CONSUMABLE:
-            return BagSlotFlags::PriorityConsumables;
-        case ITEM_CLASS_TRADE_GOODS:
-            return BagSlotFlags::PriorityTradeGoods;
-        case ITEM_CLASS_QUEST:
-            return BagSlotFlags::PriorityQuestItems;
-        default:
-            return BagSlotFlags::None;
-    }
-}
-
-int8 Player::PickAutoDepositTab(::BankType bank, Item const* item) const
-{
-    static constexpr BagSlotFlags AllPriorityFlags =
-        BagSlotFlags::PriorityEquipment   | BagSlotFlags::PriorityConsumables |
-        BagSlotFlags::PriorityTradeGoods  | BagSlotFlags::PriorityJunk        |
-        BagSlotFlags::PriorityQuestItems  | BagSlotFlags::PriorityReagents;
-
-    BagSlotFlags itemCategory = GetItemAutoDepositCategory(item);
-
-    auto pick = [&](auto const& tabs) -> int8
-    {
-        int8 fallback = -1;
-        for (std::size_t i = 0; i < tabs.size(); ++i)
-        {
-            BagSlotFlags flags = static_cast<BagSlotFlags>(int32(*tabs[i].DepositFlags));
-
-            // "Cleanup: Ignore this tab" — opt out of auto-deposit entirely
-            if ((flags & BagSlotFlags::DisableAutoSort) != BagSlotFlags::None)
-                continue;
-
-            // First match on the item's specific category wins
-            if (itemCategory != BagSlotFlags::None && (flags & itemCategory) != BagSlotFlags::None)
-                return int8(i);
-
-            // Remember the first tab with no priority filters as a generic fallback
-            if (fallback < 0 && (flags & AllPriorityFlags) == BagSlotFlags::None)
-                fallback = int8(i);
-        }
-        return fallback;
-    };
-
-    return (bank == ::BankType::Account)
-        ? pick(m_activePlayerData->AccountBankTabSettings)
-        : pick(m_activePlayerData->CharacterBankTabSettings);
-}
-
-std::vector<Item*> Player::GetItemsForBankAutoDeposit(::BankType bank, bool includeReagents) const
-{
-    std::vector<Item*> itemList;
-    ForEachItem(ItemSearchLocation::Inventory, [&itemList, bank, includeReagents](Item* item)
-    {
-        ItemTemplate const* proto = item->GetTemplate();
-        if (!proto)
-            return ItemSearchCallbackResult::Continue;
-
-        // Quest items and non-empty bags never auto-deposit
-        if (proto->GetClass() == ITEM_CLASS_QUEST || item->IsNotEmptyBag())
-            return ItemSearchCallbackResult::Continue;
-
-        if (bank == ::BankType::Account)
-        {
-            // Account bank rejects character-soulbound items (only warbound / BoA / unbound allowed)
-            if (item->IsSoulBound() && !item->IsAccountBound())
-                return ItemSearchCallbackResult::Continue;
-
-            // The "Include tradeable reagents" checkbox in the warband bank UI
-            if (!includeReagents && proto->IsCraftingReagent())
-                return ItemSearchCallbackResult::Continue;
-        }
-
-        itemList.push_back(item);
-        return ItemSearchCallbackResult::Continue;
-    });
-
-    return itemList;
-}
-
 Item* Player::GetItemByGuid(ObjectGuid guid) const
 {
     Item* result = nullptr;
@@ -10270,8 +9590,7 @@ Bag* Player::GetBagByPos(uint8 bag) const
 {
     if ((bag >= INVENTORY_SLOT_BAG_START && bag < INVENTORY_SLOT_BAG_END)
         || (bag >= BANK_SLOT_BAG_START && bag < BANK_SLOT_BAG_END)
-        || (bag >= REAGENT_BAG_SLOT_START && bag < REAGENT_BAG_SLOT_END)
-        || (bag >= ACCOUNT_BANK_SLOT_BAG_START && bag < ACCOUNT_BANK_SLOT_BAG_END))
+        || (bag >= REAGENT_BAG_SLOT_START && bag < REAGENT_BAG_SLOT_END))
         if (Item* item = GetItemByPos(INVENTORY_SLOT_BAG_0, bag))
             return item->ToBag();
     return nullptr;
@@ -10401,8 +9720,6 @@ bool Player::IsBagPos(uint16 pos)
         return true;
     if (bag == INVENTORY_SLOT_BAG_0 && (slot >= REAGENT_BAG_SLOT_START && slot < REAGENT_BAG_SLOT_END))
         return true;
-    if (bag == INVENTORY_SLOT_BAG_0 && (slot >= ACCOUNT_BANK_SLOT_BAG_START && slot < ACCOUNT_BANK_SLOT_BAG_END))
-        return true;
     return false;
 }
 
@@ -10411,11 +9728,9 @@ bool Player::IsChildEquipmentPos(uint8 bag, uint8 slot)
     return bag == INVENTORY_SLOT_BAG_0 && (slot >= CHILD_EQUIPMENT_SLOT_START && slot < CHILD_EQUIPMENT_SLOT_END);
 }
 
-bool Player::IsAccountBankPos(uint8 bag, uint8 slot)
+bool Player::IsAccountBankPos(uint8 bag, uint8 /*slot*/)
 {
     if (bag >= ACCOUNT_BANK_SLOT_BAG_START && bag < ACCOUNT_BANK_SLOT_BAG_END)
-        return true;
-    if (bag == INVENTORY_SLOT_BAG_0 && slot >= ACCOUNT_BANK_SLOT_BAG_START && slot < ACCOUNT_BANK_SLOT_BAG_END)
         return true;
     return false;
 }
@@ -10456,16 +9771,11 @@ bool Player::IsValidPos(uint8 bag, uint8 slot, bool explicit_pos) const
         if (slot >= BANK_SLOT_BAG_START && slot < BANK_SLOT_BAG_END)
             return true;
 
-        // account bank bag slots
-        if (slot >= ACCOUNT_BANK_SLOT_BAG_START && slot < ACCOUNT_BANK_SLOT_BAG_END)
-            return true;
-
         return false;
     }
 
     // bag content slots
     // bank bag content slots
-    // account bank bag content slots
     if (Bag* pBag = GetBagByPos(bag))
     {
         // any post selected
@@ -11833,93 +11143,6 @@ InventoryResult Player::CanBankItem(uint8 bag, uint8 slot, ItemPosCountVec& dest
     return reagentBankOnly ? EQUIP_ERR_REAGENT_BANK_FULL : EQUIP_ERR_BANK_FULL;
 }
 
-InventoryResult Player::CanAccountBankItem(uint8 bag, uint8 slot, ItemPosCountVec& dest, Item* pItem, bool swap) const
-{
-    if (!pItem)
-        return swap ? EQUIP_ERR_CANT_SWAP : EQUIP_ERR_ITEM_NOT_FOUND;
-
-    // Check: no character-soulbound items allowed (only warbound/BoA/unbound)
-    if (pItem->IsSoulBound() && !pItem->IsAccountBound())
-        return EQUIP_ERR_NO_SOULBOUND_ITEM_IN_ACCOUNT_BANK;
-
-    // Check: no quest items in account bank
-    if (pItem->GetTemplate()->GetClass() == ITEM_CLASS_QUEST)
-        return EQUIP_ERR_CANT_SWAP;
-
-    uint32 count = pItem->GetCount();
-    ItemTemplate const* pProto = pItem->GetTemplate();
-
-    // Specific slot requested
-    if (bag != NULL_BAG && slot != NULL_SLOT)
-    {
-        if (bag >= ACCOUNT_BANK_SLOT_BAG_START && bag < ACCOUNT_BANK_SLOT_BAG_END)
-        {
-            InventoryResult res = CanStoreItem_InSpecificSlot(bag, slot, dest, pProto, count, swap, pItem);
-            if (res != EQUIP_ERR_OK)
-                return res;
-
-            if (count == 0)
-                return EQUIP_ERR_OK;
-        }
-        return EQUIP_ERR_BANK_FULL;
-    }
-
-    // Specific bag requested
-    if (bag != NULL_BAG && slot == NULL_SLOT)
-    {
-        if (bag >= ACCOUNT_BANK_SLOT_BAG_START && bag < ACCOUNT_BANK_SLOT_BAG_END)
-        {
-            // Account bank tab bags are generic ITEM_SUBCLASS_CONTAINER bags, so
-            // both passes run with non_specialized=true (matching CanBankItem).
-            // First merge with existing stacks (only meaningful for stackables).
-            if (pProto->GetMaxStackSize() != 1)
-            {
-                InventoryResult res = CanStoreItem_InBag(bag, dest, pProto, count, true, true, pItem, NULL_BAG, NULL_SLOT);
-                if (res != EQUIP_ERR_OK)
-                    return res;
-
-                if (count == 0)
-                    return EQUIP_ERR_OK;
-            }
-
-            // Then try empty slots — this must run even when the merge pass returned
-            // EQUIP_ERR_OK without fully placing the stack (no matching stacks found).
-            InventoryResult res = CanStoreItem_InBag(bag, dest, pProto, count, false, true, pItem, NULL_BAG, NULL_SLOT);
-            if (res != EQUIP_ERR_OK)
-                return res;
-
-            if (count == 0)
-                return EQUIP_ERR_OK;
-        }
-        return EQUIP_ERR_BANK_FULL;
-    }
-
-    // No specific bag/slot: search all account bank bags
-    // First pass: try to merge with existing stacks (non_specialized=true — see above)
-    for (uint8 i = ACCOUNT_BANK_SLOT_BAG_START; i < ACCOUNT_BANK_SLOT_BAG_END; i++)
-    {
-        InventoryResult res = CanStoreItem_InBag(i, dest, pProto, count, true, true, pItem, bag, slot);
-        if (res != EQUIP_ERR_OK)
-            continue;
-
-        if (count == 0)
-            return EQUIP_ERR_OK;
-    }
-
-    // Second pass: try empty slots
-    for (uint8 i = ACCOUNT_BANK_SLOT_BAG_START; i < ACCOUNT_BANK_SLOT_BAG_END; i++)
-    {
-        InventoryResult res = CanStoreItem_InBag(i, dest, pProto, count, false, true, pItem, bag, slot);
-        if (res != EQUIP_ERR_OK)
-            continue;
-
-        if (count == 0)
-            return EQUIP_ERR_OK;
-    }
-
-    return EQUIP_ERR_BANK_FULL;
-}
-
 InventoryResult Player::CanUseItem(Item* pItem, bool not_loading) const
 {
     if (pItem)
@@ -12137,10 +11360,7 @@ Item* Player::StoreNewItem(ItemPosCountVec const& pos, uint32 itemId, bool updat
         }
 
         if (addToCollection)
-        {
             GetSession()->GetCollectionMgr()->OnItemAdded(item);
-            TryCollectConduitFromItem(item);
-        }
 
         if (ItemChildEquipmentEntry const* childItemEntry = sDB2Manager.GetItemChildEquipment(itemId))
         {
@@ -12217,9 +11437,6 @@ Item* Player::_StoreItem(uint16 pos, Item* pItem, uint32 count, bool clone, bool
 
         if (pItem->GetBonding() == BIND_ON_ACQUIRE ||
             pItem->GetBonding() == BIND_QUEST ||
-            pItem->GetBonding() == BIND_WOW_ACCOUNT ||
-            pItem->GetBonding() == BIND_BNET_ACCOUNT ||
-            pItem->GetBonding() == BIND_BNET_ACCOUNT_UNTIL_EQUIPPED ||
             (pItem->GetBonding() == BIND_ON_EQUIP && IsBagPos(pos)))
             pItem->SetBinding(true);
 
@@ -12259,9 +11476,6 @@ Item* Player::_StoreItem(uint16 pos, Item* pItem, uint32 count, bool clone, bool
     {
         if (pItem2->GetBonding() == BIND_ON_ACQUIRE ||
             pItem2->GetBonding() == BIND_QUEST ||
-            pItem2->GetBonding() == BIND_WOW_ACCOUNT ||
-            pItem2->GetBonding() == BIND_BNET_ACCOUNT ||
-            pItem2->GetBonding() == BIND_BNET_ACCOUNT_UNTIL_EQUIPPED ||
             (pItem2->GetBonding() == BIND_ON_EQUIP && IsBagPos(pos)))
             pItem2->SetBinding(true);
 
@@ -12684,13 +11898,9 @@ void Player::VisualizeItem(uint8 slot, Item* pItem)
         return;
 
     // check also  BIND_ON_ACQUIRE and BIND_QUEST for .additem or .additemset case by GM (not binded at adding to inventory)
-    if (pItem->GetBonding() == BIND_ON_EQUIP || pItem->GetBonding() == BIND_ON_ACQUIRE || pItem->GetBonding() == BIND_QUEST
-        || pItem->GetBonding() == BIND_WOW_ACCOUNT || pItem->GetBonding() == BIND_BNET_ACCOUNT
-        || pItem->GetBonding() == BIND_BNET_ACCOUNT_UNTIL_EQUIPPED)
+    if (pItem->GetBonding() == BIND_ON_EQUIP || pItem->GetBonding() == BIND_ON_ACQUIRE || pItem->GetBonding() == BIND_QUEST)
     {
         pItem->SetBinding(true);
-        if (pItem->GetBonding() == BIND_BNET_ACCOUNT_UNTIL_EQUIPPED)
-            pItem->ConvertToSoulbound();
         if (IsInWorld())
             GetSession()->GetCollectionMgr()->AddItemAppearance(pItem);
     }
@@ -13488,7 +12698,7 @@ void Player::SwapItem(uint16 src, uint16 dst)
 
             RemoveItem(srcbag, srcslot, true);
             StoreItem(dest, pSrcItem, true);
-            if (IsBankPos(src) || IsAccountBankPos(src))
+            if (IsBankPos(src))
                 ItemAddedQuestCheck(pSrcItem->GetEntry(), pSrcItem->GetCount());
         }
         else if (IsBankPos(dst))
@@ -13504,21 +12714,6 @@ void Player::SwapItem(uint16 src, uint16 dst)
             RemoveItem(srcbag, srcslot, true);
             BankItem(dest, pSrcItem, true);
             ItemRemovedQuestCheck(pSrcItem->GetEntry(), pSrcItem->GetCount());
-        }
-        else if (IsAccountBankPos(dst))
-        {
-            ItemPosCountVec dest;
-            InventoryResult msg = CanAccountBankItem(dstbag, dstslot, dest, pSrcItem, false);
-            if (msg != EQUIP_ERR_OK)
-            {
-                SendEquipError(msg, pSrcItem, nullptr);
-                return;
-            }
-
-            RemoveItem(srcbag, srcslot, true);
-            BankItem(dest, pSrcItem, true);
-            if (!IsBankPos(src) && !IsAccountBankPos(src))
-                ItemRemovedQuestCheck(pSrcItem->GetEntry(), pSrcItem->GetCount());
         }
         else if (IsEquipmentPos(dst))
         {
@@ -13548,8 +12743,6 @@ void Player::SwapItem(uint16 src, uint16 dst)
             msg = CanStoreItem(dstbag, dstslot, sDest, pSrcItem, false);
         else if (IsBankPos(dst))
             msg = CanBankItem(dstbag, dstslot, sDest, pSrcItem, false);
-        else if (IsAccountBankPos(dst))
-            msg = CanAccountBankItem(dstbag, dstslot, sDest, pSrcItem, false);
         else if (IsEquipmentPos(dst))
             msg = CanEquipItem(dstslot, eDest, pSrcItem, false);
         else
@@ -13567,7 +12760,7 @@ void Player::SwapItem(uint16 src, uint16 dst)
 
                 if (IsInventoryPos(dst))
                     StoreItem(sDest, pSrcItem, true);
-                else if (IsBankPos(dst) || IsAccountBankPos(dst))
+                else if (IsBankPos(dst))
                     BankItem(sDest, pSrcItem, true);
                 else if (IsEquipmentPos(dst))
                 {
@@ -13605,8 +12798,6 @@ void Player::SwapItem(uint16 src, uint16 dst)
         msg = CanStoreItem(dstbag, dstslot, sDest, pSrcItem, true);
     else if (IsBankPos(dst))
         msg = CanBankItem(dstbag, dstslot, sDest, pSrcItem, true);
-    else if (IsAccountBankPos(dst))
-        msg = CanAccountBankItem(dstbag, dstslot, sDest, pSrcItem, true);
     else if (IsEquipmentPos(dst))
     {
         msg = CanEquipItem(dstslot, eDest, pSrcItem, true);
@@ -13627,8 +12818,6 @@ void Player::SwapItem(uint16 src, uint16 dst)
         msg = CanStoreItem(srcbag, srcslot, sDest2, pDstItem, true);
     else if (IsBankPos(src))
         msg = CanBankItem(srcbag, srcslot, sDest2, pDstItem, true);
-    else if (IsAccountBankPos(src))
-        msg = CanAccountBankItem(srcbag, srcslot, sDest2, pDstItem, true);
     else if (IsEquipmentPos(src))
     {
         msg = CanEquipItem(srcslot, eDest2, pDstItem, true);
@@ -13719,7 +12908,7 @@ void Player::SwapItem(uint16 src, uint16 dst)
     // add to dest
     if (IsInventoryPos(dst))
         StoreItem(sDest, pSrcItem, true);
-    else if (IsBankPos(dst) || IsAccountBankPos(dst))
+    else if (IsBankPos(dst))
         BankItem(sDest, pSrcItem, true);
     else if (IsEquipmentPos(dst))
     {
@@ -13731,7 +12920,7 @@ void Player::SwapItem(uint16 src, uint16 dst)
     // add to src
     if (IsInventoryPos(src))
         StoreItem(sDest2, pDstItem, true);
-    else if (IsBankPos(src) || IsAccountBankPos(src))
+    else if (IsBankPos(src))
         BankItem(sDest2, pDstItem, true);
     else if (IsEquipmentPos(src))
         EquipItem(eDest2, pDstItem, true);
@@ -14928,16 +14117,8 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             SendRespecWipeConfirm(guid, GetNextResetTalentsCost(), SPEC_RESET_TALENTS);
             break;
         case GossipOptionNpc::Stablemaster:
-            // Sniff-verified against a real 12.0.7 stablemaster visit: retail sends NO gossip
-            // interaction packet for a stablemaster option. The client opens the stable window
-            // itself from selecting the OptionNPC == Stablemaster gossip option plus the
-            // ActivePlayerData::PetStable::StableMaster update field that SetStableMaster sets
-            // (delivered via the normal object update). Falling through to the generic
-            // !handled block sends SMSG_GOSSIP_OPTION_NPC_INTERACTION / NPCInteractionOpenResult,
-            // which retail never sends and which suppresses the client-side open — so mark it
-            // handled and send nothing extra.
             SetStableMaster(guid);
-            handled = true;
+            handled = false;
             break;
         case GossipOptionNpc::PetSpecializationMaster:
             PlayerTalkClass->SendCloseGossip();
@@ -14974,150 +14155,20 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             PlayerTalkClass->SendCloseGossip();
             SendRespecWipeConfirm(guid, 0, SPEC_RESET_GLYPHS);
             break;
-        case GossipOptionNpc::GarrisonMissionNpc:
-            // WoD Command Table. Fall through to the !handled branch, which sends the RETAIL trigger
-            // SMSG_GOSSIP_OPTION_NPC_INTERACTION{GossipNpcOptionID=30323}. The client resolves 30323 via
-            // GossipNPCOption.db2 (type GarrisonMissionNpc) and enters PlayerInteractionType::GarrMission(32).
-            // That interaction alone does NOT open the frame — the client fires the legacy
-            // GARRISON_MISSION_NPC_OPENED(1) (-> GarrisonMissionFrame) from its SMSG_DELETE_EXPIRED_MISSIONS_RESULT
-            // handler while interaction 32 is active, gated on Result==0 && wire bit6(LegionUnkBit)==0
-            // (see Garrison::SendDeleteExpiredMissionsResult). (Do NOT send SMSG_NPC_INTERACTION_OPEN_RESULT{32};
-            // that routes into the modern PlayerInteractionManager which has no GarrMission frame and dead-ends.)
-            // Precondition: the gossip_menu_option row must have GossipNpcOptionID = 30323.
-            handled = false;
-            break;
-        case GossipOptionNpc::ShipmentCrafter:
-            // WoD work-order NPC (e.g. the Tannery's "Work Orders" clerk). Retail 12.0.7 flow (sniff-verified):
-            // selecting this option -> SMSG_GOSSIP_OPTION_NPC_INTERACTION{GossipNpcOptionID} establishes
-            // PlayerInteractionType::ShipmentCrafter -> the client then sends CMSG_GARRISON_OPEN_SHIPMENT_NPC
-            // (HandleOpenShipmentNpc), which resolves the NPC's building and returns its shipment container ->
-            // client opens GarrisonCapacitiveDisplayFrame. So just fall through to the !handled interaction
-            // path (identical to GarrisonMissionNpc). The gossip_menu_option MUST carry a real ShipmentCrafter
-            // GossipNpcOptionID (a NULL one crashes the client, ERROR #132).
-            handled = false;
-            break;
         case GossipOptionNpc::GarrisonTradeskillNpc: // NYI
             break;
-        case GossipOptionNpc::GarrisonRecruitment:
-        {
-            // WoD garrison recruiter (e.g. Lysa Serion, 84947, in the Lunarfall/Frostwall inn). Selecting the
-            // option opens the recruitment frame via SMSG_GARRISON_OPEN_RECRUITMENT_NPC, which seeds the three
-            // recruit slots and tells the client whether it may roll a fresh set
-            // (CMSG_GARRISON_GENERATE_RECRUITS) and whether it may pick a counter/trait preference
-            // (CMSG_GARRISON_SET_RECRUITMENT_PREFERENCES). Both of those handlers, and the packet itself, have
-            // been here all along - only the opener was missing, so the option was a dead click.
-            //
-            // Deliberately resolved through the no-arg GetGarrison() (WoD, type 2): HandleGarrisonGenerateRecruits
-            // and HandleGarrisonRecruitFollower both resolve the same way, and seeding the frame from a different
-            // garrison than the one those handlers act on would let a player recruit against the wrong roster.
-            // If the recruiter is ever reused for another garrison type, all three sites must move together.
-            Garrison* garrison = GetGarrison();
-            if (!garrison)
-                break;
-
-            WorldPackets::Garrison::GarrisonOpenRecruitmentNpc openRecruitment;
-            openRecruitment.NpcGUID = guid;
-            openRecruitment.MechanicTypeID = garrison->GetRecruitmentPreferenceAbilityId();
-            openRecruitment.TraitID = garrison->GetRecruitmentPreferenceTraitId();
-
-            // Exactly 3 inline follower records, no count prefix (see GarrisonOpenRecruitmentNpc::Write). Slots
-            // past the rolled count stay default-constructed, matching HandleGarrisonGenerateRecruits.
-            std::vector<WorldPackets::Garrison::GarrisonFollower> const& recruits = garrison->GetAvailableRecruits();
-            for (std::size_t i = 0; i < openRecruitment.Followers.size() && i < recruits.size(); ++i)
-                openRecruitment.Followers[i] = recruits[i];
-
-            openRecruitment.CanGenerateRecruits = true;
-            openRecruitment.CanSetRecruitmentPreference = true;
-            SendDirectMessage(openRecruitment.Write());
+        case GossipOptionNpc::GarrisonRecruitment: // NYI
             break;
-        }
-        // GossipOptionNpc::GarrisonTalent (Order Advancement) intentionally has NO case: it falls through to
-        // `default` (handled = false), so the generic immersive-interaction path below runs. The client resolves
-        // the option's GossipNpcOptionID (GossipNPCOption.db2) to PlayerInteractionType::GarrTalent and fires
-        // GARRISON_TALENT_NPC_OPENED -> OrderHallTalentFrame. No dedicated open-talent packet/opcode is needed
-        // (verified by client RE; a dedicated packet leaves a stuck "book cursor" because no frame is registered
-        // for it). The option only needs its GossipNpcOptionID set in GossipNPCOption.db2 (e.g. Hunter = 32330).
-        case GossipOptionNpc::CovenantPreviewNpc:
-        {
-            // Tell the client which covenant to preview. The covenant is NOT inferred from the creature entry - it
-            // comes from the gossip option's own GossipNPCOption.db2 row (CovenantID column), e.g. option 32285 = Kyrian
-            // on Polemarch Adrestes, 32306 = Venthyr on General Draven.
-            int32 covenantId = 0;
-            if (item->GossipNpcOptionID)
-                if (GossipNPCOptionEntry const* npcOption = sGossipNPCOptionStore.LookupEntry(*item->GossipNpcOptionID))
-                    covenantId = npcOption->CovenantID;
-
-            if (covenantId > 0)
-            {
-                WorldPackets::Covenant::CovenantPreviewOpenNpc preview;
-                preview.NpcGUID = guid;
-                preview.CovenantID = covenantId;
-                SendDirectMessage(preview.Write());
-            }
-            else
-                TC_LOG_DEBUG("entities.player", "Player::OnGossipSelect: covenant preview option {} on menu {} has no GossipNPCOption CovenantID; preview not sent.",
-                    gossipOptionId, menuId);
-
-            // Fall through to the generic path so the CovenantPreview interaction is still opened.
-            handled = false;
-            break;
-        }
-        case GossipOptionNpc::ChromieTimeNpc:
-            // Fall through to the generic !handled branch, which sends
-            // SMSG_GOSSIP_OPTION_NPC_INTERACTION{GossipNpcOptionID}; the client resolves that through
-            // GossipNPCOption.db2 into PlayerInteractionType::ChromieTime (45) and raises the timeline
-            // picker. Consuming the option here (the old "// NYI" stub) swallowed it and nothing opened.
-            // This matches feature/chromie-time, which owns this handler - integration kept its stub
-            // through the merge even though the branch had already changed this line.
-            handled = false;
+        case GossipOptionNpc::ChromieTimeNpc: // NYI
             break;
         case GossipOptionNpc::RuneforgeLegendaryCrafting: // NYI
             break;
         case GossipOptionNpc::RuneforgeLegendaryUpgrade: // NYI
             break;
-        // GossipOptionNpc::ProfessionsCraftingOrder (48) deliberately keeps no case and is NOT listed here: the
-        // 12.0.7 client's GossipNPCOption.db2 carries zero rows of that type, so no live NPC can raise it. It
-        // therefore reaches `default:`, which sets handled = false and opens the generic interaction - strictly
-        // more useful than the upstream "// NYI" stub, which consumed the option and sent nothing. That stub is
-        // deliberately NOT reinstated here: feature/housing-system still carried it only because the branch
-        // predates feature/crafting-orders' removal of it.
-        case GossipOptionNpc::ProfessionsCustomerOrder:
-        {
-            // The crafting-order clerk has its own dedicated open opcode, so it belongs in this
-            // switch rather than in the generic !handled fall-through — exactly like the auctioneer
-            // above. SMSG_CRAFTING_HOUSE_HELLO_RESPONSE REPLACES SMSG_GOSSIP_OPTION_NPC_INTERACTION
-            // here; it does not accompany it.
-            //
-            // Capture evidence (build 68275, ingame-shop_ordersCrafting_professions.pkt, three
-            // identical sequences at ticks 383194 / 761111 / 788488, clerk menu 30243 — the same menu
-            // the crafting-order work targets):
-            //     CMSG_GOSSIP_SELECT_OPTION{guid, 30243, 107733}
-            //   ~150 ms later
-            //     SMSG_CRAFTING_HOUSE_HELLO_RESPONSE{guid, 0x40}      <- the only reply
-            //     CMSG_CRAFTING_ORDER_LIST_MY_ORDERS{same guid}
-            // SMSG_GOSSIP_OPTION_NPC_INTERACTION appears zero times in those windows, and
-            // SMSG_NPC_INTERACTION_OPEN_RESULT zero times in the whole 12.0.7 capture set. That is
-            // not a dead mechanism in the session: the same capture carries three
-            // SMSG_GOSSIP_OPTION_NPC_INTERACTION records for a GameObject, so retail deliberately
-            // does not use it for this clerk.
-            //
-            // The client handler (sub_7FF72ACDB8D0) opens PlayerInteractionType 60 itself and then
-            // fires CRAFTINGORDERS_SHOW_CUSTOMER, so nothing else is needed to raise the frame.
-            PlayerTalkClass->GetInteractionData().StartInteraction(guid, PlayerInteractionType::ProfessionsCustomerOrder);
-
-            WorldPackets::Housing::CraftingHouseHelloResponse craftingHouseHello;
-            craftingHouseHello.Guid = guid;
-            craftingHouseHello.OpenForBusiness = true;  // clear raises CRAFTING_HOUSE_DISABLED instead
-            SendDirectMessage(craftingHouseHello.Write());
-
-            // Merge note (integration/all-systems): feature/crafting-orders reached this line first and set
-            // handled = false here, shipping world SQL that populates gossip_menu_option.GossipNpcOptionID on
-            // menus 27907 and 30243. The capture evidence above wins, so the replace semantics are kept and
-            // `handled` stays true. That SQL is then only inert, not wrong: GossipNpcOptionID is read solely on
-            // the !handled path, which this case no longer takes. Leave the rows in place - they cost nothing
-            // and are the correct data if a future build ever restores the generic trigger.
+        case GossipOptionNpc::ProfessionsCraftingOrder: // NYI
             break;
-        }
+        case GossipOptionNpc::ProfessionsCustomerOrder: // NYI
+            break;
         case GossipOptionNpc::BarbersChoice: // NYI - unknown if needs sending
             break;
         default:
@@ -15181,21 +14232,6 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
                 SendDirectMessage(npcInteraction.Write());
             }
         }
-    }
-
-    // Cast associated spell if gossip option has one (used by delve entrances, scenario triggers, etc.)
-    if (item->SpellID)
-    {
-        if (sSpellMgr->GetSpellInfo(*item->SpellID, GetMap()->GetDifficultyID()))
-        {
-            if (source->GetTypeId() == TYPEID_GAMEOBJECT)
-                source->ToGameObject()->CastSpell(this, *item->SpellID);
-            else if (source->GetTypeId() == TYPEID_UNIT)
-                source->ToCreature()->CastSpell(this, *item->SpellID);
-            else
-                CastSpell(this, *item->SpellID, true);
-        }
-        PlayerTalkClass->SendCloseGossip();
     }
 
     ModifyMoney(-cost);
@@ -15765,24 +14801,6 @@ bool Player::CanRewardQuest(Quest const* quest, LootItemType rewardType, uint32 
         }
     }
 
-    // TreasurePicker (server-authoritative picker contents, see `treasure_picker`)
-    for (int32 treasurePickerId : quest->GetTreasurePickerId())
-    {
-        TreasurePickerTemplate const* treasurePicker = sObjectMgr->GetTreasurePicker(uint32(treasurePickerId));
-        TreasurePickerItem const* pickerItem = sObjectMgr->SelectTreasurePickerItem(treasurePicker, this, rewardId);
-        if (!pickerItem)
-            continue;
-
-        InventoryResult res = CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, pickerItem->ItemID, pickerItem->Quantity);
-        if (res != EQUIP_ERR_OK)
-        {
-            if (msg)
-                SendQuestFailed(quest->GetQuestId(), res);
-
-            return false;
-        }
-    }
-
     return true;
 }
 
@@ -15948,10 +14966,6 @@ uint32 Player::GetQuestXPReward(Quest const* quest)
     for (Unit::AuraEffectList::const_iterator i = ModXPPctAuras.begin(); i != ModXPPctAuras.end(); ++i)
         AddPct(XP, (*i)->GetAmount());
 
-    // Warband alt XP bonus (5% per max-level character on account, max 25%)
-    if (uint8 altCount = GetWarbandMaxLevelCharCount())
-        XP += XP * altCount * 5 / 100;
-
     return XP;
 }
 
@@ -15987,19 +15001,23 @@ void Player::RewardQuestPackage(uint32 questPackageId, ItemContext context, uint
     {
         for (QuestPackageItemEntry const* questPackageItem : *questPackageItems)
         {
-            if (onlyItemId && questPackageItem->ItemID != int32(onlyItemId))
-                continue;
-
-            if (CanSelectQuestPackageItem(questPackageItem))
+            if (onlyItemId && questPackageItem->ItemID == int32(onlyItemId))
             {
-                hasFilteredQuestPackageReward = true;
-                ItemPosCountVec dest;
-                if (CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, questPackageItem->ItemID, questPackageItem->ItemQuantity) == EQUIP_ERR_OK)
+                if (CanSelectQuestPackageItem(questPackageItem))
                 {
-                    Item* item = StoreNewItem(dest, questPackageItem->ItemID, true, GenerateItemRandomBonusListId(questPackageItem->ItemID), {}, context);
-                    SendNewItem(item, questPackageItem->ItemQuantity, true, false);
+                    hasFilteredQuestPackageReward = true;
+                    ItemPosCountVec dest;
+                    if (CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, questPackageItem->ItemID, questPackageItem->ItemQuantity) == EQUIP_ERR_OK)
+                    {
+                        Item* item = StoreNewItem(dest, questPackageItem->ItemID, true, GenerateItemRandomBonusListId(questPackageItem->ItemID), {}, context);
+                        SendNewItem(item, questPackageItem->ItemQuantity, true, false);
+                        continue;
+                    }
                 }
             }
+
+            // Unlock the item appearance for the other reward items as well of possible
+            GetSession()->GetCollectionMgr()->AddItemAppearance(questPackageItem->ItemID);
         }
     }
 
@@ -16032,11 +15050,6 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
     uint32 quest_id = quest->GetQuestId();
     QuestStatus oldStatus = GetQuestStatus(quest_id);
 
-    // A turned-in calling frees its slot on the board straight away; the replacement arrives at the next daily
-    // reset. The client agrees with this ordering - it re-requests the callings on QUEST_TURNED_IN.
-    if (quest->GetQuestTag() == QuestTagType::CovenantCalling)
-        OnCovenantCallingCompleted(quest_id);
-
     if (quest->IsDaily() || quest->IsDFQuest())
     {
         SetDailyQuestStatus(quest_id);
@@ -16060,10 +15073,6 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
         SetRewardedQuest(quest_id);
 
     SetQuestCompletedBit(quest_id, true);
-
-    // Phase 10F - if this quest is a Campaign.Completed marker, auto-grant the
-    // Campaign.RewardQuestID to the player (retail behavior).
-    QuestMgr::OnQuestCompletedHandleCampaignReward(this, quest_id);
 
     for (QuestObjective const& obj : quest->GetObjectives())
     {
@@ -16146,14 +15155,20 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
             {
                 for (uint32 i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
                 {
-                    if (quest->RewardChoiceItemId[i] && quest->RewardChoiceItemType[i] == LootItemType::Item && quest->RewardChoiceItemId[i] == rewardId)
+                    if (quest->RewardChoiceItemId[i] && quest->RewardChoiceItemType[i] == LootItemType::Item)
                     {
-                        ItemPosCountVec dest;
-                        if (CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, rewardId, quest->RewardChoiceItemCount[i]) == EQUIP_ERR_OK)
+                        if (quest->RewardChoiceItemId[i] == rewardId)
                         {
-                            Item* item = StoreNewItem(dest, rewardId, true, GenerateItemRandomBonusListId(rewardId), {}, ItemContext::Quest_Reward);
-                            SendNewItem(item, quest->RewardChoiceItemCount[i], true, false);
+                            ItemPosCountVec dest;
+                            if (CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, rewardId, quest->RewardChoiceItemCount[i]) == EQUIP_ERR_OK)
+                            {
+                                Item* item = StoreNewItem(dest, rewardId, true, GenerateItemRandomBonusListId(rewardId), {}, ItemContext::Quest_Reward);
+                                SendNewItem(item, quest->RewardChoiceItemCount[i], true, false);
+                            }
                         }
+
+                        // Add the remaining item appearances for the quest if possible
+                        GetSession()->GetCollectionMgr()->AddItemAppearance(quest->RewardChoiceItemId[i]);
                     }
                 }
             }
@@ -16174,28 +15189,6 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
         }
         default:
             break;
-    }
-
-    // TreasurePicker (server-authoritative picker contents; independent of the classic RewardItemId[])
-    for (int32 treasurePickerId : quest->GetTreasurePickerId())
-    {
-        TreasurePickerTemplate const* treasurePicker = sObjectMgr->GetTreasurePicker(uint32(treasurePickerId));
-        TreasurePickerItem const* pickerItem = sObjectMgr->SelectTreasurePickerItem(treasurePicker, this, rewardId);
-        if (!pickerItem)
-            continue;
-
-        ItemPosCountVec dest;
-        if (CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, pickerItem->ItemID, pickerItem->Quantity) != EQUIP_ERR_OK)
-            continue;
-
-        std::vector<int32> bonusListIDs;
-        if (pickerItem->BonusListID)
-            bonusListIDs.push_back(pickerItem->BonusListID);
-
-        ItemContext context = ItemContext(pickerItem->Context);
-        Item* item = StoreNewItem(dest, pickerItem->ItemID, true, 0, {}, context, bonusListIDs.empty() ? nullptr : &bonusListIDs);
-        if (item)
-            SendNewItem(item, pickerItem->Quantity, true, false);
     }
 
     for (uint8 i = 0; i < QUEST_REWARD_CURRENCY_COUNT; ++i)
@@ -16283,49 +15276,6 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
     UpdateCriteria(CriteriaType::CompleteQuestsCount);
     UpdateCriteria(CriteriaType::CompleteQuest, quest->GetQuestId());
     UpdateCriteria(CriteriaType::CompleteAnyReplayQuest, 1);
-    // CriteriaType::CompleteAnyWorldQuest (203). No asset - every real Criteria row gates on
-    // ModifierTreeType::QuestHasQuestInfoId (206), which resolves miscValue1 as the quest id, so the quest
-    // id is what must be passed.
-    if (quest->IsWorldQuest())
-        UpdateCriteria(CriteriaType::CompleteAnyWorldQuest, quest->GetQuestId());
-    // CriteriaType::CompleteTrackingQuest (250). Tracking quests (QUEST_FLAGS_TRACKING_EVENT) are the hidden,
-    // auto-rewarded progress markers; they are rewarded through this same path.
-    if (quest->HasFlag(QUEST_FLAGS_TRACKING_EVENT))
-        UpdateCriteria(CriteriaType::CompleteTrackingQuest, quest->GetQuestId());
-
-    // Grant any garrison/war-campaign champions (GarrFollower) mapped to this quest turn-in.
-    // Retail encodes several of these as the quest's RewardSpell (SPELL_EFFECT_ADD_GARRISON_FOLLOWER),
-    // but that path only reaches the follower's own garrison type via Spell::EffectAddGarrisonFollower;
-    // this data-driven table is the authoritative, faction-agnostic mechanism and also covers champions
-    // that are not granted through a reward spell.
-    if (std::vector<QuestGarrisonFollower> const* garrisonFollowers = sObjectMgr->GetQuestGarrisonFollowers(quest_id))
-    {
-        for (QuestGarrisonFollower const& reward : *garrisonFollowers)
-        {
-            GarrisonType garrType = GarrisonType(reward.GarrType);
-            Garrison* garrison = GetGarrison(garrType);
-
-            // Ensure the target garrison exists. In retail the war-campaign garrison is created earlier in
-            // the campaign; create it here as a safety net for the known war-campaign sites so a champion
-            // reward is never silently lost. Unknown types are left to their own creation path.
-            if (!garrison && garrType == GARRISON_TYPE_WAR_CAMPAIGN)
-            {
-                CreateGarrison(GetTeam() == ALLIANCE ? 168 : 169);
-                garrison = GetGarrison(garrType);
-            }
-
-            if (!garrison)
-            {
-                TC_LOG_DEBUG("entities.player.quest", "Player::RewardQuest: quest {} grants GarrFollower {} for GarrType {} but player {} has no such garrison; skipped.",
-                    quest_id, reward.GarrFollowerID, reward.GarrType, GetGUID().ToString());
-                continue;
-            }
-
-            // Idempotent: never double-grant a champion the player already owns.
-            if (!garrison->GetFollowerByEntry(reward.GarrFollowerID))
-                garrison->AddFollower(reward.GarrFollowerID);
-        }
-    }
 
     // make full db save
     SaveToDB(false);
@@ -16370,10 +15320,6 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
 
     sScriptMgr->OnQuestStatusChange(this, quest_id);
     sScriptMgr->OnQuestStatusChange(this, quest, oldStatus, QUEST_STATUS_REWARDED);
-
-    // Housing level progression: quest-based level-up
-    if (Housing* housing = GetHousing())
-        housing->OnQuestCompleted(quest_id);
 
     if (updateVisibility)
         UpdateObjectVisibility();
@@ -17768,10 +16714,6 @@ void Player::ReputationChanged(FactionEntry const* factionEntry, int32 change)
     UpdateQuestObjectiveProgress(QUEST_OBJECTIVE_MIN_REPUTATION, factionEntry->ID, change);
     UpdateQuestObjectiveProgress(QUEST_OBJECTIVE_MAX_REPUTATION, factionEntry->ID, change);
     UpdateQuestObjectiveProgress(QUEST_OBJECTIVE_INCREASE_REPUTATION, factionEntry->ID, change);
-
-    // A covenant renown gain may cross one or more renown levels -> grant their RenownRewards.
-    if (change > 0 && GetReputationMgr().IsRenownReputation(factionEntry))
-        UpdateRenownRewards(factionEntry);
 }
 
 void Player::CurrencyChanged(uint32 currencyId, int32 change)
@@ -17779,76 +16721,6 @@ void Player::CurrencyChanged(uint32 currencyId, int32 change)
     UpdateQuestObjectiveProgress(QUEST_OBJECTIVE_CURRENCY, currencyId, change);
     UpdateQuestObjectiveProgress(QUEST_OBJECTIVE_HAVE_CURRENCY, currencyId, change);
     UpdateQuestObjectiveProgress(QUEST_OBJECTIVE_OBTAIN_CURRENCY, currencyId, change);
-
-    // A Shadowlands covenant stores its renown in a per-covenant currency (Covenant.db2 CurrencyTypesID), so a
-    // change to one of those currencies IS a renown level change. This is the hook the reputation-driven path
-    // gets from ReputationMgr - see Player::GetCovenantRenownCurrency for why the reputation path can never
-    // fire for covenants 1-4.
-    if (uint32 covenantId = GetCovenantIdForRenownCurrency(currencyId))
-    {
-        UpdateCovenantRenownRewards(covenantId);
-        if (covenantId == m_activeCovenantId)
-            SyncCovenantRenownDisplayCurrency();
-    }
-    else if (currencyId == CURRENCY_TYPE_COVENANT_RENOWN && change > 0)
-    {
-        // Renown-granting CONTENT awards the shared display currency, not the per-covenant one: every quest in
-        // the world database that awards renown awards 1822 (58407 "The Medallion of Dominion", 62406 "Staff of
-        // the Primus", 60108 "Drust and Ashes"), and the per-covenant currencies carry an AwardConditionID
-        // (PlayerCondition 70101-70104, "CovenantID == n") marking them as the covenant-scoped copy. So a gain
-        // on 1822 is credited to the active covenant's track, which is where renown is actually stored; the
-        // resulting change on that currency runs the branch above and mirrors the value straight back, so this
-        // settles in one round trip instead of looping. Losses are never forwarded - the track is the authority
-        // and a spurious display loss self-heals on the next sync.
-        if (CurrencyTypesEntry const* covenantCurrency = GetCovenantRenownCurrency(m_activeCovenantId))
-        {
-            int32 unclaimed = int32(GetCurrencyQuantity(CURRENCY_TYPE_COVENANT_RENOWN))
-                - int32(GetCurrencyQuantity(covenantCurrency->ID));
-            if (unclaimed > 0)
-                ModifyCurrency(covenantCurrency->ID, unclaimed, CurrencyGainSource::RenownRepGain);
-        }
-    }
-
-    // Reservoir anima works the same way as renown - per-covenant storage (1859-1862) behind a shared display
-    // currency (1813) - with one difference that matters: anima is SPENT. Sanctum research and Anima Conductor
-    // channels charge 1813, so unlike renown the mirror has to carry losses as well as gains, or a spend would
-    // be undone by the next sync and anima would be infinite.
-    // Both directions of the anima mirror move currency, and moving currency re-enters this function. The
-    // round trip is designed to settle immediately (the second hop finds the two sides equal and does nothing),
-    // but "designed to settle" is not "cannot loop": if the view and the track ever clamped differently the
-    // pair would oscillate forever and take the world thread with them. This latch makes that impossible -
-    // the outermost hop owns the reconciliation and any nested one is skipped, leaving at worst a divergence
-    // that the next sync (login, covenant switch, next anima change) repairs.
-    if (m_covenantAnimaSyncing)
-        return;
-
-    if (uint32 animaCovenantId = GetCovenantIdForAnimaCurrency(currencyId))
-    {
-        if (animaCovenantId == m_activeCovenantId)
-        {
-            m_covenantAnimaSyncing = true;
-            SyncCovenantAnimaDisplayCurrency();
-            m_covenantAnimaSyncing = false;
-        }
-    }
-    else if (currencyId == CURRENCY_TYPE_RESERVOIR_ANIMA)
-    {
-        // Every anima gain and every anima charge in the build lands on 1813; credit or debit it against the
-        // active covenant's track, which is where anima is actually stored. CurrencyChanged runs after the
-        // storage has already been updated, so the difference below is the amount the track still owes or owns.
-        if (CurrencyTypesEntry const* covenantCurrency = GetCovenantAnimaCurrency(m_activeCovenantId))
-        {
-            int32 unbanked = int32(GetCurrencyQuantity(CURRENCY_TYPE_RESERVOIR_ANIMA))
-                - int32(GetCurrencyQuantity(covenantCurrency->ID));
-            if (unbanked)
-            {
-                m_covenantAnimaSyncing = true;
-                ModifyCurrency(covenantCurrency->ID, unbanked, CurrencyGainSource::Vendor,
-                    CurrencyDestroyReason::Garrison);
-                m_covenantAnimaSyncing = false;
-            }
-        }
-    }
 }
 
 void Player::UpdateQuestObjectiveProgress(QuestObjectiveType objectiveType, int32 objectId, int64 addCount, ObjectGuid victimGuid /*= ObjectGuid::Empty*/,
@@ -18467,33 +17339,6 @@ void Player::SendQuestReward(Quest const* quest, Creature const* questGiver, uin
     }
 
     packet.HideChatMessage = hideChatMessage;
-
-    // TreasurePicker: advertise the row the grant path in RewardQuest will actually hand out.
-    // QuestGiverQuestComplete carries a single ItemReward slot, and a quest may carry both a classic
-    // RewardItemId[] and a TreasurePickerID. Only fill the slot when nothing else claims it - writing
-    // it unconditionally would hide an already-set classic reward from the completion frame.
-    // The grant path is unaffected: RewardQuest still hands out both.
-    if (!packet.ItemReward.ItemID && !quest->GetRewItemsCount())
-    {
-        for (int32 treasurePickerId : quest->GetTreasurePickerId())
-        {
-            TreasurePickerTemplate const* treasurePicker = sObjectMgr->GetTreasurePicker(uint32(treasurePickerId));
-            // same non-choice "first eligible row" selection as the grant path, so what the frame
-            // shows and what lands in the bags cannot diverge
-            TreasurePickerItem const* pickerItem = sObjectMgr->SelectTreasurePickerItem(treasurePicker, this);
-            if (!pickerItem)
-                continue;
-
-            packet.ItemReward.ItemID = pickerItem->ItemID;
-            if (pickerItem->BonusListID)
-            {
-                packet.ItemReward.ItemBonus.emplace();
-                packet.ItemReward.ItemBonus->Context = ItemContext(pickerItem->Context);
-                packet.ItemReward.ItemBonus->BonusListIDs.push_back(pickerItem->BonusListID);
-            }
-            break;
-        }
-    }
 
     SendDirectMessage(packet.Write());
 }
@@ -19124,8 +17969,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         // "totalKills, todayKills, yesterdayKills, chosenTitle, watchedFaction, drunk, "
         // "health, power1, power2, power3, power4, power5, power6, power7, power8, power9, power10, instance_id, activeTalentGroup, lootSpecId, exploredZones, knownTitles, actionBars, "
         // "raidDifficulty, legacyRaidDifficulty, fishingSteps, honor, honorLevel, honorRestState, honorRestBonus, numRespecs, "
-        // "personalTabardEmblemStyle, personalTabardEmblemColor, personalTabardBorderStyle, personalTabardBorderColor, personalTabardBackgroundColor, transmogOutfitEquippedId, transmogOutfitLocked, "
-        // "chromieTimeExpansionId, timerunningSeasonId "
+        // "personalTabardEmblemStyle, personalTabardEmblemColor, personalTabardBorderStyle, personalTabardBorderColor, personalTabardBackgroundColor, transmogOutfitEquippedId, transmogOutfitLocked "
         // "FROM characters c LEFT JOIN character_fishingsteps cfs ON c.guid = cfs.guid WHERE c.guid = ?", CONNECTION_ASYNC);
 
         ObjectGuid::LowType guid;
@@ -19205,8 +18049,6 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         int32 personalTabardBackgroundColor;
         int32 transmogOutfitEquippedId;
         bool transmogOutfitLocked;
-        uint8 chromieTimeExpansionId;
-        uint32 timerunningSeasonId;
 
         explicit PlayerLoadData(Field const* fields)
         {
@@ -19290,8 +18132,6 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             personalTabardBackgroundColor = fields[i++].GetInt32();
             transmogOutfitEquippedId = fields[i++].GetInt32();
             transmogOutfitLocked = fields[i++].GetBool();
-            chromieTimeExpansionId = fields[i++].GetUInt8();
-            timerunningSeasonId = fields[i++].GetUInt32();
         }
 
     } fields(result->Fetch());
@@ -19365,10 +18205,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     SetObjectScale(1.0f);
 
     // load achievements before anything else to prevent multiple gains for the same achievement/criteria on every loading (as loading does call UpdateCriteria)
-    m_achievementMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACHIEVEMENTS), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CRITERIA_PROGRESS),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WARBAND_ACHIEVEMENTS), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WARBAND_ACHIEVEMENT_PROGRESS));
+    m_achievementMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACHIEVEMENTS), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CRITERIA_PROGRESS));
     m_questObjectiveCriteriaMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA_PROGRESS));
-    m_perksActivityMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_PERKS_ACTIVITY), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_PERKS_ACTIVITY_CRITERIA));
 
     SetMoney(std::min(fields.money, MAX_MONEY_AMOUNT));
 
@@ -19422,38 +18260,6 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     //Need to call it to initialize m_team (m_team can be calculated from race)
     //Other way is to saves m_team into characters table.
     SetFactionForRace(GetRace());
-
-    // Restore Chromie Time state from DB. A character at or above the deactivation level
-    // restores nothing: the update fields stay zeroed and the next save persists 0, so a
-    // stale DB value (e.g. written before a level-up cleared the state) cannot resurrect
-    // chromie time on login (audit R8/m3, SRV CHR-4; band per audit R10).
-    if (fields.chromieTimeExpansionId > 0 && GetLevel() < ChromieTimeDeactivationLevel)
-    {
-        if (UIChromieTimeExpansionInfoEntry const* entry = sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(fields.chromieTimeExpansionId)))
-        {
-            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
-                .ModifyValue(&UF::ActivePlayerData::UiChromieTimeExpansionID),
-                int32(fields.chromieTimeExpansionId));
-
-            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
-                .ModifyValue(&UF::PlayerData::CtrOptions)
-                .ModifyValue(&UF::CTROptions::ChromieTimeExpansionMask),
-                uint32(entry->ExpansionMask));
-
-            SetChromieTimeConditionalFlags(true);
-        }
-    }
-
-    if (fields.timerunningSeasonId)
-        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
-            .ModifyValue(&UF::ActivePlayerData::TimerunningSeasonID),
-            int32(fields.timerunningSeasonId));
-
-    // Always set FactionGroup on CtrOptions (needed for party sync and content tuning)
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
-        .ModifyValue(&UF::PlayerData::CtrOptions)
-        .ModifyValue(&UF::CTROptions::FactionGroup),
-        GetFactionGroupForRace(GetRace()));
 
     // load home bind and check in same time class/race pair, it used later for restore broken positions
     if (!_LoadHomeBind(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_HOME_BIND)))
@@ -19775,12 +18581,6 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     if (!m_taxi.LoadTaxiMask(fields.taximask))                   // must be before InitTaxiNodesForLevel
         TC_LOG_WARN("entities.player.loading", "Player::LoadFromDB: Player ({}) has invalid taximask ({}) in DB. Forced partial load.", GetGUID().ToString(), fields.taximask);
 
-    if (PreparedQueryResult warbandTaxiResult = holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WARBAND_TAXI_MASK))
-    {
-        TaxiMask accountMask = PlayerTaxi::LoadTaxiMaskFromString((*warbandTaxiResult)[0].GetString());
-        m_taxi.MergeAccountTaxiMask(accountMask);
-    }
-
     uint32 extraflags = fields.extra_flags;
 
     _LoadPetStable(fields.summonedPetNumber, holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_PET_SLOTS));
@@ -19817,12 +18617,6 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     // load skills after InitStatsForLevel because it triggering aura apply also
     _LoadSkills(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SKILLS));
     UpdateSkillsForLevel(); //update skills after load, to make sure they are correctly update at player load
-
-    _LoadResearchSites(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_RESEARCH_SITES)); // Archaeology: restore persisted dig sites
-    InitializeResearchSites(); // Archaeology: seed active dig sites if none persisted and the profession is known
-    _LoadResearchHistory(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_RESEARCH_HISTORY)); // Archaeology: restore completed projects (before project rolls so they avoid repeats)
-    _LoadResearchProjects(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_RESEARCH_PROJECTS)); // Archaeology: restore active research projects
-    InitializeResearchProjects(); // Archaeology: backfill a project for branches with fragments but none active
 
     SetNumRespecs(fields.numRespecs);
     SetPrimarySpecialization(fields.primarySpecialization);
@@ -19866,7 +18660,6 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     _LoadQuestStatusObjectives(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES));
     _LoadQuestStatusObjectiveSpawnTrackings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_SPAWN_TRACKING));
     _LoadQuestStatusRewarded(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_REW));
-    _LoadContentTracking(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CONTENT_TRACKING));
     _LoadDailyQuestStatus(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_DAILY_QUEST_STATUS));
     _LoadWeeklyQuestStatus(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WEEKLY_QUEST_STATUS));
     _LoadSeasonalQuestStatus(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SEASONAL_QUEST_STATUS));
@@ -19883,25 +18676,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     // must be before inventory (some items required reputation check)
     m_reputationMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_REPUTATION));
-    m_reputationMgr->LoadAccountWideFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_REPUTATION));
-    m_reputationMgr->LoadRenownRewardsGrantedFromDB(
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CHAR_RENOWN_REWARDS_GRANTED),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WARBAND_RENOWN_REWARDS_GRANTED));
-
-    if (PreparedQueryResult maxLevelResult = holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WARBAND_MAX_LEVEL_COUNT))
-        _warbandMaxLevelCharCount = std::min((*maxLevelResult)[0].GetUInt64(), uint64(5));
 
     _LoadCharacterBankTabSettings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS));
-    _LoadAccountBankTabSettings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_TAB_SETTINGS));
-    _LoadAccountBankCoinage(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_COINAGE));
-
-    _LoadCovenantSoulbinds(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_COVENANT_SOULBINDS));
-    _LoadCovenant(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_COVENANT));
-    _LoadSoulbindConduits(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUITS));
-    _LoadSoulbindConduitSockets(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUIT_SOCKETS));
-    _LoadRenownRewards(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_RENOWN_REWARDS));
-    _LoadCovenantCallings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_COVENANT_CALLINGS));
-    ApplyConduitSpells();   // spell/aura systems are ready by here (mirrors _LoadGlyphAuras above)
 
     _LoadInventory(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_INVENTORY),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ARTIFACTS),
@@ -19910,8 +18686,6 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_AZERITE_UNLOCKED_ESSENCES),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_AZERITE_EMPOWERED),
         time_diff);
-
-    _LoadAccountBankItems(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_ITEMS), time_diff);
 
     // update items with duration and realtime
     UpdateItemDuration(time_diff, true);
@@ -20050,480 +18824,13 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     _LoadPlayerData(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_DATA_ELEMENTS), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_DATA_FLAGS));
 
-    // A character may own several garrisons (WoD garrison, Legion order hall, BfA war campaign, covenant sanctum).
-    // The login holder's GARRISON query returns every character_garrison row; load each with its own sub-tables
-    // filtered by garrType. The sub-table result cursors are consumed once, so they can't be shared across garrisons
-    // - fetch each garrison's rows synchronously here. Garrison::LoadFromDB itself is unchanged (reads the current
-    // header row + the filtered sub-results exactly as before), so a single garrison loads byte-identically.
-    if (PreparedQueryResult garrisonResult = holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON))
-    {
-        ObjectGuid::LowType lowGuid = GetGUID().GetCounter();
-        do
-        {
-            uint8 garrType = static_cast<uint8>(garrisonResult->Fetch()[2].GetUInt32());   // character_garrison.type
-            auto byType = [&](CharacterDatabaseStatements idx) -> PreparedQueryResult
-            {
-                CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(idx);
-                stmt->setUInt64(0, lowGuid);
-                stmt->setUInt8(1, garrType);
-                return CharacterDatabase.Query(stmt);
-            };
-
-            std::unique_ptr<Garrison> garrison = std::make_unique<Garrison>(this);
-            if (garrison->LoadFromDB(garrisonResult,
-                byType(CHAR_SEL_CHARACTER_GARRISON_BLUEPRINTS_BY_TYPE),
-                byType(CHAR_SEL_CHARACTER_GARRISON_BUILDINGS_BY_TYPE),
-                byType(CHAR_SEL_CHARACTER_GARRISON_FOLLOWERS_BY_TYPE),
-                byType(CHAR_SEL_CHARACTER_GARRISON_FOLLOWER_ABILITIES_BY_TYPE),
-                byType(CHAR_SEL_CHARACTER_GARRISON_MISSIONS_BY_TYPE),
-                byType(CHAR_SEL_CHARACTER_GARRISON_SPECIALIZATIONS_BY_TYPE),
-                byType(CHAR_SEL_CHARACTER_GARRISON_SHIPMENTS_BY_TYPE),
-                byType(CHAR_SEL_CHARACTER_GARRISON_TALENTS_BY_TYPE),
-                byType(CHAR_SEL_CHARACTER_GARRISON_TROPHIES_BY_TYPE),
-                byType(CHAR_SEL_CHARACTER_GARRISON_ARCHIVED_MISSIONS_BY_TYPE)))
-                _garrisons[garrison->GetType()] = std::move(garrison);
-        } while (garrisonResult->NextRow());
-    }
-
-    _mythicPlusData = std::make_unique<MythicPlusData>(this);
-    _mythicPlusData->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS));
-    // The vault row must load BEFORE the weekly runs: loading the runs prunes a week that has already reset,
-    // and that prune both reads the stored claim/keystone boundaries and rewrites the row with the previous
-    // week's captured summary. Loading it afterwards would clobber the capture with the pre-reset values.
-    _mythicPlusData->LoadVaultFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT));
-    _mythicPlusData->LoadWeeklyFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY));
-    UpdateDungeonScore();
-
-    std::unique_ptr<Housing> housing = std::make_unique<Housing>(this);
-    if (housing->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_HOUSING),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_HOUSING_DECOR),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_HOUSING_ROOMS),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_HOUSING_FIXTURES),
-        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_HOUSING_CATALOG)))
-        _housings.push_back(std::move(housing));
-
-    // The client Lua UI sets FrameTutorialAccount bits individually as the player completes each
-    // tutorial step. We set exactly one of them up front - HousingModesUnlocked (38), which the editor
-    // needs - and leave the rest to the client. An earlier revision set the whole bitfield and forced
-    // housingTutorialsEnabled=0, which unlocked the editor but also told the client the entire housing
-    // tutorial was already done, so first-time buyers were dropped straight into the House Finder.
-    //
-    // The 256-bit server tutorial flags are NOT touched here. They used to be blanket-set to all-ones on every
-    // login ("retail sniff shows all 256 bits set" - true of a veteran retail account, not of a fresh one), which
-    // permanently marked every tutorial in the game as already seen for the account. The client owns this state
-    // and reports each step through CMSG_TUTORIAL (WorldSession::HandleTutorialFlag), so letting it drive them is
-    // both correct and self-repairing.
-    if (GetSession())
-    {
-        // The 256-bit server tutorial flags (above) are separate from the client's
-        // FrameTutorialAccount UI flags. The client stores those in the CVar bitfield
-        // "closedInfoFramesAccountWide" within the GLOBAL_CONFIG_CACHE account data.
-        // Without setting bit 38 (HousingModesUnlocked), the housing editor UI keeps
-        // expert/cleanup/layout modes locked with "Tutorial Mode" error.
-        AccountData const* configCache = GetSession()->GetAccountData(GLOBAL_CONFIG_CACHE);
-        std::string configData = configCache ? configCache->Data : "";
-        bool configModified = false;
-
-        // Helper lambda: set or replace a CVar value in the config string
-        auto ensureCVar = [&](std::string_view cvarName, std::string_view value)
-        {
-            std::string setPrefix = std::string("SET ") + std::string(cvarName) + " \"";
-            size_t pos = configData.find(setPrefix);
-            if (pos != std::string::npos)
-            {
-                // Replace existing value
-                size_t valStart = pos + setPrefix.size();
-                size_t valEnd = configData.find('"', valStart);
-                if (valEnd != std::string::npos)
-                {
-                    std::string oldVal = configData.substr(valStart, valEnd - valStart);
-                    if (oldVal != value)
-                    {
-                        configData.replace(valStart, valEnd - valStart, value);
-                        configModified = true;
-                    }
-                }
-            }
-            else
-            {
-                // Append new CVar
-                if (!configData.empty() && configData.back() != '\n')
-                    configData += '\n';
-                configData += "SET ";
-                configData += cvarName;
-                configData += " \"";
-                configData += value;
-                configData += "\"\n";
-                configModified = true;
-            }
-        };
-
-        // Unlock the housing editor modes and NOTHING else - see HOUSING_MODES_UNLOCKED_CVAR.
-        // housingTutorialsEnabled is deliberately left alone so the client runs the housing tutorial
-        // normally; forcing it to 0 here is what skipped the tutorial and dropped a first-time buyer
-        // straight into the House Finder.
-        ensureCVar("closedInfoFramesAccountWide", HOUSING_MODES_UNLOCKED_CVAR);
-        // Actively restore the client default rather than merely stopping writing it: accounts that
-        // logged in under the old code still carry a persisted housingTutorialsEnabled="0" in their
-        // GLOBAL_CONFIG_CACHE, and leaving it alone would keep the tutorial suppressed forever for
-        // exactly the characters that hit the bug. This repairs our own past write; it is not a gate.
-        ensureCVar("housingTutorialsEnabled", "1");
-
-        if (configModified)
-        {
-            GetSession()->SetAccountData(GLOBAL_CONFIG_CACHE, GameTime::GetGameTime(), configData);
-            // Re-send account data timestamps so the client detects the newer timestamp
-            // and re-fetches GLOBAL_CONFIG_CACHE. Without this, the client uses the stale
-            // data it fetched during auth (before LoadFromDB modified it).
-            GetSession()->SendAccountDataTimes(GetGUID(), GLOBAL_CACHE_MASK);
-            TC_LOG_DEBUG("housing", "Player::LoadFromDB: Injected housing tutorial CVars into GLOBAL_CONFIG_CACHE for account {}",
-                GetSession()->GetAccountId());
-        }
-    }
-
-    // Always register PlayerHouseInfoComponent_C fragment on the Player entity.
-    // The client requires this fragment to resolve housing data from the Player descriptor;
-    // without it, C_Housing.StartTutorial() fails pre-flight check with ERR_HOUSING_ACTION_UNAVAILABLE (1215).
-    if (!m_playerHouseInfoComponentData.has_value())
-    {
-        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
-            .ModifyValue(&UF::PlayerHouseInfoComponentData::EditorMode), uint8(0));
-        m_entityFragments.Add(WowCS::EntityFragment::PlayerHouseInfoComponent_C, false,
-            WowCS::GetRawFragmentData(m_playerHouseInfoComponentData));
-    }
-
-    // Populate PlayerHouseInfoComponentData::Houses with the player's owned houses.
-    //
-    // IMPORTANT (analysis-agent narrow-fix 2026-04-23T09:30Z): use the
-    // Neighborhood's plot.HouseGuid rather than h->GetHouseGuid() so the
-    // HouseGuid in PlayerHouseInfoComponent.Houses is BIT-IDENTICAL to the
-    // HouseGuid in mirror.Houses (FNeighborhoodMirrorData_C). Client Self-
-    // check compares Houses[].Guid entries in the two fragments; any drift
-    // (e.g. session->GetBattlenetAccountId() vs AccountMgr::GetIdByGameAccount
-    // producing different bnetAccountId at different times) would cause the
-    // lookup to miss and self's plot renders as ownerType=0 None.
-    //
-    // Iterate through the player's Housing objects. For each, find the
-    // matching plot in the neighborhood (by PlotIndex) and copy plot.HouseGuid
-    // verbatim. Supplemental fields (Level, Favor, MapID) still come from h.
-    for (auto const& h : _housings)
-    {
-        if (!h || h->GetHouseGuid().IsEmpty())
-            continue;
-
-        Neighborhood const* nh = sNeighborhoodMgr.GetNeighborhood(h->GetNeighborhoodGuid());
-        ObjectGuid entryHouseGuid = h->GetHouseGuid();  // fallback when neighborhood lookup fails
-        if (nh)
-        {
-            if (Neighborhood::PlotInfo const* pi = nh->GetPlotInfo(h->GetPlotIndex()))
-                if (!pi->HouseGuid.IsEmpty())
-                    entryHouseGuid = pi->HouseGuid;
-        }
-
-        UF::PlayerMirrorHouse& mirrorHouse = AddDynamicUpdateFieldValue(
-            m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
-                .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
-        mirrorHouse.HouseGUID = entryHouseGuid;
-        mirrorHouse.NeighborhoodGUID = h->GetNeighborhoodGuid();
-        mirrorHouse.Level = h->GetLevel();
-        mirrorHouse.Favor = static_cast<uint32>(std::min<uint64>(h->GetFavor64(), std::numeric_limits<uint32>::max()));
-        mirrorHouse.PlotID = h->GetPlotIndex();
-
-        // Resolve MapID from the neighborhood's DB2 data so the dashboard works before
-        // the player enters the neighborhood map.
-        mirrorHouse.MapID = 0;
-        if (nh)
-            if (NeighborhoodMapData const* nmData = sHousingMgr.GetNeighborhoodMapData(nh->GetNeighborhoodMapID()))
-                mirrorHouse.MapID = nmData->MapID;
-
-        TC_LOG_ERROR("network", "Player::LoadFromDB: PlayerMirrorHouse: HouseGuid={} (h->GetHouseGuid={}) NeighborhoodGuid={} PlotID={} Level={} MapID={} Favor={}",
-            entryHouseGuid.ToString(), h->GetHouseGuid().ToString(), h->GetNeighborhoodGuid().ToString(), mirrorHouse.PlotID, mirrorHouse.Level, mirrorHouse.MapID, mirrorHouse.Favor);
-
-        // Initiative mirror field (12.0.5: InitiativeCycleID removed from PlayerMirrorHouse;
-        // only InitiativeFavor remains).
-        uint64 nhGuid = h->GetNeighborhoodGuid().GetCounter();
-        if (ActiveInitiative* activeInit = sInitiativeManager.GetActiveInitiative(nhGuid))
-            mirrorHouse.InitiativeFavor = sInitiativeManager.GetPlayerContribution(nhGuid, activeInit->InitiativeID, GetGUID().GetCounter());
-    }
-
-    // Register PlayerInitiativeComponent_C fragment (FragmentID 37) on the Player entity.
-    // The client's C_NeighborhoodInitiative Lua API reads initiative state from this fragment.
-    // Without it, GetNeighborhoodInitiativeInfo() returns nil and the initiative/endeavor UI
-    // never appears. Sniff-verified: all neighborhood players have this fragment.
-    if (!m_playerInitiativeComponentData.has_value())
-    {
-        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerInitiativeComponentData, 0)
-            .ModifyValue(&UF::PlayerInitiativeComponentData::NeighborhoodGUID), ObjectGuid::Empty);
-        m_entityFragments.Add(WowCS::EntityFragment::PlayerInitiativeComponent_C, false,
-            WowCS::GetRawFragmentData(m_playerInitiativeComponentData));
-    }
-
-    // Populate initiative data for the player's neighborhood
-    // Try housing first, then fall back to neighborhood membership
-    ObjectGuid initNhGuid;
-    if (!_housings.empty() && _housings[0] && !_housings[0]->GetNeighborhoodGuid().IsEmpty())
-        initNhGuid = _housings[0]->GetNeighborhoodGuid();
-    else
-    {
-        auto neighborhoods = sNeighborhoodMgr.GetNeighborhoodsForPlayer(GetGUID());
-        if (!neighborhoods.empty())
-            initNhGuid = neighborhoods[0]->GetGuid();
-    }
-
-    if (!initNhGuid.IsEmpty())
-    {
-        ObjectGuid nhGuid = initNhGuid;
-        uint64 nhLowGuid = nhGuid.GetCounter();
-        ActiveInitiative* activeInit = sInitiativeManager.GetActiveInitiative(nhLowGuid);
-
-        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerInitiativeComponentData, 0)
-            .ModifyValue(&UF::PlayerInitiativeComponentData::NeighborhoodGUID), nhGuid);
-
-        if (activeInit)
-        {
-            NeighborhoodInitiativeEntry const* initEntry = sNeighborhoodInitiativeStore.LookupEntry(activeInit->InitiativeID);
-            uint32 cycleID = sInitiativeManager.GetActiveCycleForInitiative(activeInit->InitiativeID);
-
-            // Calculate remaining duration from start time + DB2 duration.
-            // Check both NeighborhoodInitiative.Duration and InitiativeCycle.Duration.
-            // If neither provides a duration, use a 7-day default so the client shows
-            // the endeavor as active rather than expired (Duration=0 â†’ hidden).
-            // DB2 Duration is already in seconds (NOT days).
-            // Sniff-verified: RemainingDuration is in seconds (sniff value 972957 â‰ˆ 11.25 days).
-            // Duration comes from NeighborhoodInitiative DB2 (not InitiativeCycle â€” that has HouseXPCap)
-            int64 durationSec = 0;
-            if (initEntry && initEntry->Duration > 0)
-                durationSec = static_cast<int64>(initEntry->Duration);
-            if (durationSec <= 0)
-                durationSec = 7 * DAY; // 7-day fallback
-
-            int64 elapsed = static_cast<int64>(GameTime::GetGameTime()) - static_cast<int64>(activeInit->StartTime);
-            int64 remainingDuration = durationSec - elapsed;
-            // If expired, reset start time so the initiative stays active
-            if (remainingDuration <= 0)
-            {
-                activeInit->StartTime = static_cast<uint32>(GameTime::GetGameTime());
-                remainingDuration = durationSec;
-            }
-
-            // Calculate progress in the 0-1000 scale (sniff: ProgressRequired=1000)
-            float progressRequired = INITIATIVE_PROGRESS_REQUIRED;
-            float currentProgress = activeInit->Progress * progressRequired;
-
-            // Find current milestone. RequiredContributionAmount is a percentage (DB2: 25/50/75/100)
-            // while Progress is a 0..1 fraction, so it has to be scaled before comparing — comparing
-            // them raw pinned CurrentMilestoneID to the first milestone forever.
-            int32 currentMilestoneID = -1;
-            auto milestones = sInitiativeManager.GetMilestonesForCycle(cycleID);
-            for (auto const& m : milestones)
-            {
-                if (activeInit->Progress * INITIATIVE_MILESTONE_SCALE < m.RequiredContributionAmount)
-                {
-                    currentMilestoneID = static_cast<int32>(m.MilestoneID);
-                    break;
-                }
-            }
-
-            float playerContribution = static_cast<float>(
-                sInitiativeManager.GetPlayerContribution(nhLowGuid, activeInit->InitiativeID, GetGUID().GetCounter()));
-
-            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerInitiativeComponentData, 0)
-                .ModifyValue(&UF::PlayerInitiativeComponentData::InitiativeInfo)
-                .ModifyValue(&UF::PlayerInitiativeInfo::RemainingDuration), remainingDuration);
-            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerInitiativeComponentData, 0)
-                .ModifyValue(&UF::PlayerInitiativeComponentData::InitiativeInfo)
-                .ModifyValue(&UF::PlayerInitiativeInfo::CurrentInitiativeID), static_cast<int32>(activeInit->InitiativeID));
-            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerInitiativeComponentData, 0)
-                .ModifyValue(&UF::PlayerInitiativeComponentData::InitiativeInfo)
-                .ModifyValue(&UF::PlayerInitiativeInfo::CurrentMilestoneID), currentMilestoneID);
-            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerInitiativeComponentData, 0)
-                .ModifyValue(&UF::PlayerInitiativeComponentData::InitiativeInfo)
-                .ModifyValue(&UF::PlayerInitiativeInfo::CurrentCycleID), static_cast<int32>(cycleID));
-            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerInitiativeComponentData, 0)
-                .ModifyValue(&UF::PlayerInitiativeComponentData::InitiativeInfo)
-                .ModifyValue(&UF::PlayerInitiativeInfo::ProgressRequired), progressRequired);
-            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerInitiativeComponentData, 0)
-                .ModifyValue(&UF::PlayerInitiativeComponentData::InitiativeInfo)
-                .ModifyValue(&UF::PlayerInitiativeInfo::CurrentProgress), currentProgress);
-            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerInitiativeComponentData, 0)
-                .ModifyValue(&UF::PlayerInitiativeComponentData::InitiativeInfo)
-                .ModifyValue(&UF::PlayerInitiativeInfo::PlayerTotalContribution), playerContribution);
-
-            // Add house GUIDs to the Houses set
-            for (auto const& h : _housings)
-            {
-                if (h && !h->GetHouseGuid().IsEmpty())
-                    InsertSetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerInitiativeComponentData, 0)
-                        .ModifyValue(&UF::PlayerInitiativeComponentData::Houses), h->GetHouseGuid());
-            }
-
-            TC_LOG_DEBUG("housing", "Player::LoadFromDB: Populated PlayerInitiativeComponentData: "
-                "InitiativeID={} CycleID={} Progress={:.1f}/{:.0f} Milestone={} Duration={}",
-                activeInit->InitiativeID, cycleID, currentProgress, progressRequired,
-                currentMilestoneID, remainingDuration);
-        }
-    }
-
-    // Pre-populate Housing/4 (NeighborhoodMirrorEntity) and Housing/3 (HousingPlayerHouseEntity)
-    // BEFORE BuildCreateUpdateBlockForPlayer runs. The CREATE block must include the full Houses
-    // array so the client sees occupied plots at the correct indices. If we only populate these
-    // during SendInitialPacketsAfterAddToMap (after CREATE), the client receives an empty Houses
-    // array in CREATE and a DynamicUpdateField UPDATE that grows the array â€” causing it to map
-    // houses to indices 0,1,2 instead of their real PlotIndex values (e.g. 7,9,47,51).
-    if (GetSession() && !_housings.empty() && _housings[0] && !_housings[0]->GetNeighborhoodGuid().IsEmpty())
-    {
-        // Priming step (analysis-agent diagnosis 2026-04-23T09:50Z):
-        // HousingMap::AddPlayerToMap line ~671 already calls UpdatePlotHouseInfo
-        // to patch the shared Neighborhood's plot data with the current session's
-        // resolved HouseGuid/BnetGuid. But that runs AFTER Player::LoadFromDB
-        // has already read plot.HouseGuid for mirror population â€” so a
-        // fresh-server first-login-after-startup sees plot.HouseGuid=Empty
-        // (if Neighborhood::LoadFromDB's bnet resolution failed) and ships
-        // Empty-Empty to the client. Subsequent logins see the primed value.
-        // That's the observed non-determinism.
-        //
-        // Fix: call UpdatePlotHouseInfo up front, before the mirror reads
-        // plot.HouseGuid. Non-shared-state safe because it only writes to
-        // OUR plot, and the write is idempotent (same value on repeat).
-        if (Neighborhood* nh = sNeighborhoodMgr.GetNeighborhood(_housings[0]->GetNeighborhoodGuid()))
-        {
-            ObjectGuid bnetGuid = GetSession() ? GetSession()->GetBattlenetAccountGUID() : ObjectGuid::Empty;
-            nh->UpdatePlotHouseInfo(_housings[0]->GetPlotIndex(),
-                                    _housings[0]->GetHouseGuid(),
-                                    bnetGuid);
-            TC_LOG_INFO("housing", "Player::LoadFromDB PRIMING: UpdatePlotHouseInfo plot={} HouseGuid={} BnetGuid={} (before mirror read)",
-                _housings[0]->GetPlotIndex(), _housings[0]->GetHouseGuid().ToString(), bnetGuid.ToString());
-        }
-
-        Neighborhood const* neighborhood = sNeighborhoodMgr.GetNeighborhood(_housings[0]->GetNeighborhoodGuid());
-        if (neighborhood)
-        {
-            // --- Housing/4: NeighborhoodMirrorEntity ---
-            // The entity GUID must match the neighborhood's actual GUID so the client
-            // can associate it with NeighborhoodGUID references in JamCliHouse packets.
-            // WorldSession creates it with battlenetAccountId as placeholder; fix it here.
-            HousingNeighborhoodMirrorEntity& mirrorEntity = GetSession()->GetHousingNeighborhoodMirrorEntity();
-            mirrorEntity.ResetGuid(neighborhood->GetGuid());
-            mirrorEntity.SetName(neighborhood->GetName());
-            mirrorEntity.SetOwnerGUID(neighborhood->GetOwnerGuid());
-
-            // Populate all 55 plot slots SYNCHRONOUSLY with real data at login.
-            //
-            // Analysis agent 2026-04-23T07:30Z finding: the neighborhood map
-            // provider is pull-based, not push-based â€” Blizzard's
-            // NeighborhoodMapDataProviderMixin calls GetNeighborhoodMapData()
-            // every time the map is toggled open (verified via hooksecurefunc).
-            // There is no server-side event we need to fire; the map refreshes
-            // itself on show. So the blocker is simply that our mirror's Houses
-            // array must be populated BEFORE the player opens the map.
-            //
-            // Earlier experiment (commit 36b9052423) shipped Houses empty at
-            // login + populated via a 500ms deferred SendUpdateToPlayer. That
-            // created a race: if the user opened the map during the 500ms
-            // window, GetNeighborhoodMapData() returned all-unoccupied plots
-            // and the pins stayed wrong even after the defer completed (the
-            // provider doesn't re-poll without explicit refresh triggers).
-            //
-            // Synchronous population here ensures the Player CREATE bundle
-            // ships with real Houses data in the FNeighborhoodMirrorData_C
-            // fragment on the first frame â€” correct pins paint on first map
-            // open, no interaction required.
-            ObjectGuid const sessionHouse3 = GetSession()->GetHousingPlayerHouseEntity().GetGUID();
-            mirrorEntity.ClearHouses();
-            uint8 plotIdx = 0;
-            for (auto const& plot : neighborhood->GetPlots())
-            {
-                if (plot.IsOccupied())
-                {
-                    bool ownPlot = (plot.OwnerGuid == GetGUID());
-                    bool emptyHouse = plot.HouseGuid.IsEmpty();
-                    bool matchesSession = ownPlot && !emptyHouse && plot.HouseGuid == sessionHouse3;
-                    TC_LOG_INFO("housing",
-                        "Player::LoadFromDB mirror[{}]: OWN={} HouseGuid={} OwnerGuid={} OwnerBnetGuid={} "
-                        "SessionH3={} matchesSessionH3={} emptyHouseGuid={}",
-                        plotIdx, ownPlot,
-                        plot.HouseGuid.ToString(), plot.OwnerGuid.ToString(), plot.OwnerBnetGuid.ToString(),
-                        sessionHouse3.ToString(), matchesSession, emptyHouse);
-                }
-                if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
-                    mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
-                else
-                    mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
-                ++plotIdx;
-            }
-
-            // Add managers
-            mirrorEntity.ClearManagers();
-            for (auto const& member : neighborhood->GetMembers())
-            {
-                if (member.Role == NEIGHBORHOOD_ROLE_MANAGER || member.Role == NEIGHBORHOOD_ROLE_OWNER)
-                {
-                    ObjectGuid bnetGuid;
-                    if (Player* managerPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
-                        bnetGuid = managerPlayer->GetSession()->GetBattlenetAccountGUID();
-                    mirrorEntity.AddManager(bnetGuid, member.PlayerGuid);
-                }
-            }
-
-            TC_LOG_DEBUG("housing", "Player::LoadFromDB: Pre-populated Housing/4 mirror entity with {} plots from neighborhood {}",
-                MAX_NEIGHBORHOOD_PLOTS, neighborhood->GetName());
-
-            // --- Housing/3: HousingPlayerHouseEntity ---
-            Housing* housing = _housings[0].get();
-            if (housing && !housing->GetHouseGuid().IsEmpty())
-            {
-                HousingPlayerHouseEntity& houseEntity = GetSession()->GetHousingPlayerHouseEntity();
-                houseEntity.SetBnetAccount(GetSession()->GetBattlenetAccountGUID());
-                // EntityGUID = HouseGuid (self-reference). Matches what
-                // Housing::SyncUpdateFields does on every post-login re-push
-                // (Housing.cpp:2419). Sniff-verified against our own server:
-                // when the user opens the housing dashboard, the handler
-                // CMSG_HOUSING_DECOR_REQUEST_STORAGE emits a Housing/3 CREATE
-                // whose EntityGUID is the self-reference (HouseGuid), and
-                // THIS is what makes the client's own-plot map icon render.
-                // Setting Empty at login (commit a06defed4b) left the
-                // initial CREATE with EntityGUID=00 00 and the icon stayed
-                // broken until the dashboard click forced a re-push.
-                houseEntity.SetEntityGUID(housing->GetHouseGuid());
-                houseEntity.SetPlotIndex(static_cast<int32>(housing->GetPlotIndex()));
-                houseEntity.SetLevel(housing->GetLevel());
-                houseEntity.SetFavor(housing->GetFavor64());
-                houseEntity.SetBudgets(
-                    housing->GetMaxInteriorDecorBudget(),
-                    housing->GetMaxExteriorDecorBudget(),
-                    housing->GetMaxRoomBudget(),
-                    housing->GetMaxFixtureBudget()
-                );
-
-                TC_LOG_DEBUG("housing", "Player::LoadFromDB: Pre-populated Housing/3 house entity: Plot={} Level={} HouseGuid={}",
-                    housing->GetPlotIndex(), housing->GetLevel(), housing->GetHouseGuid().ToString());
-            }
-        }
-    }
-    // Safety net for characters that joined a covenant before the sanctum garrison existed (or whose creation was
-    // lost): give them the GarrType 111 garrison now. Same pattern as the war-campaign create in RewardQuest.
-    // No SQL migration is needed - the row is written by the next SaveToDB. Must run after both _LoadCovenant and
-    // the garrison load loop above.
-    if (m_activeCovenantId && !GetGarrison(GARRISON_TYPE_COVENANT))
-        CreateGarrison(GARR_SITE_COVENANT_SANCTUM);
-
-    // Re-apply GarrTalentRank.PerkSpellID for every already-researched talent. Permanently learned perks are
-    // idempotent here; the soulbind trait perks are auras and genuinely need re-casting, and this is the first
-    // point where both the garrisons and the covenant/soulbind state (_LoadCovenant, above) are loaded.
-    for (auto const& [garrType, garrison] : GetGarrisons())
-        garrison->ApplyAllTalentPerks();
-
-    // ...and take back the ones belonging to a covenant this character is no longer serving. ApplyAllTalentPerks
-    // only ever adds, so without this a character that switched covenants would keep the abilities, sanctum perks
-    // and soulbind traits of the covenant it left for as long as it kept logging in. Repairs characters that
-    // switched before this existed, and is a no-op for everybody else.
-    if (Garrison* sanctum = GetGarrison(GARRISON_TYPE_COVENANT))
-        sanctum->RefreshCovenantTalentPerks();
-
-    // Roll the calling board forward over every daily reset that passed while the character was offline. The
-    // board is stored as timestamps, so this is pure catch-up arithmetic and produces the same result whether
-    // the character was away for an hour or a month.
-    UpdateCovenantCallings();
+    std::unique_ptr<Garrison> garrison = std::make_unique<Garrison>(this);
+    if (garrison->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON),
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_BLUEPRINTS),
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_BUILDINGS),
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWERS),
+        holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWER_ABILITIES)))
+        _garrison = std::move(garrison);
 
     _InitHonorLevelOnLoadFromDB(fields.honor, fields.honorLevel);
 
@@ -20547,8 +18854,6 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     m_achievementMgr->CheckAllAchievementCriteria(this);
     m_questObjectiveCriteriaMgr->CheckAllQuestObjectiveCriteria(this);
-
-    sPreyMgr->OnPlayerLogin(this);          // Midnight S1 Prey/Voidforge — restore hunt/Journey state (no-op until content lands)
 
     PushQuests();
 
@@ -20817,6 +19122,8 @@ void Player::_LoadAuras(PreparedQueryResult auraResult, PreparedQueryResult effe
         while (auraResult->NextRow());
     }
 
+    // TODO: finish dragonriding - this forces old flight mode
+    AddAura(404468, this);
 }
 
 void Player::_LoadGlyphAuras()
@@ -21498,63 +19805,6 @@ void Player::_LoadQuestStatusRewarded(PreparedQueryResult result)
     }
 }
 
-bool Player::AddTrackedContent(int32 targetType, int32 targetId, int32 collectableSourceInfoId)
-{
-    // Ignore duplicates: the same (TargetType, TargetID) is only tracked once.
-    if (m_activePlayerData->TrackedCollectableSources.FindIndexIf([targetType, targetId](UF::CollectableSourceTrackedData const& e)
-        { return e.TargetType == targetType && e.TargetID == targetId; }) >= 0)
-        return false;
-
-    auto trackedSources = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::TrackedCollectableSources);
-    auto entry = AddDynamicUpdateFieldValue(trackedSources);
-    entry.ModifyValue(&UF::CollectableSourceTrackedData::TargetType).SetValue(targetType);
-    entry.ModifyValue(&UF::CollectableSourceTrackedData::TargetID).SetValue(targetId);
-    entry.ModifyValue(&UF::CollectableSourceTrackedData::CollectableSourceInfoID).SetValue(collectableSourceInfoId);
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CONTENT_TRACKING);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    stmt->setInt32(1, targetType);
-    stmt->setInt32(2, targetId);
-    stmt->setInt32(3, collectableSourceInfoId);
-    CharacterDatabase.Execute(stmt);
-    return true;
-}
-
-bool Player::RemoveTrackedContent(int32 targetType, int32 targetId)
-{
-    auto trackedSources = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::TrackedCollectableSources);
-    int32 const index = m_activePlayerData->TrackedCollectableSources.FindIndexIf([targetType, targetId](UF::CollectableSourceTrackedData const& e)
-        { return e.TargetType == targetType && e.TargetID == targetId; });
-    if (index < 0)
-        return false;
-
-    RemoveDynamicUpdateFieldValue(trackedSources, index);
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CONTENT_TRACKING);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    stmt->setInt32(1, targetType);
-    stmt->setInt32(2, targetId);
-    CharacterDatabase.Execute(stmt);
-    return true;
-}
-
-void Player::_LoadContentTracking(PreparedQueryResult result)
-{
-    if (!result)
-        return;
-
-    auto trackedSources = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::TrackedCollectableSources);
-    do
-    {
-        Field* fields = result->Fetch();
-        auto entry = AddDynamicUpdateFieldValue(trackedSources);
-        entry.ModifyValue(&UF::CollectableSourceTrackedData::TargetType).SetValue(fields[0].GetInt32());
-        entry.ModifyValue(&UF::CollectableSourceTrackedData::TargetID).SetValue(fields[1].GetInt32());
-        entry.ModifyValue(&UF::CollectableSourceTrackedData::CollectableSourceInfoID).SetValue(fields[2].GetInt32());
-    }
-    while (result->NextRow());
-}
-
 void Player::_LoadDailyQuestStatus(PreparedQueryResult result)
 {
     m_DFQuests.clear();
@@ -21882,7 +20132,7 @@ bool Player::Satisfy(AccessRequirement const* ar, uint32 target_map, TransferAbo
                     if (params)
                     {
                         params->Reason = TRANSFER_ABORT_DIFFICULTY;
-                        params->Arg = target_difficulty;
+                        params->Arg = mapDiff->DifficultyID;
                         params->MapDifficultyXConditionId = failedMapDifficultyXCondition;
                     }
                 }
@@ -22150,1464 +20400,6 @@ void Player::_LoadCharacterBankTabSettings(PreparedQueryResult result)
         AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::CharacterBankTabSettings));
 }
 
-void Player::_LoadCovenant(PreparedQueryResult result)
-{
-    if (!result)
-        return;
-
-    Field* fields = result->Fetch();
-    m_activeCovenantId = fields[0].GetUInt32();
-    m_activeSoulbindId = fields[1].GetUInt32();
-
-    // Replicate to the client. PlayerData::CovenantID/SoulbindID are what C_Covenants.GetActiveCovenantID() and
-    // C_Soulbinds.GetActiveSoulbindID() read, and what the covenant/soulbind PlayerConditions and criteria test;
-    // without these writes the whole covenant UI behaves as if the character never joined one.
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::CovenantID), int32(m_activeCovenantId));
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::SoulbindID), int32(m_activeSoulbindId));
-
-    // Covenant membership grants a hidden SkillLine that gates covenant-locked objects (see ApplyCovenantSkillLines).
-    ApplyCovenantSkillLines();
-}
-
-void Player::_LoadAccountBankTabSettings(PreparedQueryResult result)
-{
-    uint8 tabCount = 0;
-
-    if (result)
-    {
-        do
-        {
-            DEFINE_FIELD_ACCESSOR_CACHE_ANONYMOUS(PreparedResultSet, (tabId)(name)(icon)(description)(depositFlags)) fields { *result };
-
-            uint8 tabId = fields.tabId().GetUInt8();
-            if (tabId >= (ACCOUNT_BANK_SLOT_BAG_END - ACCOUNT_BANK_SLOT_BAG_START))
-                continue;
-
-            SetAccountBankTabSettings(tabId, fields.name().GetString(), fields.icon().GetString(),
-                fields.description().GetString(), static_cast<BagSlotFlags>(fields.depositFlags().GetUInt32()));
-
-            if (tabId >= tabCount)
-                tabCount = tabId + 1;
-
-        } while (result->NextRow());
-    }
-
-    // Derive tab count from the rows loaded
-    SetAccountBankTabCount(tabCount);
-
-    while (m_activePlayerData->AccountBankTabSettings.size() < *m_activePlayerData->NumAccountBankTabs)
-        AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::AccountBankTabSettings));
-}
-
-void Player::_LoadAccountBankCoinage(PreparedQueryResult result)
-{
-    if (result)
-        SetAccountBankCoinage((*result)[0].GetUInt64());
-    else
-        SetAccountBankCoinage(0);
-}
-
-void Player::ModifyAccountBankCoinage(int64 delta)
-{
-    int64 current = int64(GetAccountBankCoinage());
-    int64 next = current + delta;
-    if (next < 0)
-        next = 0;
-    if (uint64(next) > MAX_MONEY_AMOUNT)
-        next = int64(MAX_MONEY_AMOUNT);
-    SetAccountBankCoinage(uint64(next));
-
-    // Persist the change immediately as an ATOMIC delta rather than relying on the
-    // last-writer-wins REPLACE at save time (CR-3). Combined with the single-holder account
-    // bank lock (only the holder ever reaches this path) this guarantees the shared balance
-    // in the DB is always authoritative and can never be duped or lost across overlapping
-    // same-bnet sessions. Unlinked accounts (bnetId == 0) never persist shared state.
-    int64 applied = next - current;
-    uint32 bnetAccountId = GetSession() ? GetSession()->GetBattlenetAccountId() : 0;
-    if (!bnetAccountId || applied == 0)
-        return;
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_ACCOUNT_BANK_COINAGE_DELTA);
-    stmt->setUInt32(0, bnetAccountId);
-    stmt->setInt64(1, applied);
-    stmt->setInt64(2, applied);
-    CharacterDatabase.Execute(stmt);
-}
-
-void Player::_LoadAccountBankItems(PreparedQueryResult result, uint32 timeDiff)
-{
-    //  Same field layout as character_inventory load, but with bag/slot from account_bank_item at the end
-    //  Fields 0-51: item_instance fields (same as _LoadInventory)
-    //  Field 52: abi.bag (tab index 0-4)
-    //  Field 53: abi.slot (slot within tab 0-97)
-
-    // First, ensure all account bank tabs have their bag objects created
-    // This fixes the issue where empty tabs appear but have no slots
-    for (uint8 tabIndex = 0; tabIndex < GetAccountBankTabCount(); ++tabIndex)
-    {
-        uint8 bagSlot = ACCOUNT_BANK_SLOT_BAG_START + tabIndex;
-        Bag* bag = GetBagByPos(bagSlot);
-        if (!bag)
-        {
-            // Create the bag item for this tab if it doesn't exist yet
-            if (Item* bagItem = Item::CreateItem(ITEM_ACCOUNT_BANK_TAB_BAG, 1, ItemContext::NONE, this))
-            {
-                uint16 bagPos = (INVENTORY_SLOT_BAG_0 << 8) | bagSlot;
-                bagItem->SetContainer(nullptr);
-                bagItem->SetSlot(bagSlot);
-                StoreItem(ItemPosCountVec(1, ItemPosCount(bagPos, 1)), bagItem, true);
-                bagItem->SetState(ITEM_UNCHANGED, this);
-                bag = bagItem->ToBag();
-
-                TC_LOG_DEBUG("entities.player", "Player::_LoadAccountBankItems: Created account bank bag for tab {} at slot {}", tabIndex, bagSlot);
-            }
-
-            if (!bag)
-            {
-                TC_LOG_ERROR("entities.player", "Player::_LoadAccountBankItems: Player '{}' ({}) failed to create account bank bag for tab {}.",
-                    GetName(), GetGUID().ToString(), tabIndex);
-                continue;
-            }
-        }
-    }
-
-    if (!result)
-        return;
-
-    uint32 zoneId = GetZoneId();
-    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
-
-    m_itemUpdateQueueBlocked = true;
-    do
-    {
-        Field* fields = result->Fetch();
-        if (Item* item = _LoadItem(trans, zoneId, timeDiff, fields))
-        {
-            uint8 tabIndex = fields[52].GetUInt8();
-            uint8 slot = fields[53].GetUInt8();
-
-            if (tabIndex >= GetAccountBankTabCount())
-            {
-                TC_LOG_ERROR("entities.player", "Player::_LoadAccountBankItems: Player '{}' ({}) has account bank item ({}, entry: {}) in tab {} which exceeds tab count {}. Skipping.",
-                    GetName(), GetGUID().ToString(), item->GetGUID().ToString(), item->GetEntry(), tabIndex, GetAccountBankTabCount());
-                item->DeleteFromDB(trans);
-                delete item;
-                continue;
-            }
-
-            uint8 bagSlot = ACCOUNT_BANK_SLOT_BAG_START + tabIndex;
-
-            // Bag should already exist from the pre-creation loop above
-            Bag* bag = GetBagByPos(bagSlot);
-            if (!bag)
-            {
-                TC_LOG_ERROR("entities.player", "Player::_LoadAccountBankItems: Player '{}' ({}) failed to get account bank bag for tab {} after pre-creation.",
-                    GetName(), GetGUID().ToString(), tabIndex);
-                item->DeleteFromDB(trans);
-                delete item;
-                continue;
-            }
-
-            GetSession()->GetCollectionMgr()->CheckHeirloomUpgrades(item);
-            GetSession()->GetCollectionMgr()->AddItemAppearance(item);
-
-            ItemPosCountVec dest;
-            InventoryResult err = CanStoreItem(bagSlot, slot, dest, item);
-            if (err == EQUIP_ERR_OK)
-            {
-                item = StoreItem(dest, item, true);
-                item->SetState(ITEM_UNCHANGED, this);
-            }
-            else
-            {
-                TC_LOG_ERROR("entities.player", "Player::_LoadAccountBankItems: Player '{}' ({}) has account bank item ({}, entry: {}) which can't be loaded (tab {}, slot {}) by reason {}. Item will be sent by mail.",
-                    GetName(), GetGUID().ToString(), item->GetGUID().ToString(), item->GetEntry(), tabIndex, slot, uint32(err));
-                item->DeleteFromInventoryDB(trans);
-
-                MailDraft draft(GetSession()->GetTrinityString(LANG_NOT_EQUIPPED_ITEM), "There were problems with equipping item(s).");
-                draft.AddItem(item);
-                draft.SendMailTo(trans, this, MailSender(this, MAIL_STATIONERY_GM), MAIL_CHECK_MASK_COPIED);
-            }
-        }
-    } while (result->NextRow());
-
-    m_itemUpdateQueueBlocked = false;
-    CharacterDatabase.CommitTransaction(trans);
-}
-
-void Player::_LoadCovenantSoulbinds(PreparedQueryResult result)
-{
-    if (!result)
-        return;
-
-    do
-    {
-        Field* fields = result->Fetch();
-        m_covenantSoulbinds[fields[0].GetUInt32()] = fields[1].GetUInt32();
-    } while (result->NextRow());
-}
-
-void Player::RememberCovenantSoulbind(uint32 covenantId, uint32 soulbindId)
-{
-    if (!covenantId)
-        return;
-
-    auto [itr, inserted] = m_covenantSoulbinds.insert({ covenantId, soulbindId });
-    if (!inserted)
-    {
-        if (itr->second == soulbindId)
-            return;
-        itr->second = soulbindId;
-    }
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_COVENANT_SOULBIND);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    stmt->setUInt32(1, covenantId);
-    stmt->setUInt32(2, soulbindId);
-    CharacterDatabase.Execute(stmt);
-}
-
-uint32 Player::GetRememberedCovenantSoulbind(uint32 covenantId) const
-{
-    auto itr = m_covenantSoulbinds.find(covenantId);
-    return itr != m_covenantSoulbinds.end() ? itr->second : 0;
-}
-
-bool Player::HasEverJoinedCovenant(uint32 covenantId) const
-{
-    return m_covenantSoulbinds.count(covenantId) != 0;
-}
-
-void Player::_LoadRenownRewards(PreparedQueryResult result)
-{
-    if (!result)
-        return;
-
-    do
-    {
-        Field* fields = result->Fetch();
-        m_renownRewardsGranted[fields[0].GetUInt32()] = fields[1].GetUInt32();
-    } while (result->NextRow());
-}
-
-namespace
-{
-// Shadowlands covenant renown.
-//
-// CURRENCY_TYPE_COVENANT_RENOWN (1822) is the shared display currency. The client's renown UI reads it, and so
-// does every renown gate in the build: all 46 PlayerCondition rows in 12.0.7.68275 that reference a renown
-// currency reference 1822 and none reference the per-covenant currencies 1829-1832, as do the
-// ModifierTreeType 119 (PlayerHasCurrencyEqualOrGreaterThan) nodes behind the sanctum reservoir gates. So 1822
-// has to track the ACTIVE covenant's renown or none of those gates can ever evaluate true.
-//
-// Renown level for a covenant-renown currency quantity: level = quantity + 1.
-//
-// RenownRewards.db2 publishes levels 1..80 for covenants 1-4, while CurrencyTypes 1822/1829-1832 all cap at
-// MaxQty 79 (and share MaxQtyWorldStateID 19735, "Covenant Renown (Currency) - Max quantity", default 79).
-// Quantity 0 is therefore Renown 1 - the level a character holds the moment it joins - and quantity 79 is
-// Renown 80; without the offset the level-80 rewards would be unreachable.
-//
-// The offset is specific to the Shadowlands covenants. For every Dragonflight/TWW major faction the highest
-// RenownRewards level equals the currency MaxQty exactly (Valdrakken Accord 2088 MaxQty 30 / levels 1..30,
-// Maruuk Centaur 2002 MaxQty 25 / levels 1..25, Loamm Niffen 2402 MaxQty 20 / levels 1..20, ...), which is
-// why ReputationMgr::GetRenownLevel returns the raw quantity for the reputation-driven path and must not be
-// changed. Cross-check: the two sanctum reservoir gates PlayerCondition 82863 / 82871 (recorded as the
-// Renown 11 / Renown 19 requirements of GarrTalent 1138/1141/1144/1147 and 1139/1142/1145/1148) resolve to
-// ModifierTree 145849 / 145865, both ModifierTreeType 119 on currency 1822 with amounts 10 and 18.
-constexpr int32 COVENANT_RENOWN_LEVEL_OFFSET = 1;
-}
-
-CurrencyTypesEntry const* Player::GetCovenantRenownCurrency(uint32 covenantId)
-{
-    CovenantEntry const* covenant = covenantId ? sCovenantStore.LookupEntry(covenantId) : nullptr;
-    if (!covenant || covenant->CurrencyTypesID <= 0)
-        return nullptr;
-
-    // Covenant.db2 also carries the Dragonflight and later major factions, and they publish a CurrencyTypesID
-    // too. Those run on renown REPUTATION (their Faction row publishes RenownCurrencyID) and are served by
-    // UpdateRenownRewards(FactionEntry const*); claiming them here would double-grant and would apply the
-    // Shadowlands-only level offset to them. Only covenants whose faction publishes no renown currency - which
-    // in this build is exactly the four Shadowlands covenants - are currency-driven.
-    FactionEntry const* faction = sFactionStore.LookupEntry(uint32(covenant->FactionID));
-    if (!faction || faction->RenownCurrencyID > 0)
-        return nullptr;
-
-    return sCurrencyTypesStore.LookupEntry(uint32(covenant->CurrencyTypesID));
-}
-
-uint32 Player::GetCovenantIdForRenownCurrency(uint32 currencyId)
-{
-    if (!currencyId)
-        return 0;
-
-    for (CovenantEntry const* covenant : sCovenantStore)
-        if (CurrencyTypesEntry const* currency = GetCovenantRenownCurrency(covenant->ID))
-            if (currency->ID == currencyId)
-                return covenant->ID;
-
-    return 0;
-}
-
-uint32 Player::GetCovenantRenownLevel(uint32 covenantId /*= 0*/) const
-{
-    if (!covenantId)
-        covenantId = m_activeCovenantId;
-
-    CurrencyTypesEntry const* currency = GetCovenantRenownCurrency(covenantId);
-    if (!currency)
-        return 0;
-
-    return GetCurrencyQuantity(currency->ID) + COVENANT_RENOWN_LEVEL_OFFSET;
-}
-
-uint32 Player::GetHighestCovenantRenownLevel() const
-{
-    uint32 highest = 0;
-    for (CovenantEntry const* covenant : sCovenantStore)
-    {
-        CurrencyTypesEntry const* currency = GetCovenantRenownCurrency(covenant->ID);
-        if (!currency)
-            continue;
-
-        // Same guard as UpdateCovenantRenownRewards: quantity 0 means Renown 1 for a covenant the character has
-        // actually joined, but it must not read as Renown 1 for the three it never touched.
-        uint32 quantity = GetCurrencyQuantity(currency->ID);
-        if (!quantity && covenant->ID != m_activeCovenantId)
-            continue;
-
-        highest = std::max(highest, quantity + COVENANT_RENOWN_LEVEL_OFFSET);
-    }
-
-    return highest;
-}
-
-uint32 Player::GetMaxCovenantRenownLevel()
-{
-    // Read the cap rather than hardcode it. Renown is stored as a currency quantity with level = quantity + 1, and
-    // CurrencyTypes 1829-1832 (and the 1822 display mirror) all publish MaxQty 79 through the shared
-    // MaxQtyWorldStateID 19735, i.e. Renown 80 - which is also exactly the highest level RenownRewards.db2 defines
-    // for covenants 1-4. Falls back to the RenownRewards ceiling if the currency ever stops publishing a cap.
-    if (CurrencyTypesEntry const* currency = GetCovenantRenownCurrency(1))
-        if (currency->MaxQty)
-            return currency->MaxQty + COVENANT_RENOWN_LEVEL_OFFSET;
-
-    return 0;
-}
-
-bool Player::IsCovenantSwitchUnlocked() const
-{
-    // The 9.1.5 rule, and only that rule: covenant switching becomes free and unpenalised once ANY covenant has
-    // been taken to maximum renown. The launch-era model (a re-join quest chain, a lockout and a renown penalty)
-    // is deliberately NOT implemented - none of its numbers are published anywhere in the 12.0.7.68275 client
-    // data, so building it would mean inventing them.
-    uint32 const required = GetMaxCovenantRenownLevel();
-    if (!required)
-        return false;
-
-    return GetHighestCovenantRenownLevel() >= required;
-}
-
-bool Player::CanChangeCovenant() const
-{
-    // A character that never pledged is not switching, it is joining. "Never pledged" has to mean never, not
-    // merely "has none right now": spell 338503 "Reset Covenant" sets the covenant to 0, and treating the result
-    // as a first-time joiner would turn reset-then-rejoin into a free switch that skips the renown gate entirely.
-    // HasEverJoinedAnyCovenant() is remembered per covenant on the way out, so it survives the reset.
-    if (!m_activeCovenantId)
-        return !HasEverJoinedAnyCovenant() || IsCovenantSwitchUnlocked();
-
-    return IsCovenantSwitchUnlocked();
-}
-
-void Player::SyncCovenantRenownDisplayCurrency()
-{
-    if (!sCurrencyTypesStore.LookupEntry(CURRENCY_TYPE_COVENANT_RENOWN))
-        return;
-
-    // The per-covenant currency is the authority; 1822 is a view of it. A character with no covenant has no
-    // renown, so the view goes to zero - covenant PlayerConditions test 1822 without also testing CovenantID,
-    // and a stale display value would satisfy them.
-    uint32 target = 0;
-    if (CurrencyTypesEntry const* covenantCurrency = GetCovenantRenownCurrency(m_activeCovenantId))
-        target = GetCurrencyQuantity(covenantCurrency->ID);
-
-    int32 delta = int32(target) - int32(GetCurrencyQuantity(CURRENCY_TYPE_COVENANT_RENOWN));
-    if (!delta)
-        return;
-
-    // 1822 shares MaxQtyWorldStateID 19735 with the per-covenant currencies, so ModifyCurrency's cap clamp can
-    // never make the view disagree with the track it views. On a covenant switch the view moves down to the
-    // newly-active covenant's own (independently stored) renown - hence FactionConversion as the reason.
-    ModifyCurrency(CURRENCY_TYPE_COVENANT_RENOWN, delta, CurrencyGainSource::RenownRepGain,
-        CurrencyDestroyReason::FactionConversion);
-}
-
-bool Player::IsCovenantRenownCatchupActive() const
-{
-    // Accelerated renown catch-up is NOT implemented, so the honest answer is "no".
-    //
-    // Retail gated renown gains by calendar week and boosted gains for a character below the account's
-    // renown high-water mark. Neither the weekly schedule nor the boost rate is published anywhere in the
-    // 12.0.7.68275 client data - CurrencyTypes 1822/1829-1832 all have MaxEarnablePerWeek = 0, and the only
-    // two ModifierTree rows of type RenownCatchupActive/RapidRenownCatchupActive (167897/167898) carry no
-    // assets - so there is nothing to derive the mechanic from. Reporting true here would promise the client's
-    // renown UI a bonus the server never pays, so it stays false until real accelerated gains exist.
-    return false;
-}
-
-namespace
-{
-// The four Shadowlands covenants store their reservoir anima the same way they store their renown: in a
-// per-covenant currency, with a shared display currency mirroring the active one.
-//
-//   1859 Reservoir Anima-Kyrian / 1860 -Venthyr / 1861 -Night Fae / 1862 -Necrolord
-//
-// All four carry AwardConditionID 70101-70104 (the same "CovenantID == n" PlayerConditions the renown family
-// uses) and the same MaxQty 200000 as the shared 1813, which is what makes the mirror safe: the view can never
-// clamp differently from the track it views. The order below is covenant id order and is asserted against the
-// AwardConditionID mapping rather than assumed - see GetCovenantAnimaCurrency.
-constexpr std::array<uint32, 4> CovenantAnimaCurrencies = { 1859, 1860, 1861, 1862 };
-
-// Covenant Callings.
-//
-// Three numbers govern the board, and all three are read off the 12.0.7.68275 client rather than assumed:
-//
-//  * MaxSlots = 3. CovenantCallingsConstants.Callings.MaxCallings = 3 (Blizzard_APIDocumentationGenerated/
-//    CovenantCallingsConstantsDocumentation.lua). The client iterates exactly 1..MaxCallings over the id list
-//    this server sends and treats a missing entry as "already done today" (CovenantCallingMixin:Init sets
-//    isLockedToday when its bounty is nil).
-//
-//  * One new calling per daily reset. CovenantCallingsMixin:GetDaysUntilNext returns
-//    "index - firstLockedIndex + 1" for a locked slot, i.e. the first empty slot refills in 1 day, the second
-//    in 2 and the third in 3 (the matching BOUNTY_BOARD_NO_CALLINGS_DAYS_1/2/3 strings exist). A board emptied
-//    by completing all three therefore comes back one calling at a time, not all at once.
-//
-//  * Three days of offer life. That is the same statement seen from the other side: a full board refills over
-//    exactly three resets, so an untaken calling can be at most three resets old. It is the only one of the
-//    three that has no single line of client data naming it, and it is what makes 1-per-day and 3-concurrent
-//    consistent instead of contradictory.
-//
-// A completed calling frees its slot immediately and the slot refills at the NEXT reset (the 1-day rule).
-// An expired calling frees its slot at a reset boundary and refills in the SAME pass, so a board nobody
-// touches stays full at three rather than flickering empty for a day.
-namespace CovenantCallings
-{
-    constexpr uint8 MaxSlots = 3;
-    constexpr time_t OfferDuration = 3 * DAY;
-}
-}
-
-CurrencyTypesEntry const* Player::GetCovenantAnimaCurrency(uint32 covenantId)
-{
-    // Only the four Shadowlands covenants have an anima track; Covenant.db2 rows 12+ (the Dragonflight and
-    // later major factions) reuse the table for renown only and must not be given one.
-    if (!covenantId || covenantId > CovenantAnimaCurrencies.size())
-        return nullptr;
-
-    if (!sCovenantStore.LookupEntry(covenantId))
-        return nullptr;
-
-    return sCurrencyTypesStore.LookupEntry(CovenantAnimaCurrencies[covenantId - 1]);
-}
-
-uint32 Player::GetCovenantIdForAnimaCurrency(uint32 currencyId)
-{
-    if (!currencyId)
-        return 0;
-
-    for (std::size_t i = 0; i < CovenantAnimaCurrencies.size(); ++i)
-        if (CovenantAnimaCurrencies[i] == currencyId)
-            return uint32(i) + 1;
-
-    return 0;
-}
-
-void Player::SyncCovenantAnimaDisplayCurrency()
-{
-    if (!sCurrencyTypesStore.LookupEntry(CURRENCY_TYPE_RESERVOIR_ANIMA))
-        return;
-
-    CurrencyTypesEntry const* covenantCurrency = GetCovenantAnimaCurrency(m_activeCovenantId);
-    if (!covenantCurrency)
-    {
-        // No covenant, no track to mirror. The view is deliberately LEFT ALONE rather than zeroed: a character
-        // that banked reservoir anima before it was covenant-scoped (or before it joined at all) holds that
-        // balance only on 1813, and zeroing the view here would be the only place in this system that can
-        // destroy a balance. It is handed to a track by MigrateLegacyReservoirAnima the moment one exists.
-        return;
-    }
-
-    // The per-covenant currency is the authority; 1813 is a view of it. Repointing the view at a switch is safe
-    // because the invariant "view == active track" holds at all times while a covenant is active - see
-    // Player::CurrencyChanged, which forwards every change on the view into the track in both directions. So the
-    // outgoing covenant's balance is already banked on its own currency before the view moves off it.
-    int32 delta = int32(GetCurrencyQuantity(covenantCurrency->ID)) - int32(GetCurrencyQuantity(CURRENCY_TYPE_RESERVOIR_ANIMA));
-    if (!delta)
-        return;
-
-    ModifyCurrency(CURRENCY_TYPE_RESERVOIR_ANIMA, delta, CurrencyGainSource::Vendor,
-        CurrencyDestroyReason::FactionConversion);
-}
-
-void Player::MigrateLegacyReservoirAnima()
-{
-    // One-shot repair for characters whose reservoir anima predates covenant scoping: everything that ever
-    // grants anima targets 1813 (SPELL_EFFECT_GIVE_CURRENCY 166 - nothing in the build targets 1859-1862), so
-    // such a character has a balance on the view and nothing on its track.
-    //
-    // It is safe to run on every login because it can only ever move anima ONTO the track, and it self-disables:
-    // once the view and the track agree there is nothing to move, and the invariant maintained by CurrencyChanged
-    // keeps them in agreement from then on. It must run BEFORE the first SyncCovenantAnimaDisplayCurrency of the
-    // session, which repoints the view at the track.
-    CurrencyTypesEntry const* covenantCurrency = GetCovenantAnimaCurrency(m_activeCovenantId);
-    if (!covenantCurrency)
-        return;
-
-    int32 unbanked = int32(GetCurrencyQuantity(CURRENCY_TYPE_RESERVOIR_ANIMA))
-        - int32(GetCurrencyQuantity(covenantCurrency->ID));
-    if (unbanked > 0)
-        ModifyCurrency(covenantCurrency->ID, unbanked, CurrencyGainSource::Vendor);
-}
-
-bool Player::AreCovenantCallingsUnlocked() const
-{
-    CovenantEntry const* covenant = m_activeCovenantId ? sCovenantStore.LookupEntry(m_activeCovenantId) : nullptr;
-    if (!covenant || covenant->BountySetID <= 0)
-        return false;
-
-    BountySetEntry const* bountySet = sBountySetStore.LookupEntry(uint32(covenant->BountySetID));
-    if (!bountySet)
-        return false;
-
-    // BountySet.VisiblePlayerConditionID is the real gate and the only one that works. Every covenant bounty set
-    // (111 Kyrian / 112 Venthyr / 113 Necrolord / 114 Night Fae) carries LockedQuestID = 0, so the LockedQuestID
-    // test this used to do could never refuse anything - callings unlocked the instant a character joined.
-    // The VisiblePlayerConditionID rows (84987/84989/84988/84990) each pin CovenantID plus the covenant campaign
-    // chapter that actually opens callings in retail (PrevQuestID 57559 "Choosing Your Purpose" + the covenant's
-    // own chapter quest, PrevQuestLogic 5).
-    //
-    // Note the pairing is taken from Covenant.BountySetID -> BountySet.VisiblePlayerConditionID and never from
-    // the numeric order of the ids: BountySet 113 belongs to covenant 4 (Necrolord) and 114 to covenant 3
-    // (Night Fae), and PlayerCondition 84988/84990 carry CovenantID 4/3 to match. Reading them in id order
-    // would gate two of the four covenants on another covenant's campaign.
-    if (bountySet->VisiblePlayerConditionID > 0
-        && !ConditionMgr::IsPlayerMeetingCondition(this, uint32(bountySet->VisiblePlayerConditionID)))
-        return false;
-
-    return true;
-}
-
-uint32 Player::RollCovenantCalling(uint32 covenantId, uint8 slot, time_t issueTime) const
-{
-    CovenantEntry const* covenant = sCovenantStore.LookupEntry(covenantId);
-    if (!covenant || covenant->BountySetID <= 0)
-        return 0;
-
-    std::vector<BountyEntry const*> const* bounties = sDB2Manager.GetBountiesForBountySet(covenant->BountySetID);
-    if (!bounties)
-        return 0;
-
-    std::vector<BountyEntry const*> eligible;
-    eligible.reserve(bounties->size());
-    for (BountyEntry const* bounty : *bounties)
-    {
-        if (bounty->QuestID <= 0)
-            continue;
-
-        // Never offer the same calling twice at once.
-        bool alreadyOffered = false;
-        if (std::vector<CovenantCallingSlot> const* slots = Trinity::Containers::MapGetValuePtr(m_covenantCallings, covenantId))
-            for (CovenantCallingSlot const& existing : *slots)
-                if (existing.BountyID == bounty->ID)
-                    alreadyOffered = true;
-
-        if (alreadyOffered)
-            continue;
-
-        // Nor one the character is already carrying or has already completed in this daily period - the client
-        // would render it as an offer it can neither accept nor turn in.
-        if (GetQuestStatus(uint32(bounty->QuestID)) != QUEST_STATUS_NONE || IsDailyQuestDone(uint32(bounty->QuestID)))
-            continue;
-
-        // Bounty.TurninPlayerConditionID gates whether the bounty's turn-in is possible at all. It is honoured
-        // here for completeness, but note that it is 0 on all 96 covenant Bounty rows in 12.0.7.68275 (only 7
-        // rows in the whole table carry one, and they are Legion/BfA emissaries), so this can never fire for a
-        // covenant today. It is kept because the field is the plan's stated gate and costs nothing.
-        if (bounty->TurninPlayerConditionID > 0
-            && !ConditionMgr::IsPlayerMeetingCondition(this, uint32(bounty->TurninPlayerConditionID)))
-            continue;
-
-        eligible.push_back(bounty);
-    }
-
-    if (eligible.empty())
-        return 0;
-
-    std::sort(eligible.begin(), eligible.end(), [](BountyEntry const* left, BountyEntry const* right)
-    {
-        return left->ID < right->ID;
-    });
-
-    // Deterministic rather than random: the same character, slot and issue boundary must always produce the
-    // same calling. The issue stamp is a daily-reset boundary, so the pick is stable for the whole day and a
-    // server restart mid-day cannot hand the player a different board than the one they were already looking at.
-    uint64 seed = GetGUID().GetCounter();
-    seed = seed * 1099511628211ull + uint64(issueTime);
-    seed = seed * 1099511628211ull + uint64(slot);
-    seed = seed * 1099511628211ull + uint64(covenantId);
-    seed ^= seed >> 29;
-
-    return eligible[seed % eligible.size()]->ID;
-}
-
-void Player::UpdateCovenantCallings()
-{
-    uint32 const covenantId = m_activeCovenantId;
-    if (!covenantId)
-        return;
-
-    if (!AreCovenantCallingsUnlocked())
-        return;
-
-    time_t const now = GameTime::GetGameTime();
-    // The daily reset boundary that is currently in force. Anchoring every timestamp on it is what makes the
-    // board roll over exactly at reset instead of drifting to whenever the player happened to log in.
-    time_t const lastReset = sWorld->GetNextDailyQuestsResetTime() - DAY;
-    time_t const nextReset = sWorld->GetNextDailyQuestsResetTime();
-
-    std::vector<CovenantCallingSlot>& slots = m_covenantCallings[covenantId];
-
-    // A board that has never existed starts with every slot due at the current reset, so a character that has
-    // just unlocked callings sees a full board of three rather than one calling and a two-day wait. This is the
-    // steady state of the three rules above (issue one per reset, keep three, three-day life), just entered at
-    // once instead of over three days.
-    if (slots.empty())
-    {
-        slots.resize(CovenantCallings::MaxSlots);
-        for (CovenantCallingSlot& slot : slots)
-            slot.RefillTime = lastReset;
-
-        m_covenantCallingsChanged = true;
-    }
-    else if (slots.size() < CovenantCallings::MaxSlots)
-    {
-        // Defensive: a partially-written board (a truncated row set) is topped up rather than left short.
-        while (slots.size() < CovenantCallings::MaxSlots)
-            slots.push_back(CovenantCallingSlot{ 0, 0, lastReset });
-
-        m_covenantCallingsChanged = true;
-    }
-
-    // 1. Expire. An offer that has run out frees its slot and becomes due immediately: its expiry is itself a
-    //    reset boundary, so "immediately" means "at this reset", and the replacement is issued in step 3 below.
-    for (CovenantCallingSlot& slot : slots)
-    {
-        if (!slot.BountyID || slot.ExpireTime > now)
-            continue;
-
-        slot.BountyID = 0;
-        slot.RefillTime = slot.ExpireTime;
-        slot.ExpireTime = 0;
-        m_covenantCallingsChanged = true;
-    }
-
-    // 2. Schedule any slot that was freed without a refill date (a completed calling). Pending slots queue up
-    //    behind whatever is already scheduled, one per reset - which is exactly the 1/2/3-day countdown the
-    //    client renders from GetDaysUntilNext.
-    {
-        time_t cursor = lastReset;
-        for (CovenantCallingSlot const& slot : slots)
-            if (!slot.BountyID && slot.RefillTime > cursor)
-                cursor = slot.RefillTime;
-
-        for (CovenantCallingSlot& slot : slots)
-        {
-            if (slot.BountyID || slot.RefillTime)
-                continue;
-
-            cursor += DAY;
-            slot.RefillTime = cursor;
-            m_covenantCallingsChanged = true;
-        }
-    }
-
-    // 3. Issue. Every slot whose refill boundary has passed gets a calling, so a character who was offline for
-    //    three days comes back to a full board instead of losing the days they were away. The offer is stamped
-    //    with the boundary it was due at, not with "now", which keeps expiry on reset boundaries.
-    for (uint8 i = 0; i < slots.size(); ++i)
-    {
-        CovenantCallingSlot& slot = slots[i];
-        if (slot.BountyID || !slot.RefillTime || slot.RefillTime > now)
-            continue;
-
-        uint32 const bountyId = RollCovenantCalling(covenantId, i, slot.RefillTime);
-        if (!bountyId)
-            continue;   // pool exhausted for now; the slot stays due and is retried on the next pass
-
-        slot.BountyID = bountyId;
-        slot.ExpireTime = slot.RefillTime + CovenantCallings::OfferDuration;
-        slot.RefillTime = 0;
-        m_covenantCallingsChanged = true;
-
-        // An offer issued at a boundary already more than OfferDuration in the past would be born expired
-        // (a character offline for a week). Give it the current period instead of a dead slot.
-        if (slot.ExpireTime <= now)
-            slot.ExpireTime = nextReset + CovenantCallings::OfferDuration - DAY;
-    }
-}
-
-std::vector<int32> Player::GetCovenantCallingBountyIDs() const
-{
-    std::vector<int32> bountyIds;
-
-    std::vector<CovenantCallingSlot> const* slots = Trinity::Containers::MapGetValuePtr(m_covenantCallings, m_activeCovenantId);
-    if (!slots)
-        return bountyIds;
-
-    // Slot order matters: the client indexes the list 1..MaxCallings and treats every index past the end as a
-    // calling already dealt with today, which is precisely what an empty slot means.
-    bountyIds.reserve(slots->size());
-    for (CovenantCallingSlot const& slot : *slots)
-        if (slot.BountyID)
-            bountyIds.push_back(int32(slot.BountyID));
-
-    return bountyIds;
-}
-
-void Player::SendCovenantCallingsUpdate()
-{
-    WorldPackets::Covenant::CovenantCallingsAvailabilityResponse response;
-    response.CallingsUnlocked = AreCovenantCallingsUnlocked();
-    if (response.CallingsUnlocked)
-        response.BountyIDs = GetCovenantCallingBountyIDs();
-
-    SendDirectMessage(response.Write());
-}
-
-void Player::OnCovenantCallingCompleted(uint32 questId)
-{
-    std::vector<CovenantCallingSlot>* slots = Trinity::Containers::MapGetValuePtr(m_covenantCallings, m_activeCovenantId);
-    if (!slots)
-        return;
-
-    bool freed = false;
-    for (CovenantCallingSlot& slot : *slots)
-    {
-        if (!slot.BountyID)
-            continue;
-
-        BountyEntry const* bounty = sBountyStore.LookupEntry(slot.BountyID);
-        if (!bounty || uint32(bounty->QuestID) != questId)
-            continue;
-
-        // Freed with no refill date: UpdateCovenantCallings schedules it for the next reset, so a completed
-        // calling is replaced tomorrow rather than sitting out the rest of its three-day offer window.
-        slot.BountyID = 0;
-        slot.ExpireTime = 0;
-        slot.RefillTime = 0;
-        freed = true;
-    }
-
-    if (!freed)
-        return;
-
-    m_covenantCallingsChanged = true;
-    UpdateCovenantCallings();
-    SendCovenantCallingsUpdate();
-}
-
-void Player::_LoadCovenantCallings(PreparedQueryResult result)
-{
-    if (!result)
-        return;
-
-    do
-    {
-        Field* fields = result->Fetch();
-
-        uint32 const covenantId = fields[0].GetUInt32();
-        uint8 const slotIndex = fields[1].GetUInt8();
-        if (!covenantId || slotIndex >= CovenantCallings::MaxSlots)
-            continue;
-
-        std::vector<CovenantCallingSlot>& slots = m_covenantCallings[covenantId];
-        if (slots.empty())
-            slots.resize(CovenantCallings::MaxSlots);
-
-        CovenantCallingSlot& slot = slots[slotIndex];
-        slot.BountyID = fields[2].GetUInt32();
-        slot.ExpireTime = fields[3].GetInt64();
-        slot.RefillTime = fields[4].GetInt64();
-
-        // A bounty that no longer exists in DB2 (a build change) must not keep its slot hostage.
-        if (slot.BountyID && !sBountyStore.LookupEntry(slot.BountyID))
-        {
-            slot.BountyID = 0;
-            slot.ExpireTime = 0;
-            slot.RefillTime = 0;
-            m_covenantCallingsChanged = true;
-        }
-    } while (result->NextRow());
-}
-
-void Player::_SaveCovenantCallings(CharacterDatabaseTransaction trans)
-{
-    if (!m_covenantCallingsChanged)
-        return;
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_COVENANT_CALLINGS);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    trans->Append(stmt);
-
-    for (auto const& [covenantId, slots] : m_covenantCallings)
-    {
-        for (uint8 i = 0; i < slots.size(); ++i)
-        {
-            CovenantCallingSlot const& slot = slots[i];
-            if (!slot.BountyID && !slot.RefillTime)
-                continue;   // a slot with nothing to remember costs nothing to forget
-
-            stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_COVENANT_CALLINGS);
-            stmt->setUInt64(0, GetGUID().GetCounter());
-            stmt->setUInt32(1, covenantId);
-            stmt->setUInt8(2, i);
-            stmt->setUInt32(3, slot.BountyID);
-            stmt->setInt64(4, slot.ExpireTime);
-            stmt->setInt64(5, slot.RefillTime);
-            trans->Append(stmt);
-        }
-    }
-
-    m_covenantCallingsChanged = false;
-}
-
-void Player::GrantRenownReward(RenownRewardsEntry const* reward)
-{
-    if (!reward)
-        return;
-
-    // RenownRewards rows can carry an eligibility gate, and it is load-bearing rather than cosmetic: the
-    // Renown 48 batch is twelve rows per covenant, one per class (PlayerCondition 39985/39986/39987/40073/
-    // 42230/42788-42794 are pure ClassMask conditions), and the two Kyrian Renown 4 companions 1270/1271 are
-    // gated on the campaign quests 60294/60293 (PlayerCondition 85540/85541). Ungated, every character would
-    // receive all twelve class items and both companions.
-    if (reward->PlayerConditionID > 0 && !ConditionMgr::IsPlayerMeetingCondition(this, uint32(reward->PlayerConditionID)))
-        return;
-
-    if (reward->SpellID > 0)
-        LearnSpell(uint32(reward->SpellID), false);
-
-    if (reward->CharTitlesID > 0)
-        if (CharTitlesEntry const* title = sCharTitlesStore.LookupEntry(uint32(reward->CharTitlesID)))
-            SetTitle(title);
-
-    if (reward->MountID > 0)
-        if (MountEntry const* mount = sMountStore.LookupEntry(uint32(reward->MountID)))
-            if (mount->SourceSpellID > 0)
-                GetSession()->GetCollectionMgr()->AddMount(uint32(mount->SourceSpellID), MOUNT_STATUS_NONE);
-
-    if (reward->ItemID > 0)
-        AddItem(uint32(reward->ItemID), 1);
-
-    if (reward->TransmogID > 0)
-        if (ItemModifiedAppearanceEntry const* appearance = sItemModifiedAppearanceStore.LookupEntry(uint32(reward->TransmogID)))
-            GetSession()->GetCollectionMgr()->AddItemAppearance(appearance->ItemID, uint32(appearance->ItemAppearanceModifierID));
-
-    if (reward->TransmogSetID > 0)
-        GetSession()->GetCollectionMgr()->AddTransmogSet(uint32(reward->TransmogSetID));
-
-    if (reward->GarrFollowerID > 0)
-    {
-        // Route to the follower's own garrison type. The no-arg GetGarrison() is the WoD garrison (type 2), and
-        // all 37 GarrFollowerID rewards of covenants 1-4 are GarrTypeID 111 (the covenant sanctum), so this
-        // grant silently did nothing for every covenant companion - the same failure class already fixed in
-        // Spell::EffectAddGarrisonFollower.
-        GarrisonType garrType = GARRISON_TYPE_GARRISON;
-        if (GarrFollowerEntry const* followerEntry = sGarrFollowerStore.LookupEntry(uint32(reward->GarrFollowerID)))
-            garrType = GarrisonType(followerEntry->GarrTypeID);
-
-        if (Garrison* garrison = GetGarrison(garrType))
-            garrison->AddFollower(uint32(reward->GarrFollowerID));
-    }
-
-    if (reward->TransmogIllusionID > 0)
-        if (sTransmogIllusionStore.LookupEntry(uint32(reward->TransmogIllusionID)))
-            GetSession()->GetCollectionMgr()->AddTransmogIllusion(uint32(reward->TransmogIllusionID));
-
-    // RenownRewards.QuestID is deliberately NOT granted. It is not a reward quest: 424 of the 511 covenant rows
-    // carry one, and the same id repeats across unrelated rows of the same covenant (e.g. Kyrian 64508 appears
-    // on the Renown 1, 4, 5 and 6 rows, which award nothing, a companion, a campaign milestone and a transmog
-    // respectively). It reads as the quest the UI links the row to, not something to hand out; pushing 424
-    // quests at a character would be destructive. Left until the field's meaning is confirmed in-game.
-}
-
-void Player::UpdateRenownRewards(FactionEntry const* renownFaction)
-{
-    // Only act on live renown gains for an in-world player (avoids granting items mid-load); a player who already had
-    // renown before this feature is caught up on the first live renown change (all ungranted levels grant at once).
-    if (!renownFaction || !IsInWorld())
-        return;
-
-    if (!GetReputationMgr().IsRenownReputation(renownFaction))
-        return;
-
-    // Which covenant owns this renown faction?
-    uint32 covenantId = 0;
-    for (CovenantEntry const* covenant : sCovenantStore)
-    {
-        if (covenant->FactionID == int32(renownFaction->ID))
-        {
-            covenantId = covenant->ID;
-            break;
-        }
-    }
-    if (!covenantId)
-        return;
-
-    GrantRenownRewardsUpTo(covenantId, GetReputationMgr().GetRenownLevel(renownFaction));
-}
-
-void Player::UpdateCovenantRenownRewards(uint32 covenantId)
-{
-    // Same in-world guard as the reputation path: never grant items mid-load. A character that already holds
-    // renown is caught up by UpdateAllRenownRewards() once it is in world.
-    if (!IsInWorld())
-        return;
-
-    CurrencyTypesEntry const* currency = GetCovenantRenownCurrency(covenantId);
-    if (!currency)
-        return;
-
-    // A covenant the character never joined has no renown, and quantity 0 would otherwise read as Renown 1 and
-    // claim that level's rewards for all four covenants at once. The active covenant is always walked, because
-    // a fresh member legitimately sits at quantity 0 / Renown 1.
-    if (covenantId != m_activeCovenantId && !GetCurrencyQuantity(currency->ID))
-        return;
-
-    GrantRenownRewardsUpTo(covenantId, int32(GetCovenantRenownLevel(covenantId)));
-}
-
-void Player::GrantRenownRewardsUpTo(uint32 covenantId, int32 currentLevel)
-{
-    if (!covenantId || currentLevel <= 0)
-        return;
-
-    uint32& granted = m_renownRewardsGranted[covenantId];
-    if (int32(granted) >= currentLevel)
-        return;
-
-    for (int32 level = int32(granted) + 1; level <= currentLevel; ++level)
-        if (std::vector<RenownRewardsEntry const*> const* rewards = sDB2Manager.GetRenownRewards(int32(covenantId), level))
-            for (RenownRewardsEntry const* reward : *rewards)
-                GrantRenownReward(reward);
-
-    granted = uint32(currentLevel);
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_COVENANT_RENOWN);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    stmt->setUInt32(1, covenantId);
-    stmt->setUInt32(2, granted);
-    CharacterDatabase.Execute(stmt);
-}
-
-void Player::UpdateAllRenownRewards()
-{
-    // Reputation-driven renown (Dragonflight and later major factions).
-    for (CovenantEntry const* covenant : sCovenantStore)
-        if (FactionEntry const* faction = sFactionStore.LookupEntry(uint32(covenant->FactionID)))
-            UpdateRenownRewards(faction);
-
-    // Currency-driven renown (the four Shadowlands covenants). Every covenant is walked, not just the active
-    // one: the per-covenant currencies 1829-1832 persist independently, so a character that switched covenants
-    // still owns - and is still owed the rewards of - its other tracks.
-    for (CovenantEntry const* covenant : sCovenantStore)
-        UpdateCovenantRenownRewards(covenant->ID);
-
-    // 1822 is a display mirror of the active covenant's track and nothing writes it directly; refresh it once
-    // the character is in world so the renown UI and the renown PlayerConditions see the right value on login.
-    SyncCovenantRenownDisplayCurrency();
-
-    // Same for the reservoir anima view (1813), but bank any pre-covenant-scoping balance onto the track first
-    // so that repointing the view cannot cost anybody the anima they had.
-    MigrateLegacyReservoirAnima();
-    SyncCovenantAnimaDisplayCurrency();
-}
-
-void Player::ActivateSoulbind(SoulbindEntry const* soulbind)
-{
-    if (!soulbind)
-        return;
-
-    // Switching soulbinds changes the active tree, so strip the previously-applied conduit spells and trait perks
-    // first - both are scoped to the tree that is about to stop being active.
-    RemoveConduitSpells();
-    RemoveSoulbindTraitSpells();
-
-    // The active covenant is NOT derived from the soulbind. It is set by the covenant-choice flow
-    // (SPELL_EFFECT_SET_COVENANT -> SetActiveCovenant). Deriving it here let any client free-switch covenant by
-    // simply activating a foreign covenant's soulbind; WorldSession::HandleActivateSoulbind now rejects a soulbind
-    // whose CovenantID does not match the player's, and this function no longer overwrites it.
-    m_activeSoulbindId = soulbind->ID;
-
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::SoulbindID), int32(m_activeSoulbindId));
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_COVENANT);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    stmt->setUInt32(1, m_activeCovenantId);
-    stmt->setUInt32(2, m_activeSoulbindId);
-    CharacterDatabase.Execute(stmt);
-
-    // Re-apply the conduits socketed into, and the trait nodes taken in, the newly-active soulbind's tree.
-    ApplyConduitSpells();
-    ApplySoulbindTraitSpells();
-}
-
-void Player::ApplyCovenantSkillLines()
-{
-    // Covenant membership is expressed to the lock system as a hidden SkillLine (Covenant.db2 SkillLineID:
-    // 2730 Kyrian / 2731 Venthyr / 2732 Night Fae / 2733 Necrolord). LOCKTYPE_COVENANT_* (157-160) resolve to
-    // those skills via SkillByLockType (SharedDefines.h) and Spell::CanOpenLock compares the player's skill value
-    // against Lock.db2's required value. The four covenant Lock rows (3285-3288) all require 300, and the skill
-    // lines have no SkillTiers cap (SkillRaceClassInfo.SkillTierID = 0), so membership grants exactly 300.
-    constexpr uint16 CovenantSkillValue = 300;
-
-    for (CovenantEntry const* covenant : sCovenantStore)
-    {
-        if (covenant->SkillLineID <= 0)
-            continue;
-
-        bool const isActive = covenant->ID == m_activeCovenantId;
-        uint16 const value = isActive ? CovenantSkillValue : 0;
-
-        // Skip no-op writes so this stays cheap and idempotent (it runs on every load and covenant set).
-        if (GetPureSkillValue(uint32(covenant->SkillLineID)) == value)
-            continue;
-
-        SetSkill(uint32(covenant->SkillLineID), 0, value, value);
-    }
-}
-
-// Join, switch or leave a covenant. SPELL_EFFECT_SET_COVENANT is the only way in:
-//
-//   299204/299205/299206/299207 "<Covenant> Covenant"  -> MiscValue 1/2/3/4, the pledge
-//   338503                      "Reset Covenant"        -> MiscValue 0, plus SPELL_EFFECT_QUEST_FAIL on all four
-//                                                          covenant-choice quests 56066-56069 and the two phase
-//                                                          refresh effects (167/170). That is the whole retail
-//                                                          reset mechanism, read straight off the client data.
-//
-// NOTHING HERE DESTROYS COVENANT-SCOPED STATE. A switch is a change of which covenant is being SERVED, not a
-// wipe of the one being left:
-//
-//   kept  - renown (per-covenant currencies 1829-1832) and the granted-reward high-water mark
-//           (character_covenant_renown), reservoir anima (1859-1862) and redeemed souls (1863-1866),
-//           every researched sanctum/ability/soulbind talent (character_garrison_talents; every covenant-scoped
-//           GarrTalentTree names its owner in FeatureSubtypeIndex, so the four covenants own disjoint rows),
-//           the sanctum garrison itself with all of its companions, missions and shipments, the conduit
-//           collection and its sockets, and each covenant's calling board.
-//   moved  - the 1822 renown and 1813 anima DISPLAY currencies, which are views of the active covenant's track.
-//   scoped - the covenant SkillLine, the GarrTalentRank.PerkSpellID perks of covenant-scoped trees, the active
-//            soulbind and the conduit/trait auras that hang off it. All of these come back on return.
-void Player::SetActiveCovenant(uint32 covenantId)
-{
-    uint32 const previousCovenantId = m_activeCovenantId;
-    bool const changed = previousCovenantId != covenantId;
-
-    if (changed && previousCovenantId)
-    {
-        // ---- leave the covenant being served -------------------------------------------------------------
-        // Remember which soulbind it was using so returning restores it (and with it the conduits socketed into
-        // that tree and its trait nodes, none of which are touched here).
-        RememberCovenantSoulbind(previousCovenantId, m_activeSoulbindId);
-
-        // Bank anything sitting unspent on the 1813 view onto the covenant that earned it BEFORE the view is
-        // repointed, then empty the view. This is the one ordering that matters in the whole function: the view is
-        // about to stop describing this covenant, and everything in the build that grants anima grants it on the
-        // view. Emptying it is what makes the banking safe rather than duplicating - the balance now lives only on
-        // 1859-1862, and without this step the next join would read the leftover view as anima the INCOMING
-        // covenant had not banked yet and hand it a free copy of the outgoing covenant's reservoir.
-        MigrateLegacyReservoirAnima();
-        if (int32 viewQuantity = int32(GetCurrencyQuantity(CURRENCY_TYPE_RESERVOIR_ANIMA)))
-        {
-            // Under the mirror latch, and that is not optional: this covenant is still the active one, so without
-            // it Player::CurrencyChanged would faithfully forward the emptying of the view onto 1859-1862 and wipe
-            // the very balance the line above just banked. The latch is exactly the "the caller owns this
-            // reconciliation" flag the anima mirror already uses internally.
-            m_covenantAnimaSyncing = true;
-            ModifyCurrency(CURRENCY_TYPE_RESERVOIR_ANIMA, -viewQuantity, CurrencyGainSource::Vendor,
-                CurrencyDestroyReason::FactionConversion);
-            m_covenantAnimaSyncing = false;
-        }
-
-        // Take down the auras of the soulbind that is stopping being active. Their sources (sockets, trait rows)
-        // stay in the database.
-        RemoveConduitSpells();
-        RemoveSoulbindTraitSpells();
-
-        m_activeSoulbindId = 0;
-        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::SoulbindID), int32(0));
-    }
-
-    m_activeCovenantId = covenantId;
-
-    // Replicate to the client (drives C_Covenants.GetActiveCovenantID, covenant PlayerConditions and criteria).
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::CovenantID), int32(m_activeCovenantId));
-
-    // Grant the joined covenant's SkillLine and strip the other three (idempotent). With covenantId 0 this strips
-    // all four, which is what closes the covenant-locked objects behind a character that left.
-    ApplyCovenantSkillLines();
-
-    if (changed)
-    {
-        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_COVENANT);
-        stmt->setUInt64(0, GetGUID().GetCounter());
-        stmt->setUInt32(1, m_activeCovenantId);
-        stmt->setUInt32(2, m_activeSoulbindId);
-        CharacterDatabase.Execute(stmt);
-    }
-
-    // Joining a covenant grants the covenant sanctum (GarrType 111, GarrSite 296). It backs the Sanctum UI,
-    // sanctum research (GarrTalentTree rows with GarrTypeID 111) and Adventures, and SPELL_EFFECT_LEARN_GARR_TALENT
-    // silently no-ops without it. Guarded so it is created once and re-running the covenant choice is harmless.
-    // Leaving a covenant deliberately does NOT delete it: it holds the researched talents, the companions and the
-    // running missions of every covenant this character has served.
-    if (m_activeCovenantId && !GetGarrison(GARRISON_TYPE_COVENANT))
-        CreateGarrison(GARR_SITE_COVENANT_SANCTUM);
-
-    if (!changed)
-        return;
-
-    if (Garrison* sanctum = GetGarrison(GARRISON_TYPE_COVENANT))
-    {
-        // A covenant that is being returned to already owns its ability talents. One that is being joined for the
-        // first time as a SWITCH does not, and it never will: the class + signature abilities are handed out by
-        // the covenant campaign (quest reward spells 337187/337059/337191/337190 and 328604/320846/336692/337388
-        // -> SPELL_EFFECT_LEARN_GARR_TALENT), and a switcher does not run a second campaign. Seating the ability
-        // tree here is exactly what those grant spells do - all 14 talents of trees 393/396/397/395 are authored
-        // cost 0 / gold 0 / duration 0 with no prerequisites, and GarrTalentRank.PerkPlayerConditionID does the
-        // per-class filtering - so no spell id or ability id is assumed anywhere.
-        // A FIRST pledge is left alone: there the campaign is still ahead of the character and grants them itself.
-        if (m_activeCovenantId && HasEverJoinedAnyCovenant())
-            sanctum->GrantCovenantAbilityTalents(m_activeCovenantId);
-
-        // Strip the perks of every covenant-scoped tree that is no longer the active covenant's and (re)apply the
-        // active one's. The talent rows themselves are untouched, so this is fully reversible.
-        sanctum->RefreshCovenantTalentPerks();
-    }
-
-    if (m_activeCovenantId)
-    {
-        // Record the pledge (and, on a return, keep the remembered soulbind). This is also what makes the NEXT
-        // change to this covenant read as a switch rather than a first pledge.
-        RememberCovenantSoulbind(m_activeCovenantId, GetRememberedCovenantSoulbind(m_activeCovenantId));
-
-        // Restore the soulbind this covenant was last using. ActivateSoulbind re-applies its conduits and traits
-        // and persists the pair, so a returning member gets its whole soulbind back in one step.
-        if (uint32 rememberedSoulbind = GetRememberedCovenantSoulbind(m_activeCovenantId))
-            if (SoulbindEntry const* soulbind = sSoulbindStore.LookupEntry(rememberedSoulbind))
-                if (uint32(soulbind->CovenantID) == m_activeCovenantId)
-                    ActivateSoulbind(soulbind);
-    }
-
-    // Renown is per-covenant and never resets, so the joined covenant's own track becomes current: repoint
-    // the 1822 display mirror at it and hand over anything already earned there (a returning member keeps
-    // the renown it had). A brand-new member sits at currency 0, which is Renown 1. With no covenant the view
-    // goes to zero, because the renown PlayerConditions read 1822 without also testing CovenantID.
-    SyncCovenantRenownDisplayCurrency();
-    UpdateCovenantRenownRewards(m_activeCovenantId);
-
-    // Reservoir anima repoints the same way. The outgoing covenant's balance was banked above, so this hands the
-    // character its new covenant's own reservoir rather than a copy of the old one; the Migrate call picks up
-    // anything gained while the character was covenantless and banks it onto the covenant now being served.
-    MigrateLegacyReservoirAnima();
-    SyncCovenantAnimaDisplayCurrency();
-
-    // The calling board is per covenant too; seed/roll the new covenant's board and tell the client.
-    UpdateCovenantCallings();
-    SendCovenantCallingsUpdate();
-
-    // Covenant membership drives phases and CONDITION_COVENANT, and spell 338503 carries SPELL_EFFECT_UPDATE_
-    // PLAYER_PHASE (167) + SPELL_EFFECT_UPDATE_ZONE_AURAS_AND_PHASES (170) for exactly that reason.
-    PhasingHandler::OnConditionChange(this);
-}
-
-void Player::_LoadSoulbindConduits(PreparedQueryResult result)
-{
-    if (!result)
-        return;
-
-    do
-    {
-        Field* fields = result->Fetch();
-        uint32 conduitId = fields[0].GetUInt32();
-        uint32 rankIndex = fields[1].GetUInt32();
-        if (sSoulbindConduitStore.LookupEntry(conduitId))
-            m_soulbindConduits[conduitId] = rankIndex;
-    } while (result->NextRow());
-}
-
-void Player::_LoadSoulbindConduitSockets(PreparedQueryResult result)
-{
-    if (!result)
-        return;
-
-    do
-    {
-        Field* fields = result->Fetch();
-        uint32 garrTalentId = fields[0].GetUInt32();
-        uint32 conduitId = fields[1].GetUInt32();
-        uint32 treeId = fields[2].GetUInt32();
-        m_soulbindConduitSockets[garrTalentId] = { conduitId, treeId };
-    } while (result->NextRow());
-
-    // Applied after the active soulbind is known (LoadFromDB order), so ApplyConduitSpells() is called there.
-}
-
-int32 Player::GetConduitRank(uint32 conduitId) const
-{
-    auto itr = m_soulbindConduits.find(conduitId);
-    return itr != m_soulbindConduits.end() ? int32(itr->second) : -1;
-}
-
-bool Player::CollectConduit(uint32 conduitId, int32 rankIndex /*= -1*/)
-{
-    if (!sSoulbindConduitStore.LookupEntry(conduitId))
-        return false;
-
-    // Default to the lowest RankIndex defined for this conduit (data-driven; do not assume 0).
-    if (rankIndex < 0)
-    {
-        bool found = false;
-        int32 lowest = 0;
-        for (SoulbindConduitRankEntry const* rank : sSoulbindConduitRankStore)
-        {
-            if (rank->SoulbindConduitID != conduitId)
-                continue;
-            if (!found || rank->RankIndex < lowest)
-            {
-                lowest = rank->RankIndex;
-                found = true;
-            }
-        }
-        if (!found)
-            return false;   // no rank rows -> cannot resolve a spell, refuse rather than store a bogus rank
-        rankIndex = lowest;
-    }
-
-    // Never downgrade an already-owned conduit.
-    auto itr = m_soulbindConduits.find(conduitId);
-    if (itr != m_soulbindConduits.end() && int32(itr->second) >= rankIndex)
-        return false;
-
-    m_soulbindConduits[conduitId] = uint32(rankIndex);
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_SOULBIND_CONDUIT);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    stmt->setUInt32(1, conduitId);
-    stmt->setUInt32(2, uint32(rankIndex));
-    CharacterDatabase.Execute(stmt);
-
-    // If this conduit is currently socketed in the active soulbind tree, refresh the applied conduit spells so the
-    // upgraded rank takes effect immediately. Without this the player keeps the OLD-rank spell until the next
-    // soulbind switch or relog. Guard on IsInWorld(): during character load conduits are applied once after the
-    // active soulbind is known (ApplyConduitSpells in the load path), so refreshing here would double-apply.
-    if (IsInWorld())
-    {
-        bool socketed = false;
-        for (auto const& [garrTalentId, socket] : m_soulbindConduitSockets)
-        {
-            if (socket.first == conduitId)
-            {
-                socketed = true;
-                break;
-            }
-        }
-        if (socketed)
-        {
-            RemoveConduitSpells();
-            ApplyConduitSpells();
-        }
-    }
-    return true;
-}
-
-void Player::TryCollectConduitFromItem(Item* item)
-{
-    if (!item)
-        return;
-
-    uint32 conduitId = sDB2Manager.GetConduitForItem(item->GetEntry());
-    if (!conduitId)
-        return;
-
-    // The acquired item's level maps to the conduit rank (a higher-ilvl duplicate upgrades the collection). If no rank
-    // properties row qualifies, CollectConduit falls back to the conduit's lowest defined rank.
-    int32 rank = sDB2Manager.GetConduitRankForItemLevel(item->GetItemLevel(this));
-    CollectConduit(conduitId, rank);
-}
-
-bool Player::SocketConduit(uint32 garrTalentTreeId, uint32 garrTalentId, uint32 conduitId)
-{
-    SoulbindConduitEntry const* conduit = sSoulbindConduitStore.LookupEntry(conduitId);
-    if (!conduit)
-        return false;
-
-    // Must own the conduit and it must belong to the player's covenant (0 == covenant-agnostic).
-    if (!HasConduit(conduitId))
-        return false;
-    if (conduit->CovenantID != 0 && uint32(conduit->CovenantID) != m_activeCovenantId)
-        return false;
-
-    // If this node is currently applying a conduit for the active tree, strip it before replacing.
-    bool nodeActive = false;
-    if (SoulbindEntry const* soulbind = sSoulbindStore.LookupEntry(m_activeSoulbindId))
-        nodeActive = uint32(soulbind->GarrTalentTreeID) == garrTalentTreeId;
-
-    auto existing = m_soulbindConduitSockets.find(garrTalentId);
-    if (existing != m_soulbindConduitSockets.end() && nodeActive)
-        if (int32 spellId = GetConduitSpell(existing->second.first))
-            RemoveAurasDueToSpell(uint32(spellId));
-
-    m_soulbindConduitSockets[garrTalentId] = { conduitId, garrTalentTreeId };
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_SOULBIND_CONDUIT_SOCKET);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    stmt->setUInt32(1, garrTalentId);
-    stmt->setUInt32(2, conduitId);
-    stmt->setUInt32(3, garrTalentTreeId);
-    CharacterDatabase.Execute(stmt);
-
-    if (nodeActive)
-        if (int32 spellId = GetConduitSpell(conduitId))
-            CastSpell(this, uint32(spellId), true);
-    return true;
-}
-
-void Player::RemoveConduitSocket(uint32 garrTalentId)
-{
-    auto itr = m_soulbindConduitSockets.find(garrTalentId);
-    if (itr == m_soulbindConduitSockets.end())
-        return;
-
-    if (SoulbindEntry const* soulbind = sSoulbindStore.LookupEntry(m_activeSoulbindId))
-        if (uint32(soulbind->GarrTalentTreeID) == itr->second.second)
-            if (int32 spellId = GetConduitSpell(itr->second.first))
-                RemoveAurasDueToSpell(uint32(spellId));
-
-    m_soulbindConduitSockets.erase(itr);
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_SOULBIND_CONDUIT_SOCKET);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    stmt->setUInt32(1, garrTalentId);
-    CharacterDatabase.Execute(stmt);
-}
-
-int32 Player::GetConduitSpell(uint32 conduitId) const
-{
-    int32 rank = GetConduitRank(conduitId);
-    if (rank < 0)
-        return 0;
-    if (SoulbindConduitRankEntry const* rankEntry = sDB2Manager.GetSoulbindConduitRank(int32(conduitId), rank))
-        return rankEntry->SpellID;
-    return 0;
-}
-
-void Player::ApplyConduitSpells()
-{
-    SoulbindEntry const* soulbind = sSoulbindStore.LookupEntry(m_activeSoulbindId);
-    if (!soulbind)
-        return;
-
-    uint32 treeId = uint32(soulbind->GarrTalentTreeID);
-    for (auto const& [garrTalentId, socket] : m_soulbindConduitSockets)
-    {
-        if (socket.second != treeId)
-            continue;
-        if (int32 spellId = GetConduitSpell(socket.first))
-            if (!HasAura(uint32(spellId)))
-                CastSpell(this, uint32(spellId), true);
-    }
-}
-
-void Player::RemoveConduitSpells()
-{
-    SoulbindEntry const* soulbind = sSoulbindStore.LookupEntry(m_activeSoulbindId);
-    if (!soulbind)
-        return;
-
-    uint32 treeId = uint32(soulbind->GarrTalentTreeID);
-    for (auto const& [garrTalentId, socket] : m_soulbindConduitSockets)
-    {
-        if (socket.second != treeId)
-            continue;
-        if (int32 spellId = GetConduitSpell(socket.first))
-            RemoveAurasDueToSpell(uint32(spellId));
-    }
-}
-
-// Walk the active soulbind's GarrTalentTree and apply/remove the PerkSpellID of every trait node the character has
-// already taken. Conduits are the sockets on that same tree (ApplyConduitSpells above); these are the non-socket
-// nodes, e.g. Pelagos (tree 357): 328266 Combat Meditation, 328261 Focusing Mantra, 329786 Road of Trials,
-// 329777 Phial of Patience, 328265, 328263, 328257, 351146, 351147, 351149.
-// Selecting one of these nodes is a free, instant GarrTalent (cost 0 / duration 0), so Garrison::LearnTalent puts it
-// straight at rank 1 - the point where its perk becomes live.
-template<typename Action>
-static void ForEachActiveSoulbindTraitPerk(Player* player, uint32 activeSoulbindId, Action action)
-{
-    SoulbindEntry const* soulbind = sSoulbindStore.LookupEntry(activeSoulbindId);
-    if (!soulbind)
-        return;
-
-    Garrison const* garrison = player->GetGarrison(GARRISON_TYPE_COVENANT);
-    if (!garrison)
-        return;
-
-    uint32 const treeId = uint32(soulbind->GarrTalentTreeID);
-    for (auto const& [garrTalentId, talent] : garrison->GetAllTalents())
-    {
-        if (talent.Rank < 1)
-            continue;
-
-        GarrTalentEntry const* talentEntry = sGarrTalentStore.LookupEntry(garrTalentId);
-        if (!talentEntry || talentEntry->GarrTalentTreeID != treeId)
-            continue;
-
-        std::vector<GarrTalentRankEntry const*> const* ranks = sGarrisonMgr.GetTalentRanksForTalent(garrTalentId);
-        if (!ranks)
-            continue;
-
-        int32 const last = std::min<int32>(talent.Rank, static_cast<int32>(ranks->size()));
-        for (int32 i = 0; i < last; ++i)
-            if ((*ranks)[i]->PerkSpellID > 0)
-                action(uint32((*ranks)[i]->PerkSpellID), (*ranks)[i]);
-    }
-}
-
-void Player::ApplySoulbindTraitSpells()
-{
-    ForEachActiveSoulbindTraitPerk(this, m_activeSoulbindId, [this](uint32 spellId, GarrTalentRankEntry const* rankEntry)
-    {
-        if (rankEntry->PerkPlayerConditionID > 0)
-            if (PlayerConditionEntry const* perkCondition = sPlayerConditionStore.LookupEntry(uint32(rankEntry->PerkPlayerConditionID)))
-                if (!ConditionMgr::IsPlayerMeetingCondition(this, perkCondition))
-                    return;
-
-        if (!sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
-            return;
-
-        if (!HasAura(spellId))
-            CastSpell(this, spellId, true);
-    });
-}
-
-void Player::RemoveSoulbindTraitSpells()
-{
-    // Unconditional: a perk condition that has stopped passing must not leave the aura stuck on the player.
-    ForEachActiveSoulbindTraitPerk(this, m_activeSoulbindId, [this](uint32 spellId, GarrTalentRankEntry const* /*rankEntry*/)
-    {
-        RemoveAurasDueToSpell(spellId);
-    });
-}
-
 /*********************************************************/
 /***                   SAVE SYSTEM                     ***/
 /*********************************************************/
@@ -23772,6 +20564,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
             stmt->setUInt32(index++, ClientBuild::GetMinorMajorBugfixVersionForBuild(currentRealm->Build));
         else
             stmt->setUInt32(index++, 0);
+
         stmt->setInt32(index++, m_playerData->PersonalTabard->EmblemStyle);
         stmt->setInt32(index++, m_playerData->PersonalTabard->EmblemColor);
         stmt->setInt32(index++, m_playerData->PersonalTabard->BorderStyle);
@@ -23779,11 +20572,6 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
         stmt->setInt32(index++, m_playerData->PersonalTabard->BackgroundColor);
         stmt->setInt32(index++, m_activePlayerData->TransmogMetadata->TransmogOutfitID);
         stmt->setBool(index++, m_activePlayerData->TransmogMetadata->Locked);
-        stmt->setUInt8(index++, uint8(m_activePlayerData->UiChromieTimeExpansionID));
-        stmt->setUInt32(index++, uint32(m_activePlayerData->TimerunningSeasonID));
-        // Denormalised Bnet account id so warband features (currency transfer, alt-XP) can
-        // filter characters by Battle.net account without a cross-DB join (MJ-1).
-        stmt->setUInt32(index++, GetSession()->GetBattlenetAccountId());
     }
     else
     {
@@ -23935,8 +20723,6 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
         stmt->setInt32(index++, m_playerData->PersonalTabard->BackgroundColor);
         stmt->setInt32(index++, m_activePlayerData->TransmogMetadata->TransmogOutfitID);
         stmt->setBool(index++, m_activePlayerData->TransmogMetadata->Locked);
-        stmt->setUInt8(index++, uint8(m_activePlayerData->UiChromieTimeExpansionID));
-        stmt->setUInt32(index++, uint32(m_activePlayerData->TimerunningSeasonID));
 
         // Index
         stmt->setUInt64(index, GetGUID().GetCounter());
@@ -23972,16 +20758,10 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveActions(trans);
     _SaveAuras(trans);
     _SaveSkills(trans);
-    _SaveResearchSites(trans);
-    _SaveResearchProjects(trans);
-    _SaveResearchHistory(trans);
     _SaveStoredAuraTeleportLocations(trans);
-    m_achievementMgr->SaveAccountWideToDB(trans);
     m_achievementMgr->SaveToDB(trans);
-    m_reputationMgr->SaveAccountWideToDB(trans);
     m_reputationMgr->SaveToDB(trans);
     m_questObjectiveCriteriaMgr->SaveToDB(trans);
-    m_perksActivityMgr->SaveToDB(trans);
     _SaveEquipmentSets(trans);
     _SaveTransmogOutfits(trans);
     _SaveCharacterSelectOutfit(trans);
@@ -23991,28 +20771,8 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveCUFProfiles(trans);
     _SavePlayerData(trans);
     _SaveCharacterBankTabSettings(trans);
-    for (auto const& h : _housings)
-        if (h)
-            h->SaveToDB(trans);
-    _SaveCovenantCallings(trans);
-    for (auto const& [type, garrison] : _garrisons)
-        garrison->SaveToDB(trans);
-
-    if (_mythicPlusData)
-        _mythicPlusData->SaveToDB(trans);
-
-    // Warband account-wide flight-path sharing: persist the taxi mask per Bnet account.
-    {
-        std::ostringstream ss;
-        ss << m_taxi;
-        CharacterDatabasePreparedStatement* taxiStmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_WARBAND_TAXI_MASK);
-        taxiStmt->setUInt32(0, GetSession()->GetBattlenetAccountId());
-        taxiStmt->setString(1, ss.str());
-        trans->Append(taxiStmt);
-    }
-    _SaveAccountBankTabSettings(trans);
-    _SaveAccountBankItems(trans);
-    _SaveAccountBankCoinage(trans);
+    if (_garrison)
+        _garrison->SaveToDB(trans);
 
     // check if stats should only be saved on logout
     // save stats can be out of transaction
@@ -24326,34 +21086,21 @@ void Player::_SaveInventory(CharacterDatabaseTransaction trans)
             }
         }
 
-        // Items stored INSIDE an account bank tab bag are persisted per-Bnet in
-        // _SaveAccountBankItems, so skip the per-character inventory position write
-        // for them. The tab bag itself (sitting in INVENTORY_SLOT_BAG_0 at slots
-        // ACCOUNT_BANK_SLOT_BAG_START..END) is per-character and MUST go through
-        // the normal character_inventory save path so it can be restored on relog.
-        bool isAccountBankItem = container && IsAccountBankPos(INVENTORY_SLOT_BAG_0, container->GetSlot());
-
         switch (item->GetState())
         {
             case ITEM_NEW:
             case ITEM_CHANGED:
-                if (!isAccountBankItem)
-                {
-                    stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_INVENTORY_ITEM);
-                    stmt->setUInt64(0, GetGUID().GetCounter());
-                    stmt->setUInt64(1, container ? container->GetGUID().GetCounter() : UI64LIT(0));
-                    stmt->setUInt8 (2, item->GetSlot());
-                    stmt->setUInt64(3, item->GetGUID().GetCounter());
-                    trans->Append(stmt);
-                }
+                stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_INVENTORY_ITEM);
+                stmt->setUInt64(0, GetGUID().GetCounter());
+                stmt->setUInt64(1, container ? container->GetGUID().GetCounter() : UI64LIT(0));
+                stmt->setUInt8 (2, item->GetSlot());
+                stmt->setUInt64(3, item->GetGUID().GetCounter());
+                trans->Append(stmt);
                 break;
             case ITEM_REMOVED:
-                if (!isAccountBankItem)
-                {
-                    stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_INVENTORY_BY_ITEM);
-                    stmt->setUInt64(0, item->GetGUID().GetCounter());
-                    trans->Append(stmt);
-                }
+                stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_INVENTORY_BY_ITEM);
+                stmt->setUInt64(0, item->GetGUID().GetCounter());
+                trans->Append(stmt);
                 break;
             case ITEM_UNCHANGED:
                 break;
@@ -24701,76 +21448,6 @@ void Player::_SaveMonthlyQuestStatus(CharacterDatabaseTransaction trans)
     m_MonthlyQuestChanged = false;
 }
 
-void Player::_SaveResearchSites(CharacterDatabaseTransaction trans)
-{
-    // Rewrite the character's active dig sites from the ResearchSites / ResearchSiteProgress update
-    // fields (delete-all + reinsert; the set is small and always rewritten together).
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_RESEARCH_SITE);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    trans->Append(stmt);
-
-    uint32 const count = m_activePlayerData->ResearchSites[0].size();
-    for (uint32 i = 0; i < count; ++i)
-    {
-        uint32 const siteId = m_activePlayerData->ResearchSites[0][i];
-        float findX = 0.0f, findY = 0.0f;
-        _EnsureResearchSiteFindLocation(siteId, findX, findY);
-
-        stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_RESEARCH_SITE);
-        stmt->setUInt64(0, GetGUID().GetCounter());
-        stmt->setUInt16(1, siteId);
-        stmt->setUInt32(2, m_activePlayerData->ResearchSiteProgress[0][i]);
-        stmt->setFloat(3, findX);
-        stmt->setFloat(4, findY);
-        trans->Append(stmt);
-    }
-}
-
-void Player::_SaveResearchProjects(CharacterDatabaseTransaction trans)
-{
-    // Rewrite the character's active research projects from the Research update field (delete-all +
-    // reinsert; one entry per active branch).
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_RESEARCH_PROJECT);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    trans->Append(stmt);
-
-    uint32 const count = m_activePlayerData->Research[0].size();
-    for (uint32 i = 0; i < count; ++i)
-    {
-        int16 projectId = m_activePlayerData->Research[0][i].ResearchProjectID;
-        if (!projectId)
-            continue;
-
-        ResearchProjectEntry const* project = sResearchProjectStore.LookupEntry(uint32(projectId));
-        if (!project || !sArchaeologyMgr->IsResearchBranchEnabled(project->ResearchBranchID))
-            continue;
-
-        stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_RESEARCH_PROJECT);
-        stmt->setUInt64(0, GetGUID().GetCounter());
-        stmt->setUInt32(1, uint32(projectId));
-        trans->Append(stmt);
-    }
-}
-
-void Player::_SaveResearchHistory(CharacterDatabaseTransaction trans)
-{
-    // Rewrite the character's completed research projects from ResearchHistory (delete-all + reinsert).
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_RESEARCH_HISTORY);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    trans->Append(stmt);
-
-    auto const& completed = m_activePlayerData->ResearchHistory->CompletedProjects;
-    for (uint32 i = 0; i < completed.size(); ++i)
-    {
-        stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_RESEARCH_HISTORY);
-        stmt->setUInt64(0, GetGUID().GetCounter());
-        stmt->setUInt32(1, completed[i].ProjectID);
-        stmt->setInt64(2, completed[i].FirstCompleted);
-        stmt->setUInt32(3, completed[i].CompletionCount);
-        trans->Append(stmt);
-    }
-}
-
 void Player::_SaveSkills(CharacterDatabaseTransaction trans)
 {
     CharacterDatabasePreparedStatement* stmt;
@@ -25037,86 +21714,6 @@ void Player::_SaveCharacterBankTabSettings(CharacterDatabaseTransaction trans) c
         stmt->setString(4, *tabSetting.Description);
         stmt->setInt32(5, *tabSetting.DepositFlags);
         trans->Append(stmt);
-    }
-}
-
-void Player::_SaveAccountBankTabSettings(CharacterDatabaseTransaction trans) const
-{
-    uint32 bnetAccountId = GetSession()->GetBattlenetAccountId();
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_ACCOUNT_BANK_TAB_SETTINGS);
-    stmt->setUInt32(0, bnetAccountId);
-    trans->Append(stmt);
-
-    for (std::size_t i = 0; i < m_activePlayerData->AccountBankTabSettings.size(); ++i)
-    {
-        UF::BankTabSettings const& tabSetting = m_activePlayerData->AccountBankTabSettings[i];
-        stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_ACCOUNT_BANK_TAB_SETTINGS);
-        stmt->setUInt32(0, bnetAccountId);
-        stmt->setUInt8(1, i);
-        stmt->setString(2, *tabSetting.Name);
-        stmt->setString(3, *tabSetting.Icon);
-        stmt->setString(4, *tabSetting.Description);
-        stmt->setInt32(5, *tabSetting.DepositFlags);
-        trans->Append(stmt);
-    }
-}
-
-void Player::_SaveAccountBankCoinage(CharacterDatabaseTransaction trans) const
-{
-    uint32 bnetAccountId = GetSession()->GetBattlenetAccountId();
-    if (!bnetAccountId)
-        return;
-
-    // Only the single account bank lock holder is the authoritative writer of the shared bank.
-    // A non-holder's in-memory copy may be stale (the holder can have mutated the bank since
-    // this session loaded it), so letting it write back would revert the holder's changes.
-    if (!HasPlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK))
-        return;
-
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_ACCOUNT_BANK_COINAGE);
-    stmt->setUInt32(0, bnetAccountId);
-    stmt->setUInt64(1, GetAccountBankCoinage());
-    trans->Append(stmt);
-}
-
-void Player::_SaveAccountBankItems(CharacterDatabaseTransaction trans)
-{
-    uint32 bnetAccountId = GetSession()->GetBattlenetAccountId();
-
-    // Refuse to persist shared account bank items for an unlinked account (bnetId == 0) — all
-    // such accounts would otherwise share and overwrite one another's rows (MJ-2/M2). Also
-    // refuse for any session that does not hold the account bank lock: it is not the
-    // authoritative writer and its cached copy may be stale (see _SaveAccountBankCoinage).
-    if (!bnetAccountId || !HasPlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK))
-        return;
-
-    // Delete all account bank item positions — they will be re-inserted below
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_ACCOUNT_BANK_ITEMS_BY_BNET);
-    stmt->setUInt32(0, bnetAccountId);
-    trans->Append(stmt);
-
-    // Re-insert current positions
-    for (uint8 tabIndex = 0; tabIndex < GetAccountBankTabCount(); ++tabIndex)
-    {
-        uint8 bagSlot = ACCOUNT_BANK_SLOT_BAG_START + tabIndex;
-        Bag* bag = GetBagByPos(bagSlot);
-        if (!bag)
-            continue;
-
-        for (uint32 slot = 0; slot < bag->GetBagSize(); ++slot)
-        {
-            Item* item = bag->GetItemByPos(slot);
-            if (!item)
-                continue;
-
-            stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_ACCOUNT_BANK_ITEM);
-            stmt->setUInt32(0, bnetAccountId);
-            stmt->setUInt8(1, tabIndex);
-            stmt->setUInt8(2, slot);
-            stmt->setUInt64(3, item->GetGUID().GetCounter());
-            trans->Append(stmt);
-        }
     }
 }
 
@@ -25544,40 +22141,6 @@ void Player::RemovePet(Pet* pet, PetSaveMode mode, bool returnreagent)
 
         if (GetGroup())
             SetGroupUpdateFlag(GROUP_UPDATE_FLAG_PET);
-    }
-}
-
-void Player::SetPetFavorite(uint32 petNumber, bool favorite)
-{
-    if (!m_petStable || favorite == m_petStable->IsFavorite(petNumber))
-        return;
-
-    if (favorite)
-        m_petStable->FavoritePetNumbers.insert(petNumber);
-    else
-        m_petStable->FavoritePetNumbers.erase(petNumber);
-
-    // Persist in the dedicated favorites table (keyed by pet number, so it survives the pet-row
-    // delete+reinsert that happens on every pet save).
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(favorite ? CHAR_INS_PET_FAVORITE : CHAR_DEL_PET_FAVORITE);
-    stmt->setUInt64(0, GetGUID().GetCounter());
-    stmt->setUInt32(1, petNumber);
-    CharacterDatabase.Execute(stmt);
-
-    // Reflect the favorite star in the stable UI (StablePetInfo::PetFlags).
-    if (m_activePlayerData->PetStable.has_value())
-    {
-        int32 ufIndex = m_activePlayerData->PetStable->Pets.FindIndexIf([petNumber](UF::StablePetInfo const& p) { return p.PetNumber == petNumber; });
-        if (ufIndex >= 0)
-        {
-            auto petSetter = m_values.ModifyValue(&Player::m_activePlayerData)
-                .ModifyValue(&UF::ActivePlayerData::PetStable, 0)
-                .ModifyValue(&UF::StableInfo::Pets, ufIndex);
-            if (favorite)
-                SetUpdateFieldFlagValue(petSetter.ModifyValue(&UF::StablePetInfo::PetFlags), PET_STABLE_FAVORITE);
-            else
-                RemoveUpdateFieldFlagValue(petSetter.ModifyValue(&UF::StablePetInfo::PetFlags), PET_STABLE_FAVORITE);
-        }
     }
 }
 
@@ -26694,13 +23257,8 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature* npc 
     else
         mount_display_id = sObjectMgr->GetTaxiMountDisplayId(sourcenode, GetTeam(), npc == nullptr || (sourcenode == 315 && GetClass() == CLASS_DEATH_KNIGHT));
 
-    // Some nodes publish no MountCreatureID for either team - the covenant sanctum transport network nodes are
-    // the case in point: their TaxiPath rows are 4-node TAXI_PATH_NODE_FLAG_TELEPORT stubs at a single position,
-    // so there is nothing to be mounted on. A missing display is only an error when the node claims a mount.
-    bool const sourceNodeHasMount = node->MountCreatureID[0] != 0 || node->MountCreatureID[1] != 0;
-
     // in spell case allow 0 model
-    if ((mount_display_id == 0 && spellid == 0 && sourceNodeHasMount) || sourcepath == 0)
+    if ((mount_display_id == 0 && spellid == 0) || sourcepath == 0)
     {
         GetSession()->SendActivateTaxiReply(ERR_TAXIUNSPECIFIEDSERVERERROR);
         m_taxi.ClearTaxiDestinations();
@@ -28048,12 +24606,6 @@ void Player::UpdateVisibilityOf(Trinity::IteratorPair<WorldObject**> targets)
             case TYPEID_CONVERSATION:
                 UpdateVisibilityOf(target->ToConversation(), udata, newVisibleObjects);
                 break;
-            case TYPEID_MESH_OBJECT:
-                UpdateVisibilityOf(target->ToMeshObject(), udata, newVisibleObjects);
-                break;
-            case TYPEID_HOUSING_ENTITY:
-                UpdateVisibilityOf(static_cast<HousingRoomEntity*>(target), udata, newVisibleObjects);
-                break;
             default:
                 break;
         }
@@ -28179,7 +24731,6 @@ void Player::SendInitialVisiblePackets(WorldObject* target) const
     if (Unit* targetUnit = target->ToUnit())
     {
         SendAurasForTarget(targetUnit);
-        targetUnit->SendResumeCastTo(this);
         if (targetUnit->IsAlive())
         {
             if (targetUnit->HasUnitState(UNIT_STATE_MELEE_ATTACKING) && targetUnit->GetVictim())
@@ -28240,8 +24791,6 @@ template void Player::UpdateVisibilityOf(DynamicObject* target, UpdateData& data
 template void Player::UpdateVisibilityOf(AreaTrigger*   target, UpdateData& data, std::set<WorldObject*>& visibleNow);
 template void Player::UpdateVisibilityOf(SceneObject*   target, UpdateData& data, std::set<WorldObject*>& visibleNow);
 template void Player::UpdateVisibilityOf(Conversation*  target, UpdateData& data, std::set<WorldObject*>& visibleNow);
-template void Player::UpdateVisibilityOf(MeshObject*           target, UpdateData& data, std::set<WorldObject*>& visibleNow);
-template void Player::UpdateVisibilityOf(HousingRoomEntity*    target, UpdateData& data, std::set<WorldObject*>& visibleNow);
 
 void Player::UpdateObjectVisibility(bool forced)
 {
@@ -28373,24 +24922,7 @@ void Player::SetGroup(Group* group, int8 subgroup)
         m_group.setSubGroup((uint8)subgroup);
     }
 
-    // the incremental party state baseline only means anything to the group it was broadcast in
-    ResetPartyMemberState();
-
     UpdateObjectVisibility(false);
-}
-
-WorldPackets::Party::PartyMemberStatsSnapshot& Player::GetPartyMemberStateSnapshot()
-{
-    if (!m_partyMemberState)
-        m_partyMemberState = std::make_unique<WorldPackets::Party::PartyMemberStatsSnapshot>();
-
-    return *m_partyMemberState;
-}
-
-void Player::ResetPartyMemberState()
-{
-    m_partyMemberState.reset();
-    m_partyMemberStateRecipients.clear();
 }
 
 void Player::SendInitialPacketsBeforeAddToMap()
@@ -28412,49 +24944,6 @@ void Player::SendInitialPacketsBeforeAddToMap()
     // SMSG_SET_PROFICIENCY
     // SMSG_SET_PCT_SPELL_MODIFIER
     // SMSG_SET_FLAT_SPELL_MODIFIER
-
-    // Skyriding: the client gates the dynamic-flight UI (C_MountJournal.IsDragonridingUnlocked -
-    // the mount journal's flight-style switch) behind PlayerCondition 106228 -> ModifierTree 282179,
-    // whose only satisfiable leg in this build's data is having completed "Tour the Trading Post"
-    // (66858 Alliance / 66959 Horde) - the aura leg (424143) is the harmful Remix timerunning buff.
-    // The quest's reward spell is a [DND] no-op, it has no reset flags and awards nothing, so
-    // advertising it as completed once the character knows Skyriding (376777) is retail-equivalent
-    // account state. This only sets the client-visible completed bits; the quest log and DB are
-    // untouched. These are ACCOUNT quests, so besides the character quest-completed vector the
-    // account-combined vectors must carry the bit too - the client's completed-quest conditions
-    // for account quests read those.
-    if (HasSpell(376777 /*Skyriding*/))
-    {
-        uint32 skyridingUnlockQuest = GetTeam() == ALLIANCE ? 66858 : 66959;
-        SetQuestCompletedBit(skyridingUnlockQuest, true);
-        if (uint32 questBit = sDB2Manager.GetQuestUniqueBitFlag(skyridingUnlockQuest))
-        {
-            uint32 fieldOffset = (questBit - 1) / QUESTS_COMPLETED_BITS_PER_BLOCK;
-            uint64 flag = UI64LIT(1) << ((questBit - 1) % QUESTS_COMPLETED_BITS_PER_BLOCK);
-            // index 12 = the completed-quest vector the client consults instead of the account one
-            // while a content-tracking mode (ctrOptions & 0x2000) is active
-            for (uint32 vectorIndex : { uint32(PLAYER_DATA_FLAG_ACCOUNT_COMBINED_QUESTS_INDEX), uint32(PLAYER_DATA_FLAG_ACCOUNT_COMBINED_QUEST_REWARDS_INDEX), 12u })
-                SetUpdateFieldFlagValue(m_values
-                    .ModifyValue(&Player::m_activePlayerData)
-                    .ModifyValue(&UF::ActivePlayerData::BitVectors)
-                    .ModifyValue(&UF::BitVectors::Values, vectorIndex)
-                    .ModifyValue(&UF::BitVector::Values, fieldOffset), flag);
-        }
-
-        // The spellbook's "Skyriding Flight Style" toggle (436854 Switch Flight Style,
-        // SkillLineAbility 49875 under Riding) is AcquireMethod=Learned - retail teaches it during
-        // the skyriding intro, which this core has no quest content for, so grant it with the kit.
-        // Learn before SendKnownSpells below so it rides the initial spell list. Same for the
-        // skyriding Dismount (377042 - removes label-1607 mount auras; a script extends it to any
-        // mount).
-        if (!HasSpell(436854 /*Switch Flight Style*/))
-            LearnSpell(436854, false);
-        if (!HasSpell(377042 /*Dismount*/))
-            LearnSpell(377042, false);
-
-        // The action-bar defaults are applied in LoadActions - action buttons load asynchronously
-        // and would wipe anything placed here.
-    }
 
     /// SMSG_TALENTS_INFO
     SendTalentsInfoData();
@@ -28492,14 +24981,8 @@ void Player::SendInitialPacketsBeforeAddToMap()
     m_reputationMgr->SendInitialReputations();
     /// SMSG_SETUP_CURRENCY
     SendCurrencies();
-    /// SMSG_REATTACH_RESURRECT - 12.x login sequence reattaches (or zeroes) pending resurrect state here
-    SendDirectMessage(WorldPackets::Misc::ReattachResurrect().Write());
     /// SMSG_EQUIPMENT_SET_LIST
     SendEquipmentSetList();
-
-    /// Project persisted delve state into PlayerDataElement UpdateField slots
-    /// (driven by the C_DelvesUI Lua API on the client).
-    LoadDelvePlayerDataElements();
 
     m_achievementMgr->SendAllData(this);
     m_questObjectiveCriteriaMgr->SendAllData(this);
@@ -28523,43 +25006,7 @@ void Player::SendInitialPacketsBeforeAddToMap()
     // worldServerInfo.RestrictedAccountMaxMoney; /// @todo
     worldServerInfo.DifficultyID = GetMap()->GetDifficultyID();
     // worldServerInfo.XRealmPvpAlert;  /// @todo
-    if (Housing* housing = GetHousing())
-    {
-        worldServerInfo.HouseGUID = housing->GetHouseGuid();
-        worldServerInfo.HouseOwnerAccountGUID = GetSession()->GetBattlenetAccountGUID();
-        worldServerInfo.HouseCosmeticOwnerGUID = GetSession()->GetBattlenetAccountGUID();
-        worldServerInfo.NeighborhoodGUID = housing->GetNeighborhoodGuid();
-    }
-    // Ensure NeighborhoodGUID is set for all players on a housing map,
-    // not just house owners â€” the client needs it for roster/bulletin requests
-    if (worldServerInfo.NeighborhoodGUID.IsEmpty())
-        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(GetMap()))
-            if (Neighborhood* neighborhood = housingMap->GetNeighborhood())
-                worldServerInfo.NeighborhoodGUID = neighborhood->GetGuid();
-    WorldPacket const* wsiPkt = worldServerInfo.Write();
-    SendDirectMessage(wsiPkt);
-
-    // DEBUG, not ERROR: this fires on EVERY login and emits six lines per character,
-    // at error severity, for a completely normal event. Kept rather than deleted because
-    // it is useful housing diagnostics - raise the `housing` log channel to debug to see it.
-    TC_LOG_DEBUG("housing", "=== SMSG_WORLD_SERVER_INFO (login) ===\n"
-        "  DifficultyID={}, IsTournament={}, XRealmPvp={}, BlockExit={}\n"
-        "  HouseGUID: {} (lo={:016X} hi={:016X})\n"
-        "  HouseOwnerAccountGUID: {} (lo={:016X} hi={:016X})\n"
-        "  HouseCosmeticOwnerGUID: {} (lo={:016X} hi={:016X})\n"
-        "  NeighborhoodGUID: {} (lo={:016X} hi={:016X})\n"
-        "  Packet size={} bytes",
-        worldServerInfo.DifficultyID, worldServerInfo.IsTournamentRealm,
-        worldServerInfo.XRealmPvpAlert, worldServerInfo.BlockExitingLoadingScreen,
-        worldServerInfo.HouseGUID.ToString(),
-        worldServerInfo.HouseGUID.GetRawValue(0), worldServerInfo.HouseGUID.GetRawValue(1),
-        worldServerInfo.HouseOwnerAccountGUID.ToString(),
-        worldServerInfo.HouseOwnerAccountGUID.GetRawValue(0), worldServerInfo.HouseOwnerAccountGUID.GetRawValue(1),
-        worldServerInfo.HouseCosmeticOwnerGUID.ToString(),
-        worldServerInfo.HouseCosmeticOwnerGUID.GetRawValue(0), worldServerInfo.HouseCosmeticOwnerGUID.GetRawValue(1),
-        worldServerInfo.NeighborhoodGUID.ToString(),
-        worldServerInfo.NeighborhoodGUID.GetRawValue(0), worldServerInfo.NeighborhoodGUID.GetRawValue(1),
-        wsiPkt->size());
+    SendDirectMessage(worldServerInfo.Write());
 
     // Spell modifiers
     SendSpellModifiers();
@@ -28583,7 +25030,6 @@ void Player::SendInitialPacketsBeforeAddToMap()
     SendDirectMessage(heirloomUpdate.Write());
 
     GetSession()->GetCollectionMgr()->SendFavoriteAppearances();
-    GetSession()->GetCollectionMgr()->SendFavoriteTransmogSets();
 
     // SMSG_ACCOUNT_WARBAND_SCENE_UPDATE
     WorldPackets::Misc::AccountWarbandSceneUpdate warbandSceneUpdate;
@@ -28595,46 +25041,12 @@ void Player::SendInitialPacketsBeforeAddToMap()
     initialSetup.ServerExpansionLevel = sWorld->getIntConfig(CONFIG_EXPANSION);
     SendDirectMessage(initialSetup.Write());
 
-    // Retail sends SMSG_SET_CTR_OPTIONS during login to every player regardless of chromie
-    // state (captures A/B/C: pulses appear in all 32 non-chromie sessions too - audit M4),
-    // and the first send of a session carries a default-empty Previous block
-    // ([ (0,0,0,[]), current ] - A rec 721 / B 485 / C 469, audit m2).
-    WorldPackets::Misc::CTROptionsBlock emptyPrevious;
-    SendCtrOptions(&emptyPrevious);
-
-    // Account-wide bank lock: atomically reserve the shared account bank for this session
-    // if no other session for the same Bnet account already holds it. Without this flag the
-    // client shows the "The bank is being used by another member of your Warband" prompt, and
-    // — critically — the server refuses every account bank mutation from a non-holder, so the
-    // reservation is what actually serialises concurrent same-bnet access. Unlinked accounts
-    // (bnetId == 0) are never granted the lock (TryAcquire rejects an empty Bnet GUID).
-    if (sWorld->TryAcquireAccountInventoryLock(GetSession()->GetBattlenetAccountGUID(), GetSession()))
-        SetPlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK);
-
-    // Publish the current weekly-reward period so the client's vault UI and, crucially,
-    // ModifierTreeType::PlayerHasWeeklyRewardsAvailable (which fails while the field is 0) are correct.
-    UpdateWeeklyRewardsPeriod();
-
     SetMovedUnit(this);
 }
 
 void Player::SendInitialPacketsAfterAddToMap()
 {
     UpdateVisibilityForPlayer();
-
-    // Re-apply any managed-world-state stage buffs (war-effort rewards) this character is currently eligible for.
-    sManagedWorldStateMgr->ApplyActiveBuffs(this);
-
-    // Track the BNetAccount entity as "at client" so that subsequent
-    // SendUpdateToPlayer() calls use VALUES_UPDATE instead of a duplicate CREATE.
-    // The Account entity CREATE is embedded in the player's own create block
-    // (Player::BuildCreateUpdateBlockForPlayer), which was just sent by
-    // UpdateVisibilityForPlayer() above.
-    m_clientGUIDs.insert(GetSession()->GetBattlenetAccount().GetGUID());
-    m_clientGUIDs.insert(GetSession()->GetHousingPlayerHouseEntity().GetGUID());
-    m_clientGUIDs.insert(GetSession()->GetHousingNeighborhoodMirrorEntity().GetGUID());
-
-    // HousingRoomEntity GUIDs tracked in deferred callback (not initial UPDATE_OBJECT)
 
     // Send map wide vignettes before UpdateZone, that will send zone wide vignettes
     // But first send on new map will wipe all vignettes on client
@@ -28694,12 +25106,6 @@ void Player::SendInitialPacketsAfterAddToMap()
     if (HasAuraType(SPELL_AURA_DISABLE_INERTIA))
         setCompoundState.StateChanges.emplace_back(SMSG_MOVE_DISABLE_INERTIA, m_movementCounter++);
 
-    if (int32 driveCapabilityId = m_unitData->DriveCapabilityID)
-    {
-        auto& stateChange = setCompoundState.StateChanges.emplace_back(SMSG_MOVE_SET_CAN_DRIVE, m_movementCounter++);
-        stateChange.DriveCapabilityRecID = driveCapabilityId;
-    }
-
     if (!setCompoundState.StateChanges.empty())
     {
         setCompoundState.MoverGUID = GetGUID();
@@ -28716,98 +25122,10 @@ void Player::SendInitialPacketsAfterAddToMap()
 
     PhasingHandler::OnMapChange(this);
 
-    for (auto const& [type, garrison] : _garrisons)
-        garrison->SendRemoteInfo();
+    if (_garrison)
+        _garrison->SendRemoteInfo();
 
     UpdateItemLevelAreaBasedScaling();
-
-    // Housing state setup at neighborhood map entry.
-    //
-    // PROVEN RETAIL BEHAVIOUR (sniff analysis across 3 retail 66838 captures:
-    // floorplan_editor_rotation, wall_floor_ceiling_customize,
-    // interrior_exterrior_advanced_editor):
-    //
-    //   Post-LVW unprompted window: ZERO housing-specific SMSGs.
-    //   Housing state ships ENTIRELY inside the single Player CREATE bundle
-    //   (UPDATE_OBJECT) as entity UpdateField data on Housing/4 (mirror),
-    //   Housing/3 (PlayerHouseEntity), HighGuid::Entity mirrors, etc.
-    //   No HouseStatus, Permissions, CurrentHouseInfo, PlayerHousesInfo,
-    //   UpdateHousesLevelFavor, QueryNeighborhoodName, QueryPlayerNames,
-    //   or NeighborhoodGetRoster is emitted unprompted.
-    //
-    // Previous iterations emitted all of those at login as speculative
-    // "wake-ups" for client-side state machines. Per user's blizzlike
-    // guardrail ("system works on retail, we have to fully align with the
-    // Blizzard flow") all unprompted emissions have been removed. The CMSG
-    // handlers (HandleHousingHouseStatus, HandleHousingGetPlayerPermissions,
-    // HandleHousingGetCurrentHouseInfo, HandleHousingSvcsGetPlayerHousesInfo,
-    // HandleNeighborhoodGetRoster, HandleQueryPlayerNames) already exist and
-    // emit the correct reactive responses when the client sends the CMSGs.
-    //
-    // Remaining work: keep the session-entity state populated so the Player
-    // CREATE bundle serialises correct UpdateField values. Set fields only;
-    // no SendDirectMessage/SendCreateToPlayer calls in this block.
-    if (HousingMap* housingMap = dynamic_cast<HousingMap*>(GetMap()))
-    {
-        Neighborhood* neighborhood = housingMap->GetNeighborhood();
-        if (neighborhood)
-        {
-            Housing* housing = GetHousingForNeighborhood(neighborhood->GetGuid());
-
-            // FNeighborhoodMirrorData_C on the Housing/4 session entity.
-            // Idempotent when LoadFromDB already populated â€” matches no dirty
-            // bits, no wire change.
-            HousingNeighborhoodMirrorEntity& mirrorEntity = GetSession()->GetHousingNeighborhoodMirrorEntity();
-            mirrorEntity.SetName(neighborhood->GetName());
-            mirrorEntity.SetOwnerGUID(neighborhood->GetOwnerGuid());
-            mirrorEntity.ClearHouses();
-            for (auto const& plot : neighborhood->GetPlots())
-            {
-                if (plot.IsOccupied() && !plot.HouseGuid.IsEmpty())
-                    mirrorEntity.AddHouse(plot.HouseGuid, plot.OwnerGuid);
-                else
-                    mirrorEntity.AddHouse(ObjectGuid::Empty, ObjectGuid::Empty);
-            }
-            mirrorEntity.ClearManagers();
-            for (auto const& member : neighborhood->GetMembers())
-            {
-                if (member.Role == NEIGHBORHOOD_ROLE_MANAGER || member.Role == NEIGHBORHOOD_ROLE_OWNER)
-                {
-                    ObjectGuid bnetGuid;
-                    if (Player* managerPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
-                        bnetGuid = managerPlayer->GetSession()->GetBattlenetAccountGUID();
-                    mirrorEntity.AddManager(bnetGuid, member.PlayerGuid);
-                }
-            }
-
-            // FHousingPlayerHouse_C on the Housing/3 session entity.
-            if (housing)
-            {
-                HousingPlayerHouseEntity& houseEntity = GetSession()->GetHousingPlayerHouseEntity();
-                houseEntity.SetBnetAccount(GetSession()->GetBattlenetAccountGUID());
-                houseEntity.SetEntityGUID(housing->GetHouseGuid());
-                houseEntity.SetPlotIndex(static_cast<int32>(housing->GetPlotIndex()));
-                houseEntity.SetLevel(housing->GetLevel());
-                houseEntity.SetFavor(housing->GetFavor64());
-                houseEntity.SetBudgets(
-                    housing->GetMaxInteriorDecorBudget(),
-                    housing->GetMaxExteriorDecorBudget(),
-                    housing->GetMaxRoomBudget(),
-                    housing->GetMaxFixtureBudget()
-                );
-
-                // Populate FHousingStorage_C state so the BNetAccount CREATE
-                // bundle serialises the Decor map. This is a setter-only op
-                // on the session entity; the wire emission happens inside the
-                // Player CREATE bundle via BNetAccount BuildCreateUpdateBlock.
-                housing->PopulateCatalogStorageEntries();
-            }
-
-            TC_LOG_INFO("housing", "Player {} entered neighborhood map {} - state set on session entities (blizzlike: no unprompted SMSGs emitted). Neighborhood='{}' {}, Members={}, Plots={}, HasHouse={}",
-                GetGUID().ToString(), GetMapId(), neighborhood->GetName(), neighborhood->GetGuid().ToString(),
-                neighborhood->GetMembers().size(), neighborhood->GetOccupiedPlotCount(), housing ? "yes" : "no");
-        }
-    }
 
     if (!GetPlayerSharingQuest().IsEmpty())
     {
@@ -28818,14 +25136,6 @@ void Player::SendInitialPacketsAfterAddToMap()
     }
 
     GetSceneMgr().TriggerDelayedScenes();
-
-    // Push the account-wide store front (catalogue + per-item ownership) once the player is in the world.
-    GetSession()->SendAccountStoreFrontUpdate();
-    // Resynchronise the client's world elapsed timers for the map we just entered. This is what
-    // makes a mid-run zone-in (or a relog inside a running Mythic+ instance) show the dungeon timer
-    // at the correct elapsed value - previously the timer was only ever pushed once, at run start,
-    // so anyone who was not present at that moment saw nothing.
-    sElapsedTimerMgr->SendActiveTimers(this);
 }
 
 void Player::SendUpdateToOutOfRangeGroupMembers()
@@ -28848,26 +25158,6 @@ void Player::SendTransferAborted(uint32 mapid, TransferAbortReason reason, uint8
     transferAborted.TransfertAbort = reason;
     transferAborted.MapDifficultyXConditionID = mapDifficultyXConditionID;
     SendDirectMessage(transferAborted.Write());
-}
-
-void Player::SendPreloadWorld(int32 mapId, Position const& destination) const
-{
-    WorldPackets::Movement::PreloadWorld preloadWorld;
-    preloadWorld.MapID = mapId;
-    // Retail sends the player's current position with a zeroed facing, and expresses the
-    // destination as a delta from it - the client streams around Loc.Pos + MovementOffset.
-    preloadWorld.Loc.Pos = Position(GetPositionX(), GetPositionY(), GetPositionZ(), 0.0f);
-    preloadWorld.Reason = NEW_WORLD_SEAMLESS;
-    preloadWorld.MovementOffset = Position(destination.GetPositionX() - GetPositionX(),
-        destination.GetPositionY() - GetPositionY(), destination.GetPositionZ() - GetPositionZ());
-    SendDirectMessage(preloadWorld.Write());
-}
-
-void Player::SendCancelPreloadWorld(int32 mapId) const
-{
-    WorldPackets::Movement::CancelPreloadWorld cancelPreloadWorld;
-    cancelPreloadWorld.MapID = mapId;
-    SendDirectMessage(cancelPreloadWorld.Write());
 }
 
 void Player::ApplyEquipCooldown(Item* pItem)
@@ -29268,6 +25558,7 @@ void Player::DailyReset()
         SetQuestCompletedBit(questId, false);
 
     WorldPackets::Quest::DailyQuestsReset dailyQuestsReset;
+    dailyQuestsReset.Count = int32(m_activePlayerData->DailyQuestsCompleted.size());
     SendDirectMessage(dailyQuestsReset.Write());
 
     ClearDynamicUpdateFieldValues(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::DailyQuestsCompleted));
@@ -29298,30 +25589,10 @@ void Player::DailyReset()
     m_DailyQuestChanged = false;
     m_lastDailyQuestTime = 0;
 
-    for (auto const& [type, garrison] : _garrisons)
-    {
-        garrison->ResetFollowerActivationLimit();
-        // An Anima Conductor channel bought with reservoir anima lasts until the daily reset (the client's own
-        // confirm dialog counts down C_DateAndTime.GetSecondsUntilDailyReset), so this is where it lapses.
-        garrison->ExpireTemporaryChannelAnima();
-    }
-
-    // One new calling per daily reset, and any offer that has run out of its three days lapses here.
-    UpdateCovenantCallings();
-    if (AreCovenantCallingsUnlocked())
-        SendCovenantCallingsUpdate();
+    if (_garrison)
+        _garrison->ResetFollowerActivationLimit();
 
     FailCriteria(CriteriaFailEvent::DailyQuestsCleared, 0);
-}
-
-void Player::UpdateWeeklyRewardsPeriod()
-{
-    // WeeklyRewardsPeriodSinceOrigin is the week index the client uses to gate the Great Vault UI and
-    // ModifierTreeType::PlayerHasWeeklyRewardsAvailable (313), which returns false while the field is 0.
-    // It was never written, so that modifier always failed. Mirror the exact value the vault system
-    // uses (WeeklyRewardsMgr::GetCurrentPeriod) so the field and the vault roll over together.
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::WeeklyRewardsPeriodSinceOrigin),
-        WeeklyRewardsMgr::GetCurrentPeriod());
 }
 
 void Player::ResetWeeklyQuestStatus()
@@ -29458,11 +25729,6 @@ void Player::SetBattlegroundId(uint32 val, BattlegroundTypeId bgTypeId, Battlegr
     m_bgData.bgInstanceID = val;
     m_bgData.bgTypeID = bgTypeId;
     m_bgData.queueId = queueId;
-}
-
-void Player::SetSpectateTarget(ObjectGuid guid)
-{
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::SpectateTarget), guid);
 }
 
 uint32 Player::AddBattlegroundQueueId(BattlegroundQueueTypeId val)
@@ -30976,628 +27242,6 @@ void Player::StoreLootItem(ObjectGuid lootWorldObjectGuid, uint8 lootSlot, Loot*
         sLootItemStorage->RemoveStoredLootItemForContainer(lootWorldObjectGuid.GetCounter(), item->type, item->itemid, item->count, item->LootListId);
 }
 
-void Player::HandleArchaeologySurvey()
-{
-    // A successful Survey reveals a private, branch-specific lootable find at the hidden position and
-    // advances site progress immediately. Dig/open-lock and fragment award then use the normal
-    // GameObject chest path. Retail also spawns an approximate red/yellow/green direction tool on
-    // misses and applies Standing On It while the player is over the hidden point.
-    //
-    // PROVISIONAL-FROM-FORK (evry/master-track/archaeology 9d7a0c6254 / 107b2cea57): the 8/40/80
-    // distance bands, the 8/20/40 degree facing cones and the 2-4 yd tool spawn ring come from the
-    // fork's retail observation, not from a captured server rule.
-    constexpr uint32 SPELL_ARCHAEOLOGY_SURVEY = 80451;
-    constexpr uint32 GO_SURVEY_TOOL_GREEN = 204272;
-    constexpr uint32 GO_SURVEY_TOOL_YELLOW = 206589;
-    constexpr uint32 GO_SURVEY_TOOL_RED = 206590;
-    constexpr float SURVEY_FIND_DISTANCE = 8.0f;
-    constexpr float SURVEY_GREEN_DISTANCE = 40.0f;
-    constexpr float SURVEY_YELLOW_DISTANCE = 80.0f;
-    // Max |tool facing -> find| lean per band, in radians.
-    constexpr float SURVEY_FACING_CONE_GREEN = float(8.0 * M_PI / 180.0);
-    constexpr float SURVEY_FACING_CONE_YELLOW = float(20.0 * M_PI / 180.0);
-    constexpr float SURVEY_FACING_CONE_RED = float(40.0 * M_PI / 180.0);
-    constexpr float SURVEY_TOOL_SPAWN_MIN = 2.0f;
-    constexpr float SURVEY_TOOL_SPAWN_MAX = 4.0f;
-    constexpr Seconds SURVEY_TOOL_DURATION = 5s;
-    constexpr Seconds ARCHAEOLOGY_FIND_DURATION = 2min;
-
-    if (!HasSkill(SKILL_ARCHAEOLOGY))
-        return;
-
-    // Survey tools occupy the reference implementation's second GameObject slot. Recasting removes
-    // the previous tool before creating its replacement, so stale guidance cannot make a
-    // later cast appear inert.
-    if (GameObject* previousTool = GetMap()->GetGameObject(m_ObjectSlot[1]))
-    {
-        uint32 const entry = previousTool->GetEntry();
-        if (entry == GO_SURVEY_TOOL_GREEN || entry == GO_SURVEY_TOOL_YELLOW || entry == GO_SURVEY_TOOL_RED)
-        {
-            if (previousTool->GetSpellId() == SPELL_ARCHAEOLOGY_SURVEY)
-                previousTool->SetSpellId(0);
-
-            RemoveGameObject(previousTool, true);
-            m_ObjectSlot[1] = ObjectGuid::Empty;
-        }
-    }
-
-    // Only one revealed, unconsumed find may exist for a player. Clear an expired/despawned token
-    // lazily; owned GameObjects are also removed by normal player cleanup.
-    if (_pendingArchaeologyFind)
-    {
-        if (GameObject* pendingFind = GetMap()->GetGameObject(_pendingArchaeologyFind->GameObjectGuid))
-            if (pendingFind->isSpawned())
-                return;
-
-        _pendingArchaeologyFind.reset();
-    }
-
-    uint32 const mapId = GetMapId();
-    float const px = GetPositionX();
-    float const py = GetPositionY();
-
-    // Find which of the player's active dig sites (on this map) they are standing in.
-    uint32 siteId = 0;
-    uint32 siteIndex = 0;
-    ArchaeologyDigSiteInfo const* info = nullptr;
-    uint32 const siteCount = m_activePlayerData->ResearchSites[0].size();
-    for (uint32 i = 0; i < siteCount; ++i)
-    {
-        uint32 candidate = m_activePlayerData->ResearchSites[0][i];
-        ResearchSiteEntry const* site = sResearchSiteStore.LookupEntry(candidate);
-        if (!site || uint32(site->MapID) != mapId)
-            continue;
-
-        if (sArchaeologyMgr->IsInsideDigSite(candidate, px, py))
-        {
-            siteId = candidate;
-            siteIndex = i;
-            info = sArchaeologyMgr->GetDigSiteInfo(candidate);
-            break;
-        }
-    }
-
-    if (!siteId || !info)
-        return; // not standing in one of the player's active dig sites
-
-    uint32 const progressSize = m_activePlayerData->ResearchSiteProgress[0].size();
-    uint32 progress = siteIndex < progressSize ? m_activePlayerData->ResearchSiteProgress[0][siteIndex] : 0;
-    if (progress >= info->FindCount)
-    {
-        // Site already fully surveyed (e.g. persisted full from before exhaust/replace existed):
-        // cycle it now instead of no-oping, so the player is never stuck on a dead site.
-        ReplaceResearchSite(siteIndex, mapId);
-        return;
-    }
-
-    float fx, fy;
-    if (!_EnsureResearchSiteFindLocation(siteId, fx, fy))
-        return;
-
-    float const dist = GetExactDist2d(fx, fy);
-    // Reveal when strictly inside the band; dist == 8.0f is still green guidance.
-    bool found = dist < SURVEY_FIND_DISTANCE;
-
-    if (found)
-    {
-        uint32 const findGameObjectId = sArchaeologyMgr->GetFindGameObjectId(info->BranchID);
-        if (!findGameObjectId)
-            found = false;
-        else
-        {
-            // Sibling: ArchaeologyMgr::IsUsableFindTerrain / Creature spawn - resolve Z from
-            // MAX_HEIGHT, not player Z. UpdateGroundPositionZ searches downward from the seed; on
-            // inclines the dig XY ground can sit above the player and the GO clips underground.
-            float const fz = GetMap()->GetHeight(GetPhaseShift(), fx, fy, MAX_HEIGHT, true, MAX_FALL_DISTANCE);
-            if (fz <= INVALID_HEIGHT || !Trinity::IsValidMapCoord(fx, fy, fz))
-                found = false;
-            else
-            {
-                float const facing = GetOrientation();
-                if (GameObject* find = SummonGameObject(findGameObjectId, Position(fx, fy, fz, facing),
-                    QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f), ARCHAEOLOGY_FIND_DURATION,
-                    GO_SUMMON_TIMED_OR_CORPSE_DESPAWN, GetGUID()))
-                {
-                    _pendingArchaeologyFind = PendingArchaeologyFind
-                    {
-                        .GameObjectGuid = find->GetGUID(),
-                        .ResearchSiteId = siteId,
-                        .ResearchBranchId = info->BranchID
-                    };
-
-                    ++progress;
-                    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue(siteIndex), progress);
-                    UpdateCriteria(CriteriaType::FindResearchObject, findGameObjectId);
-                    RemoveAurasDueToSpell(SPELL_ARCHAEOLOGY_STANDING_ON_IT);
-
-                    // Progress advances at reveal on retail. Generate and retain the next point now so
-                    // relog/restart cannot relocate an in-progress site's hidden find.
-                    if (progress < info->FindCount)
-                    {
-                        _researchSiteFindLocations.erase(siteId);
-                        float nextX, nextY;
-                        _EnsureResearchSiteFindLocation(siteId, nextX, nextY);
-                    }
-                }
-                else
-                    found = false;
-            }
-        }
-    }
-    if (!found)
-    {
-        uint32 const toolEntry = dist < SURVEY_GREEN_DISTANCE ? GO_SURVEY_TOOL_GREEN
-                               : dist < SURVEY_YELLOW_DISTANCE ? GO_SURVEY_TOOL_YELLOW
-                               : GO_SURVEY_TOOL_RED;
-        float const facingCone = dist < SURVEY_GREEN_DISTANCE ? SURVEY_FACING_CONE_GREEN
-                               : dist < SURVEY_YELLOW_DISTANCE ? SURVEY_FACING_CONE_YELLOW
-                               : SURVEY_FACING_CONE_RED;
-
-        // Retail spawns the theodolite beside the player (small ring), not under feet.
-        float const spawnAngle = frand(0.0f, float(2 * M_PI));
-        float const spawnDist = frand(SURVEY_TOOL_SPAWN_MIN, SURVEY_TOOL_SPAWN_MAX);
-        float const tx = px + spawnDist * std::cos(spawnAngle);
-        float const ty = py + spawnDist * std::sin(spawnAngle);
-        float const tz = GetMap()->GetHeight(GetPhaseShift(), tx, ty, MAX_HEIGHT, true, MAX_FALL_DISTANCE);
-        if (tz > INVALID_HEIGHT && Trinity::IsValidMapCoord(tx, ty, tz))
-        {
-            // Facing is tool->find with a band-dependent cone (red noisier than yellow/green).
-            // PROVISIONAL-FROM-FORK 107b2cea57.
-            Position const toolPos(tx, ty, tz);
-            float const facing = Position::NormalizeOrientation(
-                toolPos.GetAbsoluteAngle(fx, fy) + frand(-facingCone, facingCone));
-            if (GameObject* tool = SummonGameObject(toolEntry, Position(tx, ty, tz, facing),
-                QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f), SURVEY_TOOL_DURATION))
-            {
-                tool->SetSpellId(SPELL_ARCHAEOLOGY_SURVEY);
-                m_ObjectSlot[1] = tool->GetGUID();
-            }
-        }
-    }
-
-    WorldPackets::Archaeology::SurveyCast survey;
-    survey.TotalFinds = progress;
-    survey.NumFindsCompleted = info->FindCount;
-    survey.ResearchBranchID = info->BranchID;
-    survey.SuccessfulFind = found;
-    SendDirectMessage(survey.Write());
-
-    // Exhaust and replace once every find is collected (retail single-slot replacement).
-    if (found && progress >= info->FindCount)
-    {
-        ReplaceResearchSite(siteIndex, mapId);
-        UpdateCriteria(CriteriaType::ExhaustAnyResearchSite);
-    }
-}
-
-bool Player::CanUseArchaeologyFind(GameObject const* find) const
-{
-    if (!find || !_pendingArchaeologyFind || !HasSkill(SKILL_ARCHAEOLOGY))
-        return false;
-
-    return _pendingArchaeologyFind->GameObjectGuid == find->GetGUID() &&
-        find->GetOwnerGUID() == GetGUID() &&
-        find->GetPrivateObjectOwner() == GetGUID() &&
-        find->GetEntry() == sArchaeologyMgr->GetFindGameObjectId(_pendingArchaeologyFind->ResearchBranchId);
-}
-
-void Player::OnArchaeologyFindLooted(GameObject* find)
-{
-    if (!CanUseArchaeologyFind(find))
-        return;
-
-    uint32 const branchId = _pendingArchaeologyFind->ResearchBranchId;
-    _pendingArchaeologyFind.reset();
-
-    // PROVISIONAL-FROM-FORK (evry/master-track/archaeology 24a970f7c7): the first successful
-    // unique-find acquisition grants +1 Archaeology (reveal / reopen do not). Guaranteed for the
-    // observed skill range; near-cap chance curves are not modelled.
-    UpdateSkillPro(SKILL_ARCHAEOLOGY, 1000, 1);
-
-    // The normal chest loot path has already granted the branch currency (+ optional provisional
-    // keystone). Surface the branch's current project immediately; login remains the disconnect fallback.
-    EnsureResearchProject(branchId);
-}
-
-bool Player::_EnsureResearchSiteFindLocation(uint32 researchSiteId, float& x, float& y)
-{
-    auto itr = _researchSiteFindLocations.find(researchSiteId);
-    if (itr != _researchSiteFindLocations.end() &&
-        sArchaeologyMgr->IsInsideDigSite(researchSiteId, itr->second.first, itr->second.second))
-    {
-        x = itr->second.first;
-        y = itr->second.second;
-        return true;
-    }
-
-    if (!sArchaeologyMgr->GenerateFindLocation(researchSiteId, x, y, GetMap(), GetPhaseShift()))
-        return false;
-
-    _researchSiteFindLocations[researchSiteId] = { x, y };
-    return true;
-}
-
-void Player::_UpdateArchaeologySurveyIndicator()
-{
-    // Must match HandleArchaeologySurvey's reveal radius.
-    constexpr float SURVEY_FIND_DISTANCE = 8.0f;
-
-    bool standingOnFind = false;
-    if (HasSkill(SKILL_ARCHAEOLOGY))
-    {
-        if (_pendingArchaeologyFind)
-        {
-            if (GameObject* find = GetMap()->GetGameObject(_pendingArchaeologyFind->GameObjectGuid))
-            {
-                if (find->isSpawned())
-                {
-                    if (HasAura(SPELL_ARCHAEOLOGY_STANDING_ON_IT))
-                        RemoveAurasDueToSpell(SPELL_ARCHAEOLOGY_STANDING_ON_IT);
-                    return;
-                }
-            }
-
-            _pendingArchaeologyFind.reset();
-        }
-
-        uint32 const mapId = GetMapId();
-        uint32 const siteCount = m_activePlayerData->ResearchSites[0].size();
-        for (uint32 i = 0; i < siteCount; ++i)
-        {
-            uint32 const siteId = m_activePlayerData->ResearchSites[0][i];
-            ResearchSiteEntry const* site = sResearchSiteStore.LookupEntry(siteId);
-            if (!site || site->MapID < 0 || uint32(site->MapID) != mapId ||
-                !sArchaeologyMgr->IsInsideDigSite(siteId, GetPositionX(), GetPositionY()))
-                continue;
-
-            ArchaeologyDigSiteInfo const* info = sArchaeologyMgr->GetDigSiteInfo(siteId);
-            uint32 const progressSize = m_activePlayerData->ResearchSiteProgress[0].size();
-            uint32 const progress = i < progressSize ? m_activePlayerData->ResearchSiteProgress[0][i] : 0;
-            if (!info || progress >= info->FindCount)
-                break;
-
-            float fx, fy;
-            standingOnFind = _EnsureResearchSiteFindLocation(siteId, fx, fy) &&
-                GetExactDist2d(fx, fy) < SURVEY_FIND_DISTANCE;
-            break;
-        }
-    }
-
-    if (standingOnFind)
-    {
-        if (!HasAura(SPELL_ARCHAEOLOGY_STANDING_ON_IT))
-            CastSpell(this, SPELL_ARCHAEOLOGY_STANDING_ON_IT, true);
-    }
-    else if (HasAura(SPELL_ARCHAEOLOGY_STANDING_ON_IT))
-        RemoveAurasDueToSpell(SPELL_ARCHAEOLOGY_STANDING_ON_IT);
-}
-
-void Player::ReplaceResearchSite(uint32 siteIndex, uint32 mapId)
-{
-    // Swap one active dig-site slot for a fresh surveyable site on the same continent (progress
-    // reset). The client picks up the new site from the ResearchSites update field. If the continent
-    // has no other surveyable site the slot is left as-is.
-    uint32 const siteCount = m_activePlayerData->ResearchSites[0].size();
-    if (siteIndex >= siteCount)
-        return;
-
-    std::vector<uint32> activeSites;
-    activeSites.reserve(siteCount);
-    for (uint32 i = 0; i < siteCount; ++i)
-        activeSites.push_back(m_activePlayerData->ResearchSites[0][i]);
-
-    uint32 const replacement = sArchaeologyMgr->RollReplacementSite(mapId, activeSites);
-    if (!replacement)
-        return;
-
-    _researchSiteFindLocations.erase(m_activePlayerData->ResearchSites[0][siteIndex]);
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSites, 0).ModifyValue(siteIndex), uint16(replacement));
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue(siteIndex), 0u);
-
-    float x, y;
-    _EnsureResearchSiteFindLocation(replacement, x, y);
-}
-
-void Player::_LoadResearchSites(PreparedQueryResult result)
-{
-    // Restore persisted active dig sites into the ResearchSites / ResearchSiteProgress update fields.
-    // SELECT researchSiteId, progress, findX, findY FROM character_research_site WHERE guid = ?
-    if (!result)
-        return;
-
-    do
-    {
-        Field* fields = result->Fetch();
-        uint16 siteId = fields[0].GetUInt16();
-        uint32 progress = fields[1].GetUInt32();
-        float findX = fields[2].GetFloat();
-        float findY = fields[3].GetFloat();
-
-        // A persisted row can name any ResearchSite.db2 entry on the continent, including
-        // non-Archaeology overlays such as warfront phases. Do not expose a site the server cannot
-        // drive; InitializeResearchSites replaces the missing slot below.
-        if (!sArchaeologyMgr->IsSurveyableDigSite(siteId))
-        {
-            TC_LOG_WARN("entities.player.loading", "Player::_LoadResearchSites: player ({}, name: '{}') has unsupported research site {}. Replacing it with a surveyable site.",
-                GetGUID().ToString(), GetName(), siteId);
-            continue;
-        }
-
-        AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSites, 0).ModifyValue()) = siteId;
-        AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue()) = progress;
-
-        if (sArchaeologyMgr->IsInsideDigSite(siteId, findX, findY))
-            _researchSiteFindLocations[siteId] = { findX, findY };
-        else
-            _EnsureResearchSiteFindLocation(siteId, findX, findY);
-    } while (result->NextRow());
-}
-
-void Player::InitializeResearchSites()
-{
-    // Introduction continents: Eastern Kingdoms (0), Kalimdor (1), Outland (530), Northrend (571),
-    // Pandaria (870). Content stops at Pandaria - there is no Draenor+ dig-site data, so those maps
-    // are deliberately absent rather than seeded with invented rows.
-    //
-    // PROVISIONAL-FROM-FORK (evry/master-track/archaeology 80890c6a9f, extended by eb4525d6bf and
-    // b59c8db8ff): four active sites per continent, and the only eligibility test is "knows the
-    // profession and the site is surveyable". Retail gates dig sites on more than that.
-    if (!HasSkill(SKILL_ARCHAEOLOGY))
-        return;
-
-    std::vector<uint32> activeSites;
-    activeSites.reserve(m_activePlayerData->ResearchSites[0].size() + 16);
-    for (uint16 siteId : m_activePlayerData->ResearchSites[0])
-        activeSites.push_back(siteId);
-
-    for (uint32 mapId : { 0u, 1u, 530u, 571u, 870u })
-    {
-        uint32 activeCount = 0;
-        for (uint32 siteId : activeSites)
-            if (ResearchSiteEntry const* site = sResearchSiteStore.LookupEntry(siteId))
-                if (uint32(site->MapID) == mapId)
-                    ++activeCount;
-
-        if (activeCount >= 4)
-            continue;
-
-        for (uint32 siteId : sArchaeologyMgr->RollResearchSitesForMap(mapId, 4 - activeCount, activeSites))
-        {
-            AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSites, 0).ModifyValue()) = uint16(siteId);
-            AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue()) = 0u;
-            activeSites.push_back(siteId);
-
-            float x, y;
-            _EnsureResearchSiteFindLocation(siteId, x, y);
-        }
-    }
-}
-
-int32 Player::GetCurrentResearchProject(uint32 branchId) const
-{
-    uint32 const count = m_activePlayerData->Research[0].size();
-    for (uint32 i = 0; i < count; ++i)
-    {
-        int16 projectId = m_activePlayerData->Research[0][i].ResearchProjectID;
-        if (!projectId)
-            continue;
-
-        if (ResearchProjectEntry const* project = sResearchProjectStore.LookupEntry(uint32(projectId)))
-            if (project->ResearchBranchID == branchId)
-                return projectId;
-    }
-    return 0;
-}
-
-std::unordered_set<uint32> Player::GetCompletedResearchProjects() const
-{
-    std::unordered_set<uint32> completed;
-    for (UF::CompletedProject const& project : m_activePlayerData->ResearchHistory->CompletedProjects)
-        completed.insert(project.ProjectID);
-    return completed;
-}
-
-uint32 Player::EnsureResearchProject(uint32 branchId)
-{
-    if (!sArchaeologyMgr->IsResearchBranchEnabled(branchId))
-        return 0;
-
-    if (int32 existing = GetCurrentResearchProject(branchId))
-        return uint32(existing);
-
-    uint32 projectId = sArchaeologyMgr->RollResearchProject(branchId, GetCompletedResearchProjects());
-    if (!projectId)
-        return 0;
-
-    UF::Research& research = AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Research, 0).ModifyValue());
-    research.ResearchProjectID = int16(projectId);
-    return projectId;
-}
-
-void Player::InitializeResearchProjects()
-{
-    // Backfill a current project for any branch the player already has fragments in but no active
-    // project (e.g. characters that earned fragments before projects were implemented). Fresh fragment
-    // gains assign on the fly in HandleArchaeologySurvey, so this only matters on the first login after
-    // the feature lands. Currencies are already loaded by this point in LoadFromDB.
-    if (!HasSkill(SKILL_ARCHAEOLOGY))
-        return;
-
-    for (ResearchBranchEntry const* branch : sResearchBranchStore)
-    {
-        if (!branch->CurrencyID || GetCurrencyQuantity(branch->CurrencyID) == 0)
-            continue;
-
-        EnsureResearchProject(branch->ID);
-    }
-}
-
-void Player::_LoadResearchProjects(PreparedQueryResult result)
-{
-    // Restore the character's active research projects into the Research update field.
-    // SELECT projectId FROM character_research_project WHERE guid = ?
-    if (!result)
-        return;
-
-    do
-    {
-        Field* fields = result->Fetch();
-        uint32 projectId = fields[0].GetUInt32();
-        ResearchProjectEntry const* project = sResearchProjectStore.LookupEntry(projectId);
-        if (!project || !sArchaeologyMgr->IsResearchBranchEnabled(project->ResearchBranchID))
-            continue;
-
-        UF::Research& research = AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Research, 0).ModifyValue());
-        research.ResearchProjectID = int16(projectId);
-    } while (result->NextRow());
-}
-
-bool Player::CanCastResearchProjectSpell(uint32 spellId) const
-{
-    if (!HasSkill(SKILL_ARCHAEOLOGY))
-        return false;
-
-    ResearchProjectEntry const* project = sArchaeologyMgr->GetProjectBySpellId(spellId);
-    if (!project || !sArchaeologyMgr->IsResearchBranchEnabled(project->ResearchBranchID))
-        return false;
-
-    // Only the branch's current project may be solved.
-    if (GetCurrentResearchProject(project->ResearchBranchID) != int32(project->ID))
-        return false;
-
-    return true;
-}
-
-bool Player::CanSolveResearchProject(ArchaeologySolvePlan const& plan) const
-{
-    if (!HasSkill(SKILL_ARCHAEOLOGY) || !sArchaeologyMgr->IsResearchBranchEnabled(plan.BranchID))
-        return false;
-
-    ResearchProjectEntry const* project = sResearchProjectStore.LookupEntry(plan.ProjectID);
-    if (!project || project->ResearchBranchID != plan.BranchID ||
-        project->RequiredWeight != plan.RequiredWeight ||
-        GetCurrentResearchProject(plan.BranchID) != int32(plan.ProjectID))
-        return false;
-
-    if (plan.FragmentCount && !HasCurrency(plan.FragmentCurrencyID, plan.FragmentCount))
-        return false;
-
-    if (plan.KeystoneCount && !HasItemCount(plan.KeystoneItemID, plan.KeystoneCount))
-        return false;
-
-    return true;
-}
-
-bool Player::ConsumeResearchProjectSolveResources(ArchaeologySolvePlan const& plan)
-{
-    if (!CanSolveResearchProject(plan))
-        return false;
-
-    // The final cast check and this commit run synchronously on the player's world thread. Validate
-    // every resource first, then consume the exact normalized plan before the reward spell effect.
-    if (plan.KeystoneCount &&
-        DestroyItemCount(plan.KeystoneItemID, plan.KeystoneCount, true) != plan.KeystoneCount)
-        return false;
-
-    if (plan.FragmentCount)
-        RemoveCurrency(plan.FragmentCurrencyID, plan.FragmentCount, CurrencyDestroyReason::Spell);
-
-    return true;
-}
-
-void Player::CompleteResearchProjectSolve(ArchaeologySolvePlan const& plan)
-{
-    // The script calls this only after its exact resource plan committed. Keep an expected-project
-    // guard so a completed cast cannot finalize a different or already-advanced project.
-    if (GetCurrentResearchProject(plan.BranchID) != int32(plan.ProjectID))
-        return;
-
-    ResearchProjectEntry const* project = sResearchProjectStore.LookupEntry(plan.ProjectID);
-    if (!project)
-        return;
-
-    RecordCompletedProject(plan.ProjectID);
-    UpdateCriteria(CriteriaType::CompleteAnyResearchProject, project->Rarity, plan.BranchID);
-    AdvanceResearchProject(plan.BranchID, plan.ProjectID);
-
-    // Solve skill-ups follow SkillLineAbility.NumSkillUps for Archaeology (commons 5 / rares 15).
-    // Spells with no Archaeology SkillLineAbility row grant nothing. Generic UpdateCraftSkill skips
-    // these rows because their SkillupSkillLineID is 0.
-    if (project->SpellID > 0)
-    {
-        SkillLineAbilityMapBounds const bounds = sSpellMgr->GetSkillLineAbilityMapBounds(uint32(project->SpellID));
-        for (SkillLineAbilityMap::const_iterator itr = bounds.first; itr != bounds.second; ++itr)
-        {
-            SkillLineAbilityEntry const* ability = itr->second;
-            if (!ability || ability->SkillLine != SKILL_ARCHAEOLOGY || ability->NumSkillUps <= 0)
-                continue;
-
-            UpdateSkillPro(SKILL_ARCHAEOLOGY, 1000, uint32(ability->NumSkillUps));
-            break;
-        }
-    }
-}
-
-void Player::RecordCompletedProject(uint32 projectId)
-{
-    auto history = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchHistory);
-
-    // Bump the completion count if this project has been solved before.
-    auto const& completed = m_activePlayerData->ResearchHistory->CompletedProjects;
-    for (uint32 i = 0; i < completed.size(); ++i)
-    {
-        if (uint32(completed[i].ProjectID) == projectId)
-        {
-            auto entry = history.ModifyValue(&UF::ResearchHistory::CompletedProjects, i);
-            SetUpdateFieldValue(entry.ModifyValue(&UF::CompletedProject::CompletionCount), uint32(completed[i].CompletionCount) + 1);
-            return;
-        }
-    }
-
-    auto entry = AddDynamicUpdateFieldValue(history.ModifyValue(&UF::ResearchHistory::CompletedProjects));
-    entry.ModifyValue(&UF::CompletedProject::ProjectID).SetValue(projectId);
-    entry.ModifyValue(&UF::CompletedProject::FirstCompleted).SetValue(int64(GameTime::GetGameTime()));
-    entry.ModifyValue(&UF::CompletedProject::CompletionCount).SetValue(1u);
-}
-
-void Player::AdvanceResearchProject(uint32 branchId, uint32 completedProjectId)
-{
-    // Drop the completed project from the active list, then roll the branch's next project.
-    uint32 const count = m_activePlayerData->Research[0].size();
-    for (uint32 i = 0; i < count; ++i)
-    {
-        if (uint32(m_activePlayerData->Research[0][i].ResearchProjectID) == completedProjectId)
-        {
-            RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Research, 0).ModifyValue(), i);
-            break;
-        }
-    }
-
-    EnsureResearchProject(branchId);
-}
-
-void Player::_LoadResearchHistory(PreparedQueryResult result)
-{
-    // Restore completed research projects into the ResearchHistory update field.
-    // SELECT projectId, firstCompleted, completionCount FROM character_research_history WHERE guid = ?
-    if (!result)
-        return;
-
-    auto history = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchHistory);
-    do
-    {
-        Field* fields = result->Fetch();
-        uint32 projectId = fields[0].GetUInt32();
-        if (!sResearchProjectStore.HasRecord(projectId))
-            continue;
-
-        auto entry = AddDynamicUpdateFieldValue(history.ModifyValue(&UF::ResearchHistory::CompletedProjects));
-        entry.ModifyValue(&UF::CompletedProject::ProjectID).SetValue(projectId);
-        entry.ModifyValue(&UF::CompletedProject::FirstCompleted).SetValue(fields[1].GetInt64());
-        entry.ModifyValue(&UF::CompletedProject::CompletionCount).SetValue(fields[2].GetUInt32());
-    } while (result->NextRow());
-}
-
 void Player::_LoadSkills(PreparedQueryResult result)
 {
     //                                                           0      1      2    3
@@ -31815,10 +27459,10 @@ void Player::SetFallInformation(uint32 time, float z)
     m_lastFallZ = z;
 }
 
-void Player::HandleFall(MovementInfo const& movementInfo)
+void Player::HandleFall()
 {
     // calculate total z distance of the fall
-    float z_diff = m_lastFallZ - movementInfo.pos.GetPositionZ();
+    float z_diff = m_lastFallZ - m_movementInfo.pos.GetPositionZ();
     //TC_LOG_DEBUG("misc", "zDiff = {}", z_diff);
 
     //Players with low fall distance, Feather Fall or physical immunity (charges used) are ignored
@@ -31839,8 +27483,8 @@ void Player::HandleFall(MovementInfo const& movementInfo)
             if (GetCommandStatus(CHEAT_GOD))
                 damage = 0;
 
-            float height = movementInfo.pos.m_positionZ;
-            UpdateGroundPositionZ(movementInfo.pos.m_positionX, movementInfo.pos.m_positionY, height);
+            float height = m_movementInfo.pos.m_positionZ;
+            UpdateGroundPositionZ(m_movementInfo.pos.m_positionX, m_movementInfo.pos.m_positionY, height);
 
             damage *= GetTotalAuraMultiplier(SPELL_AURA_MODIFY_FALL_DAMAGE_PCT);
 
@@ -31863,7 +27507,7 @@ void Player::HandleFall(MovementInfo const& movementInfo)
             }
 
             //Z given by moveinfo, LastZ, FallTime, WaterZ, MapZ, Damage, Safefall reduction
-            TC_LOG_DEBUG("entities.player.falldamage", "FALLDAMAGE z={} sz={} pZ={} FallTime={} mZ={} damage={} SF={}\nPlayer debug info:\n{}", movementInfo.pos.GetPositionZ(), height, GetPositionZ(), movementInfo.jump.fallTime, height, damage, safe_fall, GetDebugInfo());
+            TC_LOG_DEBUG("entities.player.falldamage", "FALLDAMAGE z={} sz={} pZ={} FallTime={} mZ={} damage={} SF={}\nPlayer debug info:\n{}", m_movementInfo.pos.GetPositionZ(), height, GetPositionZ(), m_movementInfo.jump.fallTime, height, damage, safe_fall, GetDebugInfo());
         }
     }
 }
@@ -31908,7 +27552,6 @@ void Player::UpdateCriteria(CriteriaType type, uint64 miscValue1 /*= 0*/, uint64
 {
     m_achievementMgr->UpdateCriteria(type, miscValue1, miscValue2, miscValue3, ref, this);
     m_questObjectiveCriteriaMgr->UpdateCriteria(type, miscValue1, miscValue2, miscValue3, ref, this);
-    m_perksActivityMgr->UpdateCriteria(type, miscValue1, miscValue2, miscValue3, ref, this);
 
     // Update only individual achievement criteria here, otherwise we may get multiple updates
     // from a single boss kill
@@ -32367,7 +28010,7 @@ void Player::ResummonBattlePetTemporaryUnSummonedIfAny()
 
 bool Player::IsPetNeedBeTemporaryUnsummoned() const
 {
-    return !IsInWorld() || !IsAlive() || HasUnitMovementFlag(MOVEMENTFLAG_FLYING) || HasExtraUnitMovementFlag2(MOVEMENTFLAG3_ADV_FLYING);
+    return !IsInWorld() || !IsAlive() || HasUnitMovementFlag(MOVEMENTFLAG_FLYING) || HasUnitMovementFlag(MOVEMENTFLAG_ADV_FLYING);
 }
 
 bool Player::CanSeeGossipOn(Creature const* creature) const
@@ -32549,23 +28192,6 @@ void Player::SetEquipmentSet(EquipmentSetInfo::EquipmentSetData const& newEqSet)
     }
 
     eqSlot.State = eqSlot.State == EQUIPMENT_SET_NEW ? EQUIPMENT_SET_NEW : EQUIPMENT_SET_CHANGED;
-}
-
-void Player::SetEquipmentSetAssignedSpec(uint64 setGuid, int32 assignedSpecIndex)
-{
-    auto itr = _equipmentSets.find(setGuid);
-    if (itr == _equipmentSets.end())
-        return;
-
-    EquipmentSetInfo& eqSet = itr->second;
-    // A negative index clears the assignment (no spec auto-equips this set).
-    if (assignedSpecIndex >= 0)
-        eqSet.Data.AssignedSpecIndex = assignedSpecIndex;
-    else
-        eqSet.Data.AssignedSpecIndex.reset();
-
-    if (eqSet.State != EQUIPMENT_SET_NEW)
-        eqSet.State = EQUIPMENT_SET_CHANGED;
 }
 
 void Player::_SaveEquipmentSets(CharacterDatabaseTransaction trans)
@@ -32763,43 +28389,6 @@ void Player::DeleteEquipmentSet(uint64 id)
         }
         ++itr;
     }
-}
-
-void Player::AssignEquipmentSetSpec(uint64 id, int32 specIndex)
-{
-    auto itr = _equipmentSets.find(id);
-    if (itr == _equipmentSets.end() || itr->second.Data.Guid != id)
-        return;
-
-    // Equipment sets are auto-equipped on specialization change; the assignment only makes
-    // sense for a real gear set, not for a transmog outfit.
-    if (itr->second.Data.Type != EquipmentSetInfo::EQUIPMENT)
-        return;
-
-    auto markChanged = [](EquipmentSetInfo& set)
-    {
-        if (set.State != EQUIPMENT_SET_NEW)
-            set.State = EQUIPMENT_SET_CHANGED;
-    };
-
-    if (specIndex >= 0)
-    {
-        // Only one equipment set may be auto-equipped per specialization: clear the
-        // assignment from any other set currently bound to this spec so state stays consistent.
-        for (auto& [otherGuid, otherSet] : _equipmentSets)
-        {
-            if (otherGuid != id && otherSet.Data.AssignedSpecIndex == specIndex)
-            {
-                otherSet.Data.AssignedSpecIndex.reset();
-                markChanged(otherSet);
-            }
-        }
-        itr->second.Data.AssignedSpecIndex = specIndex;
-    }
-    else
-        itr->second.Data.AssignedSpecIndex.reset();
-
-    markChanged(itr->second);
 }
 
 void Player::RemoveAtLoginFlag(AtLoginFlags flags, bool persist /*= false*/)
@@ -33041,30 +28630,6 @@ void Player::_LoadTraits(PreparedQueryResult configsResult, PreparedQueryResult 
         }
     }
 
-    // Auto-grant the Skyriding (dynamic-flight) trait config if the character lacks it. The base
-    // Skyriding kit lives in a Generic trait config (TraitSystemID == 1, tree 672). Unlike Combat
-    // configs, retail creates it client-side once Skyriding is unlocked, so boosted / pre-existing
-    // characters never receive it and end up in Skyriding mode with no abilities and no Vigor. Seed
-    // it server-side with the full kit (movement abilities + every Vigor node) so the mode is usable.
-    // The abilities are learned by the generic-config apply pass below (default case) via ApplyTraitConfig.
-    constexpr int32 SKYRIDING_TRAIT_SYSTEM_ID = 1;
-    bool const hasSkyridingConfig = m_activePlayerData->TraitConfigs.FindIf([](UF::TraitConfig const& traitConfig)
-    {
-        return static_cast<TraitConfigType>(*traitConfig.Type) == TraitConfigType::Generic
-            && traitConfig.TraitSystemID == SKYRIDING_TRAIT_SYSTEM_ID;
-    }).first != nullptr;
-
-    if (!hasSkyridingConfig)
-    {
-        WorldPackets::Traits::TraitConfig skyridingConfig;
-        skyridingConfig.Type = TraitConfigType::Generic;
-        skyridingConfig.TraitSystemID = SKYRIDING_TRAIT_SYSTEM_ID;
-        skyridingConfig.Name = "Skyriding";
-        TraitMgr::FillTraitConfigWithSystemKit(skyridingConfig);
-        if (!skyridingConfig.Entries.empty())
-            CreateTraitConfig(skyridingConfig);
-    }
-
     UF::TraitConfig const* activeTraitConfig = m_activePlayerData->TraitConfigs.FindIf([&](UF::TraitConfig const& traitConfig)
     {
         return traitConfig.Type == AsUnderlyingType(TraitConfigType::Combat)
@@ -33098,12 +28663,6 @@ void Player::_LoadTraits(PreparedQueryResult configsResult, PreparedQueryResult 
 
         ApplyTraitConfig(id, true);
     }
-
-    // Everything that existed at login has now been applied exactly once. Configs created from here
-    // on (Spell::EffectCreateTraitTreeConfig, e.g. 384557 -> Skyriding tree 672) are no longer picked
-    // up by this sweep, so that effect applies them itself - it keys off this flag so the two paths
-    // stay mutually exclusive and a config can never be applied twice in one login.
-    m_traitConfigsApplied = true;
 }
 
 void Player::_SaveTalents(CharacterDatabaseTransaction trans)
@@ -33522,48 +29081,7 @@ void Player::LoadActions(PreparedQueryResult result)
 {
     _LoadActions(result);
 
-    EnsureSkyridingActionDefaults();
-
     SendActionButtons(1);
-}
-
-void Player::EnsureSkyridingActionDefaults()
-{
-    // While on a skyriding mount the client swaps the main bar to the skyriding bonus-bar page,
-    // which reads action-button slots 120-131. The retail default layout of that page, identical
-    // in the 66709 and 67314 sniffs' SMSG_UPDATE_ACTION_BUTTONS: 120 Whirling Surge, 121 Surge
-    // Forward, 122 empty, 123 Skyward Ascent, 124 Second Wind, 125 Aerial Halt (no Dismount).
-    // Trait-granted spells never fire the client's on-learn auto-placement, so replicate the
-    // default here - each spell only if known, missing from every bar, and its slot still free.
-    // Must run AFTER the async action-button load (_LoadActions clears and rebuilds
-    // m_actionButtons), i.e. from LoadActions.
-    static constexpr std::pair<uint8 /*slot*/, uint32 /*spellId*/> skyridingBarDefaults[] =
-    {
-        { 120, 361584 }, // Whirling Surge
-        { 121, 372608 }, // Surge Forward
-        { 123, 372610 }, // Skyward Ascent
-        { 124, 425782 }, // Second Wind
-        { 125, 403092 }, // Aerial Halt
-    };
-
-    for (auto const& [slot, barSpellId] : skyridingBarDefaults)
-    {
-        if (!HasSpell(barSpellId))
-            continue;
-
-        bool onAnyBar = std::ranges::any_of(m_actionButtons, [spellId = barSpellId](auto const& button)
-        {
-            return button.second.uState != ACTIONBUTTON_DELETED
-                && button.second.GetType() == ACTION_BUTTON_SPELL
-                && button.second.GetAction() == spellId;
-        });
-        if (onAnyBar)
-            continue;
-
-        auto buttonItr = m_actionButtons.find(slot);
-        if (buttonItr == m_actionButtons.end() || buttonItr->second.uState == ACTIONBUTTON_DELETED)
-            AddActionButton(slot, barSpellId, ACTION_BUTTON_SPELL);
-    }
 }
 
 void Player::CreateTraitConfig(WorldPackets::Traits::TraitConfig& traitConfig)
@@ -33594,72 +29112,6 @@ void Player::CreateTraitConfig(WorldPackets::Traits::TraitConfig& traitConfig)
     }
 
     m_traitConfigStates[configId] = PLAYERSPELL_CHANGED;
-}
-
-// Bring an already existing config back in line with the current TraitCond::Granted data: add the
-// granted entries it is missing and raise GrantedRanks that grew. Without this a DB2/hotfix grant
-// change (or any newly satisfied Granted condition) only ever reaches characters whose config is
-// created afterwards - _LoadTraits seeds the granted entries once, at config creation time.
-void Player::SyncGrantedTraitEntries(int32 configId)
-{
-    UF::TraitConfig const* traitConfig = GetTraitConfig(configId);
-    if (!traitConfig)
-        return;
-
-    std::vector<UF::TraitEntry> grantedEntries = TraitMgr::GetGrantedTraitEntriesForConfig(WorldPackets::Traits::TraitConfig(*traitConfig), this);
-    if (grantedEntries.empty())
-        return;
-
-    // Before the _LoadTraits sweep nothing is applied yet: only bring the update fields up to date and
-    // let the sweep learn the spells, otherwise the entry would be applied twice in the same login.
-    bool const applyTraits = m_traitConfigsApplied;
-
-    auto configSetter = m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::TraitConfigs, configId);
-
-    for (UF::TraitEntry const& grantedEntry : grantedEntries)
-    {
-        // re-fetch: ApplyTraitEntry learns spells, which can re-enter and grow the dynamic fields
-        traitConfig = GetTraitConfig(configId);
-        if (!traitConfig)
-            return;
-
-        int32 const existingIndex = traitConfig->Entries.FindIndexIf([&](UF::TraitEntry const& entry)
-        {
-            return entry.TraitNodeID == grantedEntry.TraitNodeID && entry.TraitNodeEntryID == grantedEntry.TraitNodeEntryID;
-        });
-
-        // same gate ApplyTraitConfig uses, so a node under an inactive sub-tree is stored but not learned
-        bool const applyEntry = applyTraits && TraitMgr::CanApplyTraitNode(*traitConfig, grantedEntry);
-
-        if (existingIndex < 0)
-        {
-            AddDynamicUpdateFieldValue(configSetter.ModifyValue(&UF::TraitConfig::Entries)) = grantedEntry;
-            m_traitConfigStates[configId] = PLAYERSPELL_CHANGED;
-
-            if (applyEntry)
-                ApplyTraitEntry(grantedEntry.TraitNodeEntryID, grantedEntry.Rank, grantedEntry.GrantedRanks, true);
-
-            continue;
-        }
-
-        int32 const existingRank = traitConfig->Entries[existingIndex].Rank;
-        int32 const existingGrantedRanks = traitConfig->Entries[existingIndex].GrantedRanks;
-        if (existingGrantedRanks >= grantedEntry.GrantedRanks)
-            continue;
-
-        // the learned spell carries rank + grantedRanks, so un-apply at the old rank before raising it
-        if (applyEntry)
-            ApplyTraitEntry(grantedEntry.TraitNodeEntryID, existingRank, existingGrantedRanks, false);
-
-        SetUpdateFieldValue(configSetter
-            .ModifyValue(&UF::TraitConfig::Entries, existingIndex)
-            .ModifyValue(&UF::TraitEntry::GrantedRanks), grantedEntry.GrantedRanks);
-        m_traitConfigStates[configId] = PLAYERSPELL_CHANGED;
-
-        if (applyEntry)
-            ApplyTraitEntry(grantedEntry.TraitNodeEntryID, existingRank, grantedEntry.GrantedRanks, true);
-    }
 }
 
 void Player::AddTraitConfig(WorldPackets::Traits::TraitConfig const& traitConfig)
@@ -33913,69 +29365,6 @@ void Player::ApplyTraitEntryChanges(int32 editedConfigId, WorldPackets::Traits::
     m_traitConfigStates[editedConfigId] = PLAYERSPELL_CHANGED;
 }
 
-void Player::ResetProfessionSpecialization(int32 identifier)
-{
-    // The client's identifier may be either the TraitConfig ID or the profession SkillLineID; match a Profession
-    // config on either so we never act on the wrong (or a combat) config.
-    UF::TraitConfig const* config = m_activePlayerData->TraitConfigs.FindIf([identifier](UF::TraitConfig const& c)
-    {
-        return static_cast<TraitConfigType>(*c.Type) == TraitConfigType::Profession
-            && (*c.ID == identifier || *c.SkillLineID == identifier);
-    }).second;
-    if (!config)
-        return;
-
-    int32 const configId = *config->ID;
-
-    // Refund the currency the player actually spent to fill this tree. Cost is linear in rank and granted (free)
-    // ranks were never paid for, so the refundable amount is the cost of (Rank - GrantedRanks) per entry.
-    std::vector<WorldPackets::Traits::TraitEntry> spentEntries;
-    for (int32 i = 0; i < std::ssize(config->Entries); ++i)
-    {
-        UF::TraitEntry const& entry = config->Entries[i];
-        int32 const paidRank = int32(entry.Rank) - int32(entry.GrantedRanks);
-        if (paidRank <= 0)
-            continue;
-
-        WorldPackets::Traits::TraitEntry& refundEntry = spentEntries.emplace_back();
-        refundEntry.TraitNodeID = entry.TraitNodeID;
-        refundEntry.TraitNodeEntryID = entry.TraitNodeEntryID;
-        refundEntry.Rank = paidRank;
-        refundEntry.GrantedRanks = 0;
-    }
-
-    std::map<int32, TraitMgr::SpentCurrency> refund;
-    TraitMgr::FillSpentCurrenciesMap(spentEntries, refund);
-    for (auto const& [traitCurrencyId, amount] : refund)
-    {
-        TraitCurrencyEntry const* traitCurrency = sTraitCurrencyStore.LookupEntry(traitCurrencyId);
-        if (!traitCurrency || amount.Total <= 0)
-            continue;
-
-        switch (traitCurrency->GetType())
-        {
-            case TraitCurrencyType::Gold:
-                ModifyMoney(amount.Total);
-                break;
-            case TraitCurrencyType::CurrencyTypesBased:
-                AddCurrency(traitCurrency->CurrencyTypesID, uint32(amount.Total), CurrencyGainSource::AzeriteRespec);
-                break;
-            default:
-                break;
-        }
-    }
-
-    // Reset the specialization tree: apply an empty copy of the config. UpdateTraitConfig removes every entry
-    // (unapplying the profession bonuses) and replicates the cleared config to the client. No gold cost is charged
-    // for the respec itself (the retail escalating cost is a follow-up); the knowledge refund above is exact.
-    WorldPackets::Traits::TraitConfig emptyConfig(*config);
-    emptyConfig.Entries.clear();
-    emptyConfig.SubTrees.clear();
-    UpdateTraitConfig(std::move(emptyConfig), 0, false);
-
-    m_traitConfigStates[configId] = PLAYERSPELL_CHANGED;
-}
-
 void Player::RenameTraitConfig(int32 editedConfigId, std::string&& newName)
 {
     UF::TraitConfig const* editedConfig = m_activePlayerData->TraitConfigs.Get(editedConfigId);
@@ -34003,15 +29392,6 @@ void Player::DeleteTraitConfig(int32 deletedConfigId)
         .ModifyValue(&UF::ActivePlayerData::TraitConfigs), deletedConfigId);
 
     m_traitConfigStates[deletedConfigId] = PLAYERSPELL_REMOVED;
-}
-
-void Player::SetFrozenPerksProgramVendorItem(WorldPackets::PerksProgram::PerksVendorItem const* item)
-{
-    auto setter = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::FrozenPerksVendorItem);
-    if (item)
-        SetUpdateFieldValue(setter, *item);
-    else
-        SetUpdateFieldValue(setter, WorldPackets::PerksProgram::PerksVendorItem{});
 }
 
 void Player::ApplyTraitConfig(int32 configId, bool apply)
@@ -34437,13 +29817,9 @@ ObjectGuid Player::GetStableMaster() const
 
 void Player::SetStableMaster(ObjectGuid stableMaster)
 {
-    // The modern (Dragonflight+) stable window is opened client-side from the
-    // ActivePlayerData::PetStable update field: the client shows it once StableMaster
-    // is a valid GUID. The previous early-return when PetStable had no value meant a
-    // hunter whose stable info was not yet initialized (e.g. no pets in the stable
-    // list) never got StableMaster set, so the stable window would not open at all.
-    // Passing index 0 to ModifyValue initialises the optional if it is not present,
-    // exactly as AddPetToUpdateFields does, so the window can always open.
+    if (!m_activePlayerData->PetStable.has_value())
+        return;
+
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
         .ModifyValue(&UF::ActivePlayerData::PetStable, 0)
         .ModifyValue(&UF::StableInfo::StableMaster), stableMaster);
@@ -34644,16 +30020,6 @@ void Player::_LoadPetStable(uint32 summonedPetNumber, PreparedQueryResult result
 
     m_petStable = std::make_unique<PetStable>();
 
-    // Load which stable pets the player pinned as favorites (kept in its own table, keyed by pet number).
-    {
-        CharacterDatabasePreparedStatement* favStmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_PET_FAVORITES);
-        favStmt->setUInt64(0, GetGUID().GetCounter());
-        if (PreparedQueryResult favResult = CharacterDatabase.Query(favStmt))
-            do
-                m_petStable->FavoritePetNumbers.insert((*favResult)[0].GetUInt32());
-            while (favResult->NextRow());
-    }
-
     //         0      1        2      3    4           5     6     7        8          9       10      11        12              13       14              15
     // SELECT id, entry, modelid, level, exp, Reactstate, slot, name, renamed, curhealth, curmana, abdata, savetime, CreatedBySpell, PetType, specialization FROM character_pet WHERE owner = ?
     if (result)
@@ -34684,16 +30050,14 @@ void Player::_LoadPetStable(uint32 summonedPetNumber, PreparedQueryResult result
                 m_petStable->ActivePets[slot] = std::move(petInfo);
 
                 if (m_petStable->ActivePets[slot]->Type == HUNTER_PET)
-                    AddPetToUpdateFields(*m_petStable->ActivePets[slot], slot,
-                        PetStableFlags(PET_STABLE_ACTIVE | (m_petStable->IsFavorite(m_petStable->ActivePets[slot]->PetNumber) ? PET_STABLE_FAVORITE : 0)));
+                    AddPetToUpdateFields(*m_petStable->ActivePets[slot], slot, PET_STABLE_ACTIVE);
             }
             else if (slot >= PET_SAVE_FIRST_STABLE_SLOT && slot < PET_SAVE_LAST_STABLE_SLOT)
             {
                 m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT] = std::move(petInfo);
 
                 if (m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT]->Type == HUNTER_PET)
-                    AddPetToUpdateFields(*m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT], slot,
-                        PetStableFlags(PET_STABLE_INACTIVE | (m_petStable->IsFavorite(m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT]->PetNumber) ? PET_STABLE_FAVORITE : 0)));
+                    AddPetToUpdateFields(*m_petStable->StabledPets[slot - PET_SAVE_FIRST_STABLE_SLOT], slot, PET_STABLE_INACTIVE);
             }
             else if (slot == PET_SAVE_NOT_IN_SLOT)
                 m_petStable->UnslottedPets.push_back(std::move(petInfo));
@@ -34718,295 +30082,16 @@ void Player::CreateGarrison(uint32 garrSiteId)
 {
     std::unique_ptr<Garrison> garrison(new Garrison(this));
     if (garrison->Create(garrSiteId))
-        _garrisons[garrison->GetType()] = std::move(garrison);
+        _garrison = std::move(garrison);
 }
 
-void Player::DeleteGarrison(GarrisonType type)
+void Player::DeleteGarrison()
 {
-    auto itr = _garrisons.find(type);
-    if (itr != _garrisons.end())
+    if (_garrison)
     {
-        itr->second->Delete();
-        _garrisons.erase(itr);
+        _garrison->Delete();
+        _garrison.reset();
     }
-}
-
-Garrison* Player::GetGarrison(GarrisonType type) const
-{
-    auto itr = _garrisons.find(type);
-    if (itr != _garrisons.end())
-        return itr->second.get();
-
-    return nullptr;
-}
-
-Garrison* Player::GetGarrisonWithMission(uint32 missionRecID) const
-{
-    for (auto const& [type, garrison] : _garrisons)
-        if (garrison->GetMissionByRecID(missionRecID))
-            return garrison.get();
-
-    return nullptr;
-}
-
-void Player::CreateHousing(ObjectGuid neighborhoodGuid, uint8 plotIndex)
-{
-    std::unique_ptr<Housing> housing(new Housing(this));
-    if (housing->Create(neighborhoodGuid, plotIndex) == HOUSING_RESULT_SUCCESS)
-    {
-        // Immediately persist to DB so housing survives server restarts
-        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
-        housing->SaveToDB(trans);
-        CharacterDatabase.CommitTransaction(trans);
-
-        // Update PlayerHouseInfoComponentData::Houses UpdateField so dashboard works mid-session
-        UF::PlayerMirrorHouse& mirrorHouse = AddDynamicUpdateFieldValue(
-            m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
-                .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
-        mirrorHouse.HouseGUID = housing->GetHouseGuid();
-        mirrorHouse.NeighborhoodGUID = housing->GetNeighborhoodGuid();
-        mirrorHouse.Level = housing->GetLevel();
-        mirrorHouse.Favor = 0;
-        mirrorHouse.MapID = static_cast<int32>(GetMapId());
-        mirrorHouse.PlotID = housing->GetPlotIndex();
-
-        TC_LOG_ERROR("housing", "Player::CreateHousing: PlayerMirrorHouse: HouseGuid={} NeighborhoodGuid={} PlotID={} Level={} MapID={}",
-            housing->GetHouseGuid().ToString(), housing->GetNeighborhoodGuid().ToString(), mirrorHouse.PlotID, mirrorHouse.Level, mirrorHouse.MapID);
-
-        _housings.push_back(std::move(housing));
-    }
-}
-
-void Player::DeleteHousing(ObjectGuid neighborhoodGuid)
-{
-    auto it = std::find_if(_housings.begin(), _housings.end(),
-        [&neighborhoodGuid](std::unique_ptr<Housing> const& h) { return h && h->GetNeighborhoodGuid() == neighborhoodGuid; });
-    if (it != _housings.end())
-    {
-        (*it)->Delete();
-        _housings.erase(it);
-    }
-}
-
-Housing* Player::GetHousing() const
-{
-    if (_housings.empty())
-        return nullptr;
-
-    // If on a HousingMap, return the housing for that map's neighborhood
-    if (IsInWorld())
-    {
-        if (HousingMap* housingMap = dynamic_cast<HousingMap*>(GetMap()))
-        {
-            if (Neighborhood* neighborhood = housingMap->GetNeighborhood())
-            {
-                ObjectGuid neighborhoodGuid = neighborhood->GetGuid();
-                for (auto const& h : _housings)
-                    if (h && h->GetNeighborhoodGuid() == neighborhoodGuid)
-                        return h.get();
-            }
-        }
-    }
-
-    // Default: return first housing
-    return _housings[0].get();
-}
-
-Housing* Player::GetHousingForNeighborhood(ObjectGuid neighborhoodGuid) const
-{
-    for (auto const& h : _housings)
-        if (h && h->GetNeighborhoodGuid() == neighborhoodGuid)
-            return h.get();
-    return nullptr;
-}
-
-std::vector<Housing const*> Player::GetAllHousings() const
-{
-    std::vector<Housing const*> result;
-    result.reserve(_housings.size());
-    for (auto const& h : _housings)
-        if (h)
-            result.push_back(h.get());
-    return result;
-}
-
-void Player::SetHousingEditorModeUpdateField(uint8 mode)
-{
-    if (m_playerHouseInfoComponentData.has_value())
-    {
-        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
-            .ModifyValue(&UF::PlayerHouseInfoComponentData::EditorMode), mode);
-    }
-}
-
-void Player::UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId)
-{
-    if (!m_playerHouseInfoComponentData.has_value())
-        return;
-
-    // DynamicUpdateField nested fields are PublicSet=false, so we snapshot, clear,
-    // and re-add entries with the updated MapID.
-    struct HouseSnapshot
-    {
-        ObjectGuid HouseGUID;
-        ObjectGuid NeighborhoodGUID;
-        uint32 Level;
-        uint32 Favor;
-        uint32 InitiativeFavor;
-        int32 MapID;
-        int32 PlotID;
-    };
-
-    UF::PlayerHouseInfoComponentData const& data = *m_playerHouseInfoComponentData;
-    bool found = false;
-    std::vector<HouseSnapshot> snapshots;
-    snapshots.reserve(data.Houses.size());
-
-    for (uint32 i = 0; i < data.Houses.size(); ++i)
-    {
-        HouseSnapshot s;
-        s.HouseGUID = data.Houses[i].HouseGUID;
-        s.NeighborhoodGUID = data.Houses[i].NeighborhoodGUID;
-        s.Level = data.Houses[i].Level;
-        s.Favor = data.Houses[i].Favor;
-        s.InitiativeFavor = data.Houses[i].InitiativeFavor;
-        s.PlotID = data.Houses[i].PlotID;
-
-        if (data.Houses[i].HouseGUID == houseGuid)
-        {
-            s.MapID = mapId;
-            found = true;
-        }
-        else
-        {
-            s.MapID = data.Houses[i].MapID;
-        }
-        snapshots.push_back(s);
-    }
-
-    if (!found)
-    {
-        TC_LOG_ERROR("housing", "Player::UpdateHousingMapId: House {} not found in PlayerHouseInfoComponentData for player {}",
-            houseGuid.ToString(), GetGUID().ToString());
-        return;
-    }
-
-    ClearDynamicUpdateFieldValues(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
-        .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
-
-    for (auto const& s : snapshots)
-    {
-        UF::PlayerMirrorHouse& h = AddDynamicUpdateFieldValue(
-            m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
-                .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
-        h.HouseGUID = s.HouseGUID;
-        h.NeighborhoodGUID = s.NeighborhoodGUID;
-        h.Level = s.Level;
-        h.Favor = s.Favor;
-        h.InitiativeFavor = s.InitiativeFavor;
-        h.MapID = s.MapID;
-        h.PlotID = s.PlotID;
-    }
-
-    TC_LOG_ERROR("housing", "Player::UpdateHousingMapId: Updated house {} MapID to {} for player {}",
-        houseGuid.ToString(), mapId, GetGUID().ToString());
-}
-
-void Player::SetCurrentHouse(ObjectGuid houseGuid)
-{
-    if (!m_playerHouseInfoComponentData.has_value())
-        return;
-
-    if (*m_playerHouseInfoComponentData->CurrentHouse == houseGuid)
-        return;
-
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
-        .ModifyValue(&UF::PlayerHouseInfoComponentData::CurrentHouse), houseGuid);
-
-    TC_LOG_DEBUG("housing", "Player::SetCurrentHouse: player={} currentHouse={}",
-        GetGUID().ToString(), houseGuid.IsEmpty() ? "<empty>" : houseGuid.ToString());
-}
-
-void Player::UpdateInitiativeFavor(uint32 favor)
-{
-    if (!m_playerHouseInfoComponentData.has_value())
-        return;
-
-    UF::PlayerHouseInfoComponentData const& data = *m_playerHouseInfoComponentData;
-
-    struct HouseSnapshot
-    {
-        ObjectGuid HouseGUID;
-        ObjectGuid NeighborhoodGUID;
-        uint32 Level;
-        uint32 Favor;
-        uint32 InitiativeFavor;
-        int32 MapID;
-        int32 PlotID;
-    };
-
-    std::vector<HouseSnapshot> snapshots;
-    snapshots.reserve(data.Houses.size());
-
-    for (uint32 i = 0; i < data.Houses.size(); ++i)
-    {
-        HouseSnapshot s;
-        s.HouseGUID = data.Houses[i].HouseGUID;
-        s.NeighborhoodGUID = data.Houses[i].NeighborhoodGUID;
-        s.Level = data.Houses[i].Level;
-        s.Favor = data.Houses[i].Favor;
-        s.InitiativeFavor = favor;
-        s.MapID = data.Houses[i].MapID;
-        s.PlotID = data.Houses[i].PlotID;
-        snapshots.push_back(s);
-    }
-
-    ClearDynamicUpdateFieldValues(m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
-        .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
-
-    for (auto const& s : snapshots)
-    {
-        UF::PlayerMirrorHouse& h = AddDynamicUpdateFieldValue(
-            m_values.ModifyValue(&Player::m_playerHouseInfoComponentData, 0)
-                .ModifyValue(&UF::PlayerHouseInfoComponentData::Houses));
-        h.HouseGUID = s.HouseGUID;
-        h.NeighborhoodGUID = s.NeighborhoodGUID;
-        h.Level = s.Level;
-        h.Favor = s.Favor;
-        h.InitiativeFavor = s.InitiativeFavor;
-        h.MapID = s.MapID;
-        h.PlotID = s.PlotID;
-    }
-}
-
-void Player::UpdateDungeonScore()
-{
-    // The client renders Mythic+ rating purely from these two update fields: the public roster summary
-    // (party frames / inspect) and the owner's full per-season score tree (the Mythic+ UI, score colors).
-    WorldPackets::MythicPlus::DungeonScoreSummary summary;
-    WorldPackets::MythicPlus::DungeonScoreData data;
-    if (MythicPlusData* mythicPlus = GetMythicPlusData())
-    {
-        mythicPlus->BuildDungeonScoreSummary(summary);
-        mythicPlus->BuildDungeonScoreData(data);
-    }
-
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::DungeonScore), std::move(summary));
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::DungeonScore), std::move(data));
-}
-
-void Player::SetItemUpgradeWatermark(uint32 slot, float itemLevel)
-{
-    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ItemUpgradeHighWatermark, slot), itemLevel);
-}
-
-Garrison* Player::GetGarrisonWithFollower(uint64 followerDbID) const
-{
-    for (auto const& [type, garrison] : _garrisons)
-        if (garrison->GetFollower(followerDbID))
-            return garrison.get();
-
-    return nullptr;
 }
 
 void Player::SendMovementSetCollisionHeight(float height, WorldPackets::Movement::UpdateCollisionHeightReason reason)
@@ -35062,8 +30147,10 @@ void Player::SendPlayerChoice(ObjectGuid sender, int32 choiceId)
     displayPlayerChoice.HideWarboardHeader = playerChoice->HideWarboardHeader;
     displayPlayerChoice.KeepOpenAfterChoice = playerChoice->KeepOpenAfterChoice;
     displayPlayerChoice.ShowChoicesAsList = playerChoice->ShowChoicesAsList;
-    displayPlayerChoice.ForceDontShowChoicesAsList = playerChoice->ForceDontShowChoicesAsList;
     displayPlayerChoice.RequiresSelection = playerChoice->RequiresSelection;
+    displayPlayerChoice.ShowChoicesAsGrid = playerChoice->ShowChoicesAsGrid;
+    displayPlayerChoice.HideAnswerArt = playerChoice->HideAnswerArt;
+    displayPlayerChoice.ShowChoicesAsColumns = playerChoice->ShowChoicesAsColumns;
 
     for (std::size_t i = 0; i < playerChoice->Responses.size() && (!playerChoice->MaxResponses || displayPlayerChoice.Responses.size() < *playerChoice->MaxResponses); ++i)
     {
@@ -35147,6 +30234,8 @@ void Player::SendPlayerChoice(ObjectGuid sender, int32 choiceId)
             mawPower.Rarity = playerChoiceResponseTemplate.MawPower->Rarity;
             mawPower.SpellID = playerChoiceResponseTemplate.MawPower->SpellID;
             mawPower.MaxStacks = playerChoiceResponseTemplate.MawPower->MaxStacks;
+
+            displayPlayerChoice.HasPowerChoice = true;
         }
     }
 
@@ -36513,13 +31602,6 @@ void Player::ExecutePendingSpellCastRequest()
             triggerFlag = TRIGGERED_FULL_MASK;
         }
 
-        // The research UI casts a project's own SpellID, which is never learned into the spellbook.
-        // Fail closed unless this exact solve script is enabled and the player's current state permits it;
-        // otherwise the spell's CREATE_ITEM effect could run without the bookkeeping script.
-        if (plrCaster->CanCastResearchProjectSpell(spellInfo->Id) &&
-            sObjectMgr->HasEnabledSpellScript(spellInfo->Id, "spell_archaeology_solve"))
-            allow = true;
-
         if (!allow)
         {
             CancelPendingCastRequest();
@@ -36578,8 +31660,6 @@ void Player::ExecutePendingSpellCastRequest()
 
     spell->m_fromClient = true;
     std::ranges::copy(_pendingSpellCastRequest->CastRequest.Misc, std::ranges::begin(spell->m_misc.Raw.Data));
-    if (!_pendingSpellCastRequest->CastRequest.Weight.empty())
-        spell->m_customArg = std::move(_pendingSpellCastRequest->CastRequest.Weight);
     spell->prepare(targets);
 
     _pendingSpellCastRequest = nullptr;
@@ -36651,9 +31731,7 @@ bool Player::ProcessItemCast(SpellCastRequest& castRequest, SpellCastTargets con
     }
 
     // check also  BIND_ON_ACQUIRE and BIND_QUEST for .additem or .additemset case by GM (not binded at adding to inventory)
-    if (item->GetBonding() == BIND_ON_USE || item->GetBonding() == BIND_ON_ACQUIRE || item->GetBonding() == BIND_QUEST
-        || item->GetBonding() == BIND_WOW_ACCOUNT || item->GetBonding() == BIND_BNET_ACCOUNT
-        || item->GetBonding() == BIND_BNET_ACCOUNT_UNTIL_EQUIPPED)
+    if (item->GetBonding() == BIND_ON_USE || item->GetBonding() == BIND_ON_ACQUIRE || item->GetBonding() == BIND_QUEST)
     {
         if (!item->IsSoulBound())
         {
@@ -36697,220 +31775,4 @@ bool Player::CanExecutePendingSpellCastRequest()
         return false;
 
     return true;
-}
-
-void Player::SetDelveData(int32 mapId, int32 tier, uint64 instanceId, int32 entranceType,
-    std::vector<ObjectGuid> playersEligibleForRewards,
-    std::vector<int32> activeOptionalAffixIDs,
-    bool restrictRewardsToCurrentPlayers)
-{
-    auto delveData = m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::DelveData, mapId);
-
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::MapID), mapId);
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::Tier), tier);
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::InstanceID), instanceId);
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::EntranceType), entranceType);
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::RestrictingRewardPlayers), uint8(restrictRewardsToCurrentPlayers ? 1 : 0));
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::PlayersEligibleForRewards), std::move(playersEligibleForRewards));
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::ActiveOptionalAffixIDs), std::move(activeOptionalAffixIDs));
-}
-
-void Player::ClearDelveData(int32 mapId)
-{
-    // Note (68275): the client's delve-map wire format has no delete op — a removed
-    // entry cannot be expressed in a values update (see WriteDelveMapFieldUpdate) and
-    // only disappears client-side with the next full ActivePlayer create block
-    // (e.g. the teleport out of the delve that accompanies every ClearDelveData call).
-    RemoveMapUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::DelveData), mapId);
-}
-
-void Player::SetDelveProgressData(int32 key, int32 lastSelectedMapId, int32 highestTierUnlocked,
-    std::vector<int32> weeklyCounters)
-{
-    // Publishes account-wide delve progression (Delves::DelveProgress) into the
-    // JamDelveData mirror so the client UI can populate highest-unlocked /
-    // last-selected state. The wire layout of each map entry is byte-exact
-    // (68275 per-entry deserializer 0x7FF7291628A0):
-    //   uint32, uint32, uint64, guidCount, intCount, uint32, PackedGUID[], uint32[], bool(MSB)
-    // — matched 1:1 by UF::DelveData::WriteCreate/WriteUpdate.
-    //
-    // The struct FIELD NAMES are now authoritative retail names from the 68275
-    // reflection descriptors (mapID/tier/instanceID/restrictingRewardPlayers/
-    // playersEligibleForRewards/activeOptionalAffixIDs/entranceType) — i.e. the
-    // struct canonically describes ACTIVE-delve state. This progression entry
-    // deliberately REPURPOSES those fields, which remains a hypothesis:
-    // // UNVERIFIED — needs sniff: the map KEY meaning (we use the current delves
-    // season ID; could be scenario/map ID) and whether retail publishes a
-    // progression-shaped entry in this map at all.
-    //   MapID  <- last-selected delve map ID (0 = none)
-    //   Tier   <- HighestTierUnlocked
-    //   InstanceID <- 0 (no instance backs a progression entry)
-    //   EntranceType <- TIERED_ENTRANCE_TYPE_DELVE
-    //   ActiveOptionalAffixIDs <- { WeeklyCompletions, HighestTierThisWeek,
-    //                               WeeklyBountifulCount, WeeklyCofferShards }
-    //     (weakest part of the hypothesis — retail semantics are delve affix ids)
-    //   RestrictingRewardPlayers <- false
-    auto delveData = m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::DelveData, key);
-
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::MapID), lastSelectedMapId);
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::Tier), highestTierUnlocked);
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::InstanceID), uint64(0));
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::EntranceType), int32(Delves::TIERED_ENTRANCE_TYPE_DELVE));
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::RestrictingRewardPlayers), uint8(0));
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::PlayersEligibleForRewards), std::vector<ObjectGuid>());
-    SetUpdateFieldValue(delveData.ModifyValue(&UF::DelveData::ActiveOptionalAffixIDs), std::move(weeklyCounters));
-}
-
-namespace
-{
-    // PlayerDataElementType: Int=0 (int64), Float=1 (32-bit float). Verified
-    // against IDA build 67186 (sub_7FF75CF73E50) and PlayerDataElementAccount.dbd
-    // / PlayerDataElementCharacter.dbd LAYOUT AEC1DEF3 (build 12.0.5.67186).
-    constexpr uint32 PDE_TYPE_INT = 0;
-    constexpr uint32 PDE_TYPE_FLOAT = 1;
-
-    // Resolve a PDE record id (used by the C_DelvesUI Lua API and by the
-    // server-side PDE_* constants in DelvesDefines.h) into the corresponding
-    // ActivePlayerData::{Account,Character}DataElements array index.
-    // Returns std::nullopt if the record id is not in the DB2 store.
-    inline Optional<uint32> ResolveAccountPdeStorageIndex(uint32 recordId)
-    {
-        if (PlayerDataElementAccountEntry const* entry = sPlayerDataElementAccountStore.LookupEntry(recordId))
-            return uint32(entry->StorageIndex);
-        return std::nullopt;
-    }
-    inline Optional<uint32> ResolveCharacterPdeStorageIndex(uint32 recordId)
-    {
-        if (PlayerDataElementCharacterEntry const* entry = sPlayerDataElementCharacterStore.LookupEntry(recordId))
-            return uint32(entry->StorageIndex);
-        return std::nullopt;
-    }
-}
-
-void Player::SetAccountDataElementInt(uint32 id, int64 value)
-{
-    Optional<uint32> storageIdx = ResolveAccountPdeStorageIndex(id);
-    if (!storageIdx)
-    {
-        TC_LOG_DEBUG("entities.player", "SetAccountDataElementInt: PDE record {} not in PlayerDataElementAccount.db2", id);
-        return;
-    }
-    // ModifyValue(field, index) auto-grows the dynamic field with zero-initialised
-    // slots up to `index`, marks the slot dirty, and returns a mutable reference.
-    auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::AccountDataElements, *storageIdx);
-    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_INT);
-    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Int64Value), value);
-}
-
-void Player::SetAccountDataElementFloat(uint32 id, float value)
-{
-    Optional<uint32> storageIdx = ResolveAccountPdeStorageIndex(id);
-    if (!storageIdx)
-    {
-        TC_LOG_DEBUG("entities.player", "SetAccountDataElementFloat: PDE record {} not in PlayerDataElementAccount.db2", id);
-        return;
-    }
-    auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::AccountDataElements, *storageIdx);
-    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_FLOAT);
-    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::FloatValue), value);
-}
-
-void Player::SetCharacterDataElementInt(uint32 id, int64 value)
-{
-    Optional<uint32> storageIdx = ResolveCharacterPdeStorageIndex(id);
-    if (!storageIdx)
-    {
-        TC_LOG_DEBUG("entities.player", "SetCharacterDataElementInt: PDE record {} not in PlayerDataElementCharacter.db2", id);
-        return;
-    }
-    auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements, *storageIdx);
-    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_INT);
-    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Int64Value), value);
-}
-
-void Player::SetCharacterDataElementFloat(uint32 id, float value)
-{
-    Optional<uint32> storageIdx = ResolveCharacterPdeStorageIndex(id);
-    if (!storageIdx)
-    {
-        TC_LOG_DEBUG("entities.player", "SetCharacterDataElementFloat: PDE record {} not in PlayerDataElementCharacter.db2", id);
-        return;
-    }
-    auto slot = m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements, *storageIdx);
-    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::Type), PDE_TYPE_FLOAT);
-    SetUpdateFieldValue(slot.ModifyValue(&UF::PlayerDataElement::FloatValue), value);
-}
-
-UF::PlayerDataElement const* Player::GetAccountDataElement(uint32 id) const
-{
-    Optional<uint32> storageIdx = ResolveAccountPdeStorageIndex(id);
-    if (!storageIdx || *storageIdx >= m_activePlayerData->AccountDataElements.size())
-        return nullptr;
-    return &m_activePlayerData->AccountDataElements[*storageIdx];
-}
-
-UF::PlayerDataElement const* Player::GetCharacterDataElement(uint32 id) const
-{
-    Optional<uint32> storageIdx = ResolveCharacterPdeStorageIndex(id);
-    if (!storageIdx || *storageIdx >= m_activePlayerData->CharacterDataElements.size())
-        return nullptr;
-    return &m_activePlayerData->CharacterDataElements[*storageIdx];
-}
-
-void Player::RemoveAccountDataElement(uint32 id)
-{
-    Optional<uint32> storageIdx = ResolveAccountPdeStorageIndex(id);
-    if (!storageIdx || *storageIdx >= m_activePlayerData->AccountDataElements.size())
-        return;
-    RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::AccountDataElements), *storageIdx);
-}
-
-void Player::RemoveCharacterDataElement(uint32 id)
-{
-    Optional<uint32> storageIdx = ResolveCharacterPdeStorageIndex(id);
-    if (!storageIdx || *storageIdx >= m_activePlayerData->CharacterDataElements.size())
-        return;
-    RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
-        .ModifyValue(&UF::ActivePlayerData::CharacterDataElements), *storageIdx);
-}
-
-bool Player::IsInDelveInstance() const
-{
-    Map const* map = GetMap();
-    if (!map || !map->Instanceable())
-        return false;
-    return map->GetDifficultyID() == Difficulty(Delves::DELVE_DIFFICULTY_ID);
-}
-
-void Player::LoadDelvePlayerDataElements()
-{
-    // Project persisted delve state (delve_companion DB row) into the
-    // PlayerDataElement UpdateField. The client surfaces these via the
-    // C_DelvesUI Lua API (e.g. GetPlayerCompanionPDEID, GetCurrentDelvesSeasonNumber).
-    Delves::CompanionState state;
-    Delves::DelvesCompanion::LoadFromDB(GetSession()->GetBattlenetAccountId(), state);
-
-    // PDE 13 = DELVES_COMPANION_INFO_SELECTION_CHARACTER_DATA_ELEMENT_ID — the
-    // currently-selected companion's PlayerCompanionInfo.ID (from
-    // DelvesDefines.h::PDE_COMPANION_INFO_SELECTION).
-    if (state.CompanionId != 0)
-        SetCharacterDataElementInt(Delves::PDE_COMPANION_INFO_SELECTION, int64(state.CompanionId));
-
-    // PDE 522 (NEW 12.0.7) = TIERED_ENTRANCE_INFO_WORLD_TIER_DIFFICULTY_CHARACTER_ELEMENT_ID —
-    // backs C_DelvesUI.GetWorldTierDifficultyForActivePlayer(). We don't run World
-    // Tier content yet; expose the baseline difficulty so the client API resolves.
-    SetCharacterDataElementInt(Delves::PDE_WORLD_TIER_DIFFICULTY,
-        int64(Delves::WorldTierDifficulty::Normal));
-
-    // Mirror account-wide delve progression (highest unlocked tier, weekly counters)
-    // into the JamDelveData ActivePlayer map so the delve UI populates on login.
-    Delves::DelvesRewards::PublishProgress(this);
 }

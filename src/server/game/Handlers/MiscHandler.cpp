@@ -25,24 +25,19 @@
 #include "Chat.h"
 #include "CinematicMgr.h"
 #include "ClientConfigPackets.h"
-#include "CombatManager.h"
 #include "Common.h"
-#include "ConditionMgr.h"
 #include "Conversation.h"
 #include "ConversationAI.h"
 #include "Corpse.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "GameTime.h"
-#include "DBCEnums.h"
 #include "GossipDef.h"
 #include "Group.h"
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "InstancePackets.h"
-#include "ChallengeMode.h"
 #include "InstanceScript.h"
-#include "MajorFactionMgr.h"
 #include "Language.h"
 #include "Log.h"
 #include "Map.h"
@@ -51,9 +46,7 @@
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "OutdoorPvP.h"
-#include "PhasingHandler.h"
 #include "Player.h"
-#include "ReputationMgr.h"
 #include "RestMgr.h"
 #include "ScriptMgr.h"
 #include "Spell.h"
@@ -88,23 +81,6 @@ void WorldSession::HandleRepopRequest(WorldPackets::Misc::RepopRequest& /*packet
     GetPlayer()->RemovePet(nullptr, PET_SAVE_NOT_IN_SLOT, true);
     GetPlayer()->BuildPlayerRepop();
     GetPlayer()->RepopAtGraveyard();
-}
-
-void WorldSession::HandleSetPreferredCemetery(WorldPackets::Misc::SetPreferredCemetery& packet)
-{
-    // Store the player's chosen graveyard; RepopAtGraveyard honors it when it is linked to the current zone.
-    _player->SetPreferredGraveyard(packet.CemeteryID);
-}
-
-void WorldSession::HandleReportStuckInCombat(WorldPackets::Misc::ReportStuckInCombat& /*packet*/)
-{
-    // The client reports it believes the player is wrongly stuck in combat. Re-validate the player's
-    // combat references and drop any that are no longer valid (dead / out of range / gone), which clears
-    // a desynced combat state without ending combat that is still legitimately ongoing.
-    if (!_player->IsInCombat())
-        return;
-
-    _player->GetCombatManager().RevalidateCombat();
 }
 
 void WorldSession::HandleWhoOpcode(WorldPackets::Who::WhoRequestPkt& whoRequest)
@@ -417,14 +393,6 @@ void WorldSession::HandleRequestCemeteryList(WorldPackets::Misc::RequestCemetery
     SendPacket(packet.Write());
 }
 
-void WorldSession::HandleGetAccountNotifications(WorldPackets::Misc::GetAccountNotifications& /*packet*/)
-{
-    // TrinityCore has no account-notification system; answer the client's request with an empty list so
-    // it does not sit waiting for a response it would otherwise never receive.
-    WorldPackets::Misc::AccountNotificationsResponse response;
-    SendPacket(response.Write());
-}
-
 void WorldSession::HandleSetSelectionOpcode(WorldPackets::Misc::SetSelection& packet)
 {
     _player->SetSelection(packet.Selection);
@@ -495,12 +463,7 @@ void WorldSession::HandleResurrectResponse(WorldPackets::Misc::ResurrectResponse
     {
         if (InstanceScript* instance = ressPlayer->GetInstanceScript())
         {
-            // Raid encounters consume a charge while the encounter runs; Mythic Keystone dungeons use the
-            // run-wide pool for the entire active run (retail 12.x).
-            InstanceMap* instanceMap = ressPlayer->GetMap()->ToInstanceMap();
-            bool const limitActive = instance->IsEncounterInProgress()
-                || (instanceMap && instanceMap->GetChallengeMode() && instanceMap->GetChallengeMode()->IsActive());
-            if (limitActive)
+            if (instance->IsEncounterInProgress())
             {
                 if (!instance->GetCombatResurrectionCharges())
                     return;
@@ -535,19 +498,6 @@ void WorldSession::HandleAreaTriggerOpcode(WorldPackets::AreaTrigger::AreaTrigge
     {
         TC_LOG_DEBUG("network", "HandleAreaTriggerOpcode: Player '{}' {} too far, ignore Area Trigger ID: {}",
             player->GetName(), player->GetGUID().ToString(), packet.AreaTriggerID);
-
-        // The client remembers which triggers it has an outstanding assertion for and will not
-        // mention this one again until that bookkeeping is undone, so silently dropping the
-        // message strands the trigger until the player leaves and returns. Echoing the rejected
-        // message back rolls the client's record back and it re-asserts on a later update, by
-        // which time our view of its position has caught up.
-        // Only this disagreement is answered: it is a transient desync that a retry resolves.
-        // The other refusals below are permanent for as long as the player stands there, and
-        // the client re-sends immediately and indefinitely when denied, so they stay silent.
-        WorldPackets::AreaTrigger::AreaTriggerDenied areaTriggerDenied;
-        areaTriggerDenied.AreaTriggerID = packet.AreaTriggerID;
-        areaTriggerDenied.Entered = packet.Entered;
-        SendPacket(areaTriggerDenied.Write());
         return;
     }
 
@@ -1028,14 +978,7 @@ void WorldSession::HandleSetDungeonDifficultyOpcode(WorldPackets::Misc::SetDunge
             return;
 
         if (group->isLFGGroup())
-        {
-            // Refusing without a word leaves the difficulty button looking broken. The client has
-            // one error for exactly this condition - ERR_DIFFICULTY_DISABLED_IN_LFG, result 11 in
-            // its own game-error table - so say so instead of returning silently.
-            SendPacket(WorldPackets::Misc::ChangePlayerDifficultyResult(
-                WorldPackets::Misc::ChangePlayerDifficultyResultCode::DisabledInLFG).Write());
             return;
-        }
 
         // the difficulty is set even if the instances can't be reset
         group->ResetInstances(InstanceResetMethod::OnChangeDifficulty, _player);
@@ -1104,12 +1047,7 @@ void WorldSession::HandleSetRaidDifficultyOpcode(WorldPackets::Misc::SetRaidDiff
             return;
 
         if (group->isLFGGroup())
-        {
-            // Same refusal as the dungeon path, same client-side error.
-            SendPacket(WorldPackets::Misc::ChangePlayerDifficultyResult(
-                WorldPackets::Misc::ChangePlayerDifficultyResultCode::DisabledInLFG).Write());
             return;
-        }
 
         // the difficulty is set even if the instances can't be reset
         group->ResetInstances(InstanceResetMethod::OnChangeDifficulty, _player);
@@ -1171,131 +1109,10 @@ void WorldSession::HandleInstanceLockResponse(WorldPackets::Instance::InstanceLo
     _player->SetPendingBind(0, 0);
 }
 
-void WorldSession::HandleStartInstanceAbandonVote(WorldPackets::Instance::StartInstanceAbandonVote& /*packet*/)
-{
-    // Instance abandon voting not yet implemented
-    // Would need to start a vote for all group members in the instance
-}
-
-void WorldSession::HandleInstanceAbandonVoteResponse(WorldPackets::Instance::InstanceAbandonVoteResponse& /*packet*/)
-{
-    // Instance abandon vote response not yet implemented
-}
-
-void WorldSession::HandleSetDifficultyID(WorldPackets::Instance::SetDifficultyID& setDifficultyID)
-{
-    DifficultyEntry const* difficultyEntry = sDifficultyStore.LookupEntry(setDifficultyID.DifficultyID);
-    if (!difficultyEntry)
-    {
-        TC_LOG_DEBUG("network", "WorldSession::HandleSetDifficultyID: player {} sent an invalid difficulty {}",
-            _player->GetGUID().ToString(), setDifficultyID.DifficultyID);
-        return;
-    }
-
-    if (!(difficultyEntry->Flags & DIFFICULTY_FLAG_CAN_SELECT))
-        return;
-
-    // cannot reset while in an instance
-    Map* map = _player->FindMap();
-    if (map && map->Instanceable())
-        return;
-
-    Difficulty difficultyID = Difficulty(difficultyEntry->ID);
-    Group* group = _player->GetGroup();
-
-    if (difficultyEntry->InstanceType == MAP_INSTANCE)
-    {
-        if (group)
-        {
-            if (difficultyID == group->GetDungeonDifficultyID())
-                return;
-            if (!group->IsLeader(_player->GetGUID()) || group->isLFGGroup())
-                return;
-            group->ResetInstances(InstanceResetMethod::OnChangeDifficulty, _player);
-            group->SetDungeonDifficultyID(difficultyID);
-        }
-
-        if (difficultyID == _player->GetDungeonDifficultyID())
-            return;
-
-        if (!group)
-            _player->ResetInstances(InstanceResetMethod::OnChangeDifficulty);
-
-        _player->SetDungeonDifficultyID(difficultyID);
-        _player->SendDungeonDifficulty();
-    }
-    else if (difficultyEntry->InstanceType == MAP_RAID)
-    {
-        bool const legacy = (difficultyEntry->Flags & DIFFICULTY_FLAG_LEGACY) != 0;
-
-        if (group)
-        {
-            if (difficultyID == (legacy ? group->GetLegacyRaidDifficultyID() : group->GetRaidDifficultyID()))
-                return;
-            if (!group->IsLeader(_player->GetGUID()) || group->isLFGGroup())
-                return;
-            group->ResetInstances(InstanceResetMethod::OnChangeDifficulty, _player);
-            if (legacy)
-                group->SetLegacyRaidDifficultyID(difficultyID);
-            else
-                group->SetRaidDifficultyID(difficultyID);
-        }
-
-        if (difficultyID == (legacy ? _player->GetLegacyRaidDifficultyID() : _player->GetRaidDifficultyID()))
-            return;
-
-        if (!group)
-            _player->ResetInstances(InstanceResetMethod::OnChangeDifficulty);
-
-        if (legacy)
-            _player->SetLegacyRaidDifficultyID(difficultyID);
-        else
-            _player->SetRaidDifficultyID(difficultyID);
-
-        _player->SendRaidDifficulty(legacy);
-    }
-}
-
-void WorldSession::HandleToggleDifficulty(WorldPackets::Instance::ToggleDifficulty& /*toggleDifficulty*/)
-{
-    // Toggle difficulty is a simplified interface for switching between
-    // normal/heroic modes - not yet implemented
-}
-
-// The client asks for its encounter timeline to be resynchronised; the request body is just the
-// requesting player's own GUID (both captures in C:\sniff\m+ run12.0.7.pkt carry a HighGuid::Player
-// GUID and nothing else). The answer is the current timeline as a SEQUENCE, which is exactly how retail
-// pushes the whole timeline - including the 4-byte, count 0 form when there is nothing on it.
-void WorldSession::HandleRequestInstanceEncounterEventSync(WorldPackets::Instance::RequestInstanceEncounterEventSync& request)
-{
-    // Every capture has the sender asking about itself. Anything else is a client asking about a unit it
-    // has no business asking about, so it is refused rather than answered with someone else's timeline.
-    if (request.Unit != _player->GetGUID())
-    {
-        TC_LOG_DEBUG("network", "WorldSession::HandleRequestInstanceEncounterEventSync: player {} asked for the timeline of {}",
-            _player->GetGUID().ToString(), request.Unit.ToString());
-        return;
-    }
-
-    InstanceScript* instance = _player->GetInstanceScript();
-    if (!instance)
-    {
-        // Not in a scripted instance, so the timeline is empty. Retail's own representation of an empty
-        // timeline is a SEQUENCE with count 0 (tick 570908 of the capture above), so send that.
-        WorldPackets::Instance::InstanceEncounterEventSequence sequence;
-        SendPacket(sequence.Write());
-        return;
-    }
-
-    instance->SendEncounterTimelineTo(_player);
-}
-
 void WorldSession::HandleViolenceLevel(WorldPackets::Misc::ViolenceLevel& /*violenceLevel*/)
 {
     // do something?
 }
-
-
 
 void WorldSession::HandleObjectUpdateFailedOpcode(WorldPackets::Misc::ObjectUpdateFailed& objectUpdateFailed)
 {
@@ -1367,28 +1184,8 @@ void WorldSession::HandleMountSetFavorite(WorldPackets::Misc::MountSetFavorite& 
     _collectionMgr->MountSetFavorite(mountSetFavorite.MountSpellID, mountSetFavorite.IsFavorite);
 }
 
-void WorldSession::HandleMountClearFanfare(WorldPackets::Misc::MountClearFanfare& mountClearFanfare)
-{
-    _collectionMgr->MountClearFanfare(mountClearFanfare.MountSpellID);
-}
-
 void WorldSession::HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& closeInteraction)
 {
-    InteractionData& interactionData = _player->PlayerTalkClass->GetInteractionData();
-
-    if (interactionData.PendingAutoLaunchedQuestId)
-    {
-        if (interactionData.Type != PlayerInteractionType::QuestGiver
-            || interactionData.SourceGuid != closeInteraction.SourceGuid)
-        {
-            TC_LOG_DEBUG("network", "CMSG_CLOSE_INTERACTION pending quest {} - SourceGuid mismatch (offer={} close={}), clearing",
-                interactionData.PendingAutoLaunchedQuestId,
-                interactionData.SourceGuid.ToString(), closeInteraction.SourceGuid.ToString());
-        }
-
-        interactionData.ClearPendingAutoLaunchedQuest(_player);
-    }
-
     if (_player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest)
         _player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest = false;
     else if (_player->PlayerTalkClass->GetInteractionData().SourceGuid == closeInteraction.SourceGuid)
@@ -1396,22 +1193,6 @@ void WorldSession::HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& 
 
     if (_player->GetStableMaster() == closeInteraction.SourceGuid)
         _player->SetStableMaster(ObjectGuid::Empty);
-}
-
-void WorldSession::HandleCloseTraitSystemInteraction(WorldPackets::Misc::CloseTraitSystemInteraction& /*closeTraitSystemInteraction*/)
-{
-    // Empty-payload notification that the client dismissed the trait/talent window opened
-    // via a TraitSystem gossip option (see Player::OnGossipSelect -> StartInteraction).
-    if (_player->PlayerTalkClass->GetInteractionData().Type == PlayerInteractionType::TraitSystem)
-        _player->PlayerTalkClass->GetInteractionData().Reset();
-}
-
-void WorldSession::HandleCloseRuneforgeInteraction(WorldPackets::Misc::CloseRuneforgeInteraction& /*closeRuneforgeInteraction*/)
-{
-    // Empty-payload notification that the client dismissed the Runecarver (legendary crafting)
-    // window opened via a LegendaryCrafting gossip option.
-    if (_player->PlayerTalkClass->GetInteractionData().Type == PlayerInteractionType::LegendaryCrafting)
-        _player->PlayerTalkClass->GetInteractionData().Reset();
 }
 
 void WorldSession::HandleConversationLineStarted(WorldPackets::Misc::ConversationLineStarted& conversationLineStarted)
@@ -1452,154 +1233,6 @@ void WorldSession::HandleQueryCountdownTimer(WorldPackets::Misc::QueryCountdownT
     startTimer.TotalTime = info->GetTotalTime();
 
     _player->SendDirectMessage(startTimer.Write());
-}
-
-void WorldSession::HandleDoCountdown(WorldPackets::Misc::DoCountdown& doCountdown)
-{
-    // The native raid/party pull countdown: the leader starts it, the server runs it and pushes the
-    // ticking timer to every group member (SMSG_START_TIMER), mirroring HandleQueryCountdownTimer's reply.
-    Group* group = _player->GetGroup();
-    if (!group)
-        return;
-
-    if (!group->IsLeader(_player->GetGUID()))
-        return;
-
-    Seconds duration(doCountdown.TotalTime);
-    if (duration <= Seconds::zero() || duration > Seconds(600))
-        return;
-
-    // A player-initiated countdown is always the PlayerCountdown slot; Pvp/ChallengeMode are server-driven.
-    group->StartCountdown(CountdownTimerType::PlayerCountdown, duration);
-
-    WorldPackets::Misc::StartTimer startTimer;
-    startTimer.Type = CountdownTimerType::PlayerCountdown;
-    startTimer.TotalTime = duration;
-    startTimer.TimeLeft = duration;
-    group->BroadcastPacket(startTimer.Write(), false);
-}
-
-void WorldSession::HandleGetRemainingGameTime(WorldPackets::Misc::GetRemainingGameTime& /*getRemainingGameTime*/)
-{
-    // Trinity accounts are not subscription-time-billed; report unlimited so the client clears the
-    // remaining-game-time UI instead of nagging.
-    WorldPackets::Misc::GetRemainingGameTimeResponse response;
-    response.SecondsRemaining = 0;
-    response.GameTimeParam = 0;
-    response.Unlimited = true;
-    SendPacket(response.Write());
-}
-
-void WorldSession::HandleSetStopConversation(WorldPackets::Misc::SetStopConversation& setStopConversation)
-{
-    Conversation* conversation = ObjectAccessor::GetConversation(*_player, setStopConversation.ConversationGUID);
-    if (!conversation)
-        return;
-
-    // Conversations are private objects owned by the player they play for; only that owner may stop one.
-    if (conversation->GetPrivateObjectOwner() == _player->GetGUID())
-        conversation->Remove();
-}
-
-void WorldSession::HandleChromieTimeSelectExpansion(WorldPackets::Misc::ChromieTimeSelectExpansion& chromieTimeSelectExpansion)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    // Wire format (12.0.5): PackedGuid Vendor + int32 ExpansionID, where ExpansionID is the
-    // UIChromieTimeExpansionInfo.ID (DB2 record id), not the Expansions enum.
-    // Verify the vendor is a gossip NPC the player is actually interacting with.
-    Creature const* vendor = player->GetNPCIfCanInteractWith(chromieTimeSelectExpansion.Vendor, UNIT_NPC_FLAG_GOSSIP, UNIT_NPC_FLAG_2_NONE);
-    if (!vendor)
-        return;
-
-    // Require an active ChromieTime interaction with this exact NPC, mirroring other
-    // interaction-driven handlers. The client always packages the interaction-source guid
-    // into the CMSG (SelectChromieTimeOption RVA 0xB79106), so a legitimate select can
-    // only arrive while the type-45 interaction started by the gossip option is open.
-    if (!player->PlayerTalkClass->GetInteractionData().IsInteractingWith(chromieTimeSelectExpansion.Vendor, PlayerInteractionType::ChromieTime))
-        return;
-
-    int32 expansionId = chromieTimeSelectExpansion.ExpansionID;
-
-    // 0 = "Return to the present"; always allowed (a chromie player above the entry
-    // ceiling - the 70..80 scaling band - must still be able to leave).
-    if (expansionId == 0)
-    {
-        player->SetChromieTime(0);
-        player->SendDirectMessage(WorldPackets::Misc::ChromieTimeSelectExpansionSuccess().Write());
-        return;
-    }
-
-    // Retail 12.0.x entry gate: level band [10, 70). The @68887 ShowPlayerConditionIDs
-    // contain no level clause, so the ceiling is server policy (see Player.h, audit R10).
-    if (player->GetLevel() < Player::ChromieTimeMinLevel || player->GetLevel() >= Player::ChromieTimeMaxEntryLevel)
-        return;
-
-    UIChromieTimeExpansionInfoEntry const* entry = sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId));
-    if (!entry)
-        return;
-
-    // Do NOT require ShowPlayerConditionID here: decoded @68887 each of those conditions is
-    // ModifierTree { All -> PlayerIsInChromieTime(own id) } with PlayerCondition flags 0x21
-    // (no InvertModifierTree) - i.e. "player is ALREADY in this timeline", the client UI's
-    // alreadyOn marker, not an eligibility gate. Requiring it inverted the gate and made
-    // every first-time selection fail (audit R10 decode).
-
-    player->SetChromieTime(expansionId);
-
-    player->SendDirectMessage(WorldPackets::Misc::ChromieTimeSelectExpansionSuccess().Write());
-
-    // Audit R13 FIX 1: retail completes quest 85026 "Where Legends are Made" (objective
-    // 453674 = QUEST_OBJECTIVE_MONSTER, ObjectID 167032 = Chromie, Amount 1,
-    // "Timewalking Campaign selected") by granting Chromie kill-credit on a successful
-    // selection. Always safe: KilledMonsterCredit no-ops if the player is not on the quest.
-    player->KilledMonsterCredit(167032);
-
-    // Audit R13 FIX 2: auto-offer the era's Chromie Time breadcrumb for the chosen timeline,
-    // matching retail's per-expansion intro quest. The breadcrumbs are FACTION-SPECIFIC, not
-    // faction-neutral: integ_world ships two Chromie NPCs - 58195 "Ambassador" (Alliance-side,
-    // creature_queststarter rows all AllowableRaces 0x55155555B1354C4D) and 167032 "Emissary"
-    // (Horde-side, all 0xAA2AAAAA4E0AB3B2). Each expansion therefore has an Alliance/Horde
-    // quest pair; offering only one faction's id would make CanTakeQuest reject the other
-    // faction (AllowableRaces mismatch) and reproduce the "no breadcrumb" bug. Every id below
-    // is verified against integ_world.quest_template (LogTitle + AllowableRaces) and, for the
-    // Horde ids, cross-checked against creature_queststarter WHERE id=167032; WotLK and DF are
-    // additionally sniff/wowhead-confirmed (DF capture A rec 4620 = 65436; WotLK 60962/60963).
-    // expansionId is the UiChromieTimeExpansionInfo.ID (DB2 record id, wago @12.0.7.68887):
-    // Cata=5, TBC=6, WotLK=7, MoP=8, WoD=9, Legion=10, SL=14, BfA=15, DF=16.
-    // Deferred: SL (14) - only 60545 "A Chilling Summons" exists (Alliance-only, started by
-    // neither Chromie, no verified Horde pair). Excluded: The War Within - breadcrumbs
-    // 81930/78713 exist and are Chromie-started, but TWW has NO UiChromieTimeExpansionInfo
-    // row so it can never arrive as a selection. Only offer when the player can take the quest
-    // and is not already on/past it (CanTakeQuest re-validates AllowableRaces, so any faction
-    // mismatch results in no offer rather than a wrong-faction quest).
-    struct ChromieIntroQuest { int32 ExpansionId; uint32 AllianceQuest; uint32 HordeQuest; };
-    static constexpr ChromieIntroQuest ChromieIntroQuests[] =
-    {
-        {  5, 60891, 60887 }, // Cataclysm              (A: Eastern Kingdoms / H: Kalimdor)
-        {  6, 60959, 60961 }, // Burning Crusade        (Outland)
-        {  7, 60962, 60963 }, // Wrath of the Lich King (Northrend)
-        {  8, 60125, 60126 }, // Mists of Pandaria      ("To Pandaria!"; H 60126 is Chromie-started)
-        {  9, 60969, 60968 }, // Warlords of Draenor    (Draenor)
-        { 10, 60971, 60970 }, // Legion                 (Broken Isles)
-        { 15, 53370, 53372 }, // Battle for Azeroth     (Hour of Reckoning)
-        { 16, 65436, 65435 }, // Dragonflight           (Dragon Isles)
-    };
-
-    for (ChromieIntroQuest const& intro : ChromieIntroQuests)
-    {
-        if (intro.ExpansionId != expansionId)
-            continue;
-
-        uint32 introQuestId = (player->GetTeam() == ALLIANCE) ? intro.AllianceQuest : intro.HordeQuest;
-        if (Quest const* introQuest = sObjectMgr->GetQuestTemplate(introQuestId))
-            if (player->GetQuestStatus(introQuestId) == QUEST_STATUS_NONE && player->CanTakeQuest(introQuest, false))
-                player->AddQuestAndCheckCompletion(introQuest, nullptr);
-
-        break;
-    }
 }
 
 void WorldSession::HandleSetCurrencyFlags(WorldPackets::Misc::SetCurrencyFlags const& setCurrenctFlags)

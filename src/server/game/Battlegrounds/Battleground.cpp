@@ -41,7 +41,6 @@
 #include "MiscPackets.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
-#include "Optional.h"
 #include "Player.h"
 #include "ReputationMgr.h"
 #include "SpellAuras.h"
@@ -49,45 +48,7 @@
 #include "Transport.h"
 #include "Util.h"
 #include "WorldStateMgr.h"
-#include <algorithm>
 #include <cstdarg>
-#include <limits>
-
-namespace
-{
-// Maps the queue a player actually came in through onto the client's own match-kind table (see
-// WorldPackets::Battleground::PVPMatchBracket). Returns nothing when this core's queue has no counterpart in
-// that table - unrated random battlegrounds, wargames and cheat queues have no label there - and
-// SMSG_PVP_MATCH_START is then simply not sent rather than sent with a made-up bracket.
-Optional<WorldPackets::Battleground::PVPMatchBracket> GetPVPMatchBracket(BattlegroundQueueTypeId queueId)
-{
-    switch (BattlegroundQueueIdType(queueId.Type))
-    {
-        case BattlegroundQueueIdType::Arena:
-            switch (queueId.TeamSize)
-            {
-                case ARENA_TYPE_2v2: return WorldPackets::Battleground::PVPMatchBracket::Arena2v2;
-                case ARENA_TYPE_3v3: return WorldPackets::Battleground::PVPMatchBracket::Arena3v3;
-                case ARENA_TYPE_5v5: return WorldPackets::Battleground::PVPMatchBracket::Arena5v5;
-                default: break;
-            }
-            break;
-        case BattlegroundQueueIdType::ArenaSkirmish:
-            return WorldPackets::Battleground::PVPMatchBracket::Skirmish;
-        case BattlegroundQueueIdType::Battleground:
-            // Only the rated 10v10 premade queue has a label; plain random battlegrounds do not.
-            if (queueId.Rated)
-                return WorldPackets::Battleground::PVPMatchBracket::RatedBattleground;
-            break;
-        case BattlegroundQueueIdType::RatedBattlegroundBlitz:
-            return WorldPackets::Battleground::PVPMatchBracket::RatedSoloRBG;
-        default:
-            break;
-    }
-
-    return {};
-}
-}
 
 template<class Do>
 void Battleground::BroadcastWorker(Do& _do)
@@ -135,7 +96,6 @@ Battleground::Battleground(BattlegroundTemplate const* battlegroundTemplate) : _
     m_PrematureCountDown = false;
 
     m_LastPlayerPositionBroadcast = 0;
-    _maxTeamScore = 0;
 
     StartDelayTimes[BG_STARTING_EVENT_FIRST]  = BG_START_DELAY_2M;
     StartDelayTimes[BG_STARTING_EVENT_SECOND] = BG_START_DELAY_1M;
@@ -433,25 +393,12 @@ inline void Battleground::_ProcessJoin(uint32 diff)
 
         SendPacketToAll(WorldPackets::Battleground::PVPMatchSetState(WorldPackets::Battleground::PVPMatchState::Engaged).Write());
 
-        for (auto const& [guid, battlegroundPlayer] : GetPlayers())
+        for (auto const& [guid, _] : GetPlayers())
         {
             if (Player* player = ObjectAccessor::GetPlayer(GetBgMap(), guid))
             {
                 player->StartCriteria(CriteriaStartEvent::StartBattleground, GetBgMap()->GetId());
                 player->AtStartOfEncounter(EncounterType::Battleground);
-
-                // Retail sends SMSG_PVP_MATCH_START 29 ms after SMSG_PVP_MATCH_SET_STATE(Engaged), i.e. right
-                // here. It is per-connection (instance) and its bracket comes from the queue the player
-                // arrived through, which is why it is built inside this loop rather than broadcast.
-                if (Optional<WorldPackets::Battleground::PVPMatchBracket> bracket = GetPVPMatchBracket(battlegroundPlayer.queueTypeId))
-                {
-                    WorldPackets::Battleground::PVPMatchStart pvpMatchStart;
-                    pvpMatchStart.MapID = GetMapId();
-                    pvpMatchStart.ArenaSeason = sWorld->getIntConfig(CONFIG_ARENA_SEASON_ID);
-                    pvpMatchStart.Bracket = *bracket;
-                    pvpMatchStart.StartTime = GameTime::GetSystemTime();
-                    player->SendDirectMessage(pvpMatchStart.Write());
-                }
             }
         }
 
@@ -669,24 +616,6 @@ void Battleground::EndBattleground(Team winner)
 {
     RemoveFromBGFreeSlotQueue();
 
-    // Eject any commentators/spectators - the match is over. They are not participants, so the normal
-    // player-removal path never touches them; send them back to where they entered from.
-    if (!m_Spectators.empty())
-    {
-        for (ObjectGuid spectatorGuid : m_Spectators)
-        {
-            if (Player* spectator = ObjectAccessor::FindPlayer(spectatorGuid))
-            {
-                spectator->SetSpectateTarget(ObjectGuid::Empty);
-                if (spectator->IsGameMaster())
-                    spectator->SetGameMaster(false);
-                spectator->SetBattlegroundId(0, BATTLEGROUND_TYPE_NONE, BATTLEGROUND_QUEUE_NONE);
-                spectator->TeleportToBGEntryPoint();
-            }
-        }
-        m_Spectators.clear();
-    }
-
     bool guildAwarded = false;
 
     if (winner == ALLIANCE)
@@ -768,11 +697,8 @@ void Battleground::EndBattleground(Team winner)
         player->RemoveAura(SPELL_HONORABLE_DEFENDER_25Y);
         player->RemoveAura(SPELL_HONORABLE_DEFENDER_60Y);
 
-        // Flat honor amounts, pre-Rate.Honor: these go to RewardHonor (via UpdatePlayerScore), which
-        // applies the rate itself. Player::SendPvpRewards advertises the same two numbers from the same
-        // function, so the advertised figure cannot drift from the paid one.
-        uint32 winnerHonor = GetBattlegroundCompletionHonor(true, player->GetRandomWinner(), false);
-        uint32 loserHonor = GetBattlegroundCompletionHonor(false, player->GetRandomWinner(), false);
+        uint32 winnerKills = player->GetRandomWinner() ? sWorld->getIntConfig(CONFIG_BG_REWARD_WINNER_HONOR_LAST) : sWorld->getIntConfig(CONFIG_BG_REWARD_WINNER_HONOR_FIRST);
+        uint32 loserKills = player->GetRandomWinner() ? sWorld->getIntConfig(CONFIG_BG_REWARD_LOSER_HONOR_LAST) : sWorld->getIntConfig(CONFIG_BG_REWARD_LOSER_HONOR_FIRST);
 
         if (isBattleground() && sWorld->getBoolConfig(CONFIG_BATTLEGROUND_STORE_STATISTICS_ENABLE))
         {
@@ -797,17 +723,6 @@ void Battleground::EndBattleground(Team winner)
             CharacterDatabase.Execute(stmt);
         }
 
-        // Great Vault: a PvP win no longer credits the World activity row.
-        //
-        // The World row is world content (delves), and its per-slot reward is generated at ItemContext
-        // Delves_Jackpot scaled by the recorded level = the delve TIER. A battleground bracket id is not a delve
-        // tier, so crediting it here both unlocked delve gear slots from PvP and fed a meaningless "tier" into the
-        // reward scaling. PvP has its own vault row in the client (WeeklyRewardChestThresholdType::RankedPvP = 2)
-        // and 12.0.7.68275's live WeeklyRewardChestThreshold.db2 group (ids 196-206) contains no Type 2 rows at
-        // all, i.e. this season has no PvP vault row to fill - matching Blizzard_WeeklyRewards.lua, which shows the
-        // PvP row only when no World activity came back. Wiring a real conquest-point RankedPvP row is a separate
-        // piece of work; until then no row is credited rather than the wrong one.
-
         // Reward winner team
         if (team == winner)
         {
@@ -820,7 +735,7 @@ void Battleground::EndBattleground(Team winner)
                     if (!player->GetRandomWinner())
                         source = BattlegroundMgr::IsRandomBattleground(bgPlayer->queueTypeId.BattlemasterListId) ? HonorGainSource::RandomBGCompletion : HonorGainSource::HolidayBGCompletion;
 
-                    UpdatePlayerScore(player, SCORE_BONUS_HONOR, winnerHonor, true, source);
+                    UpdatePlayerScore(player, SCORE_BONUS_HONOR, GetBonusHonorFromKill(winnerKills), true, source);
                     if (!player->GetRandomWinner())
                     {
                         player->SetRandomWinner(true);
@@ -850,7 +765,7 @@ void Battleground::EndBattleground(Team winner)
             {
                 if (BattlegroundMgr::IsRandomBattleground(bgPlayer->queueTypeId.BattlemasterListId)
                     || BattlegroundMgr::IsBGWeekend(BattlegroundTypeId(bgPlayer->queueTypeId.BattlemasterListId)))
-                    UpdatePlayerScore(player, SCORE_BONUS_HONOR, loserHonor, true, HonorGainSource::BGCompletion);
+                    UpdatePlayerScore(player, SCORE_BONUS_HONOR, GetBonusHonorFromKill(loserKills), true, HonorGainSource::BGCompletion);
             }
         }
 
@@ -877,33 +792,6 @@ uint32 Battleground::GetBonusHonorFromKill(uint32 kills) const
     //variable kills means how many honorable kills you scored (so we need kills * honor_for_one_kill)
     uint32 maxLevel = std::min<uint32>(GetMaxLevel(), 80U);
     return Trinity::Honor::hk_honor_at_level(maxLevel, float(kills));
-}
-
-// Battleground.RewardWinnerHonor*/RewardLoserHonor* are flat honor amounts, exactly as their names say -
-// not honorable-kill counts. They were kill counts once (30/15/5/5) and were therefore fed to
-// GetBonusHonorFromKill(); the upstream 4.3.4 merge ce742dc7a07 (2013-09-09) rescaled the values to
-// Cataclysm honor *currency* units (27000/13500/4500/3500) without touching the call site, so every
-// random-battleground win paid hk_honor_at_level(80, 27000) = ceil(27000 * 80 * 1.55) = 3,348,000 honor.
-// GetBonusHonorFromKill() itself is unchanged and stays correct for its other callers, which all pass
-// genuine kill counts (1-4 and the Alterac Valley bonus constants).
-//
-// The defaults have that era's 100x honor-currency scaler taken back out, since modern honor is unscaled
-// honor XP via Player::AddHonorXP: 270/135 winner, 45/35 loser.
-uint32 Battleground::GetBattlegroundCompletionHonor(bool winner, bool alreadyWonRandomToday, bool applyHonorRate)
-{
-    uint32 honor;
-    if (winner)
-        honor = sWorld->getIntConfig(alreadyWonRandomToday ? CONFIG_BG_REWARD_WINNER_HONOR_LAST : CONFIG_BG_REWARD_WINNER_HONOR_FIRST);
-    else
-        honor = sWorld->getIntConfig(alreadyWonRandomToday ? CONFIG_BG_REWARD_LOSER_HONOR_LAST : CONFIG_BG_REWARD_LOSER_HONOR_FIRST);
-
-    // Player::RewardHonor applies Rate.Honor to the amount it is given and truncates to int32. Callers
-    // that go through RewardHonor must NOT pre-apply the rate; callers that only display the number must,
-    // and must do it exactly the same way, which is why the arithmetic lives here and not at either site.
-    if (applyHonorRate)
-        honor = uint32(float(honor) * sWorld->getRate(RATE_HONOR));
-
-    return honor;
 }
 
 void Battleground::BlockMovement(Player* player)
@@ -1146,8 +1034,6 @@ void Battleground::AddPlayer(Player* player, BattlegroundQueueTypeId queueId)
     pvpMatchInitialize.AffectsRating = isRated();
 
     player->SendDirectMessage(pvpMatchInitialize.Write());
-
-    SendMatchScoreState(player);
 
     player->RemoveAurasByType(SPELL_AURA_MOUNTED);
 
@@ -1589,63 +1475,6 @@ void Battleground::RewardXPAtKill(Player* killer, Player* victim)
     {
         Player* killers[] = { killer };
         KillRewarder(Trinity::IteratorPair(std::begin(killers), std::end(killers)), victim, true).Reward();
-    }
-}
-
-void Battleground::SetTeamScore(TeamId teamId, int32 score)
-{
-    // Retail only puts SMSG_BATTLEGROUND_POINTS on the wire when a score actually moves - across the 322
-    // captured packets of one full match no team ever repeats a value - and callers like the Deephaul Ravine
-    // ticker do run every two seconds with nothing to add, so the early-out here is load bearing.
-    if (m_TeamScores[teamId] == score)
-        return;
-
-    m_TeamScores[teamId] = score;
-
-    WorldPackets::Battleground::BattlegroundPoints battlegroundPoints;
-    // The field is a uint16 on the wire; scores are never negative in practice but RemovePoint can in
-    // principle underflow, so clamp rather than wrap.
-    battlegroundPoints.BgPoints = uint16(std::clamp<int32>(score, 0, std::numeric_limits<uint16>::max()));
-    // m_TeamScores is indexed by TeamId (alliance 0), the packet by PvPTeamId (horde 0). They are inverted.
-    battlegroundPoints.Team = teamId == TEAM_ALLIANCE;
-    SendPacketToAll(battlegroundPoints.Write());
-}
-
-void Battleground::SetMaxTeamScore(uint16 maxTeamScore)
-{
-    if (_maxTeamScore == maxTeamScore)
-        return;
-
-    _maxTeamScore = maxTeamScore;
-
-    if (!_maxTeamScore)
-        return;
-
-    // Scripts set this from OnInit, before anyone has joined, so this normally reaches nobody and the real
-    // delivery happens from AddPlayer. It matters only if a script ever revises the cap mid-match.
-    for (auto const& [guid, _] : m_Players)
-        if (Player* player = ObjectAccessor::FindPlayer(guid))
-            SendMatchScoreState(player);
-}
-
-void Battleground::SendMatchScoreState(Player* player) const
-{
-    if (!_maxTeamScore)
-        return;
-
-    // Capture order at battleground entry (C:\sniff\rated BG 12.0.7.pkt, tick 915464, instance connection):
-    // SMSG_BATTLEGROUND_INIT first, then SMSG_BATTLEGROUND_POINTS for horde and then for alliance.
-    WorldPackets::Battleground::BattlegroundInit battlegroundInit;
-    battlegroundInit.ServerTime = GameTime::GetGameTimeMS();
-    battlegroundInit.MaxPoints = _maxTeamScore;
-    player->SendDirectMessage(battlegroundInit.Write());
-
-    for (TeamId teamId : { TEAM_HORDE, TEAM_ALLIANCE })
-    {
-        WorldPackets::Battleground::BattlegroundPoints battlegroundPoints;
-        battlegroundPoints.BgPoints = uint16(std::clamp<int32>(m_TeamScores[teamId], 0, std::numeric_limits<uint16>::max()));
-        battlegroundPoints.Team = teamId == TEAM_ALLIANCE;
-        player->SendDirectMessage(battlegroundPoints.Write());
     }
 }
 

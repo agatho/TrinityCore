@@ -16,12 +16,7 @@
  */
 
 #include "InstanceScript.h"
-#include "Timer.h"
-#include "GameTime.h"
-#include "ChallengeMode.h"
-#include "ChallengeModeMgr.h"
 #include "AreaBoundary.h"
-#include "Config.h"
 #include "Creature.h"
 #include "CreatureAI.h"
 #include "CreatureAIImpl.h"
@@ -39,19 +34,15 @@
 #include "ObjectMgr.h"
 #include "PhasingHandler.h"
 #include "Player.h"
-#include "WeeklyRewardsMgr.h"
 #include "RBAC.h"
 #include "ScriptedCreature.h"
 #include "ScriptReloadMgr.h"
 #include "SmartEnum.h"
-#include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "World.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
-#include <algorithm>
 #include <cstdarg>
-#include <vector>
 
 #ifdef TRINITY_API_USE_DYNAMIC_LINKING
 #include "ScriptMgr.h"
@@ -74,8 +65,7 @@ DungeonEncounterEntry const* BossInfo::GetDungeonEncounterForDifficulty(Difficul
 }
 
 InstanceScript::InstanceScript(InstanceMap* map) noexcept : instance(map), _instanceSpawnGroups(sObjectMgr->GetInstanceSpawnGroupsForMap(map->GetId())),
-_entranceId(0), _temporaryEntranceId(0), _combatResurrectionTimer(0), _combatResurrectionCharges(0), _combatResurrectionTimerStarted(false),
-_nextEncounterTimelineEventId(0)
+_entranceId(0), _temporaryEntranceId(0), _combatResurrectionTimer(0), _combatResurrectionCharges(0), _combatResurrectionTimerStarted(false)
 {
 #ifdef TRINITY_API_USE_DYNAMIC_LINKING
     uint32 scriptId = sObjectMgr->GetInstanceTemplate(map->GetId())->ScriptId;
@@ -409,34 +399,14 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                         if (minion->isWorldBoss() && minion->IsAlive())
                             return false;
 
-            // During a Mythic Keystone run the combat-res pool is run-wide (1 charge + 1 per interval, managed by
-            // ChallengeMode) and must not be re-initialized or cleared by individual encounters.
-            bool const activeChallengeMode = instance->GetChallengeMode() && instance->GetChallengeMode()->IsActive();
-
             DungeonEncounterEntry const* dungeonEncounter = nullptr;
             switch (state)
             {
                 case IN_PROGRESS:
                 {
-                    if (!activeChallengeMode)
-                    {
-                        uint32 resInterval = GetCombatResurrectionChargeInterval();
-                        InitializeCombatResurrections(1, resInterval);
-                        SendEncounterStart(1, 9, resInterval, resInterval);
-                    }
-                    else
-                        SendEncounterStart(GetCombatResurrectionCharges(), 9, GetCombatResurrectionChargeInterval(), _combatResurrectionTimer);
-
-                    dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
-                    if (dungeonEncounter)
-                    {
-                        SendRealmEncounterStart(dungeonEncounter->ID);
-
-                        // Retail sends SMSG_INSTANCE_ENCOUNTER_EVENT_SEQUENCE on the same sniff tick as
-                        // SMSG_ENCOUNTER_START (ticks 496010 and 743769 of C:\sniff\m+ run12.0.7.pkt).
-                        // A fresh pull starts from an empty timeline for this encounter.
-                        ClearEncounterTimeline(dungeonEncounter->ID);
-                    }
+                    uint32 resInterval = GetCombatResurrectionChargeInterval();
+                    InitializeCombatResurrections(1, resInterval);
+                    SendEncounterStart(1, 9, resInterval, resInterval);
 
                     instance->DoOnPlayers([](Player* player)
                     {
@@ -446,19 +416,8 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 }
                 case FAIL:
                 {
-                    if (!activeChallengeMode)
-                        ResetCombatResurrections();
+                    ResetCombatResurrections();
                     SendEncounterEnd();
-
-                    dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
-                    if (dungeonEncounter)
-                    {
-                        SendRealmEncounterEnd(dungeonEncounter->ID, false);
-
-                        // Retail clears the timeline with an empty 4-byte SEQUENCE on the same sniff tick
-                        // as SMSG_ENCOUNTER_END (tick 570908 of C:\sniff\m+ run12.0.7.pkt).
-                        ClearEncounterTimeline(dungeonEncounter->ID);
-                    }
 
                     instance->DoOnPlayers([](Player* player)
                     {
@@ -468,28 +427,15 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 }
                 case DONE:
                 {
-                    if (!activeChallengeMode)
-                        ResetCombatResurrections();
+                    ResetCombatResurrections();
                     SendEncounterEnd();
                     dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
                     if (dungeonEncounter)
                     {
-                        bool const isRaidEncounter = instance->IsRaid();
-                        SendRealmEncounterEnd(dungeonEncounter->ID, true);
-                        ClearEncounterTimeline(dungeonEncounter->ID);
-
                         instance->DoOnPlayers([&](Player* player)
                         {
                             if (!player->IsLockedToDungeonEncounter(dungeonEncounter->ID))
                                 player->UpdateCriteria(CriteriaType::DefeatDungeonEncounterWhileElegibleForLoot, dungeonEncounter->ID);
-
-                            // Great Vault: only raid boss kills feed the Raid row here (tier = raid difficulty).
-                            // The Dungeon row is credited exclusively on Mythic+ keystone completion
-                            // (ChallengeMode::Complete, at the true keystone level) — individual dungeon boss kills,
-                            // including inside a keystone run, must not credit it or the count/tier would be wrong.
-                            if (isRaidEncounter)
-                                sWeeklyRewardsMgr.RecordActivity(player, WeeklyRewards::ActivityType::Raid,
-                                    uint32(instance->GetDifficultyID()));
                         });
 
                         DoUpdateCriteria(CriteriaType::DefeatDungeonEncounter, dungeonEncounter->ID);
@@ -504,16 +450,6 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                     {
                         player->AtEndOfEncounter(EncounterType::DungeonEncounter);
                     });
-                    break;
-                }
-                case NOT_STARTED:
-                {
-                    // BossAI::_Reset drops a boss back to NOT_STARTED on evade rather than to FAIL, so this
-                    // is the path a wipe-and-reset actually takes. Without clearing here the timeline armed
-                    // by the previous pull keeps counting down against a boss that has already reset, and
-                    // keeps announcing casts that will never happen.
-                    if (DungeonEncounterEntry const* resetEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID()))
-                        ClearEncounterTimeline(resetEncounter->ID);
                     break;
                 }
                 default:
@@ -536,38 +472,6 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 UpdateMinionState(minion, state);
 
         UpdateSpawnGroups();
-
-        // Mythic Keystone: the run completes once every encounter in the instance is defeated.
-        if (state == DONE)
-        {
-            bool allDone = true;
-            for (BossInfo const& boss : bosses)
-            {
-                if (boss.state != DONE)
-                {
-                    allDone = false;
-                    break;
-                }
-            }
-
-            if (allDone)
-            {
-                if (ChallengeMode* challenge = instance->GetChallengeMode())
-                {
-                    if (challenge->IsActive())
-                        challenge->OnAllEncountersDone();
-                }
-                // Mythic (M0): completing a season dungeon awards a first keystone to players without one.
-                else if (instance->GetDifficultyID() == DIFFICULTY_MYTHIC)
-                {
-                    instance->DoOnPlayers([](Player* player)
-                    {
-                        sChallengeModeMgr.OnMythicDungeonCompleted(player);
-                    });
-                }
-            }
-        }
-
         return true;
     }
     return false;
@@ -989,301 +893,6 @@ void InstanceScript::SendEncounterEnd()
     instance->SendToPlayers(encounterEndMessage.Write());
 }
 
-void InstanceScript::SendRealmEncounterStart(uint32 dungeonEncounterId)
-{
-    // Remember when this encounter began so SendRealmEncounterEnd can report the real elapsed time.
-    _encounterStartTimes[dungeonEncounterId] = GameTime::GetGameTimeMS();
-
-    WorldPackets::Instance::EncounterStart encounterStart;
-    encounterStart.DungeonEncounterID = dungeonEncounterId;
-    encounterStart.DifficultyID = uint16(instance->GetDifficultyID());
-    encounterStart.GroupSize = instance->GetPlayersCountExceptGMs();
-
-    instance->SendToPlayers(encounterStart.Write());
-}
-
-void InstanceScript::SendRealmEncounterEnd(uint32 dungeonEncounterId, bool success)
-{
-    WorldPackets::Instance::EncounterEnd encounterEnd;
-    encounterEnd.DungeonEncounterID = dungeonEncounterId;
-    encounterEnd.DifficultyID = uint16(instance->GetDifficultyID());
-    encounterEnd.GroupSize = instance->GetPlayersCountExceptGMs();
-    encounterEnd.Success = success;
-
-    // Real elapsed time, not a placeholder. If we never saw the start (server restarted mid-encounter,
-    // or an encounter ended that was never announced) report 0 rather than a fabricated duration.
-    if (auto itr = _encounterStartTimes.find(dungeonEncounterId); itr != _encounterStartTimes.end())
-    {
-        encounterEnd.DurationMs = GetMSTimeDiffToNow(itr->second);
-        _encounterStartTimes.erase(itr);
-    }
-
-    instance->SendToPlayers(encounterEnd.Write());
-}
-
-namespace
-{
-// Fills one wire element from one live timeline event.
-//
-// Duration and the nested cast entry are kept in the relation that holds in all 11 captured elements,
-// Duration == TimeToCastMs + MaxQueueDuration. Retail only ever emits an element at the moment the event
-// is created, so it has no capture that shows what Duration does once the countdown has advanced; keeping
-// the observed invariant is the only choice that is backed by bytes.
-void BuildEncounterTimelineEvent(InstanceScript::EncounterTimelineEvent const& source, uint32 timestamp,
-    WorldPackets::Instance::EncounterTimelineEvent& target)
-{
-    target.Severity = source.Severity;
-    target.EventID = source.EventID;
-    target.EncounterEventID = source.EncounterEventID;
-    target.SpellID = source.SpellID;
-    target.BroadcastTextID = source.BroadcastTextID;
-    target.IconFileID = source.IconFileID;
-    target.Flags = source.Flags;
-    target.Caster = source.Caster;
-    target.Timestamp = timestamp;
-    target.MaxQueueDuration = uint32(source.MaxQueueDuration.count());
-    target.Duration = uint32(source.TimeToCast.count() + source.MaxQueueDuration.count());
-    target.CastState = 2;                   // EncounterEventCastState::NotCasting, as in every captured element
-    target.Casts.emplace_back();
-    target.Casts.back().TimeToCastMs = uint32(source.TimeToCast.count());
-}
-}
-
-InstanceScript::EncounterTimelineEvent& InstanceScript::AddEncounterTimelineEvent(ObjectGuid caster, uint32 dungeonEncounterId,
-    uint32 encounterEventId, uint32 spellId, int32 iconFileId, uint8 severity, Milliseconds timeToCast, Milliseconds maxQueueDuration)
-{
-    EncounterTimelineEvent& timelineEvent = _encounterTimeline.emplace_back();
-    timelineEvent.EventID = ++_nextEncounterTimelineEventId;    // ENCOUNTER_TIMELINE_INVALID_EVENT is 0, so never hand out 0
-    timelineEvent.DungeonEncounterID = dungeonEncounterId;
-    timelineEvent.EncounterEventID = encounterEventId;
-    timelineEvent.SpellID = spellId;
-    timelineEvent.IconFileID = iconFileId;
-    timelineEvent.Severity = severity;
-    timelineEvent.Caster = caster;
-    timelineEvent.TimeToCast = timeToCast;
-    timelineEvent.OriginalTimeToCast = timeToCast;
-    timelineEvent.MaxQueueDuration = maxQueueDuration;
-    return timelineEvent;
-}
-
-uint32 InstanceScript::ScheduleEncounterTimelineEvent(ObjectGuid caster, uint32 dungeonEncounterId, uint32 encounterEventId,
-    uint32 spellId, int32 iconFileId, uint8 severity, Milliseconds timeToCast, Milliseconds maxQueueDuration)
-{
-    EncounterTimelineEvent const& timelineEvent = AddEncounterTimelineEvent(caster, dungeonEncounterId, encounterEventId,
-        spellId, iconFileId, severity, timeToCast, maxQueueDuration);
-
-    WorldPackets::Instance::InstanceEncounterEventAppend append;
-    BuildEncounterTimelineEvent(timelineEvent, GameTime::GetGameTimeMS(), append.Events.emplace_back());
-    instance->SendToPlayers(append.Write());
-
-    return timelineEvent.EventID;
-}
-
-// Arms an encounter's whole timeline from `instance_encounter_timeline` at the moment it is pulled.
-//
-// The rows are a prediction of what the boss script is going to do, and they are only worth sending if
-// they were copied from that script - a timeline that disagrees with the encounter is worse than none,
-// because the client draws a countdown the player then plans around.
-void InstanceScript::StartEncounterTimeline(uint32 dungeonEncounterId, ObjectGuid caster)
-{
-    std::vector<InstanceEncounterTimelineInfo> const* timeline = sObjectMgr->GetInstanceEncounterTimeline(dungeonEncounterId);
-    if (!timeline)
-        return;
-
-    uint32 difficultyId = uint32(instance->GetDifficultyID());
-    bool armed = false;
-
-    for (InstanceEncounterTimelineInfo const& info : *timeline)
-    {
-        if (info.DifficultyID && info.DifficultyID != difficultyId)
-            continue;
-
-        // Retail sends the spell's own icon here, not EncounterEvent.db2's IconFileDataID (which is 0 in
-        // 621 of its 622 rows), so a row that leaves IconFileID at 0 gets the spell's icon resolved for it.
-        int32 iconFileId = info.IconFileID;
-        if (!iconFileId)
-            if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(info.SpellID, instance->GetDifficultyID()))
-                iconFileId = int32(spellInfo->IconFileDataId);
-
-        EncounterTimelineEvent& timelineEvent = AddEncounterTimelineEvent(caster, dungeonEncounterId, info.EncounterEventID,
-            info.SpellID, iconFileId, info.Severity, info.FirstCast, info.MaxQueueDuration);
-        timelineEvent.BroadcastTextID = info.BroadcastTextID;
-        timelineEvent.Flags = info.Flags;
-        timelineEvent.RepeatCast = info.RepeatCast;
-        armed = true;
-    }
-
-    // SetBossState already sent the empty SEQUENCE that clears the previous pull; only spend another packet
-    // when there is actually something to draw.
-    if (armed)
-        SendEncounterTimeline();
-}
-
-void InstanceScript::CancelEncounterTimelineEvent(uint32 eventId)
-{
-    auto itr = std::find_if(_encounterTimeline.begin(), _encounterTimeline.end(),
-        [eventId](EncounterTimelineEvent const& timelineEvent) { return timelineEvent.EventID == eventId; });
-    if (itr == _encounterTimeline.end())
-        return;
-
-    _encounterTimeline.erase(itr);
-
-    // There is no "remove one event" opcode in the family, so the whole sequence is resent - which is
-    // what SEQUENCE is for.
-    SendEncounterTimeline();
-}
-
-void InstanceScript::ClearEncounterTimeline(uint32 dungeonEncounterId)
-{
-    std::erase_if(_encounterTimeline, [dungeonEncounterId](EncounterTimelineEvent const& timelineEvent)
-    {
-        return timelineEvent.DungeonEncounterID == dungeonEncounterId;
-    });
-
-    SendEncounterTimeline();
-}
-
-void InstanceScript::SendEncounterTimeline() const
-{
-    WorldPackets::Instance::InstanceEncounterEventSequence sequence;
-    uint32 timestamp = GameTime::GetGameTimeMS();
-    for (EncounterTimelineEvent const& timelineEvent : _encounterTimeline)
-        BuildEncounterTimelineEvent(timelineEvent, timestamp, sequence.Events.emplace_back());
-
-    instance->SendToPlayers(sequence.Write());
-}
-
-void InstanceScript::SendEncounterTimelineTo(Player* player) const
-{
-    WorldPackets::Instance::InstanceEncounterEventSequence sequence;
-    uint32 timestamp = GameTime::GetGameTimeMS();
-    for (EncounterTimelineEvent const& timelineEvent : _encounterTimeline)
-        BuildEncounterTimelineEvent(timelineEvent, timestamp, sequence.Events.emplace_back());
-
-    player->SendDirectMessage(sequence.Write());
-}
-
-// Emits one CAST_UPDATE for an event. castState 1 is Casting, 3 is Expired; the two are alternative
-// endings for the same event and the capture never shows both for one EventID.
-//
-// The Expired form is not a variation on the Casting form - the 3 expired CAST_UPDATEs in
-// C:\sniff\m+ run12.0.7.pkt carry Unknown_3D 0xFF and TimeToCastMs 0, where all 49 casting ones carry 0
-// and the event's original countdown.
-void InstanceScript::SendEncounterTimelineCastUpdate(EncounterTimelineEvent const& timelineEvent, uint8 castState) const
-{
-    WorldPackets::Instance::InstanceEncounterEventCastUpdate castUpdate;
-    castUpdate.EventID = timelineEvent.EventID;
-    castUpdate.EncounterEventID = timelineEvent.EncounterEventID;
-    castUpdate.Caster = timelineEvent.Caster;
-    castUpdate.DungeonEncounterID = timelineEvent.DungeonEncounterID;
-    castUpdate.CastState = castState;
-    castUpdate.Timestamp = GameTime::GetGameTimeMS();
-    castUpdate.Unknown_3D = castState == 3 ? 0xFF : 0;
-    castUpdate.TimeToCastMs = castState == 3 ? 0 : uint32(timelineEvent.OriginalTimeToCast.count());
-    instance->SendToPlayers(castUpdate.Write());
-}
-
-void InstanceScript::ExpireEncounterTimelineEvent(uint32 eventId)
-{
-    auto itr = std::find_if(_encounterTimeline.begin(), _encounterTimeline.end(),
-        [eventId](EncounterTimelineEvent const& timelineEvent) { return timelineEvent.EventID == eventId; });
-    if (itr == _encounterTimeline.end())
-        return;
-
-    SendEncounterTimelineCastUpdate(*itr, 3);       // EncounterEventCastState::Expired
-    _encounterTimeline.erase(itr);
-}
-
-void InstanceScript::UpdateEncounterTimeline(uint32 diff)
-{
-    if (_encounterTimeline.empty())
-        return;
-
-    Milliseconds elapsed(diff);
-
-    for (auto itr = _encounterTimeline.begin(); itr != _encounterTimeline.end(); )
-    {
-        // An event whose countdown ran out with no caster left to cast it is held for its queue window and
-        // then reported Expired, which is where the capture puts those: at Timestamp + Duration, i.e. the
-        // cast moment plus MaxQueueDuration.
-        if (itr->Expiring)
-        {
-            if (itr->QueueRemaining > elapsed)
-            {
-                itr->QueueRemaining -= elapsed;
-                ++itr;
-                continue;
-            }
-
-            SendEncounterTimelineCastUpdate(*itr, 3);       // EncounterEventCastState::Expired
-            itr = _encounterTimeline.erase(itr);
-            continue;
-        }
-
-        if (itr->TimeToCast > elapsed)
-        {
-            itr->TimeToCast -= elapsed;
-            ++itr;
-            continue;
-        }
-
-        // Countdown reached zero. The timeline is a prediction; before reporting the ability as being cast,
-        // check the one thing that can falsify it without guessing - whether the unit that was supposed to
-        // cast it is still there and alive. A dead or departed caster casts nothing, and saying otherwise
-        // would put a lie on the wire.
-        Unit* caster = itr->Caster.IsPlayer() ? static_cast<Unit*>(instance->GetPlayer(itr->Caster))
-                                              : static_cast<Unit*>(instance->GetCreature(itr->Caster));
-        if (!itr->Caster.IsEmpty() && (!caster || !caster->IsAlive()))
-        {
-            itr->Expiring = true;
-            itr->QueueRemaining = itr->MaxQueueDuration;
-            itr->TimeToCast = 0ms;      // so a SEQUENCE sent during the queue window shows it as due, not pending
-            ++itr;
-            continue;
-        }
-
-        // CAST_UPDATE reports the countdown the event was created with, not the residual - see the
-        // InstancePackets.h comment.
-        SendEncounterTimelineCastUpdate(*itr, 1);           // EncounterEventCastState::Casting
-
-        // A repeating row re-arms as a fresh event, which is how retail's timeline behaves: every cast is
-        // its own EventID, announced by its own APPEND.
-        if (itr->RepeatCast > 0ms)
-        {
-            EncounterTimelineEvent repeated = *itr;
-            repeated.EventID = ++_nextEncounterTimelineEventId;
-            repeated.TimeToCast = repeated.RepeatCast;
-            repeated.OriginalTimeToCast = repeated.RepeatCast;
-
-            WorldPackets::Instance::InstanceEncounterEventAppend append;
-            BuildEncounterTimelineEvent(repeated, GameTime::GetGameTimeMS(), append.Events.emplace_back());
-            instance->SendToPlayers(append.Write());
-
-            *itr = repeated;
-            ++itr;
-            continue;
-        }
-
-        itr = _encounterTimeline.erase(itr);
-    }
-}
-
-void InstanceScript::SendUpdateAllowReleaseInProgress(bool allowRelease)
-{
-    WorldPackets::Instance::InstanceEncounterUpdateAllowReleaseInProgress packet;
-    packet.AllowRelease = allowRelease;
-
-    instance->SendToPlayers(packet.Write());
-}
-
-void InstanceScript::SendUpdateSuppressRelease(bool suppressRelease)
-{
-    WorldPackets::Instance::InstanceEncounterUpdateSuppressRelease packet;
-    packet.SuppressRelease = suppressRelease;
-
-    instance->SendToPlayers(packet.Write());
-}
-
 void InstanceScript::SendBossKillCredit(uint32 encounterId)
 {
     WorldPackets::Instance::BossKill bossKillCreditMessage;
@@ -1378,12 +987,6 @@ void InstanceScript::ResetCombatResurrections()
 
 uint32 InstanceScript::GetCombatResurrectionChargeInterval() const
 {
-    // Mythic Keystone runs use the retail dungeon-wide accrual (one charge per fixed interval, default 10 min)
-    // instead of the raid encounter formula (90 min / player count).
-    if (ChallengeMode const* challenge = instance->GetChallengeMode())
-        if (challenge->IsActive())
-            return uint32(sConfigMgr->GetIntDefault("ChallengeMode.CombatRes.IntervalMs", 10 * MINUTE * IN_MILLISECONDS));
-
     uint32 interval = 0;
     if (uint32 playerCount = instance->GetPlayers().size())
         interval = 90 * MINUTE * IN_MILLISECONDS / playerCount;

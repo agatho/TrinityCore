@@ -1,4 +1,3 @@
---
--- Delve completion trigger: the creature whose death completes the delve (0 = none; scenario path only).
---
-ALTER TABLE `delve_template` ADD `finalBossEntry` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Creature entry whose death completes the delve' AFTER `worldState26903`;
+DELETE FROM `quest_template_addon` WHERE `ID`=54976;
+INSERT INTO `quest_template_addon` (`ID`, `ScriptName`) VALUES
+(54976, 'SmartQuest');

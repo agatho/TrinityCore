@@ -31,7 +31,6 @@
 #include "Player.h"
 #include "TaxiPackets.h"
 #include "TaxiPathGraph.h"
-#include <sstream>
 
 void WorldSession::HandleEnableTaxiNodeOpcode(WorldPackets::Taxi::EnableTaxiNode& enableTaxiNode)
 {
@@ -55,7 +54,7 @@ void WorldSession::SendTaxiStatus(ObjectGuid guid)
     }
 
     // find taxi node
-    uint32 nearest = sObjectMgr->GetTaxiNodeForFlightMaster(unit->GetEntry(), unit->GetPositionX(), unit->GetPositionY(), unit->GetPositionZ(), unit->GetMapId(), player->GetTeam());
+    uint32 nearest = sObjectMgr->GetNearestTaxiNode(unit->GetPositionX(), unit->GetPositionY(), unit->GetPositionZ(), unit->GetMapId(), player->GetTeam());
 
     WorldPackets::Taxi::TaxiNodeStatus data;
     data.Unit = guid;
@@ -94,7 +93,7 @@ void WorldSession::HandleTaxiQueryAvailableNodesOpcode(WorldPackets::Taxi::TaxiQ
 void WorldSession::SendTaxiMenu(Creature* unit)
 {
     // find current node
-    uint32 curloc = sObjectMgr->GetTaxiNodeForFlightMaster(unit->GetEntry(), unit->GetPositionX(), unit->GetPositionY(), unit->GetPositionZ(), unit->GetMapId(), GetPlayer()->GetTeam());
+    uint32 curloc = sObjectMgr->GetNearestTaxiNode(unit->GetPositionX(), unit->GetPositionY(), unit->GetPositionZ(), unit->GetMapId(), GetPlayer()->GetTeam());
     if (!curloc)
         return;
 
@@ -122,34 +121,6 @@ void WorldSession::SendTaxiMenu(Creature* unit)
         data.CanUseNodes[i] &= reachableNodes[i];
     }
 
-    // Retail offers nodes the player never discovered whenever TaxiNodes.ConditionID passes. Both masks are
-    // widened: CanLandNodes is the list the flight map turns into pins, CanUseNodes only says whether a pin
-    // that already exists may be clicked. An earlier version widened CanUseNodes alone, on the belief that
-    // CanLandNodes had to stay a pure discovery mask because early landing is checked against it - it is not.
-    // PlayerTaxi::RequestEarlyLanding tests IsTaximaskNodeKnown against the live m_taximask member, which
-    // this outgoing packet copy cannot touch. The visible effect of the old version was that a Kyrian with
-    // Transport Network researched opened the Eternal Gateway map and saw only the node he had physically
-    // stood on. Still fails closed: HandleActivateTaxiOpcode accepts exactly IsTaximaskNodeKnown ||
-    // IsNodeUnlockedByCondition, the same predicate that sets the bit here, so nothing offered is unflyable.
-    TC_LOG_DEBUG("taxi.condition", "SendTaxiMenu: player {} creature {} curloc {} taxiCheater {}",
-        GetPlayer()->GetName(), unit->GetEntry(), curloc, lastTaxiCheaterState);
-
-    if (!lastTaxiCheaterState)
-        PlayerTaxi::AppendConditionUnlockedNodesTo(data.CanLandNodes, data.CanUseNodes, reachableNodes, GetPlayer());
-
-    // Dump the block of both masks that the current node lives in, as the bytes about to be appended to
-    // SMSG_SHOW_TAXI_NODES. The client consumes these masks in uint64 blocks, so this is the wire-level
-    // answer to "did the bit actually ship" - which no amount of reading the unlock code can settle. For a
-    // covenant sanctum node (2625..2634 all sit in qword 41) this prints every transport-network sibling.
-    if (sLog->ShouldLog("taxi.condition", LOG_LEVEL_DEBUG))
-    {
-        uint32 const qword = PlayerTaxi::QwordIndexForNode(curloc);
-        TC_LOG_DEBUG("taxi.condition", "SendTaxiMenu: CanLandNodes {}", PlayerTaxi::DescribeMaskQword(data.CanLandNodes, qword));
-        TC_LOG_DEBUG("taxi.condition", "SendTaxiMenu: CanUseNodes  {}", PlayerTaxi::DescribeMaskQword(data.CanUseNodes, qword));
-        TC_LOG_DEBUG("taxi.condition", "SendTaxiMenu: sending {} qwords per mask ({} bytes), TaxiNodes index size {}",
-            uint32(data.CanLandNodes.size() / 8), uint32(data.CanLandNodes.size()), sTaxiNodesStore.GetNumRows());
-    }
-
     SendPacket(data.Write());
 
     GetPlayer()->SetTaxiCheater(lastTaxiCheaterState);
@@ -158,7 +129,7 @@ void WorldSession::SendTaxiMenu(Creature* unit)
 bool WorldSession::SendLearnNewTaxiNode(Creature* unit)
 {
     // find current node
-    uint32 curloc = sObjectMgr->GetTaxiNodeForFlightMaster(unit->GetEntry(), unit->GetPositionX(), unit->GetPositionY(), unit->GetPositionZ(), unit->GetMapId(), GetPlayer()->GetTeam());
+    uint32 curloc = sObjectMgr->GetNearestTaxiNode(unit->GetPositionX(), unit->GetPositionY(), unit->GetPositionZ(), unit->GetMapId(), GetPlayer()->GetTeam());
 
     if (curloc == 0)
         return true;                                        // `true` send to avoid WorldSession::SendTaxiMenu call with one more curlock seartch with same false result.
@@ -173,18 +144,6 @@ bool WorldSession::SendLearnNewTaxiNode(Creature* unit)
         SendPacket(data.Write());
 
         GetPlayer()->UpdateCriteria(CriteriaType::LearnTaxiNode, curloc);
-
-        TaxiNodesEntry const* node = sTaxiNodesStore.LookupEntry(curloc);
-        if (node && !node->GetFlags().HasFlag(TaxiNodeFlags::NotAccountWide))
-        {
-            std::ostringstream ss;
-            ss << GetPlayer()->m_taxi;
-            CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_WARBAND_TAXI_MASK);
-            stmt->setUInt32(0, GetBattlenetAccountId());
-            stmt->setString(1, ss.str());
-            CharacterDatabase.Execute(stmt);
-        }
-
         return true;
     }
     else
@@ -194,20 +153,7 @@ bool WorldSession::SendLearnNewTaxiNode(Creature* unit)
 void WorldSession::SendDiscoverNewTaxiNode(uint32 nodeid)
 {
     if (GetPlayer()->m_taxi.SetTaximaskNode(nodeid))
-    {
         SendPacket(WorldPackets::Taxi::NewTaxiPath(nodeid).Write());
-
-        TaxiNodesEntry const* node = sTaxiNodesStore.LookupEntry(nodeid);
-        if (node && !node->GetFlags().HasFlag(TaxiNodeFlags::NotAccountWide))
-        {
-            std::ostringstream ss;
-            ss << GetPlayer()->m_taxi;
-            CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_WARBAND_TAXI_MASK);
-            stmt->setUInt32(0, GetBattlenetAccountId());
-            stmt->setString(1, ss.str());
-            CharacterDatabase.Execute(stmt);
-        }
-    }
 }
 
 void WorldSession::HandleActivateTaxiOpcode(WorldPackets::Taxi::ActivateTaxi& activateTaxi)
@@ -220,7 +166,7 @@ void WorldSession::HandleActivateTaxiOpcode(WorldPackets::Taxi::ActivateTaxi& ac
         return;
     }
 
-    uint32 curloc = sObjectMgr->GetTaxiNodeForFlightMaster(unit->GetEntry(), unit->GetPositionX(), unit->GetPositionY(), unit->GetPositionZ(), unit->GetMapId(), GetPlayer()->GetTeam());
+    uint32 curloc = sObjectMgr->GetNearestTaxiNode(unit->GetPositionX(), unit->GetPositionY(), unit->GetPositionZ(), unit->GetMapId(), GetPlayer()->GetTeam());
     if (!curloc)
         return;
 
@@ -231,14 +177,7 @@ void WorldSession::HandleActivateTaxiOpcode(WorldPackets::Taxi::ActivateTaxi& ac
 
     if (!GetPlayer()->isTaxiCheater())
     {
-        // Accept exactly the set SendTaxiMenu offered in CanUseNodes: discovered nodes, plus nodes whose
-        // TaxiNodes.ConditionID the player currently meets. Anything else is still ERR_TAXINOTVISITED.
-        auto canUseNode = [player = GetPlayer()](uint32 nodeId)
-        {
-            return player->m_taxi.IsTaximaskNodeKnown(nodeId) || PlayerTaxi::IsNodeUnlockedByCondition(nodeId, player);
-        };
-
-        if (!canUseNode(curloc) || !canUseNode(activateTaxi.Node))
+        if (!GetPlayer()->m_taxi.IsTaximaskNodeKnown(curloc) || !GetPlayer()->m_taxi.IsTaximaskNodeKnown(activateTaxi.Node))
         {
             SendActivateTaxiReply(ERR_TAXINOTVISITED);
             return;

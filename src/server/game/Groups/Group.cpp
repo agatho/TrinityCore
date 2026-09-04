@@ -36,7 +36,6 @@
 #include "PartyPackets.h"
 #include "Pet.h"
 #include "Player.h"
-#include "RecentAlliesMgr.h"
 #include "UpdateData.h"
 #include "WorldSession.h"
 
@@ -507,18 +506,6 @@ bool Group::AddMember(Player* player)
 
     player->FailCriteria(CriteriaFailEvent::ModifyPartyStatus, 0);
 
-    // Record the "recent allies" relationship: the joining player and every other online, real member of this
-    // group are now people they recently grouped with (skip battleground/battlefield groups — those are not social).
-    if (!isBGGroup() && !isBFGroup())
-    {
-        for (GroupReference const& itr : GetMembers())
-        {
-            Player* existingMember = itr.GetSource();
-            if (existingMember && existingMember != player)
-                RecentAllies::RecordGrouping(player, existingMember);
-        }
-    }
-
     {
         // Broadcast new player group member fields to rest of the group
         UpdateData groupData(player->GetMapId());
@@ -552,17 +539,6 @@ bool Group::AddMember(Player* player)
             groupData.BuildPacket(&groupDataPacket);
             player->SendDirectMessage(&groupDataPacket);
         }
-    }
-
-    {
-        // Everyone here has now grouped with the joiner: persist the pairing and feed the clients' recent-player
-        // name caches (SMSG_UPDATE_RECENT_PLAYER_GUIDS). Collected first so the joiner gets a single batched packet.
-        std::vector<Player const*> existingMembers;
-        for (GroupReference const& itr : GetMembers())
-            if (Player const* existingMember = itr.GetSource(); existingMember != player)
-                existingMembers.push_back(existingMember);
-
-        RecentAllies::RecordGroupJoin(player, existingMembers);
     }
 
     return true;
@@ -949,59 +925,21 @@ void Group::SendUpdateDestroyGroupToPlayer(Player* player) const
     player->SendDirectMessage(partyUpdate.Write());
 }
 
-void Group::UpdatePlayerOutOfRange(Player* player) const
+void Group::UpdatePlayerOutOfRange(Player const* player) const
 {
     if (!player || !player->IsInWorld())
         return;
 
-    WorldPackets::Party::PartyMemberFullState fullState;
-    fullState.Initialize(player);
-
-    WorldPackets::Party::PartyMemberStatsSnapshot& lastBroadcast = player->GetPartyMemberStateSnapshot();
-
-    WorldPackets::Party::PartyMemberPartialState partialState;
-    partialState.MemberGuid = player->GetGUID();
-    WorldPackets::Party::PartyMemberStateDelta const delta = partialState.InitializeChanged(fullState.MemberStats, lastBroadcast);
-
-    WorldPacket const* fullPacket = nullptr;
-    WorldPacket const* partialPacket = nullptr;
-
-    // Members that received our previous broadcast hold exactly what the snapshot describes, so the
-    // difference is enough for them. Anyone else - freshly joined, or just dropped out of visibility
-    // and now relying on the party frame cache again - has to be handed the whole state.
-    GuidSet& informed = player->GetPartyMemberStateRecipients();
-    GuidSet stillOutOfRange;
+    WorldPackets::Party::PartyMemberFullState packet;
+    packet.Initialize(player);
+    packet.Write();
 
     for (GroupReference const& itr : GetMembers())
     {
         Player const* member = itr.GetSource();
-        if (member == player)
-            continue;
-
-        if (member->IsInMap(player) && member->IsWithinDist(player, member->GetSightRange(), false))
-            continue;
-
-        bool const upToDate = informed.find(member->GetGUID()) != informed.end();
-        stillOutOfRange.insert(member->GetGUID());
-
-        if (!upToDate || delta == WorldPackets::Party::PartyMemberStateDelta::RequiresFullState)
-        {
-            if (!fullPacket)
-                fullPacket = fullState.Write();
-
-            member->SendDirectMessage(fullPacket);
-        }
-        else if (delta == WorldPackets::Party::PartyMemberStateDelta::Partial)
-        {
-            if (!partialPacket)
-                partialPacket = partialState.Write();
-
-            member->SendDirectMessage(partialPacket);
-        }
+        if (member != player && (!member->IsInMap(player) || !member->IsWithinDist(player, member->GetSightRange(), false)))
+            member->SendDirectMessage(packet.GetRawPacket());
     }
-
-    informed = std::move(stillOutOfRange);
-    lastBroadcast.Assign(fullState.MemberStats);
 }
 
 void Group::BroadcastAddonMessagePacket(WorldPacket const* packet, const std::string& prefix, bool ignorePlayersInBGRaid, int group /*= -1*/, ObjectGuid ignore /*= ObjectGuid::Empty*/) const

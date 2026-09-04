@@ -34,7 +34,6 @@
 #include "SpellDefines.h"
 #include "UniqueTrackablePtr.h"
 #include <list>
-#include <span>
 
 class AreaTrigger;
 class Conversation;
@@ -46,7 +45,6 @@ class GameObject;
 class InstanceScript;
 class Item;
 class Map;
-class MeshObject;
 class Object;
 class Player;
 class Scenario;
@@ -160,19 +158,7 @@ class TC_GAME_API Object : public BaseEntity
         static Conversation* ToConversation(Object* o) { return o && o->IsConversation() ? reinterpret_cast<Conversation*>(o) : nullptr; }
         static Conversation const* ToConversation(Object const* o) { return o && o->IsConversation() ? reinterpret_cast<Conversation const*>(o) : nullptr; }
 
-        MeshObject* ToMeshObject() { return IsMeshObject() ? reinterpret_cast<MeshObject*>(this) : nullptr; }
-        MeshObject const* ToMeshObject() const { return IsMeshObject() ? reinterpret_cast<MeshObject const*>(this) : nullptr; }
-        static MeshObject* ToMeshObject(Object* o) { return o && o->IsMeshObject() ? reinterpret_cast<MeshObject*>(o) : nullptr; }
-        static MeshObject const* ToMeshObject(Object const* o) { return o && o->IsMeshObject() ? reinterpret_cast<MeshObject const*>(o) : nullptr; }
-
         UF::UpdateField<UF::ObjectData, int32(WowCS::EntityFragment::CGObject), TYPEID_OBJECT> m_objectData;
-
-        // Housing entity fragments (optional - only set on housing entities)
-        bool HasHousingDecorData() const { return m_housingDecorData.has_value(); }
-        UF::OptionalUpdateField<UF::HousingDecorData, int32(WowCS::EntityFragment::FHousingDecor_C), 0> m_housingDecorData;
-        UF::OptionalUpdateField<UF::HousingRoomData, int32(WowCS::EntityFragment::FHousingRoom_C), 0> m_housingRoomData;
-        UF::OptionalUpdateField<UF::HousingRoomComponentMeshData, int32(WowCS::EntityFragment::FHousingRoomComponentMesh_C), 0> m_housingRoomComponentMeshData;
-        UF::OptionalUpdateField<UF::HousingFixtureData, int32(WowCS::EntityFragment::FHousingFixture_C), 0> m_housingFixtureData;
 
         std::string GetDebugInfo() const override;
 
@@ -395,9 +381,6 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         virtual void SendMessageToSet(WorldPacket const* data, Player const* skipped_rcvr) const;
 
         void SendCombatLogMessage(WorldPackets::CombatLog::CombatLogServerPacket* combatLog) const;
-        // Same distribution as SendCombatLogMessage, for callers that have to deliver several combat log
-        // packets describing one event; keeps it at a single grid visit instead of one per packet.
-        void SendCombatLogMessages(std::span<WorldPackets::CombatLog::CombatLogServerPacket* const> combatLogs) const;
 
         virtual uint8 GetLevelForTarget(WorldObject const* /*target*/) const { return 1; }
 
@@ -438,8 +421,8 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         TempSummon* SummonCreature(uint32 entry, Position const& pos, TempSummonType despawnType = TEMPSUMMON_MANUAL_DESPAWN, Milliseconds despawnTime = 0s, uint32 vehId = 0, uint32 spellId = 0, ObjectGuid privateObjectOwner = ObjectGuid::Empty);
         TempSummon* SummonCreature(uint32 entry, float x, float y, float z, float o = 0, TempSummonType despawnType = TEMPSUMMON_MANUAL_DESPAWN, Milliseconds despawnTime = 0s, ObjectGuid privateObjectOwner = ObjectGuid::Empty);
         TempSummon* SummonPersonalClone(Position const& pos, TempSummonType despawnType = TEMPSUMMON_MANUAL_DESPAWN, Milliseconds despawnTime = 0s, uint32 vehId = 0, uint32 spellId = 0, Player* privateObjectOwner = nullptr);
-        GameObject* SummonGameObject(uint32 entry, Position const& pos, QuaternionData const& rot, Seconds respawnTime, GOSummonType summonType = GO_SUMMON_TIMED_OR_CORPSE_DESPAWN, ObjectGuid privateObjectOwner = ObjectGuid::Empty);
-        GameObject* SummonGameObject(uint32 entry, float x, float y, float z, float ang, QuaternionData const& rot, Seconds respawnTime, GOSummonType summonType = GO_SUMMON_TIMED_OR_CORPSE_DESPAWN, ObjectGuid privateObjectOwner = ObjectGuid::Empty);
+        GameObject* SummonGameObject(uint32 entry, Position const& pos, QuaternionData const& rot, Seconds respawnTime, GOSummonType summonType = GO_SUMMON_TIMED_OR_CORPSE_DESPAWN);
+        GameObject* SummonGameObject(uint32 entry, float x, float y, float z, float ang, QuaternionData const& rot, Seconds respawnTime, GOSummonType summonType = GO_SUMMON_TIMED_OR_CORPSE_DESPAWN);
         Creature*   SummonTrigger(float x, float y, float z, float ang, Milliseconds despawnTime, CreatureAI* (*GetAI)(Creature*) = nullptr);
         void SummonCreatureGroup(uint8 group, std::list<TempSummon*>* list = nullptr);
 

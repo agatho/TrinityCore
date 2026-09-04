@@ -32,8 +32,6 @@ class Player;
 class AreaTrigger;
 class SceneObject;
 class Conversation;
-class HousingRoomEntity;
-class MeshObject;
 
 #define MAX_NUMBER_OF_CELLS     8
 
@@ -72,29 +70,25 @@ typedef GridRefManager<Player>          PlayerMapType;
 typedef GridRefManager<AreaTrigger>     AreaTriggerMapType;
 typedef GridRefManager<SceneObject>     SceneObjectMapType;
 typedef GridRefManager<Conversation>    ConversationMapType;
-typedef GridRefManager<MeshObject>      MeshObjectMapType;
-typedef GridRefManager<HousingRoomEntity> HousingRoomEntityMapType;
 
 enum GridMapTypeMask
 {
-    GRID_MAP_TYPE_MASK_CORPSE              = 0x01,
-    GRID_MAP_TYPE_MASK_CREATURE            = 0x02,
-    GRID_MAP_TYPE_MASK_DYNAMICOBJECT       = 0x04,
-    GRID_MAP_TYPE_MASK_GAMEOBJECT          = 0x08,
-    GRID_MAP_TYPE_MASK_PLAYER              = 0x10,
-    GRID_MAP_TYPE_MASK_AREATRIGGER         = 0x20,
-    GRID_MAP_TYPE_MASK_SCENEOBJECT         = 0x40,
-    GRID_MAP_TYPE_MASK_CONVERSATION        = 0x80,
-    GRID_MAP_TYPE_MASK_MESHOBJECT          = 0x100,
-    GRID_MAP_TYPE_MASK_HOUSINGROMENTITY    = 0x200,
-    GRID_MAP_TYPE_MASK_ALL                 = 0x3FF
+    GRID_MAP_TYPE_MASK_CORPSE           = 0x01,
+    GRID_MAP_TYPE_MASK_CREATURE         = 0x02,
+    GRID_MAP_TYPE_MASK_DYNAMICOBJECT    = 0x04,
+    GRID_MAP_TYPE_MASK_GAMEOBJECT       = 0x08,
+    GRID_MAP_TYPE_MASK_PLAYER           = 0x10,
+    GRID_MAP_TYPE_MASK_AREATRIGGER      = 0x20,
+    GRID_MAP_TYPE_MASK_SCENEOBJECT      = 0x40,
+    GRID_MAP_TYPE_MASK_CONVERSATION     = 0x80,
+    GRID_MAP_TYPE_MASK_ALL              = 0xFF
 };
 
 // Creature used instead pet to simplify *::Visit templates (not required duplicate code for Creature->Pet case)
-extern template struct TypeListContainer<GridRefManagerContainer, GameObject, Creature/*except pets*/, DynamicObject, Corpse/*Bones*/, AreaTrigger, SceneObject, Conversation, HousingRoomEntity, MeshObject>;
+extern template struct TypeListContainer<GridRefManagerContainer, GameObject, Creature/*except pets*/, DynamicObject, Corpse/*Bones*/, AreaTrigger, SceneObject, Conversation>;
 extern template struct TypeListContainer<GridRefManagerContainer, Player, Creature/*pets*/, Corpse/*resurrectable*/, DynamicObject/*farsight target*/>;
 
-typedef TypeListContainer<GridRefManagerContainer, GameObject, Creature/*except pets*/, DynamicObject, Corpse/*Bones*/, AreaTrigger, SceneObject, Conversation, HousingRoomEntity, MeshObject> GridTypeMapContainer;
+typedef TypeListContainer<GridRefManagerContainer, GameObject, Creature/*except pets*/, DynamicObject, Corpse/*Bones*/, AreaTrigger, SceneObject, Conversation> GridTypeMapContainer;
 typedef TypeListContainer<GridRefManagerContainer, Player, Creature/*pets*/, Corpse/*resurrectable*/, DynamicObject/*farsight target*/> WorldTypeMapContainer;
 
 extern template class Grid<WorldTypeMapContainer, GridTypeMapContainer>;
@@ -106,22 +100,10 @@ typedef NGrid<MAX_NUMBER_OF_CELLS, WorldTypeMapContainer, GridTypeMapContainer> 
 template<uint32 LIMIT>
 struct CoordPair
 {
-    CoordPair(uint32 x=0, uint32 y=0)
-        : x_coord(x), y_coord(y)
-    { }
+    constexpr CoordPair(uint32 x, uint32 y)
+        : x_coord(x), y_coord(y) { }
 
-    CoordPair(const CoordPair<LIMIT> &obj)
-        : x_coord(obj.x_coord), y_coord(obj.y_coord)
-    { }
-
-    CoordPair<LIMIT> & operator=(const CoordPair<LIMIT> &obj)
-    {
-        x_coord = obj.x_coord;
-        y_coord = obj.y_coord;
-        return *this;
-    }
-
-    void dec_x(uint32 val)
+    constexpr void dec_x(uint32 val)
     {
         if (x_coord > val)
             x_coord -= val;
@@ -129,7 +111,7 @@ struct CoordPair
             x_coord = 0;
     }
 
-    void inc_x(uint32 val)
+    constexpr void inc_x(uint32 val)
     {
         if (x_coord + val < LIMIT)
             x_coord += val;
@@ -137,7 +119,7 @@ struct CoordPair
             x_coord = LIMIT - 1;
     }
 
-    void dec_y(uint32 val)
+    constexpr void dec_y(uint32 val)
     {
         if (y_coord > val)
             y_coord -= val;
@@ -145,7 +127,7 @@ struct CoordPair
             y_coord = 0;
     }
 
-    void inc_y(uint32 val)
+    constexpr void inc_y(uint32 val)
     {
         if (y_coord + val < LIMIT)
             y_coord += val;
@@ -153,24 +135,17 @@ struct CoordPair
             y_coord = LIMIT - 1;
     }
 
-    bool IsCoordValid() const
+    constexpr bool IsCoordValid() const
     {
         return x_coord < LIMIT && y_coord < LIMIT;
     }
 
-    CoordPair& normalize()
-    {
-        x_coord = std::min(x_coord, LIMIT - 1);
-        y_coord = std::min(y_coord, LIMIT - 1);
-        return *this;
-    }
-
-    uint32 GetId() const
+    constexpr uint32 GetId() const
     {
         return y_coord * LIMIT + x_coord;
     }
 
-    friend bool operator==(CoordPair const& p1, CoordPair const& p2) = default;
+    friend constexpr bool operator==(CoordPair const& p1, CoordPair const& p2) = default;
 
     uint32 x_coord;
     uint32 y_coord;
@@ -181,48 +156,39 @@ typedef CoordPair<TOTAL_NUMBER_OF_CELLS_PER_MAP> CellCoord;
 
 namespace Trinity
 {
-    template<class RET_TYPE, int CENTER_VAL>
-    inline RET_TYPE Compute(float x, float y, float center_offset, float size)
+    template<int32 LIMIT, int32 CENTER_VAL>
+    inline constexpr CoordPair<LIMIT> Compute(float x, float y, float center_offset, float size)
     {
         // calculate and store temporary values in double format for having same result as same mySQL calculations
-        double x_offset = (double(x) - center_offset)/size;
-        double y_offset = (double(y) - center_offset)/size;
+        double x_offset = (double(x) - center_offset) / size;
+        double y_offset = (double(y) - center_offset) / size;
 
-        int x_val = int(x_offset + CENTER_VAL + 0.5);
-        int y_val = int(y_offset + CENTER_VAL + 0.5);
-        return RET_TYPE(x_val, y_val);
+        int32 x_val = int32(x_offset + CENTER_VAL + 0.5);
+        int32 y_val = int32(y_offset + CENTER_VAL + 0.5);
+        return CoordPair<LIMIT>(
+            x_val >= 0 ? x_val < LIMIT ? x_val : LIMIT - 1 : 0,
+            y_val >= 0 ? y_val < LIMIT ? y_val : LIMIT - 1 : 0
+        );
     }
 
-    inline GridCoord ComputeGridCoord(float x, float y)
+    inline constexpr GridCoord ComputeGridCoord(float x, float y)
     {
-        return Compute<GridCoord, CENTER_GRID_ID>(x, y, CENTER_GRID_OFFSET, SIZE_OF_GRIDS);
+        return Compute<MAX_NUMBER_OF_GRIDS, CENTER_GRID_ID>(x, y, CENTER_GRID_OFFSET, SIZE_OF_GRIDS);
     }
 
-    inline GridCoord ComputeGridCoordSimple(float x, float y)
+    inline constexpr GridCoord ComputeGridCoordSimple(float x, float y)
     {
         int gx = (int)(CENTER_GRID_ID - x / SIZE_OF_GRIDS);
         int gy = (int)(CENTER_GRID_ID - y / SIZE_OF_GRIDS);
         return GridCoord((MAX_NUMBER_OF_GRIDS - 1) - gx, (MAX_NUMBER_OF_GRIDS - 1) - gy);
     }
 
-    inline CellCoord ComputeCellCoord(float x, float y)
+    inline constexpr CellCoord ComputeCellCoord(float x, float y)
     {
-        return Compute<CellCoord, CENTER_GRID_CELL_ID>(x, y, CENTER_GRID_CELL_OFFSET, SIZE_OF_GRID_CELL);
+        return Compute<TOTAL_NUMBER_OF_CELLS_PER_MAP, CENTER_GRID_CELL_ID>(x, y, CENTER_GRID_CELL_OFFSET, SIZE_OF_GRID_CELL);
     }
 
-    inline CellCoord ComputeCellCoord(float x, float y, float &x_off, float &y_off)
-    {
-        double x_offset = (double(x) - CENTER_GRID_CELL_OFFSET)/SIZE_OF_GRID_CELL;
-        double y_offset = (double(y) - CENTER_GRID_CELL_OFFSET)/SIZE_OF_GRID_CELL;
-
-        int x_val = int(x_offset + CENTER_GRID_CELL_ID + 0.5f);
-        int y_val = int(y_offset + CENTER_GRID_CELL_ID + 0.5f);
-        x_off = (float(x_offset) - float(x_val) + CENTER_GRID_CELL_ID) * SIZE_OF_GRID_CELL;
-        y_off = (float(y_offset) - float(y_val) + CENTER_GRID_CELL_ID) * SIZE_OF_GRID_CELL;
-        return CellCoord(x_val, y_val);
-    }
-
-    inline void NormalizeMapCoord(float &c)
+    inline constexpr void NormalizeMapCoord(float &c)
     {
         if (c > MAP_HALFSIZE - 0.5f)
             c = MAP_HALFSIZE - 0.5f;

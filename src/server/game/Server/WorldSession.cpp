@@ -17,8 +17,6 @@
 
 #include "WorldSession.h"
 #include "Account.h"
-#include "HousingNeighborhoodMirrorEntity.h"
-#include "HousingPlayerHouseEntity.h"
 #include "AccountMgr.h"
 #include "AuthenticationPackets.h"
 #include "Bag.h"
@@ -28,14 +26,11 @@
 #include "CharacterPackets.h"
 #include "ChatPackets.h"
 #include "ClientConfigPackets.h"
-#include "BnetPresenceMgr.h"
-#include "ClubStreamHistoryMgr.h"
 #include "Containers.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "GameTime.h"
 #include "Group.h"
-#include "LFGListMgr.h"
 #include "Guild.h"
 #include "GuildMgr.h"
 #include "Hyperlinks.h"
@@ -46,7 +41,6 @@
 #include "MiscPackets.h"
 #include "ObjectMgr.h"
 #include "OutdoorPvPMgr.h"
-#include "PetBattleMgr.h"
 #include "PacketUtilities.h"
 #include "Player.h"
 #include "QueryHolder.h"
@@ -123,8 +117,6 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _accountId(id),
     _accountName(std::move(name)),
     _battlenetAccount(new Battlenet::Account(this, ObjectGuid::Create<HighGuid::BNetAccount>(battlenetAccountId), std::move(battlenetAccountEmail))),
-    _housingPlayerHouseEntity(new HousingPlayerHouseEntity(this, ObjectGuid::Create<HighGuid::Housing>(/*subType*/3, /*arg1*/sRealmList->GetCurrentRealmId().Realm, /*arg2*/7, /*arg3*/battlenetAccountId))),
-    _housingNeighborhoodMirrorEntity(new HousingNeighborhoodMirrorEntity(this, ObjectGuid::Create<HighGuid::Housing>(/*subType*/4, /*arg1*/sRealmList->GetCurrentRealmId().Realm, /*arg2*/0, /*arg3*/battlenetAccountId))),
     m_accountExpansion(expansion),
     m_expansion(std::min<uint8>(expansion, sWorld->getIntConfig(CONFIG_EXPANSION))),
     _os(std::move(os)),
@@ -329,15 +321,6 @@ void WorldSession::AddInstanceConnection(WorldSession* session, std::weak_ptr<Wo
 
     socket->SetWorldSession(session);
     session->m_Socket[CONNECTION_TYPE_INSTANCE] = std::move(socket);
-
-    // Opens the suspend window that HandleContinuePlayerLogin closes with SMSG_RESUME_COMMS one call
-    // below. The captures put SMSG_SUSPEND_COMMS exactly here: on the instance connection, right
-    // after CMSG_ENTER_ENCRYPTED_MODE_ACK, which is the call that lands us in this function.
-    WorldPackets::Auth::SuspendComms suspendComms(CONNECTION_TYPE_INSTANCE);
-    suspendComms.SerialNumber = SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER;
-    session->SendPacket(suspendComms.Write());
-    session->RegisterTimeSync(SPECIAL_SUSPEND_COMMS_TIME_SYNC_COUNTER);
-
     session->HandleContinuePlayerLogin();
 }
 
@@ -371,10 +354,7 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
     ///- Before we process anything:
     /// If necessary, kick the player because the client didn't send anything for too long
     /// (or they've been idling in character select)
-    /// Guard the socket: a session need not have one. Bot sessions are constructed with
-    /// a null realm socket and never send packets, so they always look idle and this
-    /// dereferenced nullptr. The packet loop below already guards the same member.
-    if (m_Socket[CONNECTION_TYPE_REALM] && IsConnectionIdle() && !HasPermission(rbac::RBAC_PERM_IGNORE_IDLE_CONNECTION))
+    if (IsConnectionIdle() && !HasPermission(rbac::RBAC_PERM_IGNORE_IDLE_CONNECTION))
         m_Socket[CONNECTION_TYPE_REALM]->CloseSocket();
 
     ///- Retrieve packets from the receive queue and call the appropriate handlers
@@ -393,22 +373,6 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
         OpcodeClient opcode = static_cast<OpcodeClient>(packet->GetOpcode());
         ClientOpcodeHandler const* opHandle = opcodeTable[opcode];
         TC_METRIC_DETAILED_TIMER("worldsession_update_opcode_time", TC_METRIC_TAG("opcode", opHandle->Name));
-
-        // Housing CMSG diagnostic: log ALL opcodes in housing/neighborhood ranges
-        {
-            uint32 rawOpcode = static_cast<uint32>(opcode);
-            uint32 group = (rawOpcode >> 16) & 0xFFFF;
-            if (group == 0x30 || group == 0x31 || group == 0x32 || group == 0x33 ||  // decor/fixture/room/services
-                group == 0x35 ||  // HousingSystem CMSGs
-                group == 0x37 || group == 0x38 || group == 0x39 ||  // neighborhood charter/initiative/system
-                group == 0x55 || group == 0x56 ||  // HousingSystem SMSGs (should not appear as CMSG)
-                group == 0x5A || group == 0x5C)     // neighborhood SMSG / enter-leave plot
-            {
-                TC_LOG_ERROR("housing", ">>> HOUSING CMSG RECEIVED: opcode=0x{:08X} ({}) name='{}' status={} size={} player={}",
-                    rawOpcode, rawOpcode, opHandle->Name, uint8(opHandle->Status),
-                    packet->size(), _player ? _player->GetName() : "NO_PLAYER");
-            }
-        }
 
         try
         {
@@ -601,20 +565,6 @@ void WorldSession::LogoutPlayer(bool save)
 
     if (_player)
     {
-        // Remove any premade group finder listing this player owns, and any outstanding applications.
-        sLFGListMgr.RemoveListingsBy(_player->GetGUID());
-        sLFGListMgr.RemoveApplicationsBy(_player->GetGUID());
-        sLFGListMgr.UnregisterSearch(_player->GetGUID());
-
-        // Drop the live club stream subscriptions and focus. A disconnect never sends UnsubscribeStream,
-        // so without this a stale focus would keep marking a stream read for a player who is gone.
-        sClubStreamHistoryMgr->ClearSessionState(_player->GetGUID());
-
-        // Battle.net presence: the account stays connected but is no longer on a character. Pushed to
-        // presence.v1/v2 subscribers here rather than in World::UpdateSessions, which only sees the
-        // whole session going away.
-        sBnetPresenceMgr->OnCharacterLogout(_player);
-
         if (!_player->GetLootGUID().IsEmpty())
             DoLootReleaseAll();
 
@@ -668,30 +618,9 @@ void WorldSession::LogoutPlayer(bool save)
         ///- Remove pet
         _player->RemovePet(nullptr, PET_SAVE_AS_CURRENT);
 
-        ///- Clean up any active pet battle (before releasing journal lock so XP award works)
-        if (PetBattles::PetBattle* battle = sPetBattleMgr->GetBattleByPlayer(_player->GetGUID()))
-        {
-            if (!battle->IsFinished())
-            {
-                // If battle hasn't reached FINAL_ROUND yet, resolve it (awards XP, achievements)
-                if (!battle->IsFinalRound())
-                    battle->FinishBattle(PetBattles::PET_BATTLE_RESULT_DRAW);
-                battle->CompleteBattle();
-            }
-            sPetBattleMgr->RemoveBattle(battle->GetBattleID());
-        }
-
-        ///- Release battle pet journal lock (after battle cleanup so XP award has journal access)
+        ///- Release battle pet journal lock
         if (_battlePetMgr->HasJournalLock())
             _battlePetMgr->ToggleJournalLock(false);
-
-        ///- Release account-wide bank inventory lock (both the client-facing flag and the
-        ///  authoritative server-side reservation) so another same-bnet session can acquire it.
-        if (_player->HasPlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK))
-        {
-            _player->RemovePlayerLocalFlag(PLAYER_LOCAL_FLAG_HAS_ACCOUNT_BANK_LOCK);
-            sWorld->ReleaseAccountInventoryLock(GetBattlenetAccountGUID(), this);
-        }
 
         ///- Clear whisper whitelist
         _player->ClearWhisperWhiteList();
@@ -1034,7 +963,7 @@ void WorldSession::SaveTutorialsData(CharacterDatabaseTransaction trans)
         return;
 
     bool const hasTutorialsInDB = (_tutorialsChanged & TUTORIALS_FLAG_LOADED_FROM_DB) != 0;
-    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(hasTutorialsInDB ? CHAR_UPD_TUTORIALS : CHAR_REP_TUTORIALS);
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(hasTutorialsInDB ? CHAR_UPD_TUTORIALS : CHAR_INS_TUTORIALS);
     for (uint8 i = 0; i < MAX_ACCOUNT_TUTORIAL_VALUES; ++i)
         stmt->setUInt32(i, _tutorials[i]);
     stmt->setUInt32(MAX_ACCOUNT_TUTORIAL_VALUES, GetAccountId());
@@ -1388,15 +1317,11 @@ public:
         MOUNTS,
         ITEM_APPEARANCES,
         ITEM_FAVORITE_APPEARANCES,
-        ITEM_FAVORITE_TRANSMOG_SETS,
         TRANSMOG_ILLUSIONS,
         TRANSMOG_OUTFITS,
         WARBAND_SCENES,
         PLAYER_DATA_ELEMENTS_ACCOUNT,
         PLAYER_DATA_FLAGS_ACCOUNT,
-        ACCOUNT_STORE_PURCHASES,
-        PERKS_PROGRAM_PURCHASES,
-        PERKS_PROGRAM_TENDER,
 
         MAX_QUERIES
     };
@@ -1428,18 +1353,6 @@ public:
         stmt->setUInt32(0, battlenetAccountId);
         ok = SetPreparedQuery(MOUNTS, stmt) && ok;
 
-        stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_PERKS_PURCHASES);
-        stmt->setUInt32(0, battlenetAccountId);
-        ok = SetPreparedQuery(PERKS_PROGRAM_PURCHASES, stmt) && ok;
-
-        stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_STORE_PURCHASES);
-        stmt->setUInt32(0, battlenetAccountId);
-        ok = SetPreparedQuery(ACCOUNT_STORE_PURCHASES, stmt) && ok;
-
-        stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_ACCOUNT_PERKS_TENDER);
-        stmt->setUInt32(0, battlenetAccountId);
-        ok = SetPreparedQuery(PERKS_PROGRAM_TENDER, stmt) && ok;
-
         stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_CHARACTER_COUNTS_BY_ACCOUNT_ID);
         stmt->setUInt32(0, accountId);
         ok = SetPreparedQuery(GLOBAL_REALM_CHARACTER_COUNTS, stmt) && ok;
@@ -1451,10 +1364,6 @@ public:
         stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_ITEM_FAVORITE_APPEARANCES);
         stmt->setUInt32(0, battlenetAccountId);
         ok = SetPreparedQuery(ITEM_FAVORITE_APPEARANCES, stmt) && ok;
-
-        stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_ITEM_FAVORITE_TRANSMOG_SETS);
-        stmt->setUInt32(0, battlenetAccountId);
-        ok = SetPreparedQuery(ITEM_FAVORITE_TRANSMOG_SETS, stmt) && ok;
 
         stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_TRANSMOG_ILLUSIONS);
         stmt->setUInt32(0, battlenetAccountId);
@@ -1525,20 +1434,9 @@ void WorldSession::InitializeSessionCallback(LoginDatabaseQueryHolder const& hol
     LoadTutorialsData(realmHolder.GetPreparedResult(AccountInfoQueryHolderPerRealm::TUTORIALS));
     LoadInstanceTimeRestrictions(realmHolder.GetPreparedResult(AccountInfoQueryHolderPerRealm::INSTANCE_TIMES));
     _collectionMgr->LoadAccountToys(holder.GetPreparedResult(AccountInfoQueryHolder::GLOBAL_ACCOUNT_TOYS));
-    _collectionMgr->LoadPerksProgramPurchases(holder.GetPreparedResult(AccountInfoQueryHolder::PERKS_PROGRAM_PURCHASES));
-    // Account-wide Trader's Tender: cache the shared balance so _LoadCurrency can override the per-character
-    // row when the player enters the world (a missing row leaves the cache at -1 -> seeded from the character).
-    if (PreparedQueryResult tenderResult = holder.GetPreparedResult(AccountInfoQueryHolder::PERKS_PROGRAM_TENDER))
-    {
-        Field* tenderFields = tenderResult->Fetch();
-        _accountPerksTender = int64(tenderFields[0].GetUInt32());
-        _accountPerksCacheGrantPeriod = tenderFields[1].GetUInt64();
-    }
     _collectionMgr->LoadAccountHeirlooms(holder.GetPreparedResult(AccountInfoQueryHolder::GLOBAL_ACCOUNT_HEIRLOOMS));
     _collectionMgr->LoadAccountMounts(holder.GetPreparedResult(AccountInfoQueryHolder::MOUNTS));
-    _collectionMgr->LoadAccountStorePurchases(holder.GetPreparedResult(AccountInfoQueryHolder::ACCOUNT_STORE_PURCHASES));
     _collectionMgr->LoadAccountItemAppearances(holder.GetPreparedResult(AccountInfoQueryHolder::ITEM_APPEARANCES), holder.GetPreparedResult(AccountInfoQueryHolder::ITEM_FAVORITE_APPEARANCES));
-    _collectionMgr->LoadAccountFavoriteTransmogSets(holder.GetPreparedResult(AccountInfoQueryHolder::ITEM_FAVORITE_TRANSMOG_SETS));
     _collectionMgr->LoadAccountTransmogIllusions(holder.GetPreparedResult(AccountInfoQueryHolder::TRANSMOG_ILLUSIONS));
     _collectionMgr->LoadAccountTransmogOutfits(holder.GetPreparedResult(AccountInfoQueryHolder::TRANSMOG_OUTFITS));
     _collectionMgr->LoadAccountWarbandScenes(holder.GetPreparedResult(AccountInfoQueryHolder::WARBAND_SCENES));
@@ -1554,12 +1452,6 @@ void WorldSession::InitializeSessionCallback(LoginDatabaseQueryHolder const& hol
 
     SendSetTimeZoneInformation();
     SendFeatureSystemStatusGlueScreen();
-
-    // The Shop opens at character select too, and its panel stays on "Loading, please wait" until the
-    // client has a distribution list (C_StoreSecure.HasDistributionList). Sending it here is what lets a
-    // player see - and buy - anything before entering the world.
-    SendBattlePayDistributionList();
-
     SendClientCacheVersion(sWorld->getIntConfig(CONFIG_CLIENTCACHE_VERSION));
     SendAvailableHotfixes();
     SendAccountDataTimes(ObjectGuid::Empty, GLOBAL_CACHE_MASK);
@@ -1581,19 +1473,6 @@ void WorldSession::InitializeSessionCallback(LoginDatabaseQueryHolder const& hol
 
     _battlePetMgr->LoadFromDB(holder.GetPreparedResult(AccountInfoQueryHolder::BATTLE_PETS),
                               holder.GetPreparedResult(AccountInfoQueryHolder::BATTLE_PET_SLOTS));
-}
-
-void WorldSession::StoreAccountPerksTender(uint32 amount)
-{
-    // Trader's Tender is account-wide: keep the session cache in sync and write the new absolute balance
-    // to the login DB so every character of the bnet account earns/spends/refunds against one wallet.
-    _accountPerksTender = int64(amount);
-
-    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_REP_ACCOUNT_PERKS_TENDER);
-    stmt->setUInt32(0, GetBattlenetAccountId());
-    stmt->setUInt32(1, amount);
-    stmt->setUInt64(2, _accountPerksCacheGrantPeriod);
-    LoginDatabase.Execute(stmt);
 }
 
 rbac::RBACData* WorldSession::GetRBACData() const
@@ -1909,10 +1788,8 @@ uint32 WorldSession::DosProtection::GetMaxPacketCounterAllowed(uint32 opcode) co
         }
         case CMSG_CHECK_IS_ADVENTURE_MAP_POI_VALID:     // not profiled
         {
-            // 12.0.1: the client sends one check per entry in ITS AdventureMapPOI.db2 on map open. Basing the burst
-            // limit on the SERVER store size (GetNumRows) kicks the player when the server's db2 is a subset of the
-            // client's (BfA war-campaign map -> flood -> AntiDOS kick). Allow the client's full burst.
-            maxPacketCounterAllowed = std::max<uint32>(sAdventureMapPOIStore.GetNumRows(), 4096u);
+            // 12.0.1: all entries of the db2 are sent
+            maxPacketCounterAllowed = sAdventureMapPOIStore.GetNumRows();
             break;
         }
         default:

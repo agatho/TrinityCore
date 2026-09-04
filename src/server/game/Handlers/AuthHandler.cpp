@@ -22,14 +22,12 @@
 #include "ClientConfigPackets.h"
 #include "DisableMgr.h"
 #include "GameTime.h"
-#include "Log.h"
 #include "ObjectMgr.h"
 #include "RBAC.h"
 #include "RealmList.h"
 #include "SystemPackets.h"
 #include "Timezone.h"
 #include "Util.h"
-#include "Config.h"
 #include "World.h"
 
 void WorldSession::SendAuthResponse(uint32 code, bool queued, uint32 queuePos)
@@ -56,7 +54,7 @@ void WorldSession::SendAuthResponse(uint32 code, bool queued, uint32 queuePos)
             for (auto&& templ : sCharacterTemplateDataStore->GetCharacterTemplates())
                 response.SuccessInfo->Templates.push_back(&templ.second);
 
-        response.SuccessInfo->AvailableClasses = &sObjectMgr->GetClassExpansionRequirements();
+        response.SuccessInfo->AvailableClasses = &sObjectMgr->GetRaceClassRequirements();
 
         // TEMPORARY - prevent creating characters in uncompletable zone
         // This has the side effect of disabling Exile's Reach choice clientside without actually forcing character templates
@@ -110,12 +108,7 @@ void WorldSession::SendSetTimeZoneInformation()
 void WorldSession::SendFeatureSystemStatusGlueScreen()
 {
     WorldPackets::System::FeatureSystemStatusGlueScreen features;
-    // Advertise the in-game Shop as available on the character-select/glue screen too (retail sends
-    // this true in 12.0.7). Gates the glue-screen Shop button; the in-world flag is set in
-    // WorldSession::SendFeatureSystemStatus. Both follow the Shop.Enabled worldserver.conf toggle.
-    bool const shopEnabled = sWorld->getBoolConfig(CONFIG_SHOP_ENABLED);
-    features.BpayStoreAvailable = shopEnabled;
-    features.CommerceServerEnabled = shopEnabled;
+    features.BpayStoreAvailable = false;
     features.BpayStoreDisabledByParentalControls = false;
     features.CharUndeleteEnabled = sWorld->getBoolConfig(CONFIG_FEATURE_SYSTEM_CHARACTER_UNDELETE_ENABLED);
     features.MaxCharactersOnThisRealm = sWorld->getIntConfig(CONFIG_CHARACTERS_PER_REALM);
@@ -147,27 +140,6 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
 
     features.AvailableGameModeIDs.push_back(8); // GameMode.db2, standard
 
-    // In-game Shop character boost. These three are what the client's glue screen reads to decide
-    // whether to offer a boost at all: C_CharacterServices consults IsTrialBoostEnabled before drawing
-    // the boost/"Try New Class" affordances, and the two type fields tell it WHICH boost, which has to
-    // match the BoostID our catalog's CharacterBoost deliverable carries or the UI describes a different
-    // product to the one the account owns.
-    //
-    // They follow ownership, not configuration: the flag is set only while this account actually holds
-    // an unapplied boost entitlement, so the client never offers a boost that CMSG_CHARACTER_UPGRADE_START
-    // would then have to refuse. _shopBoostAdvertised records what we said, so the Shop can push a
-    // corrected copy of this packet when the answer changes mid-session (see LoadBattlePayEntitlements).
-    _shopBoostAdvertised = shopEnabled
-        && sWorld->getBoolConfig(CONFIG_SHOP_ENTITLEMENTS_ENABLED)
-        && HasBattlePayCharacterBoost();
-
-    if (_shopBoostAdvertised)
-    {
-        features.TrialBoostEnabled = true;
-        features.ActiveBoostType = BattlePayMgr::GetCharacterBoostType();
-        features.TrialBoostType = BattlePayMgr::GetCharacterBoostType();
-    }
-
     SendPacket(features.Write());
 
     WorldPackets::System::MirrorVarSingle vars[] =
@@ -175,146 +147,20 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
         { "raidLockoutExtendEnabled"sv, "1"sv },
         { "sellAllJunkEnabled"sv, "1"sv },
         { "bypassItemLevelScalingCode"sv, "0"sv },
-        // In-game Shop. Two independent client store gates:
-        //   bpayStoreEnable - the legacy BattlePay opcode path (CMSG_BATTLE_PAY_GET_PRODUCT_LIST ->
-        //     our BattlePayMgr catalog). This is the one we actually implement, so it follows Shop.Enabled.
-        //   shop2Enabled    - the MODERN path, which is NOT a game-opcode flow at all: the client talks
-        //     HTTPS to Blizzard web services whose endpoints arrive in these very MirrorVars
-        //     (shop2HostUrlRequests = https://us.api.blizzard.com, shop2HostUrlAuth =
-        //     https://oauth.battle.net, plus shop2ClientIdStr and the VC/POP GUIDs - all captured in
-        //     ingame-shop_ordersCrafting_professions.pkt). Announcing shop2Enabled=1 while shipping no
-        //     endpoints leaves the client with the modern store switched on and nowhere to reach, so it
-        //     is OFF by default and gated behind its own config. Turn Shop.Shop2Enabled on only when a
-        //     real endpoint exists to answer it.
-        { "shop2Enabled"sv, (shopEnabled && sWorld->getBoolConfig(CONFIG_SHOP_SHOP2_ENABLED)) ? "1"sv : "0"sv },
-        { "bpayStoreEnable"sv, shopEnabled ? "1"sv : "0"sv },
-        // Recent Allies is implemented server-side (RecentAlliesMgr + the 5 opcodes); retail sends 1.
-        { "recentAlliesEnabledClient"sv, "1"sv },
-        // In-game browser widget (retail sends 1); the Shop uses it to render richer content.
-        { "browserEnabled"sv, "1"sv },
-        // Master looter is a fully supported loot method (LOOT_METHOD_MASTER); retail sends 1.
-        // Was omitted entirely from our MIRROR_VARS, hiding the master-loot UI option.
-        { "masterLooterEnabled"sv, "1"sv },
-        // Housing game rules â€” ALL values verified against 12.0.1.65940 sniff packet data (Feb 2026)
-        // Service & feature flags (read from config, default true)
-        { "performHousingExpansionCheckClient"sv, "1"sv },
-        { "housingServiceEnabled"sv, "1"sv },
-        { "housingEnableBuyHouse"sv, sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_BUY_HOUSE) ? "1"sv : "0"sv },
-        { "housingEnableDeleteHouse"sv, sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_DELETE_HOUSE) ? "1"sv : "0"sv },
-        { "housingEnableMoveHouse"sv, sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_MOVE_HOUSE) ? "1"sv : "0"sv },
-        { "housingEnableCreateCharterNeighborhood"sv, sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_CREATE_CHARTER_NEIGHBORHOOD) ? "1"sv : "0"sv },
-        { "housingEnableCreateGuildNeighborhood"sv, sWorld->getBoolConfig(CONFIG_HOUSING_ENABLE_CREATE_GUILD_NEIGHBORHOOD) ? "1"sv : "0"sv },
-        // Market
-        { "housingMarketEnabled"sv, "1"sv },
-        { "housingMarketShopEnabled"sv, "1"sv },
-        { "housingMarketCartFullRemoveEnabled"sv, "1"sv },
-        // Neighborhood & exterior
-        { "housingExteriorTypeByNeighborhoodFactionRestriction"sv, "1"sv },
-        { "minNeighborhoodGroupMembers"sv, "3"sv },
-        // Decoration limits
-        { "housingBasicDecor_MaxPreviewLimit"sv, "100"sv },
-        { "housingCatalog_CartSizeLimit"sv, "20"sv },
-        // Decor scale limits
-        { "housingExpertDecor_Scale_Indoor_Min"sv, "0.200000"sv },
-        { "housingExpertDecor_Scale_Indoor_Max"sv, "2.000000"sv },
-        { "housingExpertDecor_Scale_Outdoor_Min"sv, "0.200000"sv },
-        { "housingExpertDecor_Scale_Outdoor_Max"sv, "2.000000"sv },
-        // Screenshot report thresholds
-        { "housingDecorReportScreenshotFacingDotThreshold"sv, "0.500000"sv },
-        { "housingDecorReportScreenshotDistanceThreshold"sv, "150.000000"sv },
-        // Market telemetry throttles â€” sniff-verified against build 12.0.1.66838,
-        // SMSG_MIRROR_VARS at packet idx 9976 (dump_12.0.1.66838_2026-04-15_09-35-59).
-        // The client reads these before it will send any SMSG_HOUSING_MARKET_*
-        // telemetry CMSGs; without them the market UI may throttle-fail silently.
-        { "housingMarketViewInStoreTelemThrottle"sv, "5"sv },
-        { "housingMarketViewBundleTelemThrottle"sv, "10"sv },
-        { "housingMarketAddToCartTelemThrottle"sv, "15"sv },
-        { "housingMarketClearCartTelemThrottle"sv, "5"sv },
-        { "housingMarketRemoveFromCartTelemThrottle"sv, "20"sv },
-        { "housingMarketThrottleTimePeriodMs"sv, "10000"sv },
-        // Situation flags â€” driver context for the client's "situation" state
-        // machine (automatic/manual triggered events). Retail sends all three
-        // set on login; we were sending none. Same sniff reference.
-        { "enableAutomaticSituations"sv, "1"sv },
-        { "enableManualSituations"sv, "1"sv },
-        { "enableTransmogUpdateSituation"sv, "1"sv },
-        // Transmog system flags â€” the client gates parts of the transmog UI
-        // on these being present. Retail sends them at this stage of login.
-        { "transmogEnableSystem"sv, "1"sv },
-        { "transmogAllowArtifactOverride"sv, "1"sv },
-        { "transmogAllowCanUseEverChanges"sv, "0"sv },
-        { "transmogEnableOutfitPurchases"sv, "1"sv },
-        { "transmogEnableOutfitSlotChanges"sv, "1"sv },
-        // --- Additional vars from retail MIRROR_VARS audit (2026-04-21) ---
-        // Retail sends 116 MIRROR_VARS entries, we were sending 41. These 40
-        // below are the subset that drive client behaviour without requiring
-        // Blizzard-specific service URLs (shop2 / Pinterest skipped).
-        // Damage meter â€” gates the in-game damage meter addon feature
-        { "damageMeterCacheEnabled"sv, "1"sv },
-        { "damageMeterProcessingEnabled"sv, "1"sv },
-        // Addon chat restrictions â€” affects WHISPER/GROUP addon message routing
-        { "addonChatRestrictionsEnabled"sv, "1"sv },
-        { "addonChatRestrictionsEnabledForOutgoingAddonMessages"sv, "1"sv },
-        // Lua resource caps â€” the client throttles AddOn resources when these
-        // are present. Retail's caps, keep identical to not break addons.
-        { "limitedLuaResourcesEnabled"sv, "0"sv },
-        { "limitedLuaResourcesAddonCapacityAnim"sv, "5000"sv },
-        { "limitedLuaResourcesAddonCapacityAnimGroup"sv, "2000"sv },
-        { "limitedLuaResourcesAddonCapacityFont"sv, "300"sv },
-        { "limitedLuaResourcesAddonCapacityFontString"sv, "5000"sv },
-        { "limitedLuaResourcesAddonCapacityFrame"sv, "10000"sv },
-        { "limitedLuaResourcesAddonCapacityTexture"sv, "40000"sv },
-        { "limitedLuaResourcesAddonCapacityTimer"sv, "500"sv },
-        { "limitedLuaResourcesGlobalCapacityAnim"sv, "50000"sv },
-        { "limitedLuaResourcesGlobalCapacityAnimGroup"sv, "20000"sv },
-        { "limitedLuaResourcesGlobalCapacityFont"sv, "3000"sv },
-        { "limitedLuaResourcesGlobalCapacityFontString"sv, "50000"sv },
-        { "limitedLuaResourcesGlobalCapacityFrame"sv, "100000"sv },
-        { "limitedLuaResourcesGlobalCapacityTexture"sv, "400000"sv },
-        { "limitedLuaResourcesGlobalCapacityTimer"sv, "500"sv },
-        // Lua script throttling â€” bucket limits per second / burst
-        { "luaScriptBucketThrottleEnabled"sv, "1"sv },
-        { "luaScriptBucketThrottleMaxMsBurstNormal"sv, "20000"sv },
-        { "luaScriptBucketThrottleMaxMsBurstRestricted"sv, "1000"sv },
-        { "luaScriptBucketThrottleMaxMsPerSecondNormal"sv, "2000"sv },
-        { "luaScriptBucketThrottleMaxMsPerSecondRestricted"sv, "500"sv },
-        // Hardcore mode throttling â€” not used but sent for parity
-        { "hardcoreScriptThrottlingEnabled"sv, "0"sv },
-        // PvP training grounds â€” the PvP duel area feature
-        { "pvpTrainingGroundsEnabledClient"sv, "0"sv },
-        // Recent allies request throttle
-        { "recentAlliesRequestDataThrottle"sv, "5000"sv },
-        // LFG text filters
-        { "enableEndgameEditRestrictionsForLFGText"sv, "1"sv },
-        // Disabled game modes (retail passes an empty string; keep empty)
-        { "disabledGamemodes"sv, ""sv },
+        { "shop2Enabled"sv, "0"sv },
+        { "bpayStoreEnable"sv, "0"sv },
+        { "recentAlliesEnabledClient"sv, "0"sv },
+        { "browserEnabled"sv, "0"sv },
+        { "housingEnableCreateGuildNeighborhood"sv, "0"sv },
+        { "housingEnableDeleteHouse"sv, "0"sv },
+        { "housingServiceEnabled"sv, "0"sv },
+        { "housingEnableMoveHouse"sv, "0"sv },
+        { "housingEnableCreateCharterNeighborhood"sv, "0"sv },
+        { "housingEnableBuyHouse"sv, "0"sv },
+        { "housingMarketEnabled"sv, "0"sv },
     };
 
-    // shop2 endpoint advertisement. The client reaches the modern store over HTTPS at whatever host
-    // these vars name - they are the ONLY thing that points it anywhere, so serving our own endpoint
-    // is a matter of naming it here (no hosts file, no hostname impersonation). The client's built-in
-    // defaults are Blizzard's dev hosts (https://us.apidev.blizzard.net, https://oauth.web.blizzard.net),
-    // which is why an arbitrary host is acceptable to it. Only advertised when Shop.Shop2Enabled is on
-    // AND a URL is actually configured, so we never announce a store with nowhere to reach.
-    std::vector<WorldPackets::System::MirrorVarSingle> varList(std::begin(vars), std::end(vars));
-    if (shopEnabled && sWorld->getBoolConfig(CONFIG_SHOP_SHOP2_ENABLED))
-    {
-        auto addIfConfigured = [&varList](std::string_view name, char const* configKey)
-        {
-            std::string value = sConfigMgr->GetStringDefault(configKey, "");
-            if (!value.empty())
-                varList.emplace_back(name, value);
-        };
-
-        addIfConfigured("shop2HostUrlRequests"sv, "Shop.Shop2HostUrlRequests");
-        addIfConfigured("shop2HostUrlAuth"sv,     "Shop.Shop2HostUrlAuth");
-        addIfConfigured("shop2ClientIdStr"sv,     "Shop.Shop2ClientId");
-    }
-
     WorldPackets::System::MirrorVars variables;
-    variables.Variables = varList;
+    variables.Variables = vars;
     SendPacket(variables.Write());
-
-    TC_LOG_INFO("housing", "<<< SMSG_MIRROR_VARS sent: housingServiceEnabled=1, MaxExpansionLevel={}, AccountExpansion={}",
-        sWorld->getIntConfig(CONFIG_EXPANSION), GetAccountExpansion());
 }

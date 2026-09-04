@@ -82,10 +82,8 @@ public:
     void Reset() override;
 
     static void DeleteFromDB(ObjectGuid const& guid);
-    void LoadFromDB(PreparedQueryResult achievementResult, PreparedQueryResult criteriaResult,
-                    PreparedQueryResult warbandAchievementResult, PreparedQueryResult warbandCriteriaResult);
+    void LoadFromDB(PreparedQueryResult achievementResult, PreparedQueryResult criteriaResult);
     void SaveToDB(CharacterDatabaseTransaction trans);
-    void SaveAccountWideToDB(CharacterDatabaseTransaction trans);
 
     void SendAllData(Player const* receiver) const override;
     void SendAchievementInfo(Player* receiver, uint32 achievementId = 0) const;

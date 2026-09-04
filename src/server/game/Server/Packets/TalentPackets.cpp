@@ -61,9 +61,6 @@ ByteBuffer& operator<<(ByteBuffer& data, ClassicTalentGroupInfo const& talentGro
     if (!talentGroupInfo.GlyphIDs.empty())
         data.append(talentGroupInfo.GlyphIDs.data(), talentGroupInfo.GlyphIDs.size());
 
-    data.WriteBit(talentGroupInfo.Unused1125);
-    data.FlushBits();
-
     return data;
 }
 
@@ -113,11 +110,6 @@ void LearnTalents::Read()
     _worldPacket >> BitsSize<6>(Talents);
     for (uint16& talent : Talents)
         _worldPacket >> talent;
-}
-
-void UnlearnSpecialization::Read()
-{
-    _worldPacket >> SpecGroupIndex;
 }
 
 WorldPacket const* RespecWipeConfirm::Write()

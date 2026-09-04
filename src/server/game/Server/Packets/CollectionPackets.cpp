@@ -27,11 +27,6 @@ void CollectionItemSetFavorite::Read()
     _worldPacket >> Bits<1>(IsFavorite);
 }
 
-void MakeConditionalAppearancePermanent::Read()
-{
-    _worldPacket >> ItemModifiedAppearanceID;
-}
-
 ByteBuffer& operator<<(ByteBuffer& data, ItemCollectionItemData const& item)
 {
     data << int32(item.ID);

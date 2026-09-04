@@ -20,18 +20,14 @@
 #include "Corpse.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
-#include "DBCEnums.h"
 #include "GameTime.h"
 #include "Item.h"
 #include "Log.h"
 #include "Map.h"
-#include "Neighborhood.h"
-#include "NeighborhoodMgr.h"
 #include "NPCHandler.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
-#include "ClubUtils.h"
 #include "QueryPackets.h"
 #include "RealmList.h"
 #include "TerrainMgr.h"
@@ -40,28 +36,9 @@
 
 void WorldSession::BuildNameQueryData(ObjectGuid guid, WorldPackets::Query::NameCacheLookupResult& lookupData)
 {
-    lookupData.Player = guid;
-
-    // Housing GUIDs (HighGuid::Housing, type 55) are resolved via HouseData
-    // instead of the player name cache. The client's NameCacheLookupResult
-    // structure includes an Optional<HouseLookupData> field for this purpose.
-    if (guid.GetHigh() == HighGuid::Housing)
-    {
-        Neighborhood const* neighborhood = sNeighborhoodMgr.GetNeighborhood(guid);
-        if (neighborhood && !neighborhood->GetName().empty())
-        {
-            lookupData.Result = RESPONSE_SUCCESS;
-            lookupData.HouseData.emplace();
-            lookupData.HouseData->Guid = guid;
-            // GetName() returns const std::string& with stable lifetime
-            lookupData.HouseData->Name = neighborhood->GetName();
-        }
-        else
-            lookupData.Result = RESPONSE_FAILURE;
-        return;
-    }
-
     Player* player = ObjectAccessor::FindConnectedPlayer(guid);
+
+    lookupData.Player = guid;
 
     lookupData.Data.emplace();
     if (lookupData.Data->Initialize(guid, player))
@@ -74,53 +51,9 @@ void WorldSession::HandleQueryPlayerNames(WorldPackets::Query::QueryPlayerNames&
 {
     WorldPackets::Query::QueryPlayerNamesResponse response;
     for (ObjectGuid guid : queryPlayerNames.Players)
-    {
-        // Log Housing GUID queries for debugging neighborhood name display
-        if (guid.GetHigh() == HighGuid::Housing)
-            TC_LOG_ERROR("housing", "CMSG_QUERY_PLAYER_NAMES: Client queried Housing GUID {} â€” resolving via HouseData",
-                guid.ToString());
-
         BuildNameQueryData(guid, response.Players.emplace_back());
-    }
 
     SendPacket(response.Write());
-}
-
-// The Communities window identifies club members only by their club MemberId (and their BNet account guid), not by
-// character guid, so the ordinary CMSG_QUERY_PLAYER_NAMES path cannot resolve them and member rows render without a
-// name. Both of these opcodes were Handle_NULL and the response opcode was send-blocked.
-//
-// Clubs::CreateClubMemberId packs {realmId<<48 | guid counter}; GetGuidFromClubMemberId inverts that. A member id
-// minted on another realm cannot be resolved from our character cache and is answered with a non-zero result.
-void WorldSession::SendPlayerNameByCommunityId(WorldPackets::Query::BNetAccountAndCommunityID const& member)
-{
-    WorldPackets::Query::QueryPlayerNameByCommunityIdResponse response;
-    response.Member = member;
-
-    ObjectGuid guid = Battlenet::Services::Clubs::GetGuidFromClubMemberId(member.CommunityID);
-    if (!guid.IsEmpty() && response.Data.emplace().Initialize(guid))
-        response.Result = 0;   // found - the payload is parsed only when Result == 0
-    else
-    {
-        response.Data.reset();
-        response.Result = 1;
-    }
-
-    SendPacket(response.Write());
-}
-
-void WorldSession::HandleQueryPlayerNameByCommunityId(WorldPackets::Query::QueryPlayerNameByCommunityId& queryPlayerNameByCommunityId)
-{
-    SendPlayerNameByCommunityId(queryPlayerNameByCommunityId.Member);
-}
-
-void WorldSession::HandleQueryPlayerNamesForCommunity(WorldPackets::Query::QueryPlayerNamesForCommunity& queryPlayerNamesForCommunity)
-{
-    // There is no batched response opcode in the 12.0.7 opcode set - the client resolves a community roster by
-    // matching each SMSG_QUERY_PLAYER_NAME_BY_COMMUNITY_ID_RESPONSE against the key it echoes, so answer one
-    // response per requested member.
-    for (WorldPackets::Query::BNetAccountAndCommunityID const& member : queryPlayerNamesForCommunity.Members)
-        SendPlayerNameByCommunityId(member);
 }
 
 void WorldSession::HandleQueryTimeOpcode(WorldPackets::Query::QueryTime& /*queryTime*/)
@@ -414,55 +347,11 @@ void WorldSession::HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasureP
     if (!questInfo)
         return;
 
-    // Only answer for pickers the quest actually advertises - refuse unrelated picker ids.
-    bool questUsesPicker = false;
-    for (int32 treasurePickerId : questInfo->GetTreasurePickerId())
-    {
-        if (uint32(treasurePickerId) == queryTreasurePicker.TreasurePickerID)
-        {
-            questUsesPicker = true;
-            break;
-        }
-    }
-
-    if (!questUsesPicker)
-        return;
-
     WorldPackets::Query::TreasurePickerResponse treasurePickerResponse;
     treasurePickerResponse.QuestID = queryTreasurePicker.QuestID;
     treasurePickerResponse.TreasurePickerID = queryTreasurePicker.TreasurePickerID;
 
-    // A quest template can advertise a TreasurePickerID that world has no matching `treasure_picker`
-    // row for (e.g. the DH intro quest 40077 -> picker 3688). We must still answer: the client's quest
-    // frame blocks on the CMSG_QUERY_TREASURE_PICKER reply and never sends ACCEPT if we stay silent.
-    // So fall through to an empty SMSG_TREASURE_PICKER_RESPONSE rather than returning - no invented
-    // loot; fill `treasure_picker` when the data is actually known.
-    if (TreasurePickerTemplate const* treasurePicker = sObjectMgr->GetTreasurePicker(queryTreasurePicker.TreasurePickerID))
-    {
-        treasurePickerResponse.Treasure.Flags = treasurePicker->Flags;
-        treasurePickerResponse.Treasure.IsChoice = treasurePicker->IsChoice;
-        treasurePickerResponse.Treasure.Gold = treasurePicker->Gold;
-
-        Player* player = GetPlayer();
-        for (TreasurePickerItem const& pickerItem : treasurePicker->Items)
-        {
-            if (!sObjectMgr->IsTreasurePickerItemEligibleForPlayer(player, pickerItem.ItemID))
-                continue;
-
-            WorldPackets::Query::TreasurePickItem& itemPick = treasurePickerResponse.Treasure.ItemPicks.emplace_back();
-            itemPick.Item.ItemID = pickerItem.ItemID;
-            itemPick.Quantity = pickerItem.Quantity;
-            if (pickerItem.BonusListID)
-            {
-                itemPick.Item.ItemBonus.emplace();
-                itemPick.Item.ItemBonus->Context = ItemContext(pickerItem.Context);
-                itemPick.Item.ItemBonus->BonusListIDs.push_back(pickerItem.BonusListID);
-            }
-        }
-    }
-    else
-        TC_LOG_DEBUG("network", "WORLD: CMSG_QUERY_TREASURE_PICKER quest {} picker {} - no `treasure_picker` row, sending empty response",
-            queryTreasurePicker.QuestID, queryTreasurePicker.TreasurePickerID);
+    // TODO: Missing treasure picker implementation
 
     SendPacket(treasurePickerResponse.Write());
 }

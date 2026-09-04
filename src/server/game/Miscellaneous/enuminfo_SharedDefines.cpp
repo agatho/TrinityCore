@@ -1962,7 +1962,7 @@ TC_API_EXPORT EnumText EnumUtils<SpellAttr13>::ToString(SpellAttr13 value)
         case SPELL_ATTR13_UNK5: return { "SPELL_ATTR13_UNK5", "Unknown attribute 5@Attr13", "" };
         case SPELL_ATTR13_UNK6: return { "SPELL_ATTR13_UNK6", "Unknown attribute 6@Attr13", "" };
         case SPELL_ATTR13_UNK7: return { "SPELL_ATTR13_UNK7", "Unknown attribute 7@Attr13", "" };
-        case SPELL_ATTR13_CANNOT_LIFESTEAL_LEECH: return { "SPELL_ATTR13_CANNOT_LIFESTEAL_LEECH", "Cannot Lifesteal/Leech", "" };
+        case SPELL_ATTR13_UNK8: return { "SPELL_ATTR13_UNK8", "Unknown attribute 8@Attr13", "" };
         case SPELL_ATTR13_UNK9: return { "SPELL_ATTR13_UNK9", "Unknown attribute 9@Attr13", "" };
         case SPELL_ATTR13_UNK10: return { "SPELL_ATTR13_UNK10", "Unknown attribute 10@Attr13", "" };
         case SPELL_ATTR13_UNK11: return { "SPELL_ATTR13_UNK11", "Unknown attribute 11@Attr13", "" };
@@ -2006,7 +2006,7 @@ TC_API_EXPORT SpellAttr13 EnumUtils<SpellAttr13>::FromIndex(size_t index)
         case 5: return SPELL_ATTR13_UNK5;
         case 6: return SPELL_ATTR13_UNK6;
         case 7: return SPELL_ATTR13_UNK7;
-        case 8: return SPELL_ATTR13_CANNOT_LIFESTEAL_LEECH;
+        case 8: return SPELL_ATTR13_UNK8;
         case 9: return SPELL_ATTR13_UNK9;
         case 10: return SPELL_ATTR13_UNK10;
         case 11: return SPELL_ATTR13_UNK11;
@@ -2047,7 +2047,7 @@ TC_API_EXPORT size_t EnumUtils<SpellAttr13>::ToIndex(SpellAttr13 value)
         case SPELL_ATTR13_UNK5: return 5;
         case SPELL_ATTR13_UNK6: return 6;
         case SPELL_ATTR13_UNK7: return 7;
-        case SPELL_ATTR13_CANNOT_LIFESTEAL_LEECH: return 8;
+        case SPELL_ATTR13_UNK8: return 8;
         case SPELL_ATTR13_UNK9: return 9;
         case SPELL_ATTR13_UNK10: return 10;
         case SPELL_ATTR13_UNK11: return 11;
@@ -4307,12 +4307,13 @@ TC_API_EXPORT EnumText EnumUtils<Emote>::ToString(Emote value)
         case EMOTE_STATE_WORK_ZULAMAN_BLACKSMITTING: return { "EMOTE_STATE_WORK_ZULAMAN_BLACKSMITTING", "EMOTE_STATE_WORK_ZULAMAN_BLACKSMITTING", "" };
         case EMOTE_STATE_WORK_ZULAMAN_HAMMERING_SOUND: return { "EMOTE_STATE_WORK_ZULAMAN_HAMMERING_SOUND", "EMOTE_STATE_WORK_ZULAMAN_HAMMERING_SOUND", "" };
         case EMOTE_ATTACK1H_ZONE2_BREAKING_STUFF_SOUND: return { "EMOTE_ATTACK1H_ZONE2_BREAKING_STUFF_SOUND", "EMOTE_ATTACK1H_ZONE2_BREAKING_STUFF_SOUND", "" };
+        case EMOTE_ONESHOT_OFFER_LOOP: return { "EMOTE_ONESHOT_OFFER_LOOP", "EMOTE_ONESHOT_OFFER_LOOP", "" };
         default: throw std::out_of_range("value");
     }
 }
 
 template <>
-TC_API_EXPORT size_t EnumUtils<Emote>::Count() { return 484; }
+TC_API_EXPORT size_t EnumUtils<Emote>::Count() { return 485; }
 
 template <>
 TC_API_EXPORT Emote EnumUtils<Emote>::FromIndex(size_t index)
@@ -4803,6 +4804,7 @@ TC_API_EXPORT Emote EnumUtils<Emote>::FromIndex(size_t index)
         case 481: return EMOTE_STATE_WORK_ZULAMAN_BLACKSMITTING;
         case 482: return EMOTE_STATE_WORK_ZULAMAN_HAMMERING_SOUND;
         case 483: return EMOTE_ATTACK1H_ZONE2_BREAKING_STUFF_SOUND;
+        case 484: return EMOTE_ONESHOT_OFFER_LOOP;
         default: throw std::out_of_range("index");
     }
 }
@@ -5296,6 +5298,7 @@ TC_API_EXPORT size_t EnumUtils<Emote>::ToIndex(Emote value)
         case EMOTE_STATE_WORK_ZULAMAN_BLACKSMITTING: return 481;
         case EMOTE_STATE_WORK_ZULAMAN_HAMMERING_SOUND: return 482;
         case EMOTE_ATTACK1H_ZONE2_BREAKING_STUFF_SOUND: return 483;
+        case EMOTE_ONESHOT_OFFER_LOOP: return 484;
         default: throw std::out_of_range("value");
     }
 }

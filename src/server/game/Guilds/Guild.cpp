@@ -26,7 +26,6 @@
 #include "ChatPackets.h"
 #include "ClubMembershipService.h"
 #include "ClubService.h"
-#include "ClubStreamHistoryMgr.h"
 #include "ClubUtils.h"
 #include "Config.h"
 #include "DB2Stores.h"
@@ -46,9 +45,6 @@
 #include "WorldSession.h"
 #include "api/client/v1/club_listener.pb.h"
 #include "api/client/v1/club_membership_listener.pb.h"
-#include <algorithm>
-#include <cctype>
-#include <unordered_map>
 
 size_t const MAX_GUILD_BANK_TAB_TEXT_LEN = 500;
 
@@ -1526,9 +1522,6 @@ void Guild::HandleSetEmblem(WorldSession* session, EmblemInfo const& emblemInfo)
         m_emblemInfo = emblemInfo;
         m_emblemInfo.SaveToDB(m_id);
 
-        // CriteriaType::GuildTabardCreated (133) - guild-scoped criterion, fired once per saved emblem.
-        UpdateCriteria(CriteriaType::GuildTabardCreated, 1, 0, 0, nullptr, player);
-
         SendSaveEmblemResult(session, ERR_GUILDEMBLEM_SUCCESS); // "Guild Emblem saved."
 
         HandleQuery(session);
@@ -1676,9 +1669,6 @@ void Guild::HandleBuyBankTab(WorldSession* session, uint8 tabId)
     _CreateNewBankTab(trans);
 
     CharacterDatabase.CommitTransaction(trans);
-
-    // CriteriaType::GuildBankTabsPurchased (128) - a running total, so pass the new purchased-tab count.
-    UpdateCriteria(CriteriaType::GuildBankTabsPurchased, _GetPurchasedTabsSize(), 0, 0, nullptr, player);
 
     WorldPackets::Guild::GuildEventTabAdded packet;
     BroadcastPacket(packet.Write());
@@ -2128,11 +2118,6 @@ bool Guild::HandleMemberWithdrawMoney(WorldSession* session, uint64 amount, bool
     // Log guild bank event
     _LogBankEvent(trans, repair ? GUILD_BANK_LOG_REPAIR_MONEY : GUILD_BANK_LOG_WITHDRAW_MONEY, uint8(0), player->GetGUID().GetCounter(), amount);
     CharacterDatabase.CommitTransaction(trans);
-
-    // CriteriaType::MoneySpentOnGuildRepair (124) - only the repair-flagged withdrawal is repair spend; a
-    // plain withdrawal is not. miscValue1 = the copper taken from the guild bank for the repair.
-    if (repair && amount)
-        UpdateCriteria(CriteriaType::MoneySpentOnGuildRepair, amount, 0, 0, nullptr, player);
 
     SendEventBankMoneyChanged();
     return true;
@@ -2751,62 +2736,6 @@ void Guild::BroadcastToGuild(WorldSession* session, bool officerOnly, std::strin
                 if (player->GetSession() && _HasRankRight(player, officerOnly ? GR_RIGHT_OFFCHATLISTEN : GR_RIGHT_GCHATLISTEN) &&
                     !player->GetSocial()->HasIgnore(session->GetPlayer()->GetGUID(), session->GetAccountGUID()))
                     player->SendDirectMessage(data);
-
-        StoreClubStreamMessage(session, officerOnly, msg, language);
-    }
-}
-
-// Persists a guild/officer chat line as a club stream message.
-//
-// This is the single choke point both producers pass through exactly once: the Communities window sends
-// club.v1 CreateMessage, whose handler calls WorldSession::HandleChatMessage, and the classic chat frame
-// sends CMSG_CHAT_MESSAGE_GUILD/OFFICER, which reaches the same handler - and both end up here. Hooking
-// the two handlers separately would either miss one path or store the message twice.
-void Guild::StoreClubStreamMessage(WorldSession* session, bool officerOnly, std::string_view msg, uint32 language) const
-{
-    // Addon traffic is not chat and must never appear in scrollback. It normally goes through
-    // BroadcastAddonToGuild, but HandleChatMessage can still route a LANG_ADDON line here.
-    if (language == LANG_ADDON || language == LANG_ADDON_LOGGED)
-        return;
-
-    if (!sClubStreamHistoryMgr->IsEnabled() || msg.empty())
-        return;
-
-    Player const* author = session->GetPlayer();
-    uint64 streamId = AsUnderlyingType(officerOnly ? ClubStreamType::Officer : ClubStreamType::Guild);
-
-    // Resolve @Name against the guild roster. Only members who may actually read the stream can be
-    // mentioned in it, otherwise an officer chat mention would light a badge no one can open.
-    std::unordered_map<std::string, ObjectGuid> membersByName;
-    if (msg.find('@') != std::string_view::npos)
-    {
-        for (auto const& [guid, member] : m_members)
-        {
-            if (officerOnly && !HasAnyRankRight(member.GetRankId(), GR_RIGHT_OFFCHATLISTEN))
-                continue;
-
-            std::string name(member.GetName());
-            std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return char(std::tolower(c)); });
-            membersByName[std::move(name)] = guid;
-        }
-    }
-
-    std::vector<ObjectGuid> mentioned = ClubStreamHistoryMgr::ExtractMentions(msg, membersByName);
-
-    ClubStreamMessage const* stored = sClubStreamHistoryMgr->AddMessage(GetId(), streamId, author->GetGUID(),
-        session->GetAccountId(), msg, mentioned);
-    if (!stored)
-        return;
-
-    // Anyone with the stream open right now has read it, so their unread marker moves with the message
-    // instead of lighting up while they are looking straight at it.
-    for (auto const& [guid, member] : m_members)
-    {
-        if (guid == author->GetGUID())
-            continue;
-
-        if (sClubStreamHistoryMgr->IsStreamFocused(GetId(), streamId, guid) && sClubStreamHistoryMgr->IsStreamSubscribed(GetId(), streamId, guid))
-            sClubStreamHistoryMgr->AdvanceStreamViewTime(GetId(), streamId, guid, stored->Epoch);
     }
 }
 
@@ -3639,13 +3568,6 @@ void Guild::_SendBankContentUpdate(MoveItemData* pSrc, MoveItemData* pDest) cons
     }
 
     _SendBankContentUpdate(tabId, slots);
-
-    // The slot pushes above only reach members who already hold a bank list for the affected tab, and only
-    // because we broadcast partial updates to the whole guild (see the HACK in SendBankList). This event is
-    // the tab-agnostic "something moved in the bank" signal a client needs to re-query on its own. Broadcast
-    // it once per completed move - the two-tab case above already sent its own slot update, and duplicating
-    // the event for it would make the same move look like two.
-    BroadcastPacket(WorldPackets::Guild::GuildEventBankContentsChanged().Write());
 }
 
 void Guild::_SendBankContentUpdate(uint8 tabId, SlotIds slots) const

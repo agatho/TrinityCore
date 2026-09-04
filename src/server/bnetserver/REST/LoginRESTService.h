@@ -59,7 +59,6 @@ public:
 
     std::string const& GetHostnameForClient(boost::asio::ip::address const& address) const;
     uint16 GetPort() const { return _port; }
-    uint32 GetLoginTicketDuration() const { return _loginTicketDuration; }
 
     std::shared_ptr<Trinity::Net::Http::SessionState> CreateNewSessionState(boost::asio::ip::address const& address) override;
 

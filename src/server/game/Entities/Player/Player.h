@@ -39,7 +39,6 @@ struct AccessRequirement;
 struct AchievementEntry;
 struct AreaTableEntry;
 struct AreaTriggerEntry;
-struct ArchaeologySolvePlan;
 struct ArtifactPowerRankEntry;
 struct AzeriteEssencePowerEntry;
 struct AzeriteItemMilestonePowerEntry;
@@ -63,10 +62,8 @@ struct Mail;
 struct MapEntry;
 struct PvpTalentEntry;
 struct QuestPackageItemEntry;
-struct RenownRewardsEntry;
 struct RewardPackEntry;
 struct SkillRaceClassInfoEntry;
-struct SoulbindEntry;
 struct SpellCastRequest;
 struct TalentEntry;
 struct TrainerSpell;
@@ -82,9 +79,6 @@ class CinematicMgr;
 class Creature;
 class DynamicObject;
 class Garrison;
-class Housing;
-class MythicPlusData;
-enum GarrisonType : int32;
 class Group;
 class Guild;
 class Item;
@@ -95,7 +89,6 @@ class Pet;
 class PetAura;
 class PlayerAI;
 class PlayerAchievementMgr;
-class PerksProgramActivityMgr;
 class PlayerMenu;
 class PlayerSocial;
 class QuestObjectiveCriteriaMgr;
@@ -132,30 +125,15 @@ namespace WorldPackets
         struct CustomTabardInfo;
     }
 
-    namespace Misc
-    {
-        struct CTROptionsBlock;
-    }
-
     namespace Movement
     {
         enum class UpdateCollisionHeightReason : uint8;
-    }
-
-    namespace Party
-    {
-        struct PartyMemberStatsSnapshot;
     }
 
     namespace Traits
     {
         struct TraitConfig;
         struct TraitEntry;
-    }
-
-    namespace PerksProgram
-    {
-        struct PerksVendorItem;
     }
 
     namespace Transmogrification
@@ -869,7 +847,7 @@ enum class ItemSearchLocation
     Inventory       = 0x02,
     Bank            = 0x04,
     ReagentBank     = 0x08,
-    AccountBank     = 0x10,
+    AccountBank     = 0x10, // NYI
 
     Default         = Equipment | Inventory,
     Everywhere      = Equipment | Inventory | Bank | ReagentBank
@@ -990,8 +968,6 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES,
     PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA,
     PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA_PROGRESS,
-    PLAYER_LOGIN_QUERY_LOAD_PERKS_ACTIVITY,
-    PLAYER_LOGIN_QUERY_LOAD_PERKS_ACTIVITY_CRITERIA,
     PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_SPAWN_TRACKING,
     PLAYER_LOGIN_QUERY_LOAD_DAILY_QUEST_STATUS,
     PLAYER_LOGIN_QUERY_LOAD_REPUTATION,
@@ -1028,9 +1004,6 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_PVP_TALENTS,
     PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_DATA,
     PLAYER_LOGIN_QUERY_LOAD_SKILLS,
-    PLAYER_LOGIN_QUERY_LOAD_RESEARCH_SITES,
-    PLAYER_LOGIN_QUERY_LOAD_RESEARCH_PROJECTS,
-    PLAYER_LOGIN_QUERY_LOAD_RESEARCH_HISTORY,
     PLAYER_LOGIN_QUERY_LOAD_WEEKLY_QUEST_STATUS,
     PLAYER_LOGIN_QUERY_LOAD_RANDOM_BG,
     PLAYER_LOGIN_QUERY_LOAD_BANNED,
@@ -1042,46 +1015,15 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_CORPSE_LOCATION,
     PLAYER_LOGIN_QUERY_LOAD_PET_SLOTS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON,
-    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS,
-    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY,
-    PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_BLUEPRINTS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_BUILDINGS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWERS,
     PLAYER_LOGIN_QUERY_LOAD_GARRISON_FOLLOWER_ABILITIES,
-    PLAYER_LOGIN_QUERY_LOAD_GARRISON_MISSIONS,
-    PLAYER_LOGIN_QUERY_LOAD_GARRISON_SPECIALIZATIONS,
-    PLAYER_LOGIN_QUERY_LOAD_GARRISON_SHIPMENTS,
-    PLAYER_LOGIN_QUERY_LOAD_GARRISON_TALENTS,
-    PLAYER_LOGIN_QUERY_LOAD_GARRISON_TROPHIES,
-    PLAYER_LOGIN_QUERY_LOAD_GARRISON_ARCHIVED_MISSIONS,
     PLAYER_LOGIN_QUERY_LOAD_TRAIT_ENTRIES,
     PLAYER_LOGIN_QUERY_LOAD_TRAIT_CONFIGS,
     PLAYER_LOGIN_QUERY_LOAD_DATA_ELEMENTS,
     PLAYER_LOGIN_QUERY_LOAD_DATA_FLAGS,
     PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS,
-    PLAYER_LOGIN_QUERY_LOAD_HOUSING,
-    PLAYER_LOGIN_QUERY_LOAD_HOUSING_DECOR,
-    PLAYER_LOGIN_QUERY_LOAD_HOUSING_ROOMS,
-    PLAYER_LOGIN_QUERY_LOAD_HOUSING_FIXTURES,
-    PLAYER_LOGIN_QUERY_LOAD_HOUSING_CATALOG,
-    PLAYER_LOGIN_QUERY_LOAD_COVENANT,
-    PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUITS,
-    PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUIT_SOCKETS,
-    PLAYER_LOGIN_QUERY_LOAD_RENOWN_REWARDS,
-    PLAYER_LOGIN_QUERY_LOAD_CONTENT_TRACKING,
-    PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_REPUTATION,
-    PLAYER_LOGIN_QUERY_LOAD_WARBAND_TAXI_MASK,
-    PLAYER_LOGIN_QUERY_LOAD_WARBAND_MAX_LEVEL_COUNT,
-    PLAYER_LOGIN_QUERY_LOAD_WARBAND_ACHIEVEMENTS,
-    PLAYER_LOGIN_QUERY_LOAD_WARBAND_ACHIEVEMENT_PROGRESS,
-    PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_TAB_SETTINGS,
-    PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_ITEMS,
-    PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_BANK_COINAGE,
-    PLAYER_LOGIN_QUERY_LOAD_COVENANT_CALLINGS,
-    PLAYER_LOGIN_QUERY_LOAD_COVENANT_SOULBINDS,
-    PLAYER_LOGIN_QUERY_LOAD_CHAR_RENOWN_REWARDS_GRANTED,
-    PLAYER_LOGIN_QUERY_LOAD_WARBAND_RENOWN_REWARDS_GRANTED,
     MAX_PLAYER_LOGIN_QUERY
 };
 
@@ -1330,13 +1272,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendSupercededSpell(uint32 oldSpell, uint32 newSpell) const;
         void SendTransferAborted(uint32 mapid, TransferAbortReason reason, uint8 arg = 0, int32 mapDifficultyXConditionID = 0) const;
 
-        // Asks the client to start streaming mapId ahead of a seamless transfer, so that the
-        // transfer itself needs no loading screen. destination is where the player will end up,
-        // expressed in the destination map's frame; the client is sent the delta from the
-        // player's current position.
-        void SendPreloadWorld(int32 mapId, Position const& destination) const;
-        void SendCancelPreloadWorld(int32 mapId) const;
-
         bool CanInteractWithQuestGiver(Object* questGiver) const;
         Creature* GetNPCIfCanInteractWith(ObjectGuid const& guid, NPCFlags npcFlags, NPCFlags2 npcFlags2) const;
         GameObject* GetGameObjectIfCanInteractWith(ObjectGuid const& guid) const;
@@ -1346,7 +1281,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void ToggleDND();
         bool isAFK() const { return HasPlayerFlag(PLAYER_FLAGS_AFK); }
         bool isDND() const { return HasPlayerFlag(PLAYER_FLAGS_DND); }
-        uint16 GetChatFlags() const;
+        uint32 GetChatFlags() const;
         std::string autoReplyMsg;
 
         int64 GetBarberShopCost(Trinity::IteratorPair<UF::ChrCustomizationChoice const*> newCustomizations) const;
@@ -1410,9 +1345,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         std::array<uint32, MAX_PLAYED_TIME_INDEX> m_Played_time;
         uint32 GetTotalPlayedTime() const { return m_Played_time[PLAYED_TIME_TOTAL]; }
         uint32 GetLevelPlayedTime() const { return m_Played_time[PLAYED_TIME_LEVEL]; }
-        // Wall-clock creation time of this character (characters.createTime). Used by ModifierTreeType
-        // PlayerCreatedCharacterLessThanHoursAgoRealTime (204), the real-time sibling of the played-time check.
-        time_t GetCharacterCreateTime() const { return m_createTime; }
 
         Gender GetNativeGender() const override { return Gender(*m_playerData->NativeSex); }
         void SetNativeGender(Gender gender) override { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::NativeSex), gender); }
@@ -1424,7 +1356,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         PetStable const* GetPetStable() const { return m_petStable.get(); }
         void AddPetToUpdateFields(PetStable::PetInfo const& pet, PetSaveMode slot, PetStableFlags flags);
         void SetPetSlot(uint32 petNumber, PetSaveMode dstPetSlot);
-        void SetPetFavorite(uint32 petNumber, bool favorite);   // CMSG_SET_PET_FAVORITE: pin/unpin a stable pet
         ObjectGuid GetStableMaster() const;
         void SetStableMaster(ObjectGuid stableMaster);
 
@@ -1527,16 +1458,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
                                     return false;
             }
 
-            if (flag.HasFlag(ItemSearchLocation::AccountBank))
-            {
-                for (uint8 i = ACCOUNT_BANK_SLOT_BAG_START; i < ACCOUNT_BANK_SLOT_BAG_END; ++i)
-                    if (Bag* bag = GetBagByPos(i))
-                        for (uint32 j = 0; j < GetBagSize(bag); ++j)
-                            if (Item* pItem = GetItemInBag(bag, j))
-                                if (callback(pItem) == ItemSearchCallbackResult::Stop)
-                                    return false;
-            }
-
             return true;
         }
 
@@ -1556,10 +1477,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         Item* GetUseableItemByPos(uint8 bag, uint8 slot) const;
         Bag*  GetBagByPos(uint8 slot) const;
         std::vector<Item*> GetCraftingReagentItemsToDeposit();
-        std::vector<Item*> GetWarboundItemsToDeposit();
-        std::vector<Item*> GetItemsForBankAutoDeposit(::BankType bank, bool includeReagents) const;
-        static BagSlotFlags GetItemAutoDepositCategory(Item const* item);
-        int8 PickAutoDepositTab(::BankType bank, Item const* item) const;
         Item* GetWeaponForAttack(WeaponAttackType attackType, bool useable = false) const;
         Item* GetShield(bool useable = false) const;
         Item* GetChildItemByGuid(ObjectGuid guid) const;
@@ -1574,7 +1491,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         static bool IsBankPos(uint8 bag, uint8 slot);
         static bool IsChildEquipmentPos(uint16 pos) { return IsChildEquipmentPos(pos >> 8, pos & 255); }
         static bool IsChildEquipmentPos(uint8 bag, uint8 slot);
-        static bool IsAccountBankPos(uint16 pos) { return IsAccountBankPos(pos >> 8, pos & 255); }
+        static bool IsAccountBankPos(uint16 pos) { return IsBankPos(pos >> 8, pos & 255); }
         static bool IsAccountBankPos(uint8 bag, uint8 slot);
         bool IsValidPos(uint16 pos, bool explicit_pos) const { return IsValidPos(pos >> 8, pos & 255, explicit_pos); }
         bool IsValidPos(uint8 bag, uint8 slot, bool explicit_pos) const;
@@ -1587,9 +1504,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SetCharacterBankTabCount(uint8 count) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::NumCharacterBankTabs), count); }
         uint8 GetAccountBankTabCount() const { return m_activePlayerData->NumAccountBankTabs; }
         void SetAccountBankTabCount(uint8 count) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::NumAccountBankTabs), count); }
-        uint64 GetAccountBankCoinage() const { return m_activePlayerData->AccountBankCoinage; }
-        void SetAccountBankCoinage(uint64 coinage) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::AccountBankCoinage), coinage); }
-        void ModifyAccountBankCoinage(int64 delta);
         void SetCharacterBankTabSettings(uint32 tabId, std::string const& name, std::string const& icon, std::string const& description, BagSlotFlags depositFlags)
         {
             auto setter = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::CharacterBankTabSettings, tabId);
@@ -1609,8 +1523,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         }
         bool IsBackpackAutoSortDisabled() const { return m_activePlayerData->BackpackAutoSortDisabled; }
         void SetBackpackAutoSortDisabled(bool disabled) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::BackpackAutoSortDisabled), disabled); }
-        void SetSortBagsRightToLeft(bool enable) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::SortBagsRightToLeft), enable); }
-        void SetInsertItemsLeftToRight(bool enable) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::InsertItemsLeftToRight), enable); }
         bool IsBackpackSellJunkDisabled() const { return m_activePlayerData->BackpackSellJunkDisabled; }
         void SetBackpackSellJunkDisabled(bool disabled) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::BackpackSellJunkDisabled), disabled); }
         bool IsBankAutoSortDisabled() const { return m_activePlayerData->BankAutoSortDisabled; }
@@ -1646,7 +1558,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         InventoryResult CanUnequipItems(uint32 item, uint32 count) const;
         InventoryResult CanUnequipItem(uint16 src, bool swap) const;
         InventoryResult CanBankItem(uint8 bag, uint8 slot, ItemPosCountVec& dest, Item* pItem, bool swap, bool not_loading = true, bool reagentBankOnly = false) const;
-        InventoryResult CanAccountBankItem(uint8 bag, uint8 slot, ItemPosCountVec& dest, Item* pItem, bool swap) const;
         InventoryResult CanUseItem(Item* pItem, bool not_loading = true) const;
         bool HasItemTotemCategory(uint32 TotemCategory) const;
         InventoryResult CanUseItem(ItemTemplate const* pItem, bool skipRequiredLevelCheck = false) const;
@@ -1855,7 +1766,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SetSeasonalQuestStatus(uint32 quest_id);
         void DailyReset();
         void ResetWeeklyQuestStatus();
-        void UpdateWeeklyRewardsPeriod();
         void ResetMonthlyQuestStatus();
         void ResetSeasonalQuestStatus(uint16 event_id, time_t eventStartTime);
 
@@ -1920,11 +1830,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendQuestUpdateAddPlayer(Quest const* quest, uint16 newCount) const;
         void SendQuestGiverStatusMultiple();
         void SendDisplayToast(uint32 entry, DisplayToastType type, bool isBonusRoll, uint32 quantity, DisplayToastMethod method, uint32 questId = 0, Item* item = nullptr) const;
-
-        // Content tracking: mirrors a tracked map-content entry into the ActivePlayer.TrackedCollectableSources update
-        // field and persists it, so tracking survives relog. Returns true if the tracked set changed.
-        bool AddTrackedContent(int32 targetType, int32 targetId, int32 collectableSourceInfoId);
-        bool RemoveTrackedContent(int32 targetType, int32 targetId);
 
         uint32 GetSharedQuestID() const { return m_sharedQuestId; }
         ObjectGuid GetPlayerSharingQuest() const { return m_playerSharingQuest; }
@@ -1994,8 +1899,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void Regenerate(Powers power);
         void InterruptPowerRegen(Powers power);
         void RegenerateHealth();
-        void UpdateVigor(uint32 elapsedMs = 0);
-        void EnsureSkyridingActionDefaults();
         void setRegenTimerCount(uint32 time) {m_regenTimerCount = time;}
         void setWeaponChangeTimer(uint32 time) {m_weaponChangeTimer = time;}
 
@@ -2153,14 +2056,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void ApplyTraitEntryChanges(int32 editedConfigId, WorldPackets::Traits::TraitConfig const& newConfig, bool applyTraits, bool consumeCurrencies);
         void RenameTraitConfig(int32 editedConfigId, std::string&& newName);
         void DeleteTraitConfig(int32 deletedConfigId);
-        void ResetProfessionSpecialization(int32 identifier);   // profession respec: refund spent knowledge + clear the tree
-        void SetFrozenPerksProgramVendorItem(WorldPackets::PerksProgram::PerksVendorItem const* item);   // nullptr clears the Trading Post freeze
         void ApplyTraitConfig(int32 configId, bool apply);
         void ApplyTraitEntry(int32 traitNodeEntryId, int32 rank, int32 grantedRanks, bool apply);
-        void SyncGrantedTraitEntries(int32 configId);   // retro-grant: pull new TraitCond::Granted entries/ranks into an existing config
-        // False until the login sweep at the end of _LoadTraits has applied every config; anything that
-        // creates or extends a config before that must leave the spell side to the sweep (no double apply).
-        bool AreTraitConfigsApplied() const { return m_traitConfigsApplied; }
         void SetActiveCombatTraitConfigID(int32 traitConfigId) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ActiveCombatTraitConfigID), traitConfigId); }
         void SetCurrentCombatTraitConfigSubTreeID(int32 traitSubTreeId) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::CurrentCombatTraitConfigSubTreeID), traitSubTreeId); }
         void SetTraitConfigUseStarterBuild(int32 traitConfigId, bool useStarterBuild);
@@ -2351,7 +2248,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void UpdateSpellHitChances();
 
         void UpdateSpellCritChance();
-        void UpdateLeech();
         void UpdateCorruption();
         void UpdateArmorPenetration(int32 amount);
         void UpdateExpertise(WeaponAttackType attType);
@@ -2364,7 +2260,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         ObjectGuid const& GetLootGUID() const { return m_playerData->LootTargetGUID; }
         void SetLootGUID(ObjectGuid const& guid) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::LootTargetGUID), guid); }
-        void SetOfferedScriptQuestID(int32 questId);
         Loot* GetLootByWorldObjectGUID(ObjectGuid const& lootWorldObjectGuid) const;
         std::unordered_map<ObjectGuid, Loot*> const& GetAELootView() const { return m_AELootView; }
         LootRoll* GetLootRoll(ObjectGuid const& lootObjectGuid, uint8 lootListId);
@@ -2374,25 +2269,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void RemovedInsignia(Player* looterPlr);
 
         WorldSession* GetSession() const { return m_session; }
-
-        // Delves update field management (m_activePlayerData->DelveData is a map keyed by MapID)
-        void SetDelveData(int32 mapId, int32 tier, uint64 instanceId, int32 entranceType,
-            std::vector<ObjectGuid> playersEligibleForRewards = {},
-            std::vector<int32> activeOptionalAffixIDs = {},
-            bool restrictRewardsToCurrentPlayers = false);
-        void ClearDelveData(int32 mapId);
-        // Publishes account-wide delve progression as an additional entry in the same
-        // JamDelveData mirror map (68275: unordered_map<uint32, JamDelveData> at
-        // CGActivePlayer_C+0x1F08). Key + per-field semantics are a hypothesis —
-        // // UNVERIFIED — needs sniff. See Player.cpp::SetDelveProgressData.
-        void SetDelveProgressData(int32 key, int32 lastSelectedMapId, int32 highestTierUnlocked,
-            std::vector<int32> weeklyCounters);
-        bool HasActiveDelve() const { return !m_activePlayerData->DelveData.empty(); }
-        bool IsInDelveInstance() const;
-
-        // Transient per-session selection from CMSG_SELECT_DELVE_ENTRANCE_TIER (re-sent by client on TIERED_ENTRANCE_OPEN).
-        uint8 m_delveSelectedTier = 0;
-        uint32 m_delveSelectedMapId = 0;
 
     protected:
         UF::UpdateFieldFlag GetUpdateFieldFlagsFor(Player const* target) const override;
@@ -2463,7 +2339,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void ResurrectPlayer(float restore_percent, bool applySickness = false);
         void BuildPlayerRepop();
         void RepopAtGraveyard();
-        void SetPreferredGraveyard(uint32 graveyardId) { m_preferredGraveyardId = graveyardId; }
 
         void DurabilityLossAll(double percent, bool inventory);
         void DurabilityLoss(Item* item, double percent);
@@ -2503,9 +2378,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void LearnSkillRewardedSpells(uint32 skillId, uint32 skillValue, Races race);
         int32 GetProfessionSlotFor(uint32 skillId) const;
         int32 FindEmptyProfessionSlotFor(uint32 skillId) const;
-        // Releases or reassigns one of the two primary profession tool slots. Needed by skills that are
-        // SkillCategory 11 without being a primary profession (e.g. the covenant tradeskill Abominable Stitching).
-        void SetProfessionSkillLine(uint32 pos, int32 skillLineId) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ProfessionSkillLine, pos), skillLineId); }
         uint16 GetSkillLineIdByPos(uint32 pos) const { return m_activePlayerData->Skill->SkillLineID[pos]; }
         void SetSkillLineId(uint32 pos, uint16 skillLineId) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Skill).ModifyValue(&UF::SkillInfo::SkillLineID, pos), skillLineId); }
         uint16 GetSkillStepByPos(uint32 pos) const { return m_activePlayerData->Skill->SkillStep[pos]; }
@@ -2547,20 +2419,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         static Team TeamForRace(uint8 race);
         static TeamId TeamIdForRace(uint8 race);
         static uint8 GetFactionGroupForRace(uint8 race);
-        // Chromie Time level band (retail 12.0.x, audit R10). Entry requires
-        // ChromieTimeMinLevel <= level < ChromieTimeMaxEntryLevel; scaling runs to 80; at
-        // ChromieTimeDeactivationLevel the state is force-cleared (12.0.1 patch note:
-        // threshold moved 61 -> 71 -> 81). The @68887 ShowPlayerConditionIDs carry no level
-        // clause (each is just "already in that timeline" - ModifierTree criteria type 300),
-        // so the entry ceiling is server policy: 70 per retail-parity P3; wiki's 68 is
-        // unconfirmed. The level-80 soft exit (auto-accepted return quest + capital
-        // auto-exit) is NYI: quest id and trigger mechanism are unmined (audit R10 deferral).
-        static constexpr uint8 ChromieTimeMinLevel = 10;
-        static constexpr uint8 ChromieTimeMaxEntryLevel = 70;
-        static constexpr uint8 ChromieTimeDeactivationLevel = 81;
-        void SetChromieTime(int32 expansionId);
-        void SetChromieTimeConditionalFlags(bool enabled);
-        void SendCtrOptions(WorldPackets::Misc::CTROptionsBlock const* previous = nullptr) const;
         Team GetTeam() const { return m_team; }
         TeamId GetTeamId() const { return GetTeamIdForTeam(m_team); }
         void SetFactionForRace(uint8 race);
@@ -2579,7 +2437,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         ReputationMgr&       GetReputationMgr()       { return *m_reputationMgr; }
         ReputationMgr const& GetReputationMgr() const { return *m_reputationMgr; }
-        PerksProgramActivityMgr* GetPerksActivityMgr() const { return m_perksActivityMgr.get(); }
         ReputationRank GetReputationRank(uint32 faction_id) const;
         void RewardReputation(Unit* victim, float rate);
         void RewardReputation(Quest const* quest);
@@ -2591,48 +2448,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         void UpdateSkillsForLevel();
         void ModifySkillBonus(uint32 skillid, int32 val, bool talent);
-
-        // Archaeology: seed active dig sites into the ResearchSites update fields on login when the
-        // player knows the profession and has none yet.
-        void InitializeResearchSites();
-
-        // Archaeology: resolve a Survey (spell 80451) cast - if standing in an active dig site, test
-        // the hidden find, reveal its private lootable GameObject + advance progress on success, and
-        // reply with the survey result packet.
-        void HandleArchaeologySurvey();
-
-        // Archaeology find GameObject guard/callback used by go_archaeology_find.
-        bool CanUseArchaeologyFind(GameObject const* find) const;
-        void OnArchaeologyFindLooted(GameObject* find);
-
-        // Archaeology: swap one active dig-site slot for a fresh surveyable site on the same continent
-        // (progress reset), used when a site is exhausted or found already complete.
-        void ReplaceResearchSite(uint32 siteIndex, uint32 mapId);
-
-        // Archaeology: on login, assign a current research project for each branch the player already
-        // has fragments in but no active project (new fragment gains assign on the fly).
-        void InitializeResearchProjects();
-
-        // Archaeology: the active research project for a branch (ResearchProject.db2 ID), or 0 if none.
-        int32 GetCurrentResearchProject(uint32 branchId) const;
-
-        // Archaeology: ensure a branch has a current project, assigning a fresh one if it has none.
-        // Returns the project ID (existing or new), or 0 if the branch has no eligible projects.
-        uint32 EnsureResearchProject(uint32 branchId);
-
-        // Archaeology: the set of completed research project IDs (from ResearchHistory), used to bias
-        // new project rolls away from repeats.
-        std::unordered_set<uint32> GetCompletedResearchProjects() const;
-
-        // Archaeology: authorize the current project's solve spell through the client-cast known-spell
-        // gate. Resource validation remains in the solve script, which owns the preserved cast weights.
-        bool CanCastResearchProjectSpell(uint32 spellId) const;
-
-        // Archaeology: revalidate mutable player state against one immutable DB2-backed solve plan,
-        // consume its exact accepted resources before the reward effect, then finalize bookkeeping.
-        bool CanSolveResearchProject(ArchaeologySolvePlan const& plan) const;
-        bool ConsumeResearchProjectSolveResources(ArchaeologySolvePlan const& plan);
-        void CompleteResearchProjectSolve(ArchaeologySolvePlan const& plan);
 
         /*********************************************************/
         /***                  PVP SYSTEM                       ***/
@@ -2747,8 +2562,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendEquipmentSetList();
         void SetEquipmentSet(EquipmentSetInfo::EquipmentSetData const& newEqSet);
         void DeleteEquipmentSet(uint64 id);
-        void SetEquipmentSetAssignedSpec(uint64 setGuid, int32 assignedSpecIndex);
-        void AssignEquipmentSetSpec(uint64 id, int32 specIndex);
 
         void SendInitWorldStates(uint32 zoneId, uint32 areaId) const;
         void SendUpdateWorldState(uint32 variable, uint32 value, bool hidden = false) const;
@@ -2795,8 +2608,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         bool IsMercenaryForBattlegroundQueueType(BattlegroundQueueTypeId bgQueueTypeId) const;
         WorldLocation const& GetBattlegroundEntryPoint() const { return m_bgData.joinPos; }
         void SetBattlegroundEntryPoint();
-
-        void SetSpectateTarget(ObjectGuid guid);            // commentator: unit this spectator is following
 
         void SetBGTeam(Team team);
         Team GetBGTeam() const;
@@ -2856,7 +2667,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         // only changed for direct client control (possess, vehicle etc.), not stuff you control using pet commands
         WorldObject* m_seer;
         void SetFallInformation(uint32 time, float z);
-        void HandleFall(MovementInfo const& movementInfo);
+        void HandleFall();
 
         void SetClientControl(Unit* target, bool allowMove);
 
@@ -2993,10 +2804,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint32 GetGroupUpdateFlag() const { return m_groupUpdateMask; }
         void SetGroupUpdateFlag(uint32 flag) { m_groupUpdateMask |= flag; }
         void RemoveGroupUpdateFlag(uint32 flag) { m_groupUpdateMask &= ~flag; }
-        // state last broadcast to out of range party members, and who already holds it
-        WorldPackets::Party::PartyMemberStatsSnapshot& GetPartyMemberStateSnapshot();
-        GuidSet& GetPartyMemberStateRecipients() { return m_partyMemberStateRecipients; }
-        void ResetPartyMemberState();
         void SetPartyType(GroupCategory category, uint8 type);
         void ResetGroupUpdateSequenceIfNeeded(Group const* group);
         int32 NextGroupUpdateSequenceNumber(GroupCategory category);
@@ -3073,164 +2880,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void UnlockReagentBank() { SetPlayerFlagEx(PLAYER_FLAGS_EX_REAGENT_BANK_UNLOCKED); }
 
         void CreateGarrison(uint32 garrSiteId);
-        void DeleteGarrison(GarrisonType type = GarrisonType(2) /*GARRISON_TYPE_GARRISON*/);
-        Garrison* GetGarrison() const { return GetGarrison(GarrisonType(2) /*GARRISON_TYPE_GARRISON*/); }
-
-        void CreateHousing(ObjectGuid neighborhoodGuid, uint8 plotIndex);
-        void DeleteHousing(ObjectGuid neighborhoodGuid);
-        Housing* GetHousing() const;
-        Housing* GetHousingForNeighborhood(ObjectGuid neighborhoodGuid) const;
-        std::vector<Housing const*> GetAllHousings() const;
-        void SetHousingEditorModeUpdateField(uint8 mode);
-        void UpdateHousingMapId(ObjectGuid houseGuid, int32 mapId);
-        void UpdateInitiativeFavor(uint32 favor);
-
-        // 12.0.5 plot-entry mechanism: writes PlayerHouseInfoComponentData.CurrentHouse to
-        // the given house GUID (or ObjectGuid::Empty on plot-leave). Client tracks plot
-        // occupancy by observing this field's UPDATE_OBJECT changes -- it replaces the
-        // removed SMSG_NEIGHBORHOOD_PLAYER_ENTER_PLOT / LEAVE_PLOT opcodes and the
-        // per-AT FHousingPlotAreaTrigger_C fragment that were deleted in 12.0.5.
-        void SetCurrentHouse(ObjectGuid houseGuid);
-
-        // Transient -- set by the door GO script before a visit teleport so
-        // MapManager routes the visitor to the owner's HouseInteriorMap
-        // instance (instanceId = owner's GUID counter). Empty means "enter my
-        // own interior" (the default case). Cleared by MapManager once read.
-        void SetHouseVisitTarget(ObjectGuid ownerGuid) { _houseVisitTargetOwner = ownerGuid; }
-        ObjectGuid GetHouseVisitTarget() const { return _houseVisitTargetOwner; }
-        void ClearHouseVisitTarget() { _houseVisitTargetOwner = ObjectGuid::Empty; }
-        Garrison* GetGarrison(GarrisonType type) const;
-        // The player's garrison (of ANY type) currently holding the mission with this recID, or nullptr. Lets the
-        // mission opcode handlers act on the right garrison (WoD / class order hall / covenant) instead of always
-        // defaulting to the WoD garrison.
-        Garrison* GetGarrisonWithMission(uint32 missionRecID) const;
-        // Same idea for followers. Follower DbIDs come from a single generator (GarrisonMgr) and are therefore
-        // unique across every garrison a character owns, so a DbID alone identifies exactly one garrison. Handlers
-        // that receive only a FollowerDBID must use this instead of the no-arg GetGarrison(), which resolves the
-        // WoD garrison and silently no-ops for order hall / covenant followers.
-        Garrison* GetGarrisonWithFollower(uint64 followerDbID) const;
-        std::unordered_map<int32, std::unique_ptr<Garrison>> const& GetGarrisons() const { return _garrisons; }
-        MythicPlusData* GetMythicPlusData() const { return _mythicPlusData.get(); }
-        // Rebuilds the Mythic+ rating update fields (PlayerData + ActivePlayerData DungeonScore) from
-        // MythicPlusData. Called on load and after every recorded keystone run.
-        void UpdateDungeonScore();
-        // Sets one ActivePlayerData::ItemUpgradeHighWatermark slot (item upgrade crest-waiver display).
-        void SetItemUpgradeWatermark(uint32 slot, float itemLevel);
-
-        // Covenant / Soulbind
-        uint32 GetActiveCovenant() const { return m_activeCovenantId; }
-        uint32 GetActiveSoulbind() const { return m_activeSoulbindId; }
-        // SPELL_EFFECT_SET_COVENANT. Joins, switches or (covenantId 0 - spell 338503 "Reset Covenant") leaves a
-        // covenant. Never destroys anything belonging to a covenant the character may return to; see the function.
-        void SetActiveCovenant(uint32 covenantId);
-        void ActivateSoulbind(SoulbindEntry const* soulbind);   // validates + persists; reapplies conduit effects
-
-        // Soulbind conduit collection (server-authoritative: conduitId -> owned RankIndex)
-        bool HasConduit(uint32 conduitId) const { return m_soulbindConduits.find(conduitId) != m_soulbindConduits.end(); }
-        int32 GetConduitRank(uint32 conduitId) const;
-        // Read-only view of the whole conduit collection. Used by ModifierTreeType
-        // PlayerSoulbindConduitCountAtRankEqualOrGreaterThan (309), which counts conduits at a minimum rank.
-        std::unordered_map<uint32 /*conduitId*/, uint32 /*rankIndex*/> const& GetSoulbindConduits() const { return m_soulbindConduits; }
-        bool CollectConduit(uint32 conduitId, int32 rankIndex = -1);   // grant/upgrade; rankIndex < 0 => lowest defined rank
-        void ApplyCovenantSkillLines();                         // grant the active covenant's SkillLine, strip the other three (idempotent)
-
-        // Covenant switching / reset (retail spell 338503 "Reset Covenant": SPELL_EFFECT_SET_COVENANT with
-        // MiscValue 0 + SPELL_EFFECT_QUEST_FAIL on all four covenant-choice quests 56066-56069).
-        //
-        // Highest renown level the character has reached on ANY covenant (0 when it has none anywhere).
-        uint32 GetHighestCovenantRenownLevel() const;
-        // Renown level at which a covenant's track is full: CurrencyTypes 1829-1832 MaxQty 79 + 1 = Renown 80.
-        static uint32 GetMaxCovenantRenownLevel();
-        // The 9.1.5 rule: once any covenant has reached max renown (80) switching is free and unpenalised.
-        bool IsCovenantSwitchUnlocked() const;
-        // True when the character may leave its current covenant for a different one right now. Trivially true for
-        // a character that has not pledged yet.
-        bool CanChangeCovenant() const;
-        // Soulbind the character last had active for a covenant (0 when it never picked one). Remembered per
-        // covenant so returning to a covenant restores the soulbind - and with it its conduits and traits.
-        uint32 GetRememberedCovenantSoulbind(uint32 covenantId) const;
-        // True when the character has pledged to this covenant at least once before.
-        bool HasEverJoinedCovenant(uint32 covenantId) const;
-        // True when the character has pledged to any covenant at least once before.
-        bool HasEverJoinedAnyCovenant() const { return !m_covenantSoulbinds.empty(); }
-        void TryCollectConduitFromItem(Item* item);                    // auto-collect when a conduit item is acquired (SoulbindConduitItem)
-        // Socketed conduits for a soulbind tree: GarrTalent node id -> conduitId
-        bool SocketConduit(uint32 garrTalentTreeId, uint32 garrTalentId, uint32 conduitId);   // validates ownership + covenant, persists, applies spell
-        void RemoveConduitSocket(uint32 garrTalentId);
-        void ApplyConduitSpells();      // (re)apply spells for all currently-socketed conduits of the active soulbind
-        void RemoveConduitSpells();     // strip conduit spells (on soulbind switch)
-        int32 GetConduitSpell(uint32 conduitId) const;   // owned rank -> SoulbindConduitRank.SpellID (0 if none)
-        // Non-conduit soulbind trait nodes (GarrTalentRank.PerkSpellID on the 12 soulbind GarrTalentTrees). All 12
-        // trees live in the same GarrType 111 garrison, so like conduits these are scoped to the ACTIVE soulbind.
-        void ApplySoulbindTraitSpells();
-        void RemoveSoulbindTraitSpells();
-
-        // Covenant renown.
-        //
-        // There are two renown engines and Covenant.db2 feeds both:
-        //  - Dragonflight and later major factions (Covenant.db2 rows 12+) run on renown REPUTATION: their
-        //    Faction row publishes RenownCurrencyID, ReputationMgr::IsRenownReputation is true and
-        //    ReputationMgr::GetRenownLevel returns the level. UpdateRenownRewards(FactionEntry const*) serves those.
-        //  - The four Shadowlands covenants (1-4) do NOT. Factions 2407/2410/2413/2465 publish
-        //    RenownCurrencyID = 0 and RenownFactionID = 0, so IsRenownReputation is false for them and the
-        //    reputation path can never fire for a covenant. Their renown is the per-covenant currency named by
-        //    Covenant.db2 CurrencyTypesID (1829 Kyrian / 1830 Venthyr / 1831 Night Fae / 1832 Necrolord).
-        //    That is also why one character can hold four independent renown tracks.
-        // Both paths converge on GrantRenownRewardsUpTo(), which grants each RenownRewards row exactly once.
-        void UpdateRenownRewards(FactionEntry const* renownFaction);
-        void UpdateAllRenownRewards();   // login catch-up: grant any renown rewards earned before this feature existed
-
-        uint8 GetWarbandMaxLevelCharCount() const { return _warbandMaxLevelCharCount; }
-        // The currency a Shadowlands covenant stores its renown in, or nullptr for any covenant whose renown is
-        // reputation-driven (and therefore not handled here).
-        static CurrencyTypesEntry const* GetCovenantRenownCurrency(uint32 covenantId);
-        // Inverse lookup: which Shadowlands covenant owns this currency id (0 if none).
-        static uint32 GetCovenantIdForRenownCurrency(uint32 currencyId);
-        // Renown level of a Shadowlands covenant (defaults to the active one). 0 when the covenant has no
-        // currency-driven renown; otherwise >= 1, because currency quantity 0 is Renown 1.
-        uint32 GetCovenantRenownLevel(uint32 covenantId = 0) const;
-        // Grant the RenownRewards rows unlocked by the covenant's current currency-driven renown level.
-        void UpdateCovenantRenownRewards(uint32 covenantId);
-        // Keep the shared display currency (1822 "Renown") equal to the ACTIVE covenant's track. The client's
-        // renown UI and every renown PlayerCondition/ModifierTree in the build read 1822, never 1829-1832.
-        void SyncCovenantRenownDisplayCurrency();
-        // Whether accelerated renown catch-up is currently running for this player
-        // (answers SMSG_COVENANT_RENOWN_SEND_CATCHUP_STATE).
-        bool IsCovenantRenownCatchupActive() const;
-
-        // The reservoir anima track of a Shadowlands covenant (CurrencyTypes 1859-1862), or nullptr for a
-        // covenant that has none. See Player::SyncCovenantAnimaDisplayCurrency for why 1813 is only a view.
-        static CurrencyTypesEntry const* GetCovenantAnimaCurrency(uint32 covenantId);
-        // Inverse lookup: which Shadowlands covenant owns this reservoir-anima currency id (0 if none).
-        static uint32 GetCovenantIdForAnimaCurrency(uint32 currencyId);
-        // Keep the shared display currency (1813 "Reservoir Anima") equal to the ACTIVE covenant's track.
-        void SyncCovenantAnimaDisplayCurrency();
-        // One-shot, non-destructive: hand any anima held only on the 1813 view to the active covenant's track.
-        void MigrateLegacyReservoirAnima();
-
-        // Covenant Callings (the daily bounty board answered by CMSG_REQUEST_COVENANT_CALLINGS).
-        //
-        // A calling board is per covenant and holds exactly CovenantCallings::MaxSlots slots. A slot either
-        // holds a bounty (with the moment it expires) or is empty (with the daily reset at which it refills).
-        // Everything is anchored on daily-reset boundaries so the board rolls over exactly at reset and is a
-        // pure function of stored timestamps - it needs no scheduler and survives a restart untouched.
-        struct CovenantCallingSlot
-        {
-            uint32 BountyID = 0;        // 0 = empty slot
-            time_t ExpireTime = 0;      // occupied slot: when the offer lapses (always a reset boundary + 3 days)
-            time_t RefillTime = 0;      // empty slot: the reset boundary at which a new bounty is issued
-        };
-
-        // Are callings unlocked for the active covenant (BountySet.VisiblePlayerConditionID)?
-        bool AreCovenantCallingsUnlocked() const;
-        // Run the board's lifecycle (expire, schedule, issue) up to "now". Cheap and idempotent.
-        void UpdateCovenantCallings();
-        // The bounty ids currently offered, in slot order (empty slots omitted).
-        std::vector<int32> GetCovenantCallingBountyIDs() const;
-        // Send SMSG_COVENANT_CALLINGS_AVAILABILITY_RESPONSE with the current board.
-        void SendCovenantCallingsUpdate();
-        // A calling quest was turned in - free its slot so the next daily reset issues a replacement.
-        void OnCovenantCallingCompleted(uint32 questId);
+        void DeleteGarrison();
+        Garrison* GetGarrison() const { return _garrison.get(); }
 
         bool IsAdvancedCombatLoggingEnabled() const { return _advancedCombatLoggingEnabled; }
         void SetAdvancedCombatLogging(bool enabled) { _advancedCombatLoggingEnabled = enabled; }
@@ -3314,15 +2965,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
             AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Toys)) = itemId;
             AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ToyFlags)) = flags;
         }
-        void RemoveToy(int32 itemId)
-        {
-            // Toys and ToyFlags are parallel dynamic arrays sharing the same index.
-            int32 index = m_activePlayerData->Toys.FindIndex(itemId);
-            if (index < 0)
-                return;
-            RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Toys), uint32(index));
-            RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ToyFlags), uint32(index));
-        }
 
         void AddTransmogBlock(uint32 blockValue) { AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Transmog)) = blockValue; }
         void AddTransmogFlag(uint32 slot, uint32 flag) { SetUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Transmog, slot), flag); }
@@ -3340,28 +2982,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         void AddWarbandScenesBlock(uint32 blockValue) { AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::WarbandScenes)) = blockValue; }
         void AddWarbandScenesFlag(uint32 slot, uint32 flag) { SetUpdateFieldFlagValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::WarbandScenes, slot), flag); }
-
-        // PlayerDataElements (PDEs) — Account-scoped and Character-scoped key-value
-        // store backing C_DelvesUI / curio book / season state. The slot index in
-        // the dynamic field IS the PDE id (PlayerDataElementType enum has only
-        // Int=0 and Float=1). 68275 note: the 67186 "bit 0x20000000 dispatches to
-        // the JamDelveData reader" description is superseded — at 68275 the delve
-        // map is read UNCONDITIONALLY inside the CGActivePlayer account-data mirror
-        // deserializer (0x7FF72920BCF0); the only gate is the global partial/full
-        // discriminator (a4 & 0x20). Helpers grow the array sparsely by inserting
-        // empty Int(0) padding when the requested id is past the current end.
-        void SetAccountDataElementInt(uint32 id, int64 value);
-        void SetAccountDataElementFloat(uint32 id, float value);
-        void SetCharacterDataElementInt(uint32 id, int64 value);
-        void SetCharacterDataElementFloat(uint32 id, float value);
-        UF::PlayerDataElement const* GetAccountDataElement(uint32 id) const;
-        UF::PlayerDataElement const* GetCharacterDataElement(uint32 id) const;
-        void RemoveAccountDataElement(uint32 id);
-        void RemoveCharacterDataElement(uint32 id);
-
-        // Delves: load persisted companion state from DB and project it into PDEs
-        // the client expects. Called from SendInitialPacketsBeforeAddToMap.
-        void LoadDelvePlayerDataElements();
 
         void AddSelfResSpell(int32 spellId) { AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::SelfResSpells)) = spellId; }
         void RemoveSelfResSpell(int32 spellId)
@@ -3443,12 +3063,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         UF::UpdateField<UF::PlayerData, int32(WowCS::EntityFragment::CGObject), TYPEID_PLAYER> m_playerData;
         UF::UpdateField<UF::ActivePlayerData, int32(WowCS::EntityFragment::CGObject), TYPEID_ACTIVE_PLAYER> m_activePlayerData;
 
-        // Housing entity fragment (optional - only set when player has housing data)
-        UF::OptionalUpdateField<UF::PlayerHouseInfoComponentData, int32(WowCS::EntityFragment::PlayerHouseInfoComponent_C), 0> m_playerHouseInfoComponentData;
-
-        // Initiative entity fragment (optional - initiative/endeavor state for UI)
-        UF::OptionalUpdateField<UF::PlayerInitiativeComponentData, int32(WowCS::EntityFragment::PlayerInitiativeComponent_C), 0> m_playerInitiativeComponentData;
-
         void SetAreaSpiritHealer(Creature* creature);
         ObjectGuid const& GetSpiritHealerGUID() const { return _areaSpiritHealerGUID; }
         bool CanAcceptAreaSpiritHealFrom(Unit* spiritHealer) const { return spiritHealer->GetGUID() == _areaSpiritHealerGUID; }
@@ -3516,26 +3130,10 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _LoadMail(PreparedQueryResult mailsResult, PreparedQueryResult mailItemsResult, PreparedQueryResult artifactResult, PreparedQueryResult azeriteItemResult,
             PreparedQueryResult azeriteItemMilestonePowersResult, PreparedQueryResult azeriteItemUnlockedEssencesResult, PreparedQueryResult azeriteEmpoweredItemResult);
         static Item* _LoadMailedItem(ObjectGuid const& playerGuid, Player* player, uint64 mailId, Mail* mail, Field* fields, ItemAdditionalLoadInfo* addionalData);
-        void _LoadCovenant(PreparedQueryResult result);
-        void _LoadCovenantSoulbinds(PreparedQueryResult result);
-        // Record (and persist) the soulbind a covenant was last using, so a switch away from it can be undone.
-        void RememberCovenantSoulbind(uint32 covenantId, uint32 soulbindId);
-        void _LoadSoulbindConduits(PreparedQueryResult result);
-        void _LoadSoulbindConduitSockets(PreparedQueryResult result);
-        void _LoadRenownRewards(PreparedQueryResult result);
-        void _LoadCovenantCallings(PreparedQueryResult result);
-        void _SaveCovenantCallings(CharacterDatabaseTransaction trans);
-        // Pick a bounty for one empty slot out of the covenant's BountySet pool (0 when nothing is eligible).
-        uint32 RollCovenantCalling(uint32 covenantId, uint8 slot, time_t issueTime) const;
-        void GrantRenownReward(RenownRewardsEntry const* reward);
-        // Shared tail of both renown engines: grant every not-yet-granted RenownRewards row up to currentLevel
-        // for this covenant, then persist the new high-water mark to character_covenant_renown.
-        void GrantRenownRewardsUpTo(uint32 covenantId, int32 currentLevel);
         void _LoadQuestStatus(PreparedQueryResult result);
         void _LoadQuestStatusObjectives(PreparedQueryResult result);
         void _LoadQuestStatusObjectiveSpawnTrackings(PreparedQueryResult result);
         void _LoadQuestStatusRewarded(PreparedQueryResult result);
-        void _LoadContentTracking(PreparedQueryResult result);
         void _LoadDailyQuestStatus(PreparedQueryResult result);
         void _LoadWeeklyQuestStatus(PreparedQueryResult result);
         void _LoadMonthlyQuestStatus(PreparedQueryResult result);
@@ -3543,13 +3141,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _LoadRandomBGStatus(PreparedQueryResult result);
         void _LoadGroup(PreparedQueryResult result);
         void _LoadSkills(PreparedQueryResult result);
-        void _LoadResearchSites(PreparedQueryResult result);
-        bool _EnsureResearchSiteFindLocation(uint32 researchSiteId, float& x, float& y);
-        void _UpdateArchaeologySurveyIndicator();
-        void _LoadResearchProjects(PreparedQueryResult result);
-        void _LoadResearchHistory(PreparedQueryResult result);
-        void RecordCompletedProject(uint32 projectId);
-        void AdvanceResearchProject(uint32 branchId, uint32 completedProjectId);
         void _LoadSpells(PreparedQueryResult result, PreparedQueryResult favoritesResult);
         void _LoadStoredAuraTeleportLocations(PreparedQueryResult result);
         bool _LoadHomeBind(PreparedQueryResult result);
@@ -3569,9 +3160,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _LoadCUFProfiles(PreparedQueryResult result);
         void _LoadPlayerData(PreparedQueryResult elementsResult, PreparedQueryResult flagsResult);
         void _LoadCharacterBankTabSettings(PreparedQueryResult result);
-        void _LoadAccountBankTabSettings(PreparedQueryResult result);
-        void _LoadAccountBankItems(PreparedQueryResult result, uint32 timeDiff);
-        void _LoadAccountBankCoinage(PreparedQueryResult result);
 
         /*********************************************************/
         /***                   SAVE SYSTEM                     ***/
@@ -3588,9 +3176,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _SaveMonthlyQuestStatus(CharacterDatabaseTransaction trans);
         void _SaveSeasonalQuestStatus(CharacterDatabaseTransaction trans);
         void _SaveSkills(CharacterDatabaseTransaction trans);
-        void _SaveResearchSites(CharacterDatabaseTransaction trans);
-        void _SaveResearchProjects(CharacterDatabaseTransaction trans);
-        void _SaveResearchHistory(CharacterDatabaseTransaction trans);
         void _SaveSpells(CharacterDatabaseTransaction trans);
         void _SaveStoredAuraTeleportLocations(CharacterDatabaseTransaction trans);
         void _SaveEquipmentSets(CharacterDatabaseTransaction trans);
@@ -3605,9 +3190,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _SaveCUFProfiles(CharacterDatabaseTransaction trans);
         void _SavePlayerData(CharacterDatabaseTransaction trans);
         void _SaveCharacterBankTabSettings(CharacterDatabaseTransaction trans) const;
-        void _SaveAccountBankTabSettings(CharacterDatabaseTransaction trans) const;
-        void _SaveAccountBankItems(CharacterDatabaseTransaction trans);
-        void _SaveAccountBankCoinage(CharacterDatabaseTransaction trans) const;
 
         /*********************************************************/
         /***              ENVIRONMENTAL SYSTEM                 ***/
@@ -3666,7 +3248,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         SpecializationInfo _specializationInfo;
 
         std::unordered_map<int32, PlayerSpellState> m_traitConfigStates;
-        bool m_traitConfigsApplied = false;
 
         ActionButtonList m_actionButtons;
 
@@ -3714,7 +3295,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         uint32 m_deathTimer;
         time_t m_deathExpireTime;
-        uint32 m_preferredGraveyardId;
 
         uint32 m_WeaponProficiency;
         uint32 m_ArmorProficiency;
@@ -3734,8 +3314,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         GroupReference m_originalGroup;
         Group* m_groupInvite;
         uint32 m_groupUpdateMask;
-        std::unique_ptr<WorldPackets::Party::PartyMemberStatsSnapshot> m_partyMemberState;
-        GuidSet m_partyMemberStateRecipients;
         bool m_bPassOnGroupLoot;
         std::array<GroupUpdateCounter, 2> m_groupUpdateSequences;
 
@@ -3787,24 +3365,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         MapReference m_mapRef;
 
-        // Covenant / soulbind (server-authoritative; the client already knows its own active soulbind choice).
-        uint32 m_activeCovenantId = 0;
-        uint32 m_activeSoulbindId = 0;
-        std::unordered_map<uint32 /*covenantId*/, uint32 /*grantedRenownLevel*/> m_renownRewardsGranted;
-        // Last soulbind used per covenant (character_covenant_soulbind). A row exists for every covenant the
-        // character has ever pledged to, even with soulbindId 0, so this doubles as the "covenants ever joined"
-        // set that tells a switch apart from a first pledge.
-        std::unordered_map<uint32 /*covenantId*/, uint32 /*soulbindId*/> m_covenantSoulbinds;
-        std::unordered_map<uint32 /*conduitId*/, uint32 /*rankIndex*/> m_soulbindConduits;
-        // garrTalent node id -> (conduitId, garrTalentTreeID); tree id lets us apply only the active soulbind's sockets
-        std::unordered_map<uint32 /*garrTalentId*/, std::pair<uint32 /*conduitId*/, uint32 /*treeId*/>> m_soulbindConduitSockets;
-        // Calling boards, one per covenant the character has ever had callings for (a covenant switch must not
-        // discard the other covenant's board - the per-covenant currencies prove Blizzard keeps all four tracks).
-        std::unordered_map<uint32 /*covenantId*/, std::vector<CovenantCallingSlot>> m_covenantCallings;
-        bool m_covenantCallingsChanged = false;
-        // Re-entrancy latch for the 1813 <-> 1859-1862 reservoir-anima mirror; see Player::CurrencyChanged.
-        bool m_covenantAnimaSyncing = false;
-
         uint32 m_lastFallTime;
         float  m_lastFallZ;
 
@@ -3833,35 +3393,15 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         std::unique_ptr<PlayerAchievementMgr> m_achievementMgr;
         std::unique_ptr<ReputationMgr> m_reputationMgr;
         std::unique_ptr<QuestObjectiveCriteriaMgr> m_questObjectiveCriteriaMgr;
-        std::unique_ptr<PerksProgramActivityMgr> m_perksActivityMgr;
 
         uint32 m_ChampioningFaction;
 
         uint32 _pendingBindId;
         uint32 _pendingBindTimer;
-        // Owner of the house this player is currently teleporting to visit.
-        // Empty for "enter my own interior". Set by the door GO script and
-        // consumed by MapManager when it creates/finds the HouseInteriorMap
-        // instance. Not persisted.
-        ObjectGuid _houseVisitTargetOwner;
-
-
-        struct PendingArchaeologyFind
-        {
-            ObjectGuid GameObjectGuid;
-            uint32 ResearchSiteId = 0;
-            uint32 ResearchBranchId = 0;
-        };
-        Optional<PendingArchaeologyFind> _pendingArchaeologyFind;
-        std::unordered_map<uint32 /*researchSiteId*/, std::pair<float, float>> _researchSiteFindLocations;
 
         uint32 _activeCheats;
-        std::vector<std::unique_ptr<Housing>> _housings;
 
-        std::unordered_map<int32 /*GarrisonType*/, std::unique_ptr<Garrison>> _garrisons;
-        std::unique_ptr<MythicPlusData> _mythicPlusData;
-
-        uint8 _warbandMaxLevelCharCount = 0;
+        std::unique_ptr<Garrison> _garrison;
 
         bool _advancedCombatLoggingEnabled;
 

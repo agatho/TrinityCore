@@ -346,11 +346,7 @@ enum class QuestTagType
     FactionAssault,
     Islands,
     Threat,
-    CovenantCalling,
-    DragonRiderRacing,                                      // 16, Dragonflight skyriding race world quests
-    Capstone,                                               // 17
-    WorldBoss,                                              // 18
-    Prey                                                    // 19
+    CovenantCalling
 };
 
 enum QuestObjectiveType

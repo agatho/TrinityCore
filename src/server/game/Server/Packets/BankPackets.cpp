@@ -46,27 +46,6 @@ void AutoDepositCharacterBank::Read()
     _worldPacket >> Banker;
 }
 
-void AutoDepositAccountBank::Read()
-{
-    // Wire layout (verified against build 12.0.5.67186 client serializer):
-    //   1 bit  - IncludeReagents (CVar bankAutoDepositReagents)
-    //   GUID   - Banker
-    _worldPacket >> Bits<1>(IncludeReagents);
-    _worldPacket >> Banker;
-}
-
-void AccountBankDepositMoney::Read()
-{
-    _worldPacket >> Banker;
-    _worldPacket >> Money;
-}
-
-void AccountBankWithdrawMoney::Read()
-{
-    _worldPacket >> Banker;
-    _worldPacket >> Money;
-}
-
 void BankerActivate::Read()
 {
     _worldPacket >> Banker;
@@ -95,5 +74,4 @@ void UpdateBankTabSettings::Read()
     _worldPacket >> Tab;
     _worldPacket >> Settings;
 }
-
 }

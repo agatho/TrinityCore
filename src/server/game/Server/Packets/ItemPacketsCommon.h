@@ -26,6 +26,7 @@
 class ByteBuffer;
 class Item;
 struct LootItem;
+struct VoidStorageItem;
 enum class ItemContext : uint8;
 
 namespace UF

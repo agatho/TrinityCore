@@ -70,8 +70,8 @@ ByteBuffer& operator<<(ByteBuffer& data, TransmogOutfitDataInfo const& transmogO
 void TransmogOutfitNew::Read()
 {
     _worldPacket >> Npc;
-    _worldPacket >> As<uint8>(Source);
     _worldPacket >> Info;
+    _worldPacket >> As<uint8>(Source);
 }
 
 WorldPacket const* TransmogOutfitNewEntryAdded::Write()
@@ -208,17 +208,6 @@ WorldPacket const* AccountTransmogUpdate::Write()
 
     if (!NewAppearances.empty())
         _worldPacket.append(NewAppearances.data(), NewAppearances.size());
-
-    return &_worldPacket;
-}
-
-WorldPacket const* AccountTransmogSetFavoritesUpdate::Write()
-{
-    _worldPacket << Bits<1>(IsFullUpdate);
-    _worldPacket << Bits<1>(IsSetFavorite);
-    _worldPacket << Size<uint32>(FavoriteTransmogSets);
-    if (!FavoriteTransmogSets.empty())
-        _worldPacket.append(FavoriteTransmogSets.data(), FavoriteTransmogSets.size());
 
     return &_worldPacket;
 }

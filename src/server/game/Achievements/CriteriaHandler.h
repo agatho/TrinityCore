@@ -35,7 +35,6 @@ struct AchievementEntry;
 struct CriteriaEntry;
 struct CriteriaTreeEntry;
 struct ModifierTreeEntry;
-struct PerksActivityEntry;
 struct QuestObjective;
 struct ScenarioStepEntry;
 
@@ -51,8 +50,7 @@ enum CriteriaFlagsCu
     CRITERIA_FLAG_CU_ACCOUNT            = 0x2,
     CRITERIA_FLAG_CU_GUILD              = 0x4,
     CRITERIA_FLAG_CU_SCENARIO           = 0x8,
-    CRITERIA_FLAG_CU_QUEST_OBJECTIVE    = 0x10,
-    CRITERIA_FLAG_CU_PERKS_ACTIVITY     = 0x20
+    CRITERIA_FLAG_CU_QUEST_OBJECTIVE    = 0x10
 };
 
 struct Criteria
@@ -72,7 +70,6 @@ struct CriteriaTree
     AchievementEntry const* Achievement = nullptr;
     ScenarioStepEntry const* ScenarioStep = nullptr;
     ::QuestObjective const* QuestObjective = nullptr;
-    PerksActivityEntry const* PerksActivity = nullptr;
     ::Criteria const* Criteria = nullptr;
     std::vector<CriteriaTree const*> Children;
 };
@@ -348,11 +345,6 @@ public:
         return _questObjectiveCriteriasByType[size_t(type)];
     }
 
-    CriteriaList const& GetPerksActivityCriteriaByType(CriteriaType type) const
-    {
-        return _perksActivityCriteriasByType[size_t(type)];
-    }
-
     CriteriaTreeList const* GetCriteriaTreesByCriteria(uint32 criteriaId) const;
 
     CriteriaList const* GetCriteriaByStartEvent(CriteriaStartEvent startEvent, int32 asset) const;
@@ -413,7 +405,6 @@ private:
     CriteriaList _guildCriteriasByType[size_t(CriteriaType::Count)];
     std::unordered_map<std::pair<int32, int32>, CriteriaList> _scenarioCriteriasByTypeAndScenarioId;
     CriteriaList _questObjectiveCriteriasByType[size_t(CriteriaType::Count)];
-    CriteriaList _perksActivityCriteriasByType[size_t(CriteriaType::Count)];
 
     std::unordered_map<std::pair<int32, int32>, CriteriaList> _criteriasByStartEvent;
     std::unordered_map<std::pair<int32, int32>, CriteriaList> _criteriasByFailEvent;

@@ -49,7 +49,6 @@ class BaseEntity;
 class Battleground;
 class BattlegroundMap;
 class BattlegroundScript;
-class ChallengeMode;
 class CreatureGroup;
 class GameObjectModel;
 class Group;
@@ -57,9 +56,6 @@ class InstanceLock;
 class InstanceMap;
 class InstanceScript;
 class InstanceScenario;
-class HousingDecorEntity;
-class HousingRoomEntity;
-class MeshObject;
 class Object;
 class PhaseShift;
 class Player;
@@ -116,7 +112,6 @@ enum TransferAbortReason : uint32
     TRANSFER_ABORT_XREALM_ZONE_DOWN              = 24,  // Transfer Aborted: cross-realm zone is down
     TRANSFER_ABORT_SOLO_PLAYER_SWITCH_DIFFICULTY = 26,  // This instance is already in progress. You may only switch difficulties from inside the instance.
     TRANSFER_ABORT_NOT_CROSS_FACTION_COMPATIBLE  = 33,  // This instance isn't available for cross-faction groups
-    TRANSFER_ABORT_HOUSING_MAX_PLAYERS_IN_HOUSE  = 36,  // Housing: house is full
 };
 
 struct TransferAbortParams
@@ -150,10 +145,6 @@ struct ZoneDynamicInfo
     std::unique_ptr<Weather> DefaultWeather;
     WeatherState WeatherId;
     float Intensity;
-
-    // Lightning.db2 id of the storm running in this zone, 0 for none. Deliberately not derived
-    // from the weather above - see the comment on Map::SetZoneLightning.
-    int32 LightningId;
 
     struct LightOverride
     {
@@ -229,8 +220,8 @@ struct MapStoredObjectsUnorderedMap
     }
 };
 
-extern template struct TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation, MeshObject, HousingRoomEntity, HousingDecorEntity>;
-typedef TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation, MeshObject, HousingRoomEntity, HousingDecorEntity> MapStoredObjectTypesContainer;
+extern template struct TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation>;
+typedef TypeListContainer<MapStoredObjectsUnorderedMap, Creature, GameObject, DynamicObject, Pet, Corpse, AreaTrigger, SceneObject, Conversation> MapStoredObjectTypesContainer;
 
 class TC_GAME_API Map : public GridRefManager<NGridType>
 {
@@ -291,7 +282,8 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         void SetUnloadLock(GridCoord const& p, bool on) { getNGrid(p.x_coord, p.y_coord)->setUnloadExplicitLock(on); }
         void LoadGrid(float x, float y);
         void LoadGridForActiveObject(float x, float y, WorldObject const* object);
-        void LoadAllCells();
+        void LoadGridsInRange(float x, float y, float radius);
+        void LoadAllGrids();
         bool UnloadGrid(NGridType& ngrid, bool pForce);
         void GridMarkNoUnload(uint32 x, uint32 y);
         void GridUnmarkNoUnload(uint32 x, uint32 y);
@@ -390,7 +382,6 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         bool IsBattlegroundOrArena() const;
         bool IsScenario() const;
         bool IsGarrison() const;
-        bool IsHouseInterior() const;
         // Currently, this means that every entity added to this map will be marked as active
         bool IsAlwaysActive() const;
         bool GetEntrancePos(int32& mapid, float& x, float& y);
@@ -449,8 +440,6 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         Creature* GetCreature(ObjectGuid const& guid);
         DynamicObject* GetDynamicObject(ObjectGuid const& guid);
         GameObject* GetGameObject(ObjectGuid const& guid);
-        MeshObject* GetMeshObject(ObjectGuid const& guid);
-        HousingRoomEntity* GetHousingRoomEntity(ObjectGuid const& guid);
         Pet* GetPet(ObjectGuid const& guid);
         Transport* GetTransport(ObjectGuid const& guid);
         Creature* GetCreatureBySpawnId(ObjectGuid::LowType spawnId) const;
@@ -485,10 +474,10 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         AreaTriggerBySpawnIdContainer& GetAreaTriggerBySpawnIdStore() { return _areaTriggerBySpawnIdStore; }
         AreaTriggerBySpawnIdContainer const& GetAreaTriggerBySpawnIdStore() const { return _areaTriggerBySpawnIdStore; }
 
-        std::unordered_set<Corpse*> const* GetCorpsesInCell(uint32 cellId) const
+        std::unordered_set<Corpse*> const* GetCorpsesInGrid(uint32 cellId) const
         {
-            auto itr = _corpsesByCell.find(cellId);
-            if (itr != _corpsesByCell.end())
+            auto itr = _corpsesByGrid.find(cellId);
+            if (itr != _corpsesByGrid.end())
                 return &itr->second;
 
             return nullptr;
@@ -567,8 +556,6 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         Weather* GetOrGenerateZoneDefaultWeather(uint32 zoneId);
         WeatherState GetZoneWeather(uint32 zoneId) const;
         void SetZoneWeather(uint32 zoneId, WeatherState weatherId, float intensity);
-        int32 GetZoneLightning(uint32 zoneId) const;
-        void SetZoneLightning(uint32 zoneId, int32 lightningId);
         void SetZoneOverrideLight(uint32 zoneId, uint32 areaLightId, uint32 overrideLightId, Milliseconds transitionTime);
 
         void UpdateAreaDependentAuras();
@@ -640,10 +627,10 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         bool _areaTriggersToMoveLock;
         std::vector<AreaTrigger*> _areaTriggersToMove;
 
-        bool IsGridLoaded(GridCoord const&) const;
-        void EnsureGridCreated(GridCoord const&);
-        bool EnsureGridLoaded(Cell const&);
-        void EnsureGridLoadedForActiveObject(Cell const&, WorldObject const* object);
+        bool IsGridLoaded(GridCoord const& p) const;
+        void EnsureGridCreated(GridCoord const& p);
+        bool EnsureGridLoaded(GridCoord const& p);
+        void EnsureGridLoadedForActiveObject(GridCoord const& p, WorldObject const* object);
 
         void buildNGridLinkage(NGridType* pNGridType) { pNGridType->link(this); }
 
@@ -659,7 +646,7 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         void SendObjectUpdates();
 
     protected:
-        virtual void LoadGridObjects(NGridType* grid, Cell const& cell);
+        virtual void LoadGridObjects(NGridType* grid);
 
         MapEntry const* i_mapEntry;
         Difficulty i_spawnMode;
@@ -779,6 +766,8 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
 
     private:
         // Type specific code for add/remove to/from grid
+        friend class ObjectGridLoaderBase;
+
         template<class T>
         void AddToGrid(T* object, Cell const& cell);
 
@@ -834,7 +823,7 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         CreatureBySpawnIdContainer _creatureBySpawnIdStore;
         GameObjectBySpawnIdContainer _gameobjectBySpawnIdStore;
         AreaTriggerBySpawnIdContainer _areaTriggerBySpawnIdStore;
-        std::unordered_map<uint32/*cellId*/, std::unordered_set<Corpse*>> _corpsesByCell;
+        std::unordered_map<uint32/*cellId*/, std::unordered_set<Corpse*>> _corpsesByGrid;
         std::unordered_map<ObjectGuid, Corpse*> _corpsesByPlayer;
         std::unordered_set<Corpse*> _corpseBones;
 
@@ -908,8 +897,6 @@ class TC_GAME_API InstanceMap : public Map
         InstanceScenario* GetInstanceScenario() { return i_scenario.get(); }
         InstanceScenario const* GetInstanceScenario() const { return i_scenario.get(); }
         void SetInstanceScenario(InstanceScenario* scenario);
-        ChallengeMode* GetChallengeMode() { return i_challengeMode.get(); }
-        ChallengeMode const* GetChallengeMode() const { return i_challengeMode.get(); }
         InstanceLock const* GetInstanceLock() const { return i_instanceLock; }
         void UpdateInstanceLock(UpdateBossStateSaveDataEvent const& updateSaveDataEvent);
         void UpdateInstanceLock(UpdateAdditionalSaveDataEvent const& updateSaveDataEvent);
@@ -932,7 +919,6 @@ class TC_GAME_API InstanceMap : public Map
         InstanceScript* i_data;
         uint32 i_script_id;
         std::unique_ptr<InstanceScenario> i_scenario;
-        std::unique_ptr<ChallengeMode> i_challengeMode;
         InstanceLock* i_instanceLock;
         GroupInstanceReference i_owningGroupRef;
         Optional<uint32> i_lfgDungeonsId;
@@ -975,9 +961,6 @@ inline void Map::Visit(Cell const& cell, TypeContainerVisitor<T, CONTAINER>& vis
     const uint32 y = cell.GridY();
     const uint32 cell_x = cell.CellX();
     const uint32 cell_y = cell.CellY();
-
-    if (!cell.NoCreate())
-        EnsureGridLoaded(cell);
 
     NGridType* grid = getNGrid(x, y);
     if (grid && grid->isGridObjectDataLoaded())

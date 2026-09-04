@@ -22,7 +22,6 @@
 #include "DatabaseEnv.h"
 #include "Group.h"
 #include "Log.h"
-#include "DB2Stores.h"
 #include "Map.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
@@ -796,19 +795,4 @@ void WorldSession::HandleRequestPetInfo(WorldPackets::Pet::RequestPetInfo& /*req
         else
             _player->CharmSpellInitialize();
     }
-}
-
-void WorldSession::HandleSetPetSpecialization(WorldPackets::Pet::SetPetSpecializationRequest& packet)
-{
-    Pet* pet = _player->GetPet();
-    if (!pet || pet->GetGUID() != packet.PetGUID)
-        return;
-
-    // Only real pet specializations (ChrSpecialization with ClassID == 0) may be chosen, and only for a
-    // pet that actually supports them. Pet::SetSpecialization applies the spec and echoes SMSG_SET_PET_SPECIALIZATION.
-    ChrSpecializationEntry const* spec = sChrSpecializationStore.LookupEntry(packet.SpecID);
-    if (!spec || !spec->IsPetSpecialization())
-        return;
-
-    pet->SetSpecialization(packet.SpecID);
 }

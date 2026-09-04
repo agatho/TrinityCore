@@ -17,11 +17,9 @@
 
 // This is where scripts' loading functions should be declared:
 void AddSC_deathknight_pet_scripts();
-void AddSC_evoker_pet_scripts();
 void AddSC_generic_pet_scripts();
 void AddSC_hunter_pet_scripts();
 void AddSC_mage_pet_scripts();
-void AddSC_pet_battle_trainer();
 void AddSC_priest_pet_scripts();
 void AddSC_shaman_pet_scripts();
 
@@ -30,11 +28,9 @@ void AddSC_shaman_pet_scripts();
 void AddPetScripts()
 {
     AddSC_deathknight_pet_scripts();
-    AddSC_evoker_pet_scripts();
     AddSC_generic_pet_scripts();
     AddSC_hunter_pet_scripts();
     AddSC_mage_pet_scripts();
-    AddSC_pet_battle_trainer();
     AddSC_priest_pet_scripts();
     AddSC_shaman_pet_scripts();
 }

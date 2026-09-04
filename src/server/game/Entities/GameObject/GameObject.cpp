@@ -29,12 +29,9 @@
 #include "G3DPosition.hpp"
 #include "GameEventSender.h"
 #include "GameObjectAI.h"
-#include "Garrison.h"
 #include "GameObjectModel.h"
 #include "GameObjectPackets.h"
-#include "SpellPackets.h"
 #include "GameTime.h"
-#include "Garrison.h"
 #include "GossipDef.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
@@ -47,7 +44,6 @@
 #include "MapManager.h"
 #include "MapUtils.h"
 #include "MiscPackets.h"
-#include "NPCPackets.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "OutdoorPvPMgr.h"
@@ -3451,206 +3447,26 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
             if (!player)
                 return;
 
-            TC_LOG_DEBUG("housing", "GameObject::Use(GAMEOBJECT_TYPE_UI_LINK): entry={} guid={} "
-                "UILinkType={} PlayerInteractionType={} spell={} player={}",
-                GetEntry(), GetGUID().ToString(),
-                GetGOInfo()->UILink.UILinkType,
-                GetGOInfo()->UILink.PlayerInteractionType,
-                GetGOInfo()->UILink.spell,
-                player->GetGUID().ToString());
-
-            if (GetGOInfo()->UILink.PlayerInteractionType)
+            WorldPackets::GameObject::GameObjectInteraction gameObjectUILink;
+            gameObjectUILink.ObjectGUID = GetGUID();
+            switch (GetGOInfo()->UILink.UILinkType)
             {
-                WorldPackets::NPC::NPCInteractionOpenResult npcInteraction;
-                npcInteraction.Npc = GetGUID();
-                npcInteraction.InteractionType = static_cast<PlayerInteractionType>(GetGOInfo()->UILink.PlayerInteractionType);
-                npcInteraction.Success = true;
-                player->SendDirectMessage(npcInteraction.Write());
-
-                TC_LOG_DEBUG("housing", "  -> Sent SMSG_NPC_INTERACTION_OPEN_RESULT: npc={} interactionType={} success=true",
-                    GetGUID().ToString(), GetGOInfo()->UILink.PlayerInteractionType);
-
-                uint32 spellId = GetGOInfo()->UILink.spell;
-
-                // Per-plot cornerstone GOs from DB2 CASC data have spell=0 in their
-                // template.  The master template (entry 457142) has Data8=1266097 but
-                // the actual per-plot entries do not.  Fall back to the known spell
-                // for CornerstoneInteraction (type 70).
-                if (!spellId && GetGOInfo()->UILink.PlayerInteractionType == 70)
-                    spellId = 1266097; // [DNT] Trigger Convo for Unowned Plot
-
-                if (spellId)
-                {
-                    TC_LOG_DEBUG("housing", "  -> Casting spell {} on player", spellId);
-                    player->CastSpell(player, spellId, true);
-                }
-            }
-            else
-            {
-                WorldPackets::GameObject::GameObjectInteraction gameObjectUILink;
-                gameObjectUILink.ObjectGUID = GetGUID();
-                switch (GetGOInfo()->UILink.UILinkType)
-                {
-                    case 0:
-                        gameObjectUILink.InteractionType = PlayerInteractionType::AdventureJournal;
-                        break;
-                    case 1:
-                        gameObjectUILink.InteractionType = PlayerInteractionType::ObliterumForge;
-                        break;
-                    case 2:
-                        gameObjectUILink.InteractionType = PlayerInteractionType::ScrappingMachine;
-                        break;
-                    case 3:
-                        gameObjectUILink.InteractionType = PlayerInteractionType::ItemInteraction;
-                        break;
-                    default:
-                        break;
-                }
-                player->SendDirectMessage(gameObjectUILink.Write());
-            }
-            return;
-        }
-        case GAMEOBJECT_TYPE_GARRISON_MONUMENT:             //44
-        {
-            // The WoD garrison trophy monuments ("Monument Base"): 232379/232380/233177 in Lunarfall and
-            // 233827/233828/233829 in Frostwall, all six spawned. Data0 is the TrophyTypeID (4 = Alliance,
-            // 3 = Horde) and Data1 the TrophyInstanceID, which is which of the three plinths this is.
-            //
-            // The client drives the whole UI from an interaction of PlayerInteractionType::Trophy (36):
-            // PlayerInteractionFrameManager maps that type to GarrisonMonumentFrame and its showFunc calls
-            // C_Trophy.MonumentLoadList(), which is what emits CMSG_GET_TROPHY_LIST. Until now nothing here
-            // opened that interaction, so clicking a monument did nothing at all and none of the trophy
-            // opcodes were ever reachable - the same defect the Anima Conductors had below.
-            Player* player = user->ToPlayer();
-            if (!player)
-                return;
-
-            // TrophyTypeID 0 is NoValue: no Trophy.db2 row is displayable on such a monument, so there is
-            // nothing to show. Refusing here keeps the client from opening an unavoidably empty frame.
-            if (!GetGOInfo()->garrisonMonument.TrophyTypeID)
-                return;
-
-            player->PlayerTalkClass->GetInteractionData().StartInteraction(GetGUID(), PlayerInteractionType::Trophy);
-
-            WorldPackets::GameObject::GameObjectInteraction openMonument;
-            openMonument.ObjectGUID = GetGUID();
-            openMonument.InteractionType = PlayerInteractionType::Trophy;
-            player->SendDirectMessage(openMonument.Write());
-            return;
-        }
-        case GAMEOBJECT_TYPE_GARR_TALENT_TREE:              //58
-        {
-            // A gameobject that opens a garrison talent tree directly instead of through a gossip option. The four
-            // covenant Anima Conductors are these: 328302 (Kyrian, tree 345), 350776 (Venthyr, 348),
-            // 350777 (Night Fae, 346), 348675 (Necrolord, 347) - each one's Data1 is its Channel Anima tree.
-            //
-            // SMSG_GAME_OBJECT_INTERACTION is NOT usable here, and that is why this was still inert after the case
-            // was added. Both SMSG_GAME_OBJECT_INTERACTION and SMSG_NPC_INTERACTION_OPEN_RESULT feed the client's
-            // PlayerInteractionManager, and Blizzard_UIPanels_Game/Shared/PlayerInteractionFrameManager.lua's
-            // InteractionManagerFrameInfo table has NO entry for PlayerInteractionType::GarrTalent (35) - its
-            // ShowFrame() does `if not frameInfo then return end`, i.e. a silent no-op. The talent/anima UIs are
-            // raised by dedicated events instead (Blizzard_UIParent/Mainline/UIParent.lua):
-            //   GARRISON_TALENT_NPC_OPENED(garrTypeID, garrTalentTreeID) -> OrderHallTalentFrame:SetGarrisonType()
-            //   ANIMA_DIVERSION_OPEN(AnimaDiversionFrameInfo)            -> AnimaDiversionFrame:TryShow()
-            // and the ONLY server->client trigger for either is SMSG_GOSSIP_OPTION_NPC_INTERACTION carrying a
-            // GossipNpcOptionID, from which the client reads GossipNPCOption.db2 (GossipNpcOption = 32
-            // GarrisonTalent, plus GarrTalentTreeID) - there is no dedicated open-talent/open-anima opcode
-            // anywhere in the 12.0.7 client (whole-binary opcode catalogue: 2408 named opcodes, zero matches for
-            // ANIMA/DIVERSION/TALENT_NPC/GARRISON_OPEN_MISSION).
-            //
-            // So resolve the gameobject's tree to its own GossipNPCOption row and send exactly what the gossip
-            // path sends. No id is hardcoded: the four conductors resolve to rows 31032/31290/31291/31292 purely
-            // through GarrTalentTreeID.
-            Player* player = user->ToPlayer();
-            if (!player)
-                return;
-
-            uint32 garrTalentTreeId = GetGOInfo()->garrTalentTree.GarrTalentTreeID;
-            if (!garrTalentTreeId)
-                return;
-
-            // ...with one exception, and it is the only kind of tree these gameobjects actually carry. A
-            // Channel Anima tree (GarrTalentTree.FeatureTypeIndex 7) is not a talent grid at all - it is the
-            // Anima Diversion map, and its "talents" are map pins: all six rows of the Kyrian tree 345
-            // publish IconFileDataID 0 and carry normalised map coordinates in GarrTalentMapPOI.db2 instead.
-            // Sent through the gossip path below, the client raises OrderHallTalentFrame, which draws every
-            // row as an icon button - so the frame came up with the right title, the right anima total and
-            // research cost, and six blank buttons. That is exactly what the tester saw.
-            //
-            // The map frame is a different client system. AnimaDiversionFrame is raised by the
-            // ANIMA_DIVERSION_OPEN event (UIParent.lua:2227-2229) fired from the client's own AnimaDiversion
-            // code, and that whole system is keyed on an active PlayerInteraction of type AnimaDiversion (47):
-            // C_AnimaDiversion.GetOriginPosition (client RVA 0x9FAAD0, in AnimaDiversionUI.cpp) reads the
-            // current interaction and tests it against 47, and C_AnimaDiversion.CloseUI (RVA 0x9F9720) clears
-            // interaction 47. No ANIMA opcode exists in the 12.0.7 client to carry it, so starting that
-            // interaction is the only lever there is, and SMSG_GAME_OBJECT_INTERACTION is how a gameobject
-            // starts one - the Trophy case a few lines above does exactly this.
-            //
-            // No extra payload is needed: the client takes the map from this gameobject's own Data0 (UiMapID
-            // 1813 Bastion / 1814 Maldraxxus / 1738 Revendreth / 1739 Ardenweald, one per conductor) and the
-            // texture kit from GarrTalentTree.UiTextureKitID, and it already has both.
-            if (GarrTalentTreeEntry const* talentTree = sGarrTalentTreeStore.LookupEntry(garrTalentTreeId))
-            {
-                if (talentTree->FeatureTypeIndex == GARR_TALENT_FEATURE_CHANNEL_ANIMA)
-                {
-                    player->PlayerTalkClass->GetInteractionData().StartInteraction(GetGUID(), PlayerInteractionType::AnimaDiversion);
-
-                    WorldPackets::GameObject::GameObjectInteraction openAnimaDiversion;
-                    openAnimaDiversion.ObjectGUID = GetGUID();
-                    openAnimaDiversion.InteractionType = PlayerInteractionType::AnimaDiversion;
-                    player->SendDirectMessage(openAnimaDiversion.Write());
-                    return;
-                }
-            }
-
-            GossipNPCOptionEntry const* npcOption = nullptr;
-            for (GossipNPCOptionEntry const* option : sGossipNPCOptionStore)
-            {
-                if (option->GarrTalentTreeID == int32(garrTalentTreeId))
-                {
-                    npcOption = option;
+                case 0:
+                    gameObjectUILink.InteractionType = PlayerInteractionType::AdventureJournal;
                     break;
-                }
+                case 1:
+                    gameObjectUILink.InteractionType = PlayerInteractionType::ObliterumForge;
+                    break;
+                case 2:
+                    gameObjectUILink.InteractionType = PlayerInteractionType::ScrappingMachine;
+                    break;
+                case 3:
+                    gameObjectUILink.InteractionType = PlayerInteractionType::ItemInteraction;
+                    break;
+                default:
+                    break;
             }
-
-            if (!npcOption)
-            {
-                // Nothing to open with - refuse rather than send an interaction the client has no frame for.
-                TC_LOG_DEBUG("misc", "GameObject::Use: GARR_TALENT_TREE gameobject {} (entry {}) has GarrTalentTreeID {} "
-                    "with no GossipNPCOption.db2 row referencing it; cannot open the talent UI.",
-                    GetGUID().ToString(), GetEntry(), garrTalentTreeId);
-                return;
-            }
-
-            player->PlayerTalkClass->GetInteractionData().StartInteraction(GetGUID(), PlayerInteractionType::GarrTalent);
-
-            WorldPackets::NPC::GossipOptionNPCInteraction npcInteraction;
-            npcInteraction.GossipGUID = GetGUID();
-            npcInteraction.GossipNpcOptionID = npcOption->ID;
-            player->SendDirectMessage(npcInteraction.Write());
-            return;
-        }
-        case GAMEOBJECT_TYPE_WEEKLY_REWARD_CHEST:           //59
-        {
-            // The Great Vault. Six of these are spawned across the expansion hubs, yet type 59 had no case here at
-            // all - so clicking one did nothing: no packet left the server, and PlayerInteractionType::WeeklyRewards
-            // (49) had zero send-sites anywhere in the core.
-            //
-            // The 12.0.7 client registers WeeklyRewardsFrame against that interaction type, so establishing the
-            // interaction IS the trigger; the frame then drives itself with CMSG_REQUEST_WEEKLY_REWARDS ->
-            // WorldSession::HandleRequestWeeklyRewards, which already answers with the real
-            // WeeklyRewardChestThreshold.db2-driven rows.
-            //
-            // Sent as GameObjectInteraction (the GO-side packet), mirroring GAMEOBJECT_TYPE_UI_LINK above, rather
-            // than NPCInteractionOpenResult, which is the creature-side form.
-            Player* player = user->ToPlayer();
-            if (!player)
-                return;
-
-            WorldPackets::GameObject::GameObjectInteraction weeklyRewards;
-            weeklyRewards.ObjectGUID = GetGUID();
-            weeklyRewards.InteractionType = PlayerInteractionType::WeeklyRewards;
-            player->SendDirectMessage(weeklyRewards.Write());
+            player->SendDirectMessage(gameObjectUILink.Write());
             return;
         }
         case GAMEOBJECT_TYPE_GATHERING_NODE:                //50
@@ -3702,30 +3518,6 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
             if (Loot* loot = GetLootForPlayer(player))
                 player->SendLoot(*loot);
             break;
-        }
-        case GAMEOBJECT_TYPE_GARRISON_SHIPMENT:             //45
-        {
-            // Work-order "standard"/crate. Clicking it collects the finished orders and delivers their goods;
-            // placement is a separate action at the work-order NPC. Handled in core (no script).
-            Player* player = user->ToPlayer();
-            if (!player)
-                return;
-
-            // WoD building crate: collect the finished orders on the crate's garrison plot.
-            if (Garrison* garrison = player->GetGarrison())
-                if (uint32 plotInstanceId = garrison->FindPlotInstanceForNpc(GetGUID()))
-                {
-                    garrison->CollectReadyShipments(plotInstanceId);
-                    return;
-                }
-
-            // Order-hall / class-hall "standard" (plotless, e.g. "Training Troops" / "Seal of Broken Fate"):
-            // collect the finished orders for this GO's CharShipmentContainer -> troops join the roster, item
-            // orders deliver their goods.
-            if (uint32 containerId = GetGOInfo()->garrisonShipment.ShipmentContainer)
-                for (auto const& [garrType, garrison] : player->GetGarrisons())
-                    garrison->CollectReadyShipmentsForContainer(containerId);
-            return;
         }
         default:
             if (GetGoType() >= MAX_GAMEOBJECT_TYPE)
@@ -3802,16 +3594,6 @@ void GameObject::SendCustomAnim(uint32 anim)
     customAnim.ObjectGUID = GetGUID();
     customAnim.CustomAnim = anim;
     SendMessageToSet(customAnim.Write(), true);
-}
-
-void GameObject::SendPlaySpellVisualKit(uint32 id, uint32 type, uint32 duration) const
-{
-    WorldPackets::Spells::GameObjectPlaySpellVisualKit gameObjectPlaySpellVisualKit;
-    gameObjectPlaySpellVisualKit.Object = GetGUID();
-    gameObjectPlaySpellVisualKit.KitRecID = id;
-    gameObjectPlaySpellVisualKit.KitType = type;
-    gameObjectPlaySpellVisualKit.Duration = duration;
-    SendMessageToSet(gameObjectPlaySpellVisualKit.Write(), true);
 }
 
 bool GameObject::IsInRange(float x, float y, float z, float radius) const
@@ -4431,140 +4213,7 @@ void GameObject::ValuesUpdateForPlayerWithMaskSender::operator()(Player const* p
 void GameObject::ClearValuesChangesMask()
 {
     m_values.ClearChangesMask(&GameObject::m_gameObjectData);
-    m_values.ClearChangesMask(&GameObject::m_housingCornerstoneData);
-    m_values.ClearChangesMask(&GameObject::m_mirroredPositionData);
     WorldObject::ClearValuesChangesMask();
-}
-
-void GameObject::InitHousingCornerstoneData(uint64 cost, int32 plotIndex)
-{
-    if (m_housingCornerstoneData.has_value())
-        return;
-
-    SetUpdateFieldValue(m_values.ModifyValue(&GameObject::m_housingCornerstoneData, 0)
-        .ModifyValue(&UF::HousingCornerstoneData::Cost), cost);
-    SetUpdateFieldValue(m_values.ModifyValue(&GameObject::m_housingCornerstoneData, 0)
-        .ModifyValue(&UF::HousingCornerstoneData::PlotIndex), plotIndex);
-
-    m_entityFragments.Add(WowCS::EntityFragment::FJamHousingCornerstone_C, IsInWorld(),
-        WowCS::GetRawFragmentData(m_housingCornerstoneData));
-
-    TC_LOG_DEBUG("housing", "GameObject::InitHousingCornerstoneData: entry={} guid={} cost={} plotIndex={} "
-        "isInWorld={} fragmentCount={} updateableCount={}",
-        GetEntry(), GetGUID().ToString(), cost, plotIndex,
-        IsInWorld(), m_entityFragments.Count, m_entityFragments.UpdateableCount);
-}
-
-void GameObject::InitHousingDecorData(ObjectGuid decorGuid, ObjectGuid houseGuid,
-    uint8 flags, ObjectGuid attachParent /*= ObjectGuid::Empty*/,
-    uint8 sourceType /*= 0*/, std::string sourceValue /*= {}*/)
-{
-    if (m_housingDecorData.has_value())
-        return;
-
-    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingDecorData, 0)
-        .ModifyValue(&UF::HousingDecorData::DecorGUID), decorGuid);
-    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingDecorData, 0)
-        .ModifyValue(&UF::HousingDecorData::AttachParentGUID), attachParent);
-    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingDecorData, 0)
-        .ModifyValue(&UF::HousingDecorData::Flags), flags);
-    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingDecorData, 0)
-        .ModifyValue(&UF::HousingDecorData::TargetGameObjectGUID), GetGUID());
-
-    // Set persisted data (house ownership + source tracking)
-    auto persistedRef = m_values.ModifyValue(&Object::m_housingDecorData, 0)
-        .ModifyValue(&UF::HousingDecorData::PersistedData, 0);
-    SetUpdateFieldValue(persistedRef.ModifyValue(&UF::DecorStoragePersistedData::HouseGUID), houseGuid);
-    SetUpdateFieldValue(persistedRef.ModifyValue(&UF::DecorStoragePersistedData::SourceType), sourceType);
-    if (!sourceValue.empty())
-        SetUpdateFieldValue(persistedRef.ModifyValue(&UF::DecorStoragePersistedData::SourceValue), std::move(sourceValue));
-
-    m_entityFragments.Add(WowCS::EntityFragment::FHousingDecor_C, IsInWorld(),
-        WowCS::GetRawFragmentData(m_housingDecorData));
-
-    // 12.0.5 added Tag_HousingDecorProxyGameObject (=226) to mark a GameObject that is
-    // serving as a housing-decor proxy (chair/chest/mailbox/etc. placed as decor).
-    // Attach it alongside FHousingDecor_C so the client treats this entity as housing
-    // decor in addition to its normal GO behavior.
-    m_entityFragments.Add(WowCS::EntityFragment::Tag_HousingDecorProxyGameObject, IsInWorld());
-
-    TC_LOG_DEBUG("housing", "GameObject::InitHousingDecorData: entry={} goGuid={} decorGuid={} houseGuid={} flags={} "
-        "isInWorld={} fragmentCount={}",
-        GetEntry(), GetGUID().ToString(), decorGuid.ToString(), houseGuid.ToString(), flags,
-        IsInWorld(), m_entityFragments.Count);
-}
-
-void GameObject::InitHousingDecorMirroredPosition(Position const& localPos, QuaternionData const& localRot,
-    float localScale, ObjectGuid attachParent, uint8 attachFlags /*= 3*/)
-{
-    // Retail sniff-verified: GameObject decor carries FMirroredPositionData_C fragment
-    // with AttachParent=room entity and local-space position.
-    auto posData = m_values.ModifyValue(&GameObject::m_mirroredPositionData)
-        .ModifyValue(&UF::MirroredPositionData::PositionData);
-    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::AttachParentGUID), attachParent);
-    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::PositionLocalSpace),
-        TaggedPosition<Position::XYZ>(localPos.GetPositionX(), localPos.GetPositionY(), localPos.GetPositionZ()));
-    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::RotationLocalSpace), localRot);
-    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::ScaleLocalSpace), localScale);
-    SetUpdateFieldValue(posData.ModifyValue(&UF::MirroredMeshObjectData::AttachmentFlags), attachFlags);
-
-    m_entityFragments.Add(WowCS::EntityFragment::FMirroredPositionData_C, IsInWorld(),
-        WowCS::GetRawFragmentData(m_mirroredPositionData));
-
-    TC_LOG_DEBUG("housing", "GameObject::InitHousingDecorMirroredPosition: entry={} goGuid={} "
-        "localPos=({:.2f},{:.2f},{:.2f}) attachParent={} attachFlags={}",
-        GetEntry(), GetGUID().ToString(),
-        localPos.GetPositionX(), localPos.GetPositionY(), localPos.GetPositionZ(),
-        attachParent.ToString(), attachFlags);
-}
-
-void GameObject::InitHousingFixtureData(ObjectGuid houseGuid, int32 exteriorComponentID, int32 houseExteriorWmoDataID,
-    uint8 exteriorComponentType /*= 9*/, uint8 houseSize /*= 2*/, int32 exteriorComponentHookID /*= -1*/)
-{
-    if (m_housingFixtureData.has_value())
-        return;
-
-    // Sniff-verified field values (11.2 retail MeshObject with FHousingFixture_C):
-    //   ExteriorComponentID: 141 (Stucco Base, small Human house)
-    //   HouseExteriorWmoDataID: 9 (Human/Generic theme, NOT 32)
-    //   ExteriorComponentHookID: -1 (base piece, no hook)
-    //   ExteriorComponentType: 9 (Base)
-    //   Field_59: 1
-    //   Size: 2 (small)
-    //   GameObjectGUID: 0 (empty)
-    //   Guid: MeshObject GUID (we use Housing GUID as safe substitute)
-
-    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
-        .ModifyValue(&UF::HousingFixtureData::ExteriorComponentID), exteriorComponentID);
-    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
-        .ModifyValue(&UF::HousingFixtureData::HouseExteriorWmoDataID), houseExteriorWmoDataID);
-    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
-        .ModifyValue(&UF::HousingFixtureData::ExteriorComponentHookID), exteriorComponentHookID);
-    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
-        .ModifyValue(&UF::HousingFixtureData::HouseGUID), houseGuid);
-    // Guid must be a Housing-type GUID (HighGuid::Housing, type 55). Client GUID resolver
-    // crashes if it receives a non-Housing, non-null GUID here (e.g. HighGuid::GameObject = 11)
-    // because it enters a conversion path that returns null, then dereferences at +0x64.
-    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
-        .ModifyValue(&UF::HousingFixtureData::Guid), houseGuid);
-    // GameObjectGUID: sniff confirms 0x0 (empty) for all fixture pieces
-    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
-        .ModifyValue(&UF::HousingFixtureData::ExteriorComponentType), exteriorComponentType);
-    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
-        .ModifyValue(&UF::HousingFixtureData::Field_59), uint8(1)); // sniff: always 1
-    SetUpdateFieldValue(m_values.ModifyValue(&Object::m_housingFixtureData, 0)
-        .ModifyValue(&UF::HousingFixtureData::Size), houseSize);
-
-    m_entityFragments.Add(WowCS::EntityFragment::FHousingFixture_C, IsInWorld(),
-        WowCS::GetRawFragmentData(m_housingFixtureData));
-
-    TC_LOG_DEBUG("housing", "GameObject::InitHousingFixtureData: entry={} goGuid={} houseGuid={} "
-        "exteriorComponentID={} wmoDataID={} hookID={} componentType={} size={} field59=1 "
-        "isInWorld={} fragmentCount={}",
-        GetEntry(), GetGUID().ToString(), houseGuid.ToString(),
-        exteriorComponentID, houseExteriorWmoDataID, exteriorComponentHookID,
-        exteriorComponentType, houseSize,
-        IsInWorld(), m_entityFragments.Count);
 }
 
 std::span<uint32 const> GameObject::GetPauseTimes() const

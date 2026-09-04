@@ -208,12 +208,6 @@ void WorldSession::HandleGameObjectUseOpcode(WorldPackets::GameObject::GameObjUs
 
         obj->Use(GetPlayer());
     }
-    else
-    {
-        // Debug: Log failed GO interaction attempt for housing diagnostics
-        TC_LOG_DEBUG("housing", "HandleGameObjectUseOpcode: GetGameObjectIfCanInteractWith returned null "
-            "for guid={} player={}", packet.Guid.ToString(), GetPlayer()->GetGUID().ToString());
-    }
 }
 
 void WorldSession::HandleGameobjectReportUse(WorldPackets::GameObject::GameObjReportUse& packet)
@@ -354,9 +348,7 @@ void WorldSession::HandleCancelModSpeedNoControlAuras(WorldPackets::Spells::Canc
 
 void WorldSession::HandleCancelAutoRepeatSpellOpcode(WorldPackets::Spells::CancelAutoRepeatSpell& /*cancelAutoRepeatSpell*/)
 {
-    // may be better send SMSG_CANCEL_AUTO_REPEAT?
-    // cancel and prepare for deleting
-    _player->InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
+    _player->CancelAutoRepeatSpell();
 }
 
 void WorldSession::HandleCancelQueuedSpellOpcode(WorldPackets::Spells::CancelQueuedSpell& /*cancelQueuedSpell*/)
@@ -493,12 +485,11 @@ void WorldSession::HandleMirrorImageDataRequest(WorldPackets::Spells::GetMirrorI
         mirrorImageComponentedData.UnitGUID = guid;
         if (ChrModelEntry const* chrModel = sDB2Manager.GetChrModel(creator->GetRace(), creator->GetGender()))
             mirrorImageComponentedData.ChrModelID = chrModel->ID;
+        mirrorImageComponentedData.DisplayScale = creator->GetDisplayScale();
         mirrorImageComponentedData.RaceID = creator->GetRace();
         mirrorImageComponentedData.Gender = creator->GetGender();
         mirrorImageComponentedData.ClassID = creator->GetClass();
-
-        for (UF::ChrCustomizationChoice const& customization : player->m_playerData->Customizations)
-            mirrorImageComponentedData.Customizations.push_back(customization);
+        mirrorImageComponentedData.Customizations.assign(player->m_playerData->Customizations.begin(), player->m_playerData->Customizations.end());
 
         Guild* guild = player->GetGuild();
         mirrorImageComponentedData.GuildGUID = (guild ? guild->GetGUID() : ObjectGuid::Empty);
@@ -625,42 +616,5 @@ void WorldSession::HandleKeyboundOverride(WorldPackets::Spells::KeyboundOverride
     if (!spellKeyboundOverride)
         return;
 
-    // Server-initiated reaction to a client keybind, not a player spell cast: the mapped spells are
-    // internal utilities without ALLOW_WHILE_MOUNTED & co (e.g. 374763 Lift Off for the skyriding
-    // double-jump fires while mounted and falling), so a normal cast would fail its state checks.
-    // Spell scripts' own CheckCast hooks still run and can veto.
-    player->CastSpell(player, spellKeyboundOverride->Data, true);
-}
-
-void WorldSession::HandleRequestCrowdControlSpell(WorldPackets::Spells::RequestCrowdControlSpell& requestCrowdControlSpell)
-{
-    Player* player = GetPlayer();
-    if (!player)
-        return;
-
-    // Answer with the spell currently crowd-controlling the target (any active loss-of-control aura); the arena UI
-    // uses this to show the CC on an enemy. SpellID 0 = the target is not crowd-controlled.
-    WorldPackets::Spells::ArenaCrowdControlSpellResult result;
-    result.Guid = requestCrowdControlSpell.Target;
-
-    if (Unit* target = ObjectAccessor::GetUnit(*player, requestCrowdControlSpell.Target))
-    {
-        static constexpr AuraType ccAuraTypes[] =
-        {
-            SPELL_AURA_MOD_STUN, SPELL_AURA_MOD_FEAR, SPELL_AURA_MOD_CONFUSE,
-            SPELL_AURA_MOD_ROOT, SPELL_AURA_MOD_POSSESS, SPELL_AURA_MOD_PACIFY_SILENCE
-        };
-
-        for (AuraType type : ccAuraTypes)
-        {
-            Unit::AuraEffectList const& effects = target->GetAuraEffectsByType(type);
-            if (!effects.empty())
-            {
-                result.SpellID = int32(effects.front()->GetId());
-                break;
-            }
-        }
-    }
-
-    SendPacket(result.Write());
+    player->CastSpell(player, spellKeyboundOverride->Data);
 }

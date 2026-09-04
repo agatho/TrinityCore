@@ -23,11 +23,9 @@
 #include "DB2Stores.h"
 #include "GossipDef.h"
 #include "Item.h"
-#include "ItemConversionMgr.h"
 #include "ItemPackets.h"
 #include "Log.h"
 #include "NPCPackets.h"
-#include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "World.h"
@@ -107,11 +105,6 @@ void WorldSession::HandleSwapInvItemOpcode(WorldPackets::Item::SwapInvItem& swap
         return;
     }
 
-    // Moving an item into or out of the shared account bank requires the account bank lock.
-    if ((Player::IsAccountBankPos(INVENTORY_SLOT_BAG_0, swapInvItem.Slot1)
-        || Player::IsAccountBankPos(INVENTORY_SLOT_BAG_0, swapInvItem.Slot2)) && !CanMutateAccountBank())
-        return;
-
     uint16 src = ((INVENTORY_SLOT_BAG_0 << 8) | swapInvItem.Slot1);
     uint16 dst = ((INVENTORY_SLOT_BAG_0 << 8) | swapInvItem.Slot2);
 
@@ -175,11 +168,6 @@ void WorldSession::HandleSwapItem(WorldPackets::Item::SwapItem& swapItem)
         TC_LOG_DEBUG("network", "HandleSwapItem - Unit ({}) not found or you can't interact with him.", _player->PlayerTalkClass->GetInteractionData().SourceGuid.ToString());
         return;
     }
-
-    // Moving an item into or out of the shared account bank requires the account bank lock.
-    if ((Player::IsAccountBankPos(swapItem.ContainerSlotA, swapItem.SlotA)
-        || Player::IsAccountBankPos(swapItem.ContainerSlotB, swapItem.SlotB)) && !CanMutateAccountBank())
-        return;
 
     _player->SwapItem(src, dst);
 }
@@ -924,15 +912,6 @@ void WorldSession::HandleSocketGems(WorldPackets::Item::SocketGems& socketGems)
     if (!socketGems.ItemGuid)
         return;
 
-    // Tell the client its socketing attempt was rejected (mirror of the SMSG_SOCKET_GEMS_SUCCESS sent on success),
-    // so the gem-socket UI clears the pending state instead of hanging.
-    auto sendSocketFailure = [&]()
-    {
-        WorldPackets::Item::SocketGemsFailure failure;
-        failure.Item = socketGems.ItemGuid;
-        SendPacket(failure.Write());
-    };
-
     //cheat -> tried to socket same gem multiple times
     if ((!socketGems.GemItem[0].IsEmpty() && (socketGems.GemItem[0] == socketGems.GemItem[1] || socketGems.GemItem[0] == socketGems.GemItem[2])) ||
         (!socketGems.GemItem[1].IsEmpty() && (socketGems.GemItem[1] == socketGems.GemItem[2])))
@@ -940,17 +919,11 @@ void WorldSession::HandleSocketGems(WorldPackets::Item::SocketGems& socketGems)
 
     Item* itemTarget = _player->GetItemByGuid(socketGems.ItemGuid);
     if (!itemTarget)                                         //missing item to socket
-    {
-        sendSocketFailure();
         return;
-    }
 
     ItemTemplate const* itemProto = itemTarget->GetTemplate();
     if (!itemProto)
-    {
-        sendSocketFailure();
         return;
-    }
 
     //this slot is excepted when applying / removing meta gem bonus
     uint8 slot = itemTarget->IsEquipped() ? itemTarget->GetSlot() : uint8(NULL_SLOT);
@@ -997,16 +970,10 @@ void WorldSession::HandleSocketGems(WorldPackets::Item::SocketGems& socketGems)
             {
                 // no prismatic socket
                 if (!itemTarget->GetEnchantmentId(PRISMATIC_ENCHANTMENT_SLOT))
-                {
-                    sendSocketFailure();
                     return;
-                }
 
                 if (i != firstPrismatic)
-                {
-                    sendSocketFailure();
                     return;
-                }
 
                 acceptableGemTypeMask = SOCKET_COLOR_RED | SOCKET_COLOR_YELLOW | SOCKET_COLOR_BLUE;
                 break;
@@ -1023,10 +990,7 @@ void WorldSession::HandleSocketGems(WorldPackets::Item::SocketGems& socketGems)
 
         // Gem must match socket color
         if (!(acceptableGemTypeMask & gemProperties[i]->Type))
-        {
-            sendSocketFailure();
             return;
-        }
     }
 
     // check unique-equipped conditions
@@ -1259,14 +1223,6 @@ void WorldSession::HandleUseCritterItem(WorldPackets::Item::UseCritterItem& useC
 
 void WorldSession::HandleSortAccountBankBags(WorldPackets::Item::SortAccountBankBags& /*sortAccountBankBags*/)
 {
-    // Sorting mutates the shared account bank, so it must be gated on the account bank lock
-    // once implemented. Acknowledge to the client either way so its bags do not stay locked.
-    if (!CanMutateAccountBank())
-    {
-        SendPacket(WorldPackets::Item::BagCleanupFinished().Write());
-        return;
-    }
-
     // TODO: Implement sorting
     // Placeholder to prevent completely locking out bags clientside
     SendPacket(WorldPackets::Item::BagCleanupFinished().Write());
@@ -1313,37 +1269,9 @@ void WorldSession::HandleChangeBagSlotFlag(WorldPackets::Item::ChangeBagSlotFlag
         _player->RemoveBagSlotFlag(changeBagSlotFlag.BagIndex, changeBagSlotFlag.FlagToChange);
 }
 
-void WorldSession::HandleChangeBankBagSlotFlag(WorldPackets::Item::ChangeBankBagSlotFlag const& changeBankBagSlotFlag)
-{
-    // Bank sibling of CMSG_CHANGE_BAG_SLOT_FLAG: the "bags" of the modern bank are its tabs,
-    // and each tab carries its auto-deposit BagSlotFlags in CharacterBankTabSettings::DepositFlags.
-    if (changeBankBagSlotFlag.BagIndex >= _player->m_activePlayerData->CharacterBankTabSettings.size())
-        return;
-
-    UF::BankTabSettings const& tab = _player->m_activePlayerData->CharacterBankTabSettings[changeBankBagSlotFlag.BagIndex];
-
-    BagSlotFlags depositFlags = static_cast<BagSlotFlags>(*tab.DepositFlags);
-    if (changeBankBagSlotFlag.On)
-        depositFlags |= changeBankBagSlotFlag.FlagToChange;
-    else
-        depositFlags &= ~changeBankBagSlotFlag.FlagToChange;
-
-    _player->SetCharacterBankTabSettings(changeBankBagSlotFlag.BagIndex, *tab.Name, *tab.Icon, *tab.Description, depositFlags);
-}
-
 void WorldSession::HandleSetBackpackAutosortDisabled(WorldPackets::Item::SetBackpackAutosortDisabled const& setBackpackAutosortDisabled)
 {
     _player->SetBackpackAutoSortDisabled(setBackpackAutosortDisabled.Disable);
-}
-
-void WorldSession::HandleSetSortBagsRightToLeft(WorldPackets::Item::SetSortBagsRightToLeft const& setSortBagsRightToLeft)
-{
-    _player->SetSortBagsRightToLeft(setSortBagsRightToLeft.Enable);
-}
-
-void WorldSession::HandleSetInsertItemsLeftToRight(WorldPackets::Item::SetInsertItemsLeftToRight const& setInsertItemsLeftToRight)
-{
-    _player->SetInsertItemsLeftToRight(setInsertItemsLeftToRight.Enable);
 }
 
 void WorldSession::HandleSetBackpackSellJunkDisabled(WorldPackets::Item::SetBackpackSellJunkDisabled const& setBackpackSellJunkDisabled)
@@ -1354,45 +1282,4 @@ void WorldSession::HandleSetBackpackSellJunkDisabled(WorldPackets::Item::SetBack
 void WorldSession::HandleSetBankAutosortDisabled(WorldPackets::Item::SetBankAutosortDisabled const& setBankAutosortDisabled)
 {
     _player->SetBankAutoSortDisabled(setBankAutosortDisabled.Disable);
-}
-
-void WorldSession::HandlePerformItemInteraction(WorldPackets::Item::PerformItemInteraction& performItemInteraction)
-{
-    Player* player = GetPlayer();
-
-    WorldPackets::Item::ItemInteractionComplete response;
-    response.Error = true;
-
-    // UIItemInteractionType::ItemConversion (4) is the only interaction the server implements (Matrix Catalyst).
-    constexpr int32 UI_ITEM_INTERACTION_ITEM_CONVERSION = 4;
-
-    // The interaction agent the client has open must exist near the player (the Catalyst console/steward).
-    // Kept as a range check only: which unit/GO offers the UI is world content (UiItemInteractionID links).
-    bool agentOk = performItemInteraction.AgentGuid.IsEmpty();
-    if (!agentOk)
-        if (WorldObject const* agent = ObjectAccessor::GetWorldObject(*player, performItemInteraction.AgentGuid))
-            agentOk = player->IsWithinDistInMap(agent, INTERACTION_DISTANCE * 4);
-
-    if (agentOk && performItemInteraction.InteractionType == UI_ITEM_INTERACTION_ITEM_CONVERSION)
-        if (Item* item = player->GetItemByGuid(performItemInteraction.ItemGuid))
-            if (sItemConversionMgr.PerformConversion(player, item))
-                response.Error = false;
-
-    SendPacket(response.Write());
-}
-
-void WorldSession::HandleConvertItemToBindToAccount(WorldPackets::Item::ConvertItemToBindToAccount& /*convertItemToBindToAccount*/)
-{
-    // Deliberately inert, and this is not a stub standing in for a reader we could write.
-    //
-    // This used to read an ObjectGuid and look the item up with GetItemByGuid. The 68275 client never sends
-    // one: its serializer (RVA 0x6AC670) writes { uint32, uint8 } and the sender (RVA 0x1C4D53A) fills the
-    // uint32 with the *index* the item was found at while linear-scanning a client-side guid list, or 0xFF if
-    // it was not found. That index is meaningful only inside the client's own list, which this server never
-    // built or sent, so there is nothing here to resolve an item from - the guid lookup could only ever miss,
-    // which is exactly what it did (the ItemChanged reply below it was unreachable in practice).
-    //
-    // Answering anyway would mean picking an item on the player's behalf, so we do not. Closing this properly
-    // needs the list the index refers to identified first; the reader in ItemPackets.cpp now at least matches
-    // the wire, so the five bytes are consumed cleanly instead of throwing out of a PackedGuid read.
 }

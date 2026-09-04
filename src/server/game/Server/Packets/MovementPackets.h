@@ -22,6 +22,7 @@
 #include "CombatLogPacketsCommon.h"
 #include "MovementInfo.h"
 #include "Optional.h"
+#include "PacketUtilities.h"
 
 namespace Movement
 {
@@ -319,34 +320,6 @@ namespace WorldPackets
             uint64 InstanceID = 0u;                          // Required for damageMeterResetOnNewInstance cvar to function
         };
 
-        // Asks the client to start streaming a destination world before the player is
-        // actually moved there, so that the following seamless transfer needs no loading
-        // screen. Shares NewWorld's leading field layout - retail only ever sends it with
-        // Reason == NEW_WORLD_SEAMLESS.
-        class PreloadWorld final : public ServerPacket
-        {
-        public:
-            explicit PreloadWorld() : ServerPacket(SMSG_PRELOAD_WORLD, 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 1) { }
-
-            WorldPacket const* Write() override;
-
-            int32 MapID = 0;
-            uint32 Reason = 0;
-            TeleportLocation Loc;                            // Player position in its current map's frame
-            TaggedPosition<Position::XYZ> MovementOffset;    // Destination position minus Loc.Pos
-            bool Unknown_1107 = false;                       // Client stores it but its meaning is undetermined; 0 in every observed retail sample
-        };
-
-        class CancelPreloadWorld final : public ServerPacket
-        {
-        public:
-            explicit CancelPreloadWorld() : ServerPacket(SMSG_CANCEL_PRELOAD_WORLD, 4) { }
-
-            WorldPacket const* Write() override;
-
-            int32 MapID = 0;
-        };
-
         class WorldPortResponse final : public ClientPacket
         {
         public:
@@ -375,7 +348,7 @@ namespace WorldPackets
             ObjectGuid MoverGUID;
             Optional<ObjectGuid> TransportGUID;
             float Facing = 0.0f;
-            uint8 PreloadWorld = 0;
+            bool PreloadWorld = false;
         };
 
         class MoveUpdateTeleport final : public ServerPacket
@@ -386,7 +359,7 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             MovementInfo* Status = nullptr;
-            ::MovementForces::Container const* MovementForces = nullptr;
+            std::span<MovementForce const> MovementForces;
             Optional<float> SwimBackSpeed;
             Optional<float> FlightSpeed;
             Optional<float> SwimSpeed;
@@ -785,10 +758,6 @@ namespace WorldPackets
             uint32 Ticks = 0;
         };
 
-        // ============================================================
-        // Dragonriding / Inertia / Impulse / Drive
-        // ============================================================
-
         class MoveApplyInertia final : public ServerPacket
         {
         public:
@@ -798,8 +767,8 @@ namespace WorldPackets
 
             ObjectGuid MoverGUID;
             uint32 SequenceIndex = 0;
-            int32 MovementInertiaID = 0;
-            uint32 LifetimeMs = 0;
+            int32 InertiaID = 0;
+            Duration<Milliseconds, uint32> LifetimeMs;
         };
 
         class MoveRemoveInertia final : public ServerPacket
@@ -811,7 +780,7 @@ namespace WorldPackets
 
             ObjectGuid MoverGUID;
             uint32 SequenceIndex = 0;
-            int32 MovementInertiaID = 0;
+            int32 InertiaID = 0;
         };
 
         class MoveApplyInertiaAck final : public ClientPacket
@@ -822,8 +791,8 @@ namespace WorldPackets
             void Read() override;
 
             MovementAck Ack;
-            int32 MovementInertiaID = 0;
-            uint32 LifetimeMs = 0;
+            int32 InertiaID = 0;
+            Duration<Milliseconds, uint32> LifetimeMs;
         };
 
         class MoveRemoveInertiaAck final : public ClientPacket
@@ -834,117 +803,30 @@ namespace WorldPackets
             void Read() override;
 
             MovementAck Ack;
-            int32 MovementInertiaID = 0;
+            int32 InertiaID = 0;
         };
 
         class MoveUpdateApplyInertia final : public ServerPacket
         {
         public:
-            explicit MoveUpdateApplyInertia() : ServerPacket(SMSG_MOVE_UPDATE_APPLY_INERTIA) { }
+            explicit MoveUpdateApplyInertia() : ServerPacket(SMSG_MOVE_UPDATE_APPLY_INERTIA, sizeof(MovementInfo) + 4 + 4) { }
 
             WorldPacket const* Write() override;
 
             MovementInfo* Status = nullptr;
-            int32 MovementInertiaID = 0;
-            uint32 LifetimeMs = 0;
+            int32 InertiaID = 0;
+            Duration<Milliseconds, uint32> LifetimeMs;
         };
 
         class MoveUpdateRemoveInertia final : public ServerPacket
         {
         public:
-            explicit MoveUpdateRemoveInertia() : ServerPacket(SMSG_MOVE_UPDATE_REMOVE_INERTIA) { }
+            explicit MoveUpdateRemoveInertia() : ServerPacket(SMSG_MOVE_UPDATE_REMOVE_INERTIA, sizeof(MovementInfo) + 4) { }
 
             WorldPacket const* Write() override;
 
             MovementInfo* Status = nullptr;
-            int32 MovementInertiaID = 0;
-        };
-
-        class MoveAddImpulse final : public ServerPacket
-        {
-        public:
-            explicit MoveAddImpulse() : ServerPacket(SMSG_MOVE_ADD_IMPULSE, 16 + 4 + 12) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid MoverGUID;
-            uint32 SequenceIndex = 0;
-            TaggedPosition<Position::XYZ> Direction;
-        };
-
-        class MoveAddImpulseAck final : public ClientPacket
-        {
-        public:
-            explicit MoveAddImpulseAck(WorldPacket&& packet) : ClientPacket(CMSG_MOVE_ADD_IMPULSE_ACK, std::move(packet)) { }
-
-            void Read() override;
-
-            MovementAck Ack;
-        };
-
-        class MoveUpdateAddImpulse final : public ServerPacket
-        {
-        public:
-            explicit MoveUpdateAddImpulse() : ServerPacket(SMSG_MOVE_UPDATE_ADD_IMPULSE) { }
-
-            WorldPacket const* Write() override;
-
-            MovementInfo* Status = nullptr;
-        };
-
-        class MoveSetCanDrive final : public ServerPacket
-        {
-        public:
-            explicit MoveSetCanDrive() : ServerPacket(SMSG_MOVE_SET_CAN_DRIVE, 16 + 4 + 4) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid MoverGUID;
-            uint32 SequenceIndex = 0;
-            int32 DriveCapabilityRecID = 0;
-        };
-
-        class MoveUnsetCanDrive final : public ServerPacket
-        {
-        public:
-            explicit MoveUnsetCanDrive() : ServerPacket(SMSG_MOVE_UNSET_CAN_DRIVE, 16 + 4) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid MoverGUID;
-            uint32 SequenceIndex = 0;
-        };
-
-        class MoveSetCanDriveAck final : public ClientPacket
-        {
-        public:
-            explicit MoveSetCanDriveAck(WorldPacket&& packet) : ClientPacket(CMSG_MOVE_SET_CAN_DRIVE_ACK, std::move(packet)) { }
-
-            void Read() override;
-
-            MovementAck Ack;
-            int32 DriveCapabilityRecID = 0;
-        };
-
-        class MoveStartDriveForward final : public ClientPacket
-        {
-        public:
-            explicit MoveStartDriveForward(WorldPacket&& packet) : ClientPacket(CMSG_MOVE_START_DRIVE_FORWARD, std::move(packet)) { }
-
-            void Read() override;
-
-            MovementInfo Status;
-        };
-
-        class AdjustSplineDuration final : public ServerPacket
-        {
-        public:
-            explicit AdjustSplineDuration() : ServerPacket(SMSG_ADJUST_SPLINE_DURATION, 16 + 4) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid MoverGUID;
-            float Scale = 1.0f;
+            int32 InertiaID = 0;
         };
 
         ByteBuffer& operator>>(ByteBuffer& data, MovementAck& ack);
