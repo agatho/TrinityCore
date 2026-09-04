@@ -412,6 +412,24 @@ WorldPacket const* GetVasAccountCharacterListResult::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* VasCheckTransferOkResponse::Write()
+{
+    _worldPacket << uint32(Field1);
+    _worldPacket << uint32(Field2);
+    _worldPacket << CharacterGUID;
+    _worldPacket << uint32(Accounts.size());
+
+    for (VasTransferWowAccount const& a : Accounts)
+    {
+        _worldPacket << a.AccountGUID;
+        _worldPacket.WriteBits(a.AccountName.length(), 11);
+        _worldPacket.FlushBits();
+        _worldPacket.append(a.AccountName.data(), a.AccountName.length());
+    }
+
+    return &_worldPacket;
+}
+
 WorldPacket const* GetVasTransferTargetRealmListResult::Write()
 {
     // Outer = 3 uint32 header + a flat uint32 count + the realm vector (VERIFIED, same shape as the account

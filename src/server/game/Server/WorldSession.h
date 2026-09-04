@@ -548,6 +548,7 @@ namespace WorldPackets
         class VasGetServiceStatus;
         class GetVasAccountCharacterList;
         class GetVasTransferTargetRealmList;
+        class VasCheckTransferOk;
         class GetProductList;
         class GetPurchaseList;
         class StartPurchase;
@@ -1369,6 +1370,7 @@ class TC_GAME_API WorldSession
         void HandleVasGetServiceStatus(WorldPackets::BattlePay::VasGetServiceStatus& packet);
         void HandleGetVasAccountCharacterList(WorldPackets::BattlePay::GetVasAccountCharacterList& packet);
         void HandleGetVasTransferTargetRealmList(WorldPackets::BattlePay::GetVasTransferTargetRealmList& packet);
+        void HandleVasCheckTransferOk(WorldPackets::BattlePay::VasCheckTransferOk& packet);
         void HandleCommerceTokenGetCount(WorldPackets::Token::CommerceTokenGetCount& commerceTokenGetCount);
         void SendCommerceTokenUpdate();
         int32 BattlePayCreateEntitlement(ShopProduct const& product, uint64 purchaseID);

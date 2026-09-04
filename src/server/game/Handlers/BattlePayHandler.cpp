@@ -1607,3 +1607,13 @@ void WorldSession::HandleGetVasTransferTargetRealmList(WorldPackets::BattlePay::
     result.Field1 = packet.Field1;   // echo the request token for correlation
     SendPacket(result.Write());
 }
+
+void WorldSession::HandleVasCheckTransferOk(WorldPackets::BattlePay::VasCheckTransferOk& packet)
+{
+    // Whether a VAS transfer is permitted for the requested context. This realm has no transfer network, so
+    // the honest, byte-correct answer is an empty target-account list; Field1 echoes the request context so
+    // the client can correlate the answer.
+    WorldPackets::BattlePay::VasCheckTransferOkResponse response;
+    response.Field1 = packet.Field1;
+    SendPacket(response.Write());
+}

@@ -825,6 +825,31 @@ namespace WorldPackets
             std::string RealmName;                     // 9-bit length prefix
         };
 
+        // One WoW account a character may transfer to (SMSG_VAS_CHECK_TRANSFER_OK_RESPONSE element
+        // JamVASTransferWowAccount, verified: an account guid + an 11-bit-length-prefixed account name).
+        struct VasTransferWowAccount
+        {
+            ObjectGuid AccountGUID;
+            std::string AccountName;                    // 11-bit length prefix
+        };
+
+        // SMSG_VAS_CHECK_TRANSFER_OK_RESPONSE (0x4202C3). Outer (deserializer sub_7FF7290B1A10) =
+        // { uint32, uint32, ObjectGuid, uint32-count, vector<VasTransferWowAccount> }. The two leading uint32
+        // are unlabeled offline; Field1 echoes the request context. An empty account list is the honest,
+        // byte-correct answer when the realm has no VAS transfer network.
+        class VasCheckTransferOkResponse final : public ServerPacket
+        {
+        public:
+            explicit VasCheckTransferOkResponse() : ServerPacket(SMSG_VAS_CHECK_TRANSFER_OK_RESPONSE, 28) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Field1 = 0;
+            uint32 Field2 = 0;
+            ObjectGuid CharacterGUID;
+            std::vector<VasTransferWowAccount> Accounts;
+        };
+
         // SMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST_RESULT (0x420298). Outer = 3 uint32 header + a FLAT uint32
         // count + the realm vector - VERIFIED from the deserializer sub_7FF7290AE5B0 (same shape as the account
         // list; the earlier "10x uint32" / "u8+bitfield" dumps were miscounts of the element string prefix).

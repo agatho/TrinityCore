@@ -1158,7 +1158,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_USE_EQUIPMENT_SET,                                  STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleUseEquipmentSet);
     DEFINE_HANDLER(CMSG_USE_ITEM,                                           STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleUseItemOpcode);
     DEFINE_HANDLER(CMSG_USE_TOY,                                            STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleUseToy);
-    DEFINE_HANDLER(CMSG_VAS_CHECK_TRANSFER_OK,                              STATUS_IGNORED,   PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_VAS_CHECK_TRANSFER_OK,                              STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleVasCheckTransferOk);
     DEFINE_HANDLER(CMSG_VAS_GET_QUEUE_MINUTES,                              STATUS_IGNORED,   PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_VAS_GET_SERVICE_STATUS,                             STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleVasGetServiceStatus);
     DEFINE_HANDLER(CMSG_VIOLENCE_LEVEL,                                     STATUS_AUTHED,    PROCESS_INPLACE,      &WorldSession::HandleViolenceLevel);
