@@ -79,6 +79,9 @@ public:
     // A session dropping out of the lobby (disconnect / logout / entering world) must be pulled from its party.
     void OnSessionLeave(WorldSession* session);
 
+    // Sessions that touch the lobby register here so an invite can resolve a target bnet guid to its session.
+    void RegisterSession(WorldSession* session);
+
     Party* GetPartyByBnet(ObjectGuid bnet);
 
 private:
@@ -95,8 +98,11 @@ private:
     static ObjectGuid BnetGuidOf(WorldSession* session);
     static std::string NameOf(WorldSession* session);
 
+    WorldSession* FindLobbySession(ObjectGuid bnet) const;
+
     std::unordered_map<uint64 /*bnet counter*/, std::shared_ptr<Party>> _partiesByBnet;   // member bnet -> party
     std::unordered_map<uint64 /*invitee bnet*/, std::vector<ObjectGuid /*inviter bnet*/>> _pendingInvites;
+    std::unordered_map<uint64 /*bnet counter*/, WorldSession*> _lobbySessions;
     uint64 _nextPartyId = 1;
 };
 

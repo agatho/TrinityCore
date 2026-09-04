@@ -65,6 +65,7 @@
 #include "WorldSession.h"
 #include "LobbyMatchmakerPackets.h"
 #include "Log.h"
+#include "WowLabsMatchmakingMgr.h"
 
 namespace
 {
@@ -87,77 +88,45 @@ void SendQueueResult(WorldSession* session, WorldPackets::LobbyMatchmaker::Lobby
 // gibt, in die eingeladen werden koennte.
 void WorldSession::HandleLobbyMatchmakerPartyInvite(WorldPackets::LobbyMatchmaker::LobbyMatchmakerPartyInvite& lobbyMatchmakerPartyInvite)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_PARTY_INVITE from {} target {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerPartyInvite.TargetGUID.ToString());
-
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->Invite(this, lobbyMatchmakerPartyInvite.TargetGUID);
 }
 
 // 0x43016C. Es gibt keine Einladung, die angenommen werden koennte.
 void WorldSession::HandleLobbyMatchmakerAcceptPartyInvite(WorldPackets::LobbyMatchmaker::LobbyMatchmakerAcceptPartyInvite& lobbyMatchmakerAcceptPartyInvite)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_ACCEPT_PARTY_INVITE from {} target {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerAcceptPartyInvite.TargetGUID.ToString());
-
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->AcceptInvite(this, lobbyMatchmakerAcceptPartyInvite.TargetGUID);
 }
 
 // 0x43016D. Eine Ablehnung ist clientseitig folgenlos, wenn es die Einladung nicht gibt; der
 // Fehlerkanal ist trotzdem die richtige Antwort, damit das UI nicht auf eine Bestaetigung wartet.
 void WorldSession::HandleLobbyMatchmakerRejectPartyInvite(WorldPackets::LobbyMatchmaker::LobbyMatchmakerRejectPartyInvite& lobbyMatchmakerRejectPartyInvite)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_REJECT_PARTY_INVITE from {} target {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerRejectPartyInvite.TargetGUID.ToString());
-
-    // UNVERIFIED: dass Retail hier ueberhaupt ueber SMSG_WOW_LABS_PARTY_ERROR antwortet und
-    // mit welchem Wert - eine Ablehnung ist keine ungueltige Einladung. Abgeleitet, nicht am
-    // Konsumenten gemessen; belegt ist nur, dass 0..6 sichtbar und 7..15 stumm sind.
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->RejectInvite(this, lobbyMatchmakerRejectPartyInvite.TargetGUID);
 }
 
 // 0x43016E.
 void WorldSession::HandleLobbyMatchmakerPartyUninvite(WorldPackets::LobbyMatchmaker::LobbyMatchmakerPartyUninvite& lobbyMatchmakerPartyUninvite)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_PARTY_UNINVITE from {} target {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerPartyUninvite.TargetGUID.ToString());
-
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->Uninvite(this, lobbyMatchmakerPartyUninvite.TargetGUID);
 }
 
 // 0x43016F, leere Nutzlast.
 void WorldSession::HandleLobbyMatchmakerLeaveParty(WorldPackets::LobbyMatchmaker::LobbyMatchmakerLeaveParty& /*lobbyMatchmakerLeaveParty*/)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_LEAVE_PARTY from {} - no lobby matchmaker service", GetPlayerInfo());
-
-    // UNVERIFIED: dass Retail hier ueberhaupt ueber SMSG_WOW_LABS_PARTY_ERROR antwortet und
-    // mit welchem Wert - ein Verlassen ist keine ungueltige Einladung. Abgeleitet, nicht am
-    // Konsumenten gemessen; belegt ist nur, dass 0..6 sichtbar und 7..15 stumm sind.
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->LeaveParty(this);
 }
 
 // 0x430170, ein uint32 playlistEntryID. Das Feld gehoert in JamLobbyMatchmakerPartyInfo; ohne
 // Partei gibt es nichts zu setzen.
 void WorldSession::HandleLobbyMatchmakerSetPartyPlaylistEntry(WorldPackets::LobbyMatchmaker::LobbyMatchmakerSetPartyPlaylistEntry& lobbyMatchmakerSetPartyPlaylistEntry)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_SET_PARTY_PLAYLIST_ENTRY from {} playlist {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerSetPartyPlaylistEntry.PlaylistEntryID);
-
-    // UNVERIFIED: dass Retail hier ueberhaupt ueber SMSG_WOW_LABS_PARTY_ERROR antwortet und
-    // mit welchem Wert - eine Playlistwahl ist keine Einladung. Abgeleitet, nicht am
-    // Konsumenten gemessen; belegt ist nur, dass 0..6 sichtbar und 7..15 stumm sind.
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->SetPlaylistEntry(this, lobbyMatchmakerSetPartyPlaylistEntry.PlaylistEntryID);
 }
 
 // 0x430171, ein Bit. Setzt isReady in JamLobbyMatchmakerPartyMemberInfo - ohne Partei gegenstandslos.
 void WorldSession::HandleLobbyMatchmakerSetPlayerReady(WorldPackets::LobbyMatchmaker::LobbyMatchmakerSetPlayerReady& lobbyMatchmakerSetPlayerReady)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_SET_PLAYER_READY from {} ready {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerSetPlayerReady.IsReady);
-
-    // UNVERIFIED: dass Retail hier ueberhaupt ueber SMSG_WOW_LABS_PARTY_ERROR antwortet und
-    // mit welchem Wert - ein Bereitschaftsschalter ist keine Einladung. Abgeleitet, nicht am
-    // Konsumenten gemessen; belegt ist nur, dass 0..6 sichtbar und 7..15 stumm sind.
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->SetReady(this, lobbyMatchmakerSetPlayerReady.IsReady);
 }
 
 // 0x430173 -> SMSG_LOBBY_MATCHMAKER_QUEUE_RESULT mit Status 6.

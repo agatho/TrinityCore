@@ -22,6 +22,7 @@
 #include "ObjectGuid.h"
 #include "PacketUtilities.h"
 #include "CharacterPackets.h"
+#include <array>
 #include <vector>
 
 // ----------------------------------------------------------------------------------------------
@@ -315,6 +316,73 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             uint8 Status = CANNOT_QUEUE;
+        };
+
+        // SMSG_LOBBY_MATCHMAKER_RECEIVE_INVITE (0x450321). Byte-aligned flat wire (parser sub_7FF7290B8440):
+        // PackedGuid inviter, then a u8 length byte where the display-name length is the high 6 bits
+        // (len = byte >> 2, low 2 bits unused here), then that many raw name bytes (no NUL). Drives the client
+        // event NEW_MATCHMAKING_PARTY_INVITE.
+        class LobbyMatchmakerReceiveInvite final : public ServerPacket
+        {
+        public:
+            explicit LobbyMatchmakerReceiveInvite() : ServerPacket(SMSG_LOBBY_MATCHMAKER_RECEIVE_INVITE, 24) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid InviterGuid;
+            std::string InviterName;
+        };
+
+        // SMSG_LOBBY_MATCHMAKER_PARTY_INVITE_REJECTED (0x450320). Parser sub_7FF7290B8390: just the rejector's
+        // name as a u8 (len = byte >> 2) + raw bytes. No guid. Drives REJECTED_MATCHMAKING_PARTY_INVITE{name}.
+        class LobbyMatchmakerPartyInviteRejected final : public ServerPacket
+        {
+        public:
+            explicit LobbyMatchmakerPartyInviteRejected() : ServerPacket(SMSG_LOBBY_MATCHMAKER_PARTY_INVITE_REJECTED, 8) { }
+
+            WorldPacket const* Write() override;
+
+            std::string Name;
+        };
+
+        // SMSG_LOBBY_MATCHMAKER_PARTY_INFO (0x45031F). The lobby roster broadcast; drives LOBBY_MATCHMAKER_
+        // PARTY_UPDATE. Byte-aligned flat wire (outer parser sub_7FF7290B81B0, member parser sub_7FF7291CCED0):
+        //   PackedGuid Leader; u32 PlaylistEntry; u32 count(Members); u32 count(Invited); PackedGuid; PackedGuid;
+        //   u8 flagByte {bits7:6=uint2, bit5, bit4, bit3}; Members[]; Invited[]
+        // Each 232-byte member (in wire order):
+        //   u8 M {nameLen = M>>2, bit1 = a bool}; PackedGuid; PackedGuid; u64; u8; u8; u32 countA;
+        //   u32[19] loadout (PlunderstormItemDisplayID cosmetic - structure certain, label inferred);
+        //   u32 countB; name[nameLen]; countA*{u32,u32}; countB*{u32,u32}
+        // The two 232B lists are structurally identical; list1 = confirmed members, list2 = pending invitees
+        // (inferred from the Lua GetCurrentParty vs GetPartyInvite split). The three member bools map to
+        // isReady/isPartyLeader/isLocalPlayer (exact assignment not offline-provable). P0 sends the members
+        // with the clear fields (guid, name, ready/leader/local) and leaves the cosmetic loadout + sub-lists 0.
+        struct LobbyMatchmakerPartyInfoMember
+        {
+            ObjectGuid MemberGuid;                        // partyMemberGUID (first member guid)
+            ObjectGuid AccountGuid;                       // second member guid (bnet/account)
+            uint64 Field88 = 0;
+            uint8 Field97 = 0;                             // one of isPartyLeader / isLocalPlayer
+            uint8 Field98 = 0;                             // the other of the two
+            bool ReadyBit = false;                        // M & 2
+            std::string Name;
+            std::array<uint32, 19> Loadout = { };         // PlunderstormItemDisplayID (cosmetic; 0 for now)
+        };
+
+        class LobbyMatchmakerPartyInfo final : public ServerPacket
+        {
+        public:
+            explicit LobbyMatchmakerPartyInfo() : ServerPacket(SMSG_LOBBY_MATCHMAKER_PARTY_INFO, 64) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid LeaderGuid;
+            uint32 PlaylistEntry = 0;
+            ObjectGuid Guid3;                             // two outer guids of unproven role - left empty
+            ObjectGuid Guid4;
+            uint8 FlagByte = 0;
+            std::vector<LobbyMatchmakerPartyInfoMember> Members;
+            std::vector<LobbyMatchmakerPartyInfoMember> Invited;
         };
     }
 

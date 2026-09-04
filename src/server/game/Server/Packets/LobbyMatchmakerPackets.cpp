@@ -144,6 +144,55 @@ WorldPacket const* LobbyMatchmakerQueueResult::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* LobbyMatchmakerReceiveInvite::Write()
+{
+    _worldPacket << InviterGuid;                                   // PackedGuid
+    _worldPacket << uint8(InviterName.length() << 2);              // len in high 6 bits (parser does byte>>2)
+    _worldPacket.append(InviterName.data(), InviterName.length());
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LobbyMatchmakerPartyInviteRejected::Write()
+{
+    _worldPacket << uint8(Name.length() << 2);
+    _worldPacket.append(Name.data(), Name.length());
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LobbyMatchmakerPartyInfo::Write()
+{
+    auto writeMember = [this](LobbyMatchmakerPartyInfoMember const& m)
+    {
+        _worldPacket << uint8((m.Name.length() << 2) | (m.ReadyBit ? 0x2 : 0x0));   // nameLen<<2 | bit1
+        _worldPacket << m.MemberGuid;                             // PackedGuid
+        _worldPacket << m.AccountGuid;                            // PackedGuid
+        _worldPacket << uint64(m.Field88);
+        _worldPacket << uint8(m.Field97);
+        _worldPacket << uint8(m.Field98);
+        _worldPacket << uint32(0);                               // countA (sub-list A empty)
+        for (uint32 v : m.Loadout)                              // 19x uint32 cosmetic loadout
+            _worldPacket << uint32(v);
+        _worldPacket << uint32(0);                               // countB (sub-list B empty)
+        _worldPacket.append(m.Name.data(), m.Name.length());    // name body (after countB, per the parser)
+    };
+
+    _worldPacket << LeaderGuid;                                   // PackedGuid
+    _worldPacket << uint32(PlaylistEntry);
+    _worldPacket << uint32(Members.size());                       // count1 (flat u32)
+    _worldPacket << uint32(Invited.size());                       // count2 (flat u32)
+    _worldPacket << Guid3;                                        // PackedGuid (outer role unproven; empty)
+    _worldPacket << Guid4;                                        // PackedGuid
+    _worldPacket << uint8(FlagByte);
+    for (LobbyMatchmakerPartyInfoMember const& m : Members)
+        writeMember(m);
+    for (LobbyMatchmakerPartyInfoMember const& m : Invited)
+        writeMember(m);
+
+    return &_worldPacket;
+}
 }
 
 namespace WorldPackets::WowLabs
