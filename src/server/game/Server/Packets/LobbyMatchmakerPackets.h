@@ -600,6 +600,32 @@ namespace WorldPackets
 
             uint32 State = 0;
         };
+
+        // One row of the end-of-match summary. Field SET is authoritative from Blizzard's own API doc
+        // (EndOfMatchUIDocumentation.lua: MatchDetail { type: MatchDetailType, value: number }); the concrete
+        // wire type of 'value' (int here) is a best-effort - see the packet comment.
+        struct MatchDetail
+        {
+            uint32 Type = 0;                    // MatchDetailType { Placement=0, Kills=1, PlunderAcquired=2 }
+            int32 Value = 0;
+        };
+
+        // 0x450326 - the per-player end-of-match summary that feeds C_EndOfMatchUI.GetEndOfMatchDetails() and
+        // fires SHOW_END_OF_MATCH_UI. The FIELD SET is authoritative (EndOfMatchUIDocumentation.lua:
+        // MatchDetails { matchType: EndOfMatchType, matchEnded: bool, detailsList: MatchDetail[] }); the exact
+        // wire WIDTHS/ORDER are NOT verified from the image and need a live-client sniff, so the send is gated
+        // behind the WowLabs.SendMatchEnd config (default off) - see WowLabsHandler / WowLabsMatchMgr.
+        class WowLabsNotifyPlayersMatchEnd final : public ServerPacket
+        {
+        public:
+            explicit WowLabsNotifyPlayersMatchEnd() : ServerPacket(SMSG_WOW_LABS_NOTIFY_PLAYERS_MATCH_END, 16) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 MatchType = 1;               // EndOfMatchType { None=0, Plunderstorm=1 }
+            bool MatchEnded = true;
+            std::vector<MatchDetail> Details;
+        };
     }
 }
 

@@ -22,12 +22,15 @@
 #include "Map.h"
 #include "MapManager.h"
 #include "Player.h"
+#include "SharedDefines.h"
 #include "World.h"
 #include <algorithm>
 #include <random>
 
 // Cadence of the out-of-ring storm damage tick.
 static constexpr uint32 DAMAGE_INTERVAL_MS = 1000;
+// Plunder - the Plunderstorm match currency (CurrencyTypes.db2 id 2922).
+static constexpr uint32 PLUNDER_CURRENCY = 2922;
 
 bool WowLabsMatchMgr::Match::HasMember(ObjectGuid bnet) const
 {
@@ -282,6 +285,32 @@ void WowLabsMatchMgr::UpdateInstance(Map* map, uint32 diff)
 
     match->ActiveElapsedMs += diff;
 
+    // Win condition: count the living, record death order, and end when a winner emerges. A multi-player match
+    // ends the moment one player is left (last one standing); a match ends at zero alive too (e.g. a solo run
+    // where the storm takes the lone player) - but a still-living solo player does NOT instantly "win".
+    uint32 aliveCount = 0;
+    Player* lastAlive = nullptr;
+    for (MapReference const& ref : map->GetPlayers())
+    {
+        Player* player = ref.GetSource();
+        if (!player || player->IsGameMaster())
+            continue;
+        if (player->IsAlive())
+        {
+            ++aliveCount;
+            lastAlive = player;
+        }
+        else if (std::find(match->FinishOrder.begin(), match->FinishOrder.end(), player->GetGUID()) == match->FinishOrder.end())
+            match->FinishOrder.push_back(player->GetGUID());   // just died -> next-lowest placement
+    }
+    match->PeakPlayers = std::max(match->PeakPlayers, aliveCount);
+
+    if ((match->PeakPlayers >= 2 && aliveCount <= 1) || aliveCount == 0)
+    {
+        EndMatch(map, match, lastAlive ? lastAlive->GetGUID() : ObjectGuid::Empty);
+        return;
+    }
+
     // Out-of-ring storm damage, applied on a fixed cadence regardless of the update granularity.
     match->DamageAccumMs += diff;
     if (match->DamageAccumMs < DAMAGE_INTERVAL_MS)
@@ -304,4 +333,55 @@ void WowLabsMatchMgr::UpdateInstance(Map* map, uint32 diff)
         if (player->GetDistance2d(cx, cy) > radius)
             player->EnvironmentalDamage(DAMAGE_FIRE, damage);
     }
+}
+
+void WowLabsMatchMgr::EndMatch(Map* map, Match* match, ObjectGuid winner)
+{
+    if (!match || match->MatchPhase == Phase::Ended)
+        return;
+
+    match->MatchPhase = Phase::Ended;
+
+    // Placement: the winner is 1st; the death order fills the rest from the bottom up (first to die = last
+    // place). total is the field size (winner + everyone who died).
+    uint32 const total = uint32(match->FinishOrder.size()) + (winner.IsEmpty() ? 0u : 1u);
+    std::unordered_map<uint64, uint32> placement;
+    if (!winner.IsEmpty())
+        placement[winner.GetCounter()] = 1;
+    for (size_t i = 0; i < match->FinishOrder.size(); ++i)
+        placement[match->FinishOrder[i].GetCounter()] = total - uint32(i);
+
+    uint32 const winReward = sConfigMgr->GetIntDefault("WowLabs.PlunderWinReward", 1000);
+    bool const sendEnd = sConfigMgr->GetBoolDefault("WowLabs.SendMatchEnd", false);
+
+    // Tell the clients the match is over (single-uint32 phase - the Ended wire value is provisional, like Active).
+    SendMatchStateToInstance(map, Phase::Ended);
+
+    for (MapReference const& ref : map->GetPlayers())
+    {
+        Player* player = ref.GetSource();
+        if (!player || player->IsGameMaster())
+            continue;
+
+        auto itr = placement.find(player->GetGUID().GetCounter());
+        uint32 const place = itr != placement.end() ? itr->second : std::max(total, 1u);   // stragglers = last
+        int32 const plunder = place ? int32(winReward / place) : 0;   // 1st full, 2nd half, 3rd a third...
+        if (plunder > 0)
+            player->ModifyCurrency(PLUNDER_CURRENCY, plunder, CurrencyGainSource::PvPScriptedAward);
+
+        // Per-player end-of-match summary. Kills are not attributed yet (a further increment), so 0 for now.
+        if (sendEnd)
+        {
+            WorldPackets::WowLabs::WowLabsNotifyPlayersMatchEnd packet;
+            packet.MatchType = 1;   // Plunderstorm
+            packet.MatchEnded = true;
+            packet.Details.push_back({ 0 /*Placement*/,       int32(place) });
+            packet.Details.push_back({ 1 /*Kills*/,           0 });
+            packet.Details.push_back({ 2 /*PlunderAcquired*/, plunder });
+            player->SendDirectMessage(packet.Write());
+        }
+    }
+
+    TC_LOG_INFO("network", "WowLabs: match {} (instance {}) ended - {} ranked, winner {}.",
+        match->Id, match->InstanceId, total, winner.IsEmpty() ? "none" : winner.ToString());
 }

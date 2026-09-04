@@ -282,4 +282,21 @@ WorldPacket const* WowLabsNotifyPlayersMatchStateChanged::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* WowLabsNotifyPlayersMatchEnd::Write()
+{
+    // Field order follows the Lua MatchDetails struct (matchType, matchEnded, detailsList). Widths/order are a
+    // best-effort pending a live sniff - this is only ever emitted when WowLabs.SendMatchEnd is enabled.
+    _worldPacket << uint32(MatchType);
+    _worldPacket << Bits<1>(MatchEnded);
+    _worldPacket.FlushBits();
+    _worldPacket << Size<uint32>(Details);
+    for (MatchDetail const& detail : Details)
+    {
+        _worldPacket << uint32(detail.Type);
+        _worldPacket << int32(detail.Value);
+    }
+
+    return &_worldPacket;
+}
 }

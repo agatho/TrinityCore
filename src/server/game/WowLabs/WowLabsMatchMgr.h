@@ -100,6 +100,10 @@ public:
         uint32 ActiveElapsedMs = 0;   // time since the match went Active - drives the circle schedule
         uint32 DamageAccumMs = 0;     // out-of-ring damage cadence accumulator
 
+        // Win / placement state (P6).
+        uint32 PeakPlayers = 0;                 // most alive players seen at once - the field size for placement
+        std::vector<ObjectGuid> FinishOrder;    // players by death order (first death first); winner is not here
+
         bool HasMember(ObjectGuid bnet) const;
     };
 
@@ -142,6 +146,12 @@ public:
     bool ComputeCircle(Match const* match, float& centerX, float& centerY, float& radius) const;
 
     std::vector<CirclePhase> const& GetCircleSchedule() const;
+
+    // --- Win condition / rewards (P6) ---
+
+    // End an active match: rank the players (winner + FinishOrder), award Plunder by placement, tell the clients
+    // (MATCH_STATE_CHANGED -> Ended, and per-player MATCH_END when WowLabs.SendMatchEnd is enabled).
+    void EndMatch(Map* map, Match* match, ObjectGuid winner);
 
 private:
     WowLabsMatchMgr() = default;
