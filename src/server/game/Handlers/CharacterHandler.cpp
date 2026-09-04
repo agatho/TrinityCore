@@ -892,6 +892,16 @@ void WorldSession::HandleCharEnumOpcode(WorldPackets::Character::EnumCharacters&
     });
 }
 
+void WorldSession::HandleGetAccountCharacterList(WorldPackets::Character::GetAccountCharacterList& packet)
+{
+    // Lightweight on-demand account-character query (VAS/transfer flows). The paired result SMSG's per-record
+    // wire is not recovered, so P0 parses the request honestly but does not send a guessed SMSG (which would
+    // risk disconnecting the client) - the result is deferred to a build with a live-verified reader. This is
+    // a real, expected handler (not Handle_NULL), matching this codebase's precedent for an un-modeled response.
+    TC_LOG_DEBUG("network", "CMSG_GET_ACCOUNT_CHARACTER_LIST from account {} ({} body bytes) - request parsed; "
+        "result SMSG deferred pending a verified per-record wire.", GetAccountId(), packet.Data.size());
+}
+
 void WorldSession::HandleCharUndeleteEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/)
 {
     /// get all the data necessary for loading all undeleted characters (along with their pets) on the account

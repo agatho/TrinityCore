@@ -200,6 +200,21 @@ namespace WorldPackets
             Optional<int32> ArenaTeam;
         };
 
+        // Invite a Battle.net friend to the guild. Wire recovered from the 12.1.0.69497 client builder
+        // 0x140728560: { uint64 BnetAccountID; PackedGUID FriendGUID; 1 bit flag }. The client already
+        // resolved which character the bnet friend is currently on (FriendGUID).
+        class GuildAddBattlenetFriend final : public ClientPacket
+        {
+        public:
+            explicit GuildAddBattlenetFriend(WorldPacket&& packet) : ClientPacket(CMSG_GUILD_ADD_BATTLENET_FRIEND, std::move(packet)) { }
+
+            void Read() override;
+
+            uint64 BattlenetAccountId = 0;
+            ObjectGuid FriendGuid;
+            bool Flag = false;
+        };
+
         class GuildInvite final : public ServerPacket
         {
         public:

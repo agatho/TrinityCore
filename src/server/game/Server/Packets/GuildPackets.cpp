@@ -172,6 +172,13 @@ void GuildInviteByName::Read()
         _worldPacket >> *ArenaTeam;
 }
 
+void GuildAddBattlenetFriend::Read()
+{
+    _worldPacket >> BattlenetAccountId;
+    _worldPacket >> FriendGuid;
+    _worldPacket >> Bits<1>(Flag);
+}
+
 WorldPacket const* GuildInvite::Write()
 {
     _worldPacket << SizedString::BitsSize<6>(InviterName);

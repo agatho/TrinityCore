@@ -47,6 +47,47 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // Client requests its checkout licenses/entitlements mid-checkout. Exact field layout is not verified
+        // against a live 12.1 client, so the body is consumed wholesale (diagnostics) and the handler answers
+        // by re-pushing the account's real entitlement ledger (SMSG_SYNC_WOW_ENTITLEMENTS) - proven wire, no guess.
+        class GetClientCheckoutLicenses final : public ClientPacket
+        {
+        public:
+            explicit GetClientCheckoutLicenses(WorldPacket&& packet) : ClientPacket(CMSG_GET_CLIENT_CHECKOUT_LICENSES, std::move(packet)) { }
+
+            void Read() override;
+
+            std::vector<uint8> Data;
+        };
+
+        // Client asks the realm to refresh entitlements after a web order completed (the game-side signal that
+        // closes the PayPal/web settlement loop). Body is an opaque order token (SizedCString bits<24>);
+        // consumed wholesale here and answered by reloading the entitlement ledger.
+        class RefreshEntitlementsOnOrderComplete final : public ClientPacket
+        {
+        public:
+            explicit RefreshEntitlementsOnOrderComplete(WorldPacket&& packet) : ClientPacket(CMSG_REFRESH_ENTITLEMENTS_ON_ORDER_COMPLETE, std::move(packet)) { }
+
+            void Read() override;
+
+            std::vector<uint8> Data;
+        };
+
+        // Client purchases several shop products in one request. Wire (client serializer sweep): uint32 Count,
+        // then Count x { uint32 ProductID; SizedString bits<7> Extra }. Because a wrong parse of that
+        // interleaved per-entry string would route the WRONG products through the real grant path, and the
+        // layout is not verified against a live 12.1 client, P0 consumes the body wholesale and logs; per-line
+        // routing through BattlePayProcessPurchase is gated behind a config + a confirmed wire (P1).
+        class BulkPurchase final : public ClientPacket
+        {
+        public:
+            explicit BulkPurchase(WorldPacket&& packet) : ClientPacket(CMSG_BULK_PURCHASE, std::move(packet)) { }
+
+            void Read() override;
+
+            std::vector<uint8> Data;
+        };
+
         // CMSG_CATALOG_SHOP_LICENSE_GAME_DATA_REQUEST. Sent by the client mid-checkout carrying its own
         // license / game data. The body is variable (876/140/52/36/24 bytes across the 12.1.0.69382
         // capture). We keep the whole body so the handler can log its size for future response modeling;

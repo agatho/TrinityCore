@@ -61,6 +61,17 @@ void WorldSession::HandleQuestgiverStatusQueryOpcode(WorldPackets::Quest::QuestG
     _player->PlayerTalkClass->SendQuestGiverStatus(questStatus, packet.QuestGiverGUID);
 }
 
+void WorldSession::HandleRequestTreasurePunchListItems(WorldPackets::Quest::RequestTreasurePunchListItems& packet)
+{
+    // The client requests the outstanding map-treasure "punch list" for a selector (a UiMap/zone or treasure
+    // set). TrinityCore has no world punch-list data source - the only treasure infrastructure is the per-quest
+    // treasure_picker tables, which are unrelated - so there is nothing to enumerate. Answer with an honest
+    // empty response (Count 0) so the client frame does not sit waiting, without fabricating collectibles.
+    WorldPackets::Quest::TreasurePunchListItemsResponse response;
+    response.Selector = packet.Selector;
+    SendPacket(response.Write());
+}
+
 void WorldSession::HandleQuestgiverHelloOpcode(WorldPackets::Quest::QuestGiverHello& packet)
 {
     TC_LOG_DEBUG("network", "WORLD: Received CMSG_QUESTGIVER_HELLO {}", packet.QuestGiverGUID.ToString());

@@ -37,6 +37,14 @@ void AccountStoreBeginPurchaseOrRefund::Read()
     _worldPacket >> StoreFrontID;
 }
 
+void RequestStoreFrontInfoUpdate::Read()
+{
+    size_t const len = _worldPacket.size();
+    Data.resize(len);
+    if (len)
+        _worldPacket.read(Data.data(), len);
+}
+
 WorldPacket const* AccountStoreResult::Write()
 {
     _worldPacket << uint8(Result);

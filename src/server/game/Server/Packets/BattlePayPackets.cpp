@@ -192,6 +192,30 @@ void CatalogShopLicenseGameDataRequest::Read()
         _worldPacket.read(Data.data(), len);
 }
 
+void GetClientCheckoutLicenses::Read()
+{
+    size_t const len = _worldPacket.size();
+    Data.resize(len);
+    if (len)
+        _worldPacket.read(Data.data(), len);
+}
+
+void RefreshEntitlementsOnOrderComplete::Read()
+{
+    size_t const len = _worldPacket.size();
+    Data.resize(len);
+    if (len)
+        _worldPacket.read(Data.data(), len);
+}
+
+void BulkPurchase::Read()
+{
+    size_t const len = _worldPacket.size();
+    Data.resize(len);
+    if (len)
+        _worldPacket.read(Data.data(), len);
+}
+
 WorldPacket const* StartPurchaseResponse::Write()
 {
     _worldPacket << ResultA;

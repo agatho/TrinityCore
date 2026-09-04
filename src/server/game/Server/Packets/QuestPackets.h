@@ -686,6 +686,31 @@ namespace WorldPackets
             WorldPacket const* Write() override { return &_worldPacket; }
         };
 
+        // Client asks for the outstanding "punch list" treasures for a selector (client builder 0x1406D23E0:
+        // { uint32 Selector; uint8 Flag }).
+        class RequestTreasurePunchListItems final : public ClientPacket
+        {
+        public:
+            explicit RequestTreasurePunchListItems(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_TREASURE_PUNCH_LIST_ITEMS, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Selector = 0;
+            bool Flag = false;
+        };
+
+        // Reply carrying the remaining punch-list treasures. This core has no world punch-list data source, so
+        // an honest empty list (Count 0) is returned to unblock the client frame without fabricating entries.
+        class TreasurePunchListItemsResponse final : public ServerPacket
+        {
+        public:
+            explicit TreasurePunchListItemsResponse() : ServerPacket(SMSG_TREASURE_PUNCH_LIST_ITEMS_RESPONSE, 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Selector = 0;
+        };
+
         class QuestConfirmAcceptResponse final : public ServerPacket
         {
         public:

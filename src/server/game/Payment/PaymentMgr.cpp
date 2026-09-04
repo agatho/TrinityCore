@@ -16,11 +16,16 @@
  */
 
 #include "PaymentMgr.h"
+#include "BattlePayMgr.h"
+#include "Chat.h"
 #include "Config.h"
 #include "DatabaseEnv.h"
 #include "Log.h"
+#include "ObjectAccessor.h"
 #include "PayPalClient.h"
+#include "Player.h"
 #include "StringFormat.h"
+#include "WorldSession.h"
 #include <algorithm>
 
 PaymentMgr::PaymentMgr() = default;
@@ -158,11 +163,35 @@ void PaymentMgr::BeginRealMoneyCheckout(uint32 accountId, ObjectGuid playerGuid,
     _wake.notify_all();
 }
 
-bool PaymentMgr::ResolveProduct(uint64 /*productId*/, std::string& outValue, std::string& outDescription) const
+bool PaymentMgr::ResolveProduct(uint64 productId, std::string& outValue, std::string& outDescription) const
 {
-    // TODO(P2): resolve real price + localized description via sBattlePayMgr->GetProduct(productId)
-    // once the commerce checkout rail is forward-ported onto integration. Until then, a configured
-    // test price lets QA drive a real sandbox order without the catalog.
+    // productId is the ADVERTISED catalog id the client checked out (OpenCheckout.ProductID), so resolve
+    // it the same way HandleBattlePayOpenCheckout does.
+    if (ShopProduct const* product = sBattlePayMgr->GetProductByAdvertisedId(uint32(productId)))
+    {
+        // A real-money product carries its charge as the shop fixed-point DisplayPrice (/100000) - the
+        // exact price shown on the store card (e.g. 2999000 -> "29.99"). Only a product that actually
+        // declares a real-money display price is charged the real amount; a routed product without one
+        // falls through to the QA test price so a sandbox order can still be driven.
+        if (product->Currency == SHOP_CURRENCY_REAL_MONEY && product->HasDisplayPrice && product->DisplayPrice > 0)
+        {
+            uint64 const whole = product->DisplayPrice / 100000;
+            uint64 const cents = (product->DisplayPrice % 100000) / 1000;   // fixed-point -> 2 decimals
+            outValue = Trinity::StringFormat("{}.{:02}", whole, cents);
+            outDescription = !product->Name.empty() ? product->Name : "Realm Store purchase";
+            return true;
+        }
+
+        if (!_testPrice.empty())
+        {
+            outValue = _testPrice;
+            outDescription = !product->Name.empty() ? product->Name : "Realm Store purchase";
+            return true;
+        }
+        return false;
+    }
+
+    // Unrouted product id (e.g. an un-reskinned retail catalog card): QA test price only, never a guess.
     if (_testPrice.empty())
         return false;
 
@@ -232,12 +261,23 @@ void PaymentMgr::PumpApproveUrls()
 
     for (ApproveResult const& res : pending)
     {
-        // TODO(P2): deliver the approve URL to the player's session via the Rail-A web-URL SMSG
-        // (SMSG_MIRROR_VARS host / the StoreUI SMSG). Until the commerce SMSG lands, log it so a
-        // headless/QA test can open it manually. The URL is not a secret (PayPal shows it to the
-        // buyer anyway), so logging it is acceptable; the token, creds and payer data are NOT logged.
-        TC_LOG_INFO("server.paypal", "PayPal: approve URL ready for player {} (product {}, order {}): {}",
-            res.player.ToString(), res.productId, res.orderId, res.approveUrl);
+        // Deliver the PayPal approve URL to the buyer in-game. The client opened its own shop2 overlay on
+        // OPEN_CHECKOUT which the realm cannot address, so we hand the buyer the approve link as a system
+        // message to open in a browser; on approval the bnetserver webhook flips the row to SETTLED and
+        // PumpSettlements grants the entitlement. The URL is not a secret (PayPal shows it to the buyer);
+        // the token, creds and payer data are never logged or sent.
+        if (Player* player = ObjectAccessor::FindConnectedPlayer(res.player))
+        {
+            ChatHandler(player->GetSession()).PSendSysMessage(
+                "|cff00ff00[Realm Store]|r Open this link in a web browser to complete your purchase: {}", res.approveUrl);
+        }
+        else
+        {
+            // Buyer went offline between OPEN_CHECKOUT and order creation - the URL still works; log it so
+            // an operator can hand it over. (The entitlement will still be granted on settlement regardless.)
+            TC_LOG_INFO("server.paypal", "PayPal: approve URL ready but buyer offline (product {}, order {}): {}",
+                res.productId, res.orderId, res.approveUrl);
+        }
     }
 }
 
@@ -281,12 +321,37 @@ void PaymentMgr::PumpSettlements()
     } while (result->NextRow());
 }
 
-bool PaymentMgr::DeliverSettledProduct(uint32 /*accountId*/, uint64 /*productId*/, std::string const& /*orderId*/)
+bool PaymentMgr::DeliverSettledProduct(uint32 accountId, uint64 productId, std::string const& orderId)
 {
-    // TODO(P2): call the real grant path used by the Shop.RealMoney.Mode = web branch of
-    // HandleBattlePayOpenCheckout -> DeliveryPipeline -> SMSG_BATTLE_PAY_DELIVERY_ENDED +
-    // DISTRIBUTION_UPDATE, ideally claiming (UPD ... WHERE status='SETTLED') and granting inside a
-    // single DB transaction. Returning false here (delivery not yet possible on this branch) keeps
-    // the settled row intact so no money-backed purchase is silently dropped.
-    return false;
+    // productId is the advertised id recorded at order-create time (see WorkerLoop). Resolve the catalog
+    // product so we can grant the admin product id + its service type.
+    ShopProduct const* product = sBattlePayMgr->GetProductByAdvertisedId(uint32(productId));
+    if (!product)
+    {
+        // Product pulled from the catalog after the buyer paid: never fake a grant. Leaving the row
+        // SETTLED means the operator can re-seed the product and it delivers on the next poll.
+        TC_LOG_ERROR("server.paypal", "PayPal: settled order {} references product {} no longer in the shop "
+            "catalog (account {}); leaving SETTLED for a later grant.", orderId, productId, accountId);
+        return false;
+    }
+
+    // Offline-capable grant: create an account-level BattlePay entitlement that the buyer claims on next
+    // login (a webhook can settle while the buyer is offline). purchaseId is a stable FNV-1a 64 hash of
+    // the PayPal order id so a replayed webhook maps to the same purchase; double-grant is already blocked
+    // by the DELIVERED status flip + the _deliveredThisSession guard, so this only aids traceability.
+    uint64 purchaseId = 1469598103934665603ULL;
+    for (char const c : orderId)
+    {
+        purchaseId ^= static_cast<uint8>(c);
+        purchaseId *= 1099511628211ULL;
+    }
+
+    uint8 const serviceType = BattlePayMgr::GetServiceType(*product);
+    uint64 const distributionId = sBattlePayMgr->CreateEntitlement(accountId, product->ProductID, serviceType, purchaseId);
+    if (!distributionId)
+        return false;   // CreateEntitlement already logged; keep the row SETTLED for a retry.
+
+    TC_LOG_INFO("server.paypal", "PayPal: granted entitlement {} for settled order {} (account {}, product {} '{}').",
+        distributionId, orderId, accountId, product->ProductID, product->Name);
+    return true;
 }

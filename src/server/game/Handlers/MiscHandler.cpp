@@ -481,6 +481,17 @@ void WorldSession::HandleGetAccountNotifications(WorldPackets::Misc::GetAccountN
     SendPacket(response.Write());
 }
 
+void WorldSession::HandleAccountNotificationAcknowledged(WorldPackets::Misc::AccountNotificationAcknowledged& packet)
+{
+    // Receipt for one notification the client was shown, so the server can stop re-sending it. Because
+    // HandleGetAccountNotifications always delivers an EMPTY list on this core, the client can never
+    // legitimately ack a real notification - so there is nothing to mark seen. We still parse the real
+    // wire (not a stub) and record the ack at debug level; when an account_notification store is added,
+    // mark the acked row seen here instead of logging.
+    TC_LOG_DEBUG("network", "Account notification acknowledged by {}: id {} (type {}, param {}) - no store to update.",
+        GetAccountId(), packet.NotificationID, packet.NotificationType, packet.NotificationParam);
+}
+
 void WorldSession::HandleSetSelectionOpcode(WorldPackets::Misc::SetSelection& packet)
 {
     _player->SetSelection(packet.Selection);
@@ -1026,6 +1037,18 @@ void WorldSession::HandleResetInstancesOpcode(WorldPackets::Instance::ResetInsta
         _player->ResetInstances(InstanceResetMethod::Manual);
 }
 
+void WorldSession::HandleRequestInstanceEncounterEventSync(WorldPackets::Instance::RequestInstanceEncounterEventSync& /*packet*/)
+{
+    // The client (re)requests the encounter timeline for the instance it is in - the same data the map
+    // pushes on entry. Answer with SMSG_INSTANCE_ENCOUNTER_TIMELINE_SYNC via the existing timeline system;
+    // SendEncounterTimelineTo no-ops when the instance has no active timeline, so a request outside an
+    // instance (or in one with none seeded) is silently correct rather than fabricating events.
+    if (Map* map = _player->FindMap())
+        if (InstanceMap* instanceMap = map->ToInstanceMap())
+            if (InstanceScript* instance = instanceMap->GetInstanceScript())
+                instance->SendEncounterTimelineTo(_player);
+}
+
 void WorldSession::HandleSetDungeonDifficultyOpcode(WorldPackets::Misc::SetDungeonDifficulty& setDungeonDifficulty)
 {
     DifficultyEntry const* difficultyEntry = sDifficultyStore.LookupEntry(setDungeonDifficulty.DifficultyID);
@@ -1279,6 +1302,25 @@ void WorldSession::HandleSetDifficultyID(WorldPackets::Misc::SetDifficultyID& se
     result.MapID = _player->GetMapId();
     result.DifficultyID = uint16(difficultyID);
     SendPacket(result.Write());
+}
+
+void WorldSession::HandleTogglePlayerDifficulty(WorldPackets::Misc::TogglePlayerDifficulty& /*packet*/)
+{
+    // Empty-body toggle from the unit-popup difficulty submenu: flip the player's current dungeon difficulty
+    // to its Difficulty.db2 ToggleDifficultyID (e.g. Normal <-> Heroic) and apply it through the exact same
+    // path as CMSG_SET_DIFFICULTY_ID, so the client gets the same SMSG_CHANGE_PLAYER_DIFFICULTY_RESULT and
+    // all of HandleSetDifficultyID's guards (combat, LFG, leader-only, already-inside-instance) apply. The
+    // toggle acts on dungeon difficulty (the party-difficulty submenu's axis); the reused handler refuses a
+    // change while inside an instanceable map, so this only takes effect out of instance.
+    DifficultyEntry const* current = sDifficultyStore.LookupEntry(_player->GetDungeonDifficultyID());
+    if (!current || !current->ToggleDifficultyID)
+        return;
+
+    // Reuse HandleSetDifficultyID verbatim by handing it the toggle target. The synthesized packet is never
+    // Read() (we set the field directly), so a default WorldPacket buffer is fine.
+    WorldPackets::Misc::SetDifficultyID toggle{ WorldPacket() };
+    toggle.DifficultyID = current->ToggleDifficultyID;
+    HandleSetDifficultyID(toggle);
 }
 
 void WorldSession::HandleSetTaxiBenchmark(WorldPackets::Misc::SetTaxiBenchmarkMode& packet)

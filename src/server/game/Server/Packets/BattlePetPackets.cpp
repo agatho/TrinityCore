@@ -177,6 +177,11 @@ void BattlePetDeletePet::Read()
     _worldPacket >> PetGuid;
 }
 
+void BattlePetDeletePetCheat::Read()
+{
+    _worldPacket >> PetGuid;
+}
+
 void BattlePetSetFlags::Read()
 {
     _worldPacket >> PetGuid;

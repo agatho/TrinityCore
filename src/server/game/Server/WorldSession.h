@@ -124,6 +124,7 @@ namespace WorldPackets
     namespace AccountStore
     {
         class AccountStoreBeginPurchaseOrRefund;
+        class RequestStoreFrontInfoUpdate;
     }
 
     namespace AdventureJournal
@@ -302,6 +303,7 @@ namespace WorldPackets
         class BattlePetModifyName;
         class QueryBattlePetName;
         class BattlePetDeletePet;
+        class BattlePetDeletePetCheat;
         class BattlePetSetFlags;
         class BattlePetClearFanfare;
         class BattlePetSummon;
@@ -373,6 +375,7 @@ namespace WorldPackets
 
         class AlterApperance;
         class EnumCharacters;
+        class GetAccountCharacterList;
         class CreateCharacter;
         class CharDelete;
         class CharacterRenameRequest;
@@ -573,6 +576,7 @@ namespace WorldPackets
     {
         class QueryGuildInfo;
         class GuildInviteByName;
+        class GuildAddBattlenetFriend;
         class AcceptGuildInvite;
         class DeclineGuildInvites;
         class GuildDeclineInvitation;
@@ -782,6 +786,7 @@ namespace WorldPackets
         class InstanceInfo;
         class InstanceLockResponse;
         class ResetInstances;
+        class RequestInstanceEncounterEventSync;
         class StartInstanceAbandonVote;
     }
 
@@ -899,8 +904,10 @@ namespace WorldPackets
         class SetDungeonDifficulty;
         class SetRaidDifficulty;
         class SetDifficultyID;
+        class TogglePlayerDifficulty;
         class PortGraveyard;
         class GetAccountNotifications;
+        class AccountNotificationAcknowledged;
         class ReclaimCorpse;
         class RepopRequest;
         class ReportStuckInCombat;
@@ -1012,6 +1019,9 @@ namespace WorldPackets
         class StartPurchase;
         class OpenCheckout;
         class CatalogShopLicenseGameDataRequest;
+        class GetClientCheckoutLicenses;
+        class RefreshEntitlementsOnOrderComplete;
+        class BulkPurchase;
         class ConfirmPurchaseResponse;
         class DistributionAssignToTarget;
         class CharacterUpgradeStart;
@@ -1299,6 +1309,7 @@ namespace WorldPackets
     namespace Quest
     {
         class QuestConfirmAccept;
+        class RequestTreasurePunchListItems;
         class QuestGiverStatusQuery;
         class QuestGiverStatusMultipleQuery;
         class QuestGiverHello;
@@ -2066,9 +2077,11 @@ class TC_GAME_API WorldSession
 
         void HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::AccountStore::AccountStoreBeginPurchaseOrRefund& packet);
         void SendAccountStoreFrontUpdate();
+        void HandleRequestStoreFrontInfoUpdate(WorldPackets::AccountStore::RequestStoreFrontInfoUpdate& packet);
 
         void HandleCharEnum(CharacterDatabaseQueryHolder const& holder);
         void HandleCharEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/);
+        void HandleGetAccountCharacterList(WorldPackets::Character::GetAccountCharacterList& packet);
         void HandleCharUndeleteEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/);
         void HandleCharDeleteOpcode(WorldPackets::Character::CharDelete& charDelete);
         void HandleSetupWarbandGroups(WorldPackets::Character::SetupWarbandGroups& setupWarbandGroups);
@@ -2128,6 +2141,7 @@ class TC_GAME_API WorldSession
         void HandlePortGraveyard(WorldPackets::Misc::PortGraveyard& packet);
         void HandleRequestCemeteryList(WorldPackets::Misc::RequestCemeteryList& packet);
         void HandleGetAccountNotifications(WorldPackets::Misc::GetAccountNotifications& packet);
+        void HandleAccountNotificationAcknowledged(WorldPackets::Misc::AccountNotificationAcknowledged& packet);
 
         // Inspect
         void HandleInspectOpcode(WorldPackets::Inspect::Inspect& inspect);
@@ -2218,6 +2232,9 @@ class TC_GAME_API WorldSession
         void HandleBattlePayStartPurchase(WorldPackets::BattlePay::StartPurchase& startPurchase);
         void HandleBattlePayOpenCheckout(WorldPackets::BattlePay::OpenCheckout& openCheckout);
         void HandleCatalogShopLicenseGameDataRequest(WorldPackets::BattlePay::CatalogShopLicenseGameDataRequest& request);
+        void HandleGetClientCheckoutLicenses(WorldPackets::BattlePay::GetClientCheckoutLicenses& packet);
+        void HandleRefreshEntitlementsOnOrderComplete(WorldPackets::BattlePay::RefreshEntitlementsOnOrderComplete& packet);
+        void HandleBattlePayBulkPurchase(WorldPackets::BattlePay::BulkPurchase& packet);
         void HandleBattlePayConfirmPurchaseResponse(WorldPackets::BattlePay::ConfirmPurchaseResponse& confirmPurchaseResponse);
         void BattlePayProcessPurchase(uint32 productID);
         void SendBattlePayDistributionList();
@@ -2401,6 +2418,7 @@ class TC_GAME_API WorldSession
         void HandleGuildQueryMemberRecipes(WorldPackets::Guild::GuildQueryMemberRecipes& packet);
         void HandleGuildQueryMembersForRecipe(WorldPackets::Guild::GuildQueryMembersForRecipe& packet);
         void HandleGuildInviteByName(WorldPackets::Guild::GuildInviteByName& packet);
+        void HandleGuildAddBattlenetFriend(WorldPackets::Guild::GuildAddBattlenetFriend& packet);
         void HandleGuildOfficerRemoveMember(WorldPackets::Guild::GuildOfficerRemoveMember& packet);
         void HandleGuildAcceptInvite(WorldPackets::Guild::AcceptGuildInvite& invite);
         void HandleGuildDeclineInvitation(WorldPackets::Guild::GuildDeclineInvitation& decline);
@@ -2788,6 +2806,7 @@ class TC_GAME_API WorldSession
         void HandleConfirmProfessionRespec(WorldPackets::Traits::ConfirmProfessionRespec const& confirmProfessionRespec);
 
         void HandleQuestgiverStatusQueryOpcode(WorldPackets::Quest::QuestGiverStatusQuery& packet);
+        void HandleRequestTreasurePunchListItems(WorldPackets::Quest::RequestTreasurePunchListItems& packet);
         void HandleQuestgiverStatusMultipleQuery(WorldPackets::Quest::QuestGiverStatusMultipleQuery& packet);
         void HandleQuestgiverHelloOpcode(WorldPackets::Quest::QuestGiverHello& packet);
         void HandleQuestgiverAcceptQuestOpcode(WorldPackets::Quest::QuestGiverAcceptQuest& packet);
@@ -2940,6 +2959,7 @@ class TC_GAME_API WorldSession
         void HandleSetDungeonDifficultyOpcode(WorldPackets::Misc::SetDungeonDifficulty& setDungeonDifficulty);
         void HandleSetRaidDifficultyOpcode(WorldPackets::Misc::SetRaidDifficulty& setRaidDifficulty);
         void HandleSetDifficultyID(WorldPackets::Misc::SetDifficultyID& setDifficultyID);
+        void HandleTogglePlayerDifficulty(WorldPackets::Misc::TogglePlayerDifficulty& packet);
         void HandleSetTitleOpcode(WorldPackets::Character::SetTitle& packet);
         void HandleTimeSync(uint32 counter, int64 clientTime, TimePoint responseReceiveTime);
         void HandleTimeSyncResponse(WorldPackets::Misc::TimeSyncResponse const& timeSyncResponse);
@@ -2953,6 +2973,7 @@ class TC_GAME_API WorldSession
         void HandleLogStreamingError(WorldPackets::Auth::LogStreamingError const& logStreamingError);
         void HandleWhoIsOpcode(WorldPackets::Who::WhoIsRequest& packet);
         void HandleResetInstancesOpcode(WorldPackets::Instance::ResetInstances& packet);
+        void HandleRequestInstanceEncounterEventSync(WorldPackets::Instance::RequestInstanceEncounterEventSync& packet);
         void HandleInstanceLockResponse(WorldPackets::Instance::InstanceLockResponse& packet);
         void HandleStartInstanceAbandonVote(WorldPackets::Instance::StartInstanceAbandonVote& packet);
         void HandleInstanceAbandonVoteResponse(WorldPackets::Instance::InstanceAbandonVoteResponse& packet);
@@ -3242,6 +3263,7 @@ class TC_GAME_API WorldSession
         void HandleBattlePetModifyName(WorldPackets::BattlePet::BattlePetModifyName& battlePetModifyName);
         void HandleQueryBattlePetName(WorldPackets::BattlePet::QueryBattlePetName& queryBattlePetName);
         void HandleBattlePetDeletePet(WorldPackets::BattlePet::BattlePetDeletePet& battlePetDeletePet);
+        void HandleBattlePetDeletePetCheat(WorldPackets::BattlePet::BattlePetDeletePetCheat& battlePetDeletePetCheat);
         void HandleBattlePetSetFlags(WorldPackets::BattlePet::BattlePetSetFlags& battlePetSetFlags);
         void HandleBattlePetClearFanfare(WorldPackets::BattlePet::BattlePetClearFanfare& battlePetClearFanfare);
         void HandleBattlePetSummon(WorldPackets::BattlePet::BattlePetSummon& battlePetSummon);

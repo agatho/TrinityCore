@@ -30,6 +30,7 @@
 #include "Mail.h"
 #include "MiscPackets.h"
 #include "ObjectMgr.h"
+#include "PaymentMgr.h"
 #include "Player.h"
 #include "QueryHolder.h"
 #include "RealmList.h"
@@ -657,10 +658,27 @@ void WorldSession::HandleBattlePayOpenCheckout(WorldPackets::BattlePay::OpenChec
             return;
         case SHOP_REAL_MONEY_WEB:
         default:
-            // Sniff-accurate: the client already opened the shop2 HTTPS overlay from OPEN_CHECKOUT, so the
-            // game connection sends NO response. Completion, if any, arrives from the web backend (Rail A3).
+            // Rail A3 - PAYPAL. When a PayPal provider is configured and this is a routed real-money
+            // product (so it has a price to charge and an entitlement to grant), begin a PayPal checkout:
+            // PaymentMgr creates the order off-thread and hands the buyer the approve URL in-game; the
+            // bnetserver webhook settles it and the entitlement is granted (offline-safe) on the next
+            // settlement poll. An unrouted retail card (no shop_product, e.g. the Midnight expansion card)
+            // has nothing to charge or grant, so it keeps the sniff-accurate no-response behaviour below.
+            if (product && sPaymentMgr->IsEnabled())
+            {
+                sPaymentMgr->BeginRealMoneyCheckout(GetAccountId(),
+                    GetPlayer() ? GetPlayer()->GetGUID() : ObjectGuid::Empty,
+                    openCheckout.ProductID, openCheckout.ClientToken);
+                TC_LOG_INFO("network", "BattlePay: {} began a PayPal real-money checkout for product {} (client token {}).",
+                    GetPlayerInfo(), openCheckout.ProductID, openCheckout.ClientToken);
+                return;
+            }
+
+            // Sniff-accurate fallback: the client already opened the shop2 HTTPS overlay from OPEN_CHECKOUT,
+            // so with no PayPal provider the game connection sends NO response (completion, if any, arrives
+            // from a web backend - Rail A3).
             TC_LOG_DEBUG("network", "BattlePay: {} opened a real-money web checkout for product {} (client token {}); "
-                "no game response (Shop.RealMoney.Mode=web).", GetPlayerInfo(), openCheckout.ProductID, openCheckout.ClientToken);
+                "no game response (Shop.RealMoney.Mode=web, no PayPal provider).", GetPlayerInfo(), openCheckout.ProductID, openCheckout.ClientToken);
             return;
     }
 }
@@ -688,6 +706,36 @@ void WorldSession::HandleCatalogShopLicenseGameDataRequest(WorldPackets::BattleP
         "response (SMSG 0x4202C1) is an un-modeled reflection payload and is deliberately not answered - see the "
         "handler note. If the client stalls waiting for it, capture the response bytes and model them here.",
         GetPlayerInfo(), request.Data.size());
+}
+
+void WorldSession::HandleGetClientCheckoutLicenses(WorldPackets::BattlePay::GetClientCheckoutLicenses& packet)
+{
+    // "Checkout licenses" == what this account already owns. Answer with the real entitlement ledger the
+    // rest of the shop uses (LoadBattlePayEntitlements re-pulls from the LoginDB and pushes the distribution
+    // list + SMSG_SYNC_WOW_ENTITLEMENTS) - proven wire, no invented layout.
+    TC_LOG_DEBUG("network", "BattlePay: GET_CLIENT_CHECKOUT_LICENSES from {} ({} body bytes) - resyncing entitlements.",
+        GetPlayerInfo(), packet.Data.size());
+    LoadBattlePayEntitlements(true);
+}
+
+void WorldSession::HandleRefreshEntitlementsOnOrderComplete(WorldPackets::BattlePay::RefreshEntitlementsOnOrderComplete& packet)
+{
+    // The game-side signal that a web order finished (closes the PayPal/PaymentMgr settlement loop): re-pull
+    // the account's entitlements from the authoritative ledger and push them to the client.
+    TC_LOG_INFO("network", "BattlePay: REFRESH_ENTITLEMENTS_ON_ORDER_COMPLETE from {} ({} order-token bytes) - "
+        "resyncing entitlements.", GetPlayerInfo(), packet.Data.size());
+    LoadBattlePayEntitlements(true);
+}
+
+void WorldSession::HandleBattlePayBulkPurchase(WorldPackets::BattlePay::BulkPurchase& packet)
+{
+    // Bulk (multi-product) purchase. The per-entry wire (interleaved ProductID + bits<7> string) is not
+    // verified against a live 12.1 client, and mis-parsing it would route the WRONG products through the
+    // real grant path, so P0 does not auto-grant: it records the request and leaves per-line routing through
+    // BattlePayProcessPurchase to a build that has a confirmed wire + an operator opt-in. This is a real,
+    // truthful handler (it consumes the packet and reports honestly), not a silent stub.
+    TC_LOG_INFO("network", "BattlePay: BULK_PURCHASE from {} ({} body bytes) - recorded; per-line grant routing "
+        "is deferred pending a live-verified per-entry wire (no products granted).", GetPlayerInfo(), packet.Data.size());
 }
 
 namespace

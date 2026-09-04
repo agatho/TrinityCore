@@ -84,6 +84,19 @@ public:
     int32 StoreFrontID = 0;
 };
 
+// CMSG_REQUEST_STORE_FRONT_INFO_UPDATE — client asks the realm to (re)push the account store front. The body
+// carries a StoreFrontID selector; consumed wholesale here and answered with the existing, proven
+// SMSG_ACCOUNT_STORE_FRONT_UPDATE writer (no new wire).
+class RequestStoreFrontInfoUpdate final : public ClientPacket
+{
+public:
+    explicit RequestStoreFrontInfoUpdate(WorldPacket&& packet) : ClientPacket(CMSG_REQUEST_STORE_FRONT_INFO_UPDATE, std::move(packet)) { }
+
+    void Read() override;
+
+    std::vector<uint8> Data;
+};
+
 // SMSG_ACCOUNT_STORE_RESULT (0x42032E) — client reader sub_7FF7290B8F70:
 //   uint8 Result, uint8 TransactionType, uint32 AccountStoreItemID, item-state element.
 class AccountStoreResult final : public ServerPacket

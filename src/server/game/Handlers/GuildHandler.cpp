@@ -25,6 +25,7 @@
 #include "GuildPackets.h"
 #include "GuildRenameMgr.h"
 #include "Log.h"
+#include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include <unordered_set>
@@ -53,6 +54,25 @@ void WorldSession::HandleGuildInviteByName(WorldPackets::Guild::GuildInviteByNam
     if (normalizePlayerName(packet.Name))
         if (Guild* guild = GetPlayer()->GetGuild())
             guild->HandleInviteMember(this, packet.Name);
+}
+
+void WorldSession::HandleGuildAddBattlenetFriend(WorldPackets::Guild::GuildAddBattlenetFriend& packet)
+{
+    // Invite a Battle.net friend to the guild. The client already resolved which character that bnet friend
+    // is currently on (FriendGuid), so route to the same rank-checked invite path as CMSG_GUILD_INVITE_BY_NAME
+    // (which validates guild-invite rights, ignore list, faction, already-in-a-guild and already-invited, and
+    // sends SMSG_GUILD_INVITE to the target). A bnet friend not currently online on this realm cannot be
+    // invited from here (no cross-realm guild invite is modeled), the same silent no-op the name path takes
+    // for an unknown target.
+    Guild* guild = GetPlayer()->GetGuild();
+    if (!guild)
+        return;
+
+    Player* invitee = ObjectAccessor::FindConnectedPlayer(packet.FriendGuid);
+    if (!invitee)
+        return;
+
+    guild->HandleInviteMember(this, invitee->GetName());
 }
 
 void WorldSession::HandleGuildOfficerRemoveMember(WorldPackets::Guild::GuildOfficerRemoveMember& packet)
