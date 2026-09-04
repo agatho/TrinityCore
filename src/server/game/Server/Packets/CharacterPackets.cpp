@@ -452,6 +452,14 @@ WorldPacket const* EnumCharactersResult::Write()
     return &_worldPacket;
 }
 
+void GetAccountCharacterList::Read()
+{
+    size_t const len = _worldPacket.size();
+    Data.resize(len);
+    if (len)
+        _worldPacket.read(Data.data(), len);
+}
+
 void CheckCharacterNameAvailability::Read()
 {
     _worldPacket >> SequenceIndex;

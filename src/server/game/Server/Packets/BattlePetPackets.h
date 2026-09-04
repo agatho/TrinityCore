@@ -194,6 +194,18 @@ namespace WorldPackets
             ObjectGuid PetGuid;
         };
 
+        // Developer/GM cheat variant of DELETE_PET (opcode DELETE_PET+1). Same wire (one pet GUID); the handler
+        // is gated on GM security since the client only emits this in developer mode.
+        class BattlePetDeletePetCheat final : public ClientPacket
+        {
+        public:
+            explicit BattlePetDeletePetCheat(WorldPacket&& packet) : ClientPacket(CMSG_BATTLE_PET_DELETE_PET_CHEAT, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid PetGuid;
+        };
+
         class BattlePetSetFlags final : public ClientPacket
         {
         public:

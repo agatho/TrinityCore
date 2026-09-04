@@ -243,7 +243,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_BATTLE_PAY_START_VAS_PURCHASE,                      STATUS_IGNORED,   PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_BATTLE_PET_CLEAR_FANFARE,                           STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlePetClearFanfare);
     DEFINE_HANDLER(CMSG_BATTLE_PET_DELETE_PET,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlePetDeletePet);
-    DEFINE_HANDLER(CMSG_BATTLE_PET_DELETE_PET_CHEAT,                        STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_BATTLE_PET_DELETE_PET_CHEAT,                        STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlePetDeletePetCheat);
     DEFINE_HANDLER(CMSG_BATTLE_PET_MODIFY_NAME,                             STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlePetModifyName);
     DEFINE_HANDLER(CMSG_BATTLE_PET_REQUEST_JOURNAL,                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlePetRequestJournal);
     DEFINE_HANDLER(CMSG_BATTLE_PET_REQUEST_JOURNAL_LOCK,                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlePetRequestJournalLock);
@@ -260,7 +260,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_BLEEP_PONG,                                         STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleBleepPong);
     DEFINE_HANDLER(CMSG_BONUS_ROLL,                                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBonusRoll);
     DEFINE_HANDLER(CMSG_BUG_REPORT,                                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBugReportOpcode);
-    DEFINE_HANDLER(CMSG_BULK_PURCHASE,                                      STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_BULK_PURCHASE,                                      STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleBattlePayBulkPurchase);
     DEFINE_HANDLER(CMSG_BULK_REFUND,                                        STATUS_LOGGEDIN , PROCESS_THREADUNSAFE, &WorldSession::HandleBulkRefund);
     DEFINE_HANDLER(CMSG_BUSY_TRADE,                                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBusyTradeOpcode);
     DEFINE_HANDLER(CMSG_BUY_ACCOUNT_BANK_TAB,                               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBuyBankTab);
@@ -521,12 +521,12 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_GARRISON_START_MISSION,                             STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGarrisonStartMission);
     DEFINE_HANDLER(CMSG_GARRISON_SWAP_BUILDINGS,                            STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGarrisonSwapBuildings);
     DEFINE_HANDLER(CMSG_GENERATE_RANDOM_CHARACTER_NAME,                     STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleRandomizeCharNameOpcode);
-    DEFINE_HANDLER(CMSG_GET_ACCOUNT_CHARACTER_LIST,                         STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_GET_ACCOUNT_CHARACTER_LIST,                         STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleGetAccountCharacterList);
     DEFINE_HANDLER(CMSG_GET_ACCOUNT_NOTIFICATIONS,                          STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleGetAccountNotifications);
     DEFINE_HANDLER(CMSG_GET_ALL_LICENSED_DECOR_QUANTITIES,                  STATUS_LOGGEDIN , PROCESS_THREADUNSAFE, &WorldSession::HandleGetAllLicensedDecorQuantities);
     DEFINE_HANDLER(CMSG_GET_AVAILABLE_INITIATIVE_REQUEST,                   STATUS_LOGGEDIN , PROCESS_THREADUNSAFE, &WorldSession::HandleGetAvailableInitiativeRequest);
     DEFINE_HANDLER(CMSG_GET_CHARACTER_CURRENCY_TRANSFER_LOG,                STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGetCharacterCurrencyTransferLog);
-    DEFINE_HANDLER(CMSG_GET_CLIENT_CHECKOUT_LICENSES,                       STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_GET_CLIENT_CHECKOUT_LICENSES,                       STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleGetClientCheckoutLicenses);
     DEFINE_HANDLER(CMSG_GET_DECOR_REFUND_LIST,                              STATUS_LOGGEDIN , PROCESS_THREADUNSAFE, &WorldSession::HandleGetDecorRefundList);
     DEFINE_HANDLER(CMSG_GET_GARRISON_INFO,                                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleGetGarrisonInfo);
     DEFINE_HANDLER(CMSG_GET_INITIATIVE_ACTIVITY_LOG_REQUEST,                STATUS_LOGGEDIN , PROCESS_THREADUNSAFE, &WorldSession::HandleGetInitiativeActivityLogRequest);
@@ -1010,7 +1010,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_RECENT_ALLY_SET_NOTE,                               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRecentAllySetNote);
     DEFINE_HANDLER(CMSG_RECLAIM_CORPSE,                                     STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleReclaimCorpse);
     DEFINE_HANDLER(CMSG_REFRESH_BLEEP_TOKENS,                               STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleRefreshBleepTokens);
-    DEFINE_HANDLER(CMSG_REFRESH_ENTITLEMENTS_ON_ORDER_COMPLETE,             STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_REFRESH_ENTITLEMENTS_ON_ORDER_COMPLETE,             STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleRefreshEntitlementsOnOrderComplete);
     DEFINE_HANDLER(CMSG_REGISTER_FAST_LOGIN,                                STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleRegisterFastLogin);
     DEFINE_HANDLER(CMSG_REMOVE_NEW_ITEM,                                    STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleRemoveNewItem);
     DEFINE_HANDLER(CMSG_REMOVE_RAF_RECRUIT,                                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRemoveRafRecruit);
@@ -1050,7 +1050,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_REQUEST_SCHEDULED_AREA_POI_UPDATE,                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestScheduledAreaPoiUpdate);
     DEFINE_HANDLER(CMSG_REQUEST_SCHEDULED_PVP_INFO,                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestScheduledPvpInfo);
     DEFINE_HANDLER(CMSG_REQUEST_STABLED_PETS,                               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestStabledPets);
-    DEFINE_HANDLER(CMSG_REQUEST_STORE_FRONT_INFO_UPDATE,                    STATUS_UNHANDLED, PROCESS_INPLACE,      &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_REQUEST_STORE_FRONT_INFO_UPDATE,                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleRequestStoreFrontInfoUpdate);
     // CMSG_REQUEST_SURVEY (0x3D030D): body = one uint32 (client sender RVA 0x6D22F0 writes the opcode
     // header then a single uint32 read from the sender object at +0x20). That uint32 is the
     // SurveyDeliveryMoment enum (0 Login, 1 ProfessionTable, 2 QuestTurnIn, 3 ChestLooted,

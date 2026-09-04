@@ -708,6 +708,36 @@ void WorldSession::HandleCatalogShopLicenseGameDataRequest(WorldPackets::BattleP
         GetPlayerInfo(), request.Data.size());
 }
 
+void WorldSession::HandleGetClientCheckoutLicenses(WorldPackets::BattlePay::GetClientCheckoutLicenses& packet)
+{
+    // "Checkout licenses" == what this account already owns. Answer with the real entitlement ledger the
+    // rest of the shop uses (LoadBattlePayEntitlements re-pulls from the LoginDB and pushes the distribution
+    // list + SMSG_SYNC_WOW_ENTITLEMENTS) - proven wire, no invented layout.
+    TC_LOG_DEBUG("network", "BattlePay: GET_CLIENT_CHECKOUT_LICENSES from {} ({} body bytes) - resyncing entitlements.",
+        GetPlayerInfo(), packet.Data.size());
+    LoadBattlePayEntitlements(true);
+}
+
+void WorldSession::HandleRefreshEntitlementsOnOrderComplete(WorldPackets::BattlePay::RefreshEntitlementsOnOrderComplete& packet)
+{
+    // The game-side signal that a web order finished (closes the PayPal/PaymentMgr settlement loop): re-pull
+    // the account's entitlements from the authoritative ledger and push them to the client.
+    TC_LOG_INFO("network", "BattlePay: REFRESH_ENTITLEMENTS_ON_ORDER_COMPLETE from {} ({} order-token bytes) - "
+        "resyncing entitlements.", GetPlayerInfo(), packet.Data.size());
+    LoadBattlePayEntitlements(true);
+}
+
+void WorldSession::HandleBattlePayBulkPurchase(WorldPackets::BattlePay::BulkPurchase& packet)
+{
+    // Bulk (multi-product) purchase. The per-entry wire (interleaved ProductID + bits<7> string) is not
+    // verified against a live 12.1 client, and mis-parsing it would route the WRONG products through the
+    // real grant path, so P0 does not auto-grant: it records the request and leaves per-line routing through
+    // BattlePayProcessPurchase to a build that has a confirmed wire + an operator opt-in. This is a real,
+    // truthful handler (it consumes the packet and reports honestly), not a silent stub.
+    TC_LOG_INFO("network", "BattlePay: BULK_PURCHASE from {} ({} body bytes) - recorded; per-line grant routing "
+        "is deferred pending a live-verified per-entry wire (no products granted).", GetPlayerInfo(), packet.Data.size());
+}
+
 namespace
 {
     // Renders one product as the JamBattlePayDeliverable the client parses. The same struct is embedded

@@ -47,6 +47,13 @@ void WorldSession::SendAccountStoreFrontUpdate()
     SendPacket(front.Write());
 }
 
+void WorldSession::HandleRequestStoreFrontInfoUpdate(WorldPackets::AccountStore::RequestStoreFrontInfoUpdate& /*packet*/)
+{
+    // Client asked the realm to (re)push the account store front. Answer with the same proven
+    // SMSG_ACCOUNT_STORE_FRONT_UPDATE the login path sends; it self-guards on an in-world player.
+    SendAccountStoreFrontUpdate();
+}
+
 void WorldSession::HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::AccountStore::AccountStoreBeginPurchaseOrRefund& packet)
 {
     using namespace WorldPackets::AccountStore;

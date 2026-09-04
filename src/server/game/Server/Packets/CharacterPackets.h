@@ -54,6 +54,20 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // CMSG_GET_ACCOUNT_CHARACTER_LIST — a lightweight, on-demand account-character query (VAS/transfer
+        // flows). Wire = uint32 Token + 1 bit IsDeletedCharacters. The paired SMSG_GET_ACCOUNT_CHARACTER_LIST_RESULT
+        // has an unrecovered per-record layout, so P0 consumes the body and does not send a guessed result
+        // (matching this codebase's precedent for an un-modeled response wire); the result is a verified-wire P1.
+        class GetAccountCharacterList final : public ClientPacket
+        {
+        public:
+            explicit GetAccountCharacterList(WorldPacket&& packet) : ClientPacket(CMSG_GET_ACCOUNT_CHARACTER_LIST, std::move(packet)) { }
+
+            void Read() override;
+
+            std::vector<uint8> Data;
+        };
+
         struct CharacterCreateInfo
         {
             /// User specified variables

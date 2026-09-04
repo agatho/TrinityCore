@@ -124,6 +124,7 @@ namespace WorldPackets
     namespace AccountStore
     {
         class AccountStoreBeginPurchaseOrRefund;
+        class RequestStoreFrontInfoUpdate;
     }
 
     namespace AdventureJournal
@@ -302,6 +303,7 @@ namespace WorldPackets
         class BattlePetModifyName;
         class QueryBattlePetName;
         class BattlePetDeletePet;
+        class BattlePetDeletePetCheat;
         class BattlePetSetFlags;
         class BattlePetClearFanfare;
         class BattlePetSummon;
@@ -373,6 +375,7 @@ namespace WorldPackets
 
         class AlterApperance;
         class EnumCharacters;
+        class GetAccountCharacterList;
         class CreateCharacter;
         class CharDelete;
         class CharacterRenameRequest;
@@ -1016,6 +1019,9 @@ namespace WorldPackets
         class StartPurchase;
         class OpenCheckout;
         class CatalogShopLicenseGameDataRequest;
+        class GetClientCheckoutLicenses;
+        class RefreshEntitlementsOnOrderComplete;
+        class BulkPurchase;
         class ConfirmPurchaseResponse;
         class DistributionAssignToTarget;
         class CharacterUpgradeStart;
@@ -2071,9 +2077,11 @@ class TC_GAME_API WorldSession
 
         void HandleAccountStoreBeginPurchaseOrRefund(WorldPackets::AccountStore::AccountStoreBeginPurchaseOrRefund& packet);
         void SendAccountStoreFrontUpdate();
+        void HandleRequestStoreFrontInfoUpdate(WorldPackets::AccountStore::RequestStoreFrontInfoUpdate& packet);
 
         void HandleCharEnum(CharacterDatabaseQueryHolder const& holder);
         void HandleCharEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/);
+        void HandleGetAccountCharacterList(WorldPackets::Character::GetAccountCharacterList& packet);
         void HandleCharUndeleteEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/);
         void HandleCharDeleteOpcode(WorldPackets::Character::CharDelete& charDelete);
         void HandleSetupWarbandGroups(WorldPackets::Character::SetupWarbandGroups& setupWarbandGroups);
@@ -2224,6 +2232,9 @@ class TC_GAME_API WorldSession
         void HandleBattlePayStartPurchase(WorldPackets::BattlePay::StartPurchase& startPurchase);
         void HandleBattlePayOpenCheckout(WorldPackets::BattlePay::OpenCheckout& openCheckout);
         void HandleCatalogShopLicenseGameDataRequest(WorldPackets::BattlePay::CatalogShopLicenseGameDataRequest& request);
+        void HandleGetClientCheckoutLicenses(WorldPackets::BattlePay::GetClientCheckoutLicenses& packet);
+        void HandleRefreshEntitlementsOnOrderComplete(WorldPackets::BattlePay::RefreshEntitlementsOnOrderComplete& packet);
+        void HandleBattlePayBulkPurchase(WorldPackets::BattlePay::BulkPurchase& packet);
         void HandleBattlePayConfirmPurchaseResponse(WorldPackets::BattlePay::ConfirmPurchaseResponse& confirmPurchaseResponse);
         void BattlePayProcessPurchase(uint32 productID);
         void SendBattlePayDistributionList();
@@ -3252,6 +3263,7 @@ class TC_GAME_API WorldSession
         void HandleBattlePetModifyName(WorldPackets::BattlePet::BattlePetModifyName& battlePetModifyName);
         void HandleQueryBattlePetName(WorldPackets::BattlePet::QueryBattlePetName& queryBattlePetName);
         void HandleBattlePetDeletePet(WorldPackets::BattlePet::BattlePetDeletePet& battlePetDeletePet);
+        void HandleBattlePetDeletePetCheat(WorldPackets::BattlePet::BattlePetDeletePetCheat& battlePetDeletePetCheat);
         void HandleBattlePetSetFlags(WorldPackets::BattlePet::BattlePetSetFlags& battlePetSetFlags);
         void HandleBattlePetClearFanfare(WorldPackets::BattlePet::BattlePetClearFanfare& battlePetClearFanfare);
         void HandleBattlePetSummon(WorldPackets::BattlePet::BattlePetSummon& battlePetSummon);
