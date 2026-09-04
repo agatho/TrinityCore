@@ -6888,10 +6888,21 @@ void Player::SetChromieTimeConditionalFlags(bool enabled)
         .ModifyValue(&UF::CTROptions::ConditionalFlags), std::move(conditionalFlags));
 }
 
-void Player::SetTimerunningSeasonID(uint32 seasonId)
+void Player::SetTimerunningSeasonID(uint32 seasonId, bool saveToDb /*= false*/)
 {
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
         .ModifyValue(&UF::ActivePlayerData::TimerunningSeasonID), int32(seasonId));
+
+    // The season changes at most twice in a character's life (assigned at creation, cleared on conversion),
+    // so it gets its own dedicated statement rather than riding the high-churn periodic save (mirrors
+    // SetCreateMode). Persisting also works for a character that is not the in-world Player (creation path).
+    if (saveToDb)
+    {
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_TIMERUNNING_SEASON);
+        stmt->setUInt32(0, seasonId);
+        stmt->setUInt64(1, GetGUID().GetCounter());
+        CharacterDatabase.Execute(stmt);
+    }
 }
 
 void Player::SendCtrOptions(WorldPackets::Misc::CTROptionsBlock const* previous /*= nullptr*/) const

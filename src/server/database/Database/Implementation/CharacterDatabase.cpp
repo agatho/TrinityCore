@@ -607,6 +607,7 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     // the NPE exit handshake (CMSG_ABANDON_NPE_RESPONSE), which needs the decision to survive relog -
     // otherwise Player::UpdateZone re-arms the popup on the next zone change.
     PrepareStatement(CHAR_UPD_CHARACTER_CREATE_MODE, "UPDATE characters SET createMode = ? WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_UPD_CHARACTER_TIMERUNNING_SEASON, "UPDATE characters SET timerunningSeasonId = ? WHERE guid = ?", CONNECTION_ASYNC);
 
     PrepareStatement(CHAR_UPD_ADD_AT_LOGIN_FLAG, "UPDATE characters SET at_login = at_login | ? WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_REM_AT_LOGIN_FLAG, "UPDATE characters set at_login = at_login & ~ ? WHERE guid = ?", CONNECTION_ASYNC);

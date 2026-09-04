@@ -434,7 +434,7 @@ void OpcodeTable::InitializeClientOpcodes()
     // Timerunning season, so there is nothing to clear/migrate and no conversion rules (Remix item CTR 2905 /
     // artifact CTR 4579 -> standard gear) exist. A real implementation is gated on first building the Timerunning
     // subsystem (persisted season flag + creation path + item/reward conversion tables); until then this is a no-op.
-    DEFINE_HANDLER(CMSG_CONVERT_TIMERUNNING_CHARACTER,                      STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
+    DEFINE_HANDLER(CMSG_CONVERT_TIMERUNNING_CHARACTER,                      STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleConvertTimerunningCharacter);
     DEFINE_HANDLER(CMSG_COVENANT_RENOWN_REQUEST_CATCHUP_STATE,              STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleCovenantRenownRequestCatchupState);
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_CANCEL,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderCancel);
     DEFINE_HANDLER(CMSG_CRAFTING_ORDER_CLAIM,                               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleCraftingOrderClaim);

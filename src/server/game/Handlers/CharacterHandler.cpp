@@ -892,6 +892,30 @@ void WorldSession::HandleCharEnumOpcode(WorldPackets::Character::EnumCharacters&
     });
 }
 
+void WorldSession::HandleConvertTimerunningCharacter(WorldPackets::Character::ConvertTimerunningCharacter& packet)
+{
+    // Convert a Timerunning (Pandaria/Legion Remix) character to a standard one by clearing its season flag.
+    // Char-select only, and the target may be offline, so ownership is checked against this session's enumerated
+    // characters and the clear is a direct DB UPDATE (the running Player, if any, is not the target here).
+    // TrinityCore has no Timerunning gameplay/currency/Remix items to migrate, so clearing the season IS the
+    // whole conversion; a Remix item/currency migration is a later increment gated on that content existing.
+    ObjectGuid const guid = packet.CharacterGUID;
+    if (guid.IsEmpty() || !IsLegitCharacterForAccount(guid))
+    {
+        TC_LOG_INFO("entities.player.character", "ConvertTimerunningCharacter: account {} tried to convert {} which is not one of its characters.",
+            GetAccountId(), guid.ToString());
+        return;
+    }
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_TIMERUNNING_SEASON);
+    stmt->setUInt32(0, 0);   // season 0 == a standard, non-timerunning character
+    stmt->setUInt64(1, guid.GetCounter());
+    CharacterDatabase.Execute(stmt);
+
+    TC_LOG_INFO("entities.player.character", "ConvertTimerunningCharacter: account {} converted character {} to standard.",
+        GetAccountId(), guid.ToString());
+}
+
 void WorldSession::HandleCharUndeleteEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/)
 {
     /// get all the data necessary for loading all undeleted characters (along with their pets) on the account
@@ -1264,11 +1288,9 @@ void WorldSession::HandleCharCreateOpcode(WorldPackets::Character::CreateCharact
         return;
     }
 
-    if (charCreate.CreateInfo->TimerunningSeasonID)
-    {
-        SendCharCreate(CHAR_CREATE_TIMERUNNING);
-        return;
-    }
+    // A Timerunning (Pandaria/Legion Remix) character is now allowed: the requested season is assigned and
+    // persisted at save time (below). The client only exposes Timerunning creation while a Remix event it was
+    // told about is running, and the season is a cosmetic flag on this core, so the client's selection is trusted.
 
     std::shared_ptr<WorldPackets::Character::CharacterCreateInfo> createInfo = charCreate.CreateInfo;
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHECK_NAME);
@@ -1464,6 +1486,19 @@ void WorldSession::HandleCharCreateOpcode(WorldPackets::Character::CreateCharact
 
                                                                   // Player created, save it now
             newChar->SaveToDB(trans, characterTransaction, true);
+
+            // Assign the Timerunning season atomically with creation (CHAR_INS_CHARACTER wrote the row with the
+            // default 0). A dedicated UPDATE on the same transaction keeps the season without touching the huge
+            // positional insert/load queries.
+            if (createInfo->TimerunningSeasonID)
+            {
+                newChar->SetTimerunningSeasonID(createInfo->TimerunningSeasonID);   // in-memory UpdateField
+                CharacterDatabasePreparedStatement* tsStmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_TIMERUNNING_SEASON);
+                tsStmt->setUInt32(0, createInfo->TimerunningSeasonID);
+                tsStmt->setUInt64(1, newChar->GetGUID().GetCounter());
+                characterTransaction->Append(tsStmt);
+            }
+
             createInfo->CharCount += 1;
 
             LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_REP_REALM_CHARACTERS);

@@ -54,6 +54,20 @@ namespace WorldPackets
             void Read() override { }
         };
 
+        // CMSG_CONVERT_TIMERUNNING_CHARACTER - char-select request to convert a Timerunning character to standard.
+        // Wire (client serializer 0x6B0E20): PackedGUID CharacterGUID + uint32 (a season/reason echo, read but not
+        // trusted - the server re-derives the truth from the character row).
+        class ConvertTimerunningCharacter final : public ClientPacket
+        {
+        public:
+            explicit ConvertTimerunningCharacter(WorldPacket&& packet) : ClientPacket(CMSG_CONVERT_TIMERUNNING_CHARACTER, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid CharacterGUID;
+            uint32 Field = 0;
+        };
+
         struct CharacterCreateInfo
         {
             /// User specified variables

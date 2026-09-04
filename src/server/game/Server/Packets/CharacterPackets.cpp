@@ -452,6 +452,12 @@ WorldPacket const* EnumCharactersResult::Write()
     return &_worldPacket;
 }
 
+void ConvertTimerunningCharacter::Read()
+{
+    _worldPacket >> CharacterGUID;
+    _worldPacket >> Field;
+}
+
 void CheckCharacterNameAvailability::Read()
 {
     _worldPacket >> SequenceIndex;
