@@ -794,9 +794,10 @@ namespace WorldPackets
             std::string RealmName;                     // 9-bit length prefix
         };
 
-        // SMSG_GET_VAS_ACCOUNT_CHARACTER_LIST_RESULT (0x420297). Outer header = 4x uint32 (agreed across both
-        // dump versions) then the character vector. Header field meanings are unlabeled offline; Field1 echoes
-        // the request token so the client can correlate, the rest are 0 until proven.
+        // SMSG_GET_VAS_ACCOUNT_CHARACTER_LIST_RESULT (0x420297). Outer = 3 uint32 header + a FLAT uint32 count +
+        // the character vector - VERIFIED (deserializer sub_7FF7290AE4B0; the "4th uint32" earlier dumps showed
+        // is the list count, not a header field). Header field meanings are unlabeled offline; Field1 echoes the
+        // request token so the client can correlate, the other two are 0 until proven.
         class GetVasAccountCharacterListResult final : public ServerPacket
         {
         public:
@@ -807,7 +808,6 @@ namespace WorldPackets
             uint32 Field1 = 0;
             uint32 Field2 = 0;
             uint32 Field3 = 0;
-            uint32 Field4 = 0;
             std::vector<VasAccountCharacterInfo> Characters;
         };
 
@@ -825,16 +825,20 @@ namespace WorldPackets
             std::string RealmName;                     // 9-bit length prefix
         };
 
-        // SMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST_RESULT (0x420298). Outer header field count is ambiguous
-        // between dump versions; the base (all_smsg) layout of leading uint32s + the realm vector is used and
-        // is live-test-pending.
+        // SMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST_RESULT (0x420298). Outer = 3 uint32 header + a FLAT uint32
+        // count + the realm vector - VERIFIED from the deserializer sub_7FF7290AE5B0 (same shape as the account
+        // list; the earlier "10x uint32" / "u8+bitfield" dumps were miscounts of the element string prefix).
+        // Header field meanings are unlabeled offline and stay 0 until proven.
         class GetVasTransferTargetRealmListResult final : public ServerPacket
         {
         public:
-            explicit GetVasTransferTargetRealmListResult() : ServerPacket(SMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST_RESULT, 44) { }
+            explicit GetVasTransferTargetRealmListResult() : ServerPacket(SMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST_RESULT, 16) { }
 
             WorldPacket const* Write() override;
 
+            uint32 Field1 = 0;
+            uint32 Field2 = 0;
+            uint32 Field3 = 0;
             std::vector<VasTargetRealmInfo> Realms;
         };
     }

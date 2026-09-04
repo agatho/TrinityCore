@@ -389,7 +389,6 @@ WorldPacket const* GetVasAccountCharacterListResult::Write()
     _worldPacket << uint32(Field1);
     _worldPacket << uint32(Field2);
     _worldPacket << uint32(Field3);
-    _worldPacket << uint32(Field4);
     _worldPacket << uint32(Characters.size());
 
     for (VasAccountCharacterInfo const& c : Characters)
@@ -415,9 +414,12 @@ WorldPacket const* GetVasAccountCharacterListResult::Write()
 
 WorldPacket const* GetVasTransferTargetRealmListResult::Write()
 {
-    // Outer header is ambiguous between dump versions; a uint32-counted vector of the verified realm entry
-    // (6 uint32 + a 9-bit-length-prefixed name) is used. Field meanings of the 6 uint32 are an unlabeled
-    // reflected type - populated best-effort, live-test-pending.
+    // Outer = 3 uint32 header + a flat uint32 count + the realm vector (VERIFIED, same shape as the account
+    // list). Header fields have no proven offline meaning and stay 0; the 6 uint32 per realm entry are an
+    // unlabeled reflected type populated best-effort - live-test-pending.
+    _worldPacket << uint32(Field1);
+    _worldPacket << uint32(Field2);
+    _worldPacket << uint32(Field3);
     _worldPacket << uint32(Realms.size());
 
     for (VasTargetRealmInfo const& r : Realms)

@@ -1594,3 +1594,16 @@ void WorldSession::HandleGetVasAccountCharacterList(WorldPackets::BattlePay::Get
 
     SendPacket(result.Write());
 }
+
+void WorldSession::HandleGetVasTransferTargetRealmList(WorldPackets::BattlePay::GetVasTransferTargetRealmList& packet)
+{
+    // The realms a character may be transferred to. The outer wire is verified (3 uint32 + flat count +
+    // vector), but each realm entry's 6 uint32 are an unlabeled reflected type whose meaning (which field is
+    // the address the client transfers TO) is not offline-provable - populating entries would mean guessing
+    // fields that steer a paid transfer. This realm has no configured VAS transfer network, so the honest,
+    // byte-correct answer is an empty target list; populating it is gated on a live-capture that proves the
+    // entry semantics.
+    WorldPackets::BattlePay::GetVasTransferTargetRealmListResult result;
+    result.Field1 = packet.Field1;   // echo the request token for correlation
+    SendPacket(result.Write());
+}
