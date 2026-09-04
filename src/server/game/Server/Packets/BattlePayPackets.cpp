@@ -442,12 +442,12 @@ WorldPacket const* GetVasTransferTargetRealmListResult::Write()
 
     for (VasTargetRealmInfo const& r : Realms)
     {
+        _worldPacket << uint32(r.WowRealmAddress);
         _worldPacket << uint32(r.RealmId);
-        _worldPacket << uint32(r.VirtualRealmAddress);
-        _worldPacket << uint32(r.Field3);
-        _worldPacket << uint32(r.Field4);
-        _worldPacket << uint32(r.Field5);
-        _worldPacket << uint32(r.Field6);
+        _worldPacket << uint32(r.Flags);
+        _worldPacket << uint32(r.PopulationState);
+        _worldPacket << uint32(r.CategoryId);
+        _worldPacket << uint32(r.ConfigId);
         _worldPacket.WriteBits(r.RealmName.length(), 9);
         _worldPacket.FlushBits();
         _worldPacket.append(r.RealmName.data(), r.RealmName.length());

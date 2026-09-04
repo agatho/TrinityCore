@@ -816,12 +816,14 @@ namespace WorldPackets
         // client has a selectable, named realm - live-test-pending on which field it transfers TO.
         struct VasTargetRealmInfo
         {
-            uint32 RealmId = 0;                        // inferred
-            uint32 VirtualRealmAddress = 0;            // inferred: the field the client targets the transfer to
-            uint32 Field3 = 0;
-            uint32 Field4 = 0;
-            uint32 Field5 = 0;
-            uint32 Field6 = 0;
+            // Field order mirrors the bnet JSON::RealmList::RealmEntry the client already consumes at login;
+            // wowRealmAddress (realm.Id.GetAddress()) is the value the client sends back to target the transfer.
+            uint32 WowRealmAddress = 0;                // field[0]: realm.Id.GetAddress() - the transfer target
+            uint32 RealmId = 0;                        // field[1]: cfgRealmsID
+            uint32 Flags = 0;                          // field[2]
+            uint32 PopulationState = 0;                // field[3]
+            uint32 CategoryId = 0;                     // field[4]: timezone/category
+            uint32 ConfigId = 0;                       // field[5]
             std::string RealmName;                     // 9-bit length prefix
         };
 

@@ -1597,14 +1597,46 @@ void WorldSession::HandleGetVasAccountCharacterList(WorldPackets::BattlePay::Get
 
 void WorldSession::HandleGetVasTransferTargetRealmList(WorldPackets::BattlePay::GetVasTransferTargetRealmList& packet)
 {
-    // The realms a character may be transferred to. The outer wire is verified (3 uint32 + flat count +
-    // vector), but each realm entry's 6 uint32 are an unlabeled reflected type whose meaning (which field is
-    // the address the client transfers TO) is not offline-provable - populating entries would mean guessing
-    // fields that steer a paid transfer. This realm has no configured VAS transfer network, so the honest,
-    // byte-correct answer is an empty target list; populating it is gated on a live-capture that proves the
-    // entry semantics.
+    // The realms a character may be transferred to: every other realm this bnetserver fronts (our setup runs
+    // three). Enumerated from the shared auth realmlist, excluding this realm and any that are offline. Each
+    // entry mirrors the bnet RealmEntry the client already consumes at login - wowRealmAddress (the value the
+    // client sends back to target the transfer) is realm.Id.GetAddress(); the remaining fields are populated
+    // best-effort from realm id/flags/population and are live-test-pending on the exact field order.
     WorldPackets::BattlePay::GetVasTransferTargetRealmListResult result;
     result.Field1 = packet.Field1;   // echo the request token for correlation
+
+    Battlenet::RealmHandle const currentRealm = sRealmList->GetCurrentRealmId();
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_REALMLIST);
+    if (PreparedQueryResult res = LoginDatabase.Query(stmt))
+    {
+        do
+        {
+            Field* fields = res->Fetch();
+            uint32 const realmId = fields[0].GetUInt32();
+            uint8 const flag = fields[8].GetUInt8();
+            uint8 const region = fields[13].GetUInt8();
+            uint8 const battlegroup = fields[14].GetUInt8();
+
+            if (realmId == currentRealm.Realm)          // not this realm
+                continue;
+            if (flag & Trinity::Legacy::REALM_FLAG_OFFLINE)   // only realms that are up can receive a transfer
+                continue;
+
+            Battlenet::RealmHandle const handle(region, battlegroup, realmId);
+
+            WorldPackets::BattlePay::VasTargetRealmInfo entry;
+            entry.WowRealmAddress = handle.GetAddress();
+            entry.RealmId = realmId;
+            entry.Flags = flag;
+            entry.PopulationState = uint32(fields[11].GetFloat());   // population column
+            entry.CategoryId = fields[9].GetUInt8();                 // timezone column
+            entry.RealmName = fields[1].GetString();
+            result.Realms.push_back(std::move(entry));
+        }
+        while (res->NextRow());
+    }
+
     SendPacket(result.Write());
 }
 
