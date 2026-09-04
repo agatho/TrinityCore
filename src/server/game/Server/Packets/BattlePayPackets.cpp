@@ -343,4 +343,40 @@ WorldPacket const* CharacterUpgradeAborted::Write()
 
     return &_worldPacket;
 }
+
+void CharacterUpgradeManualUnrevokeRequest::Read()
+{
+    _worldPacket >> CharacterGUID;
+}
+
+void GetVasAccountCharacterList::Read()
+{
+    _worldPacket >> Field1;
+    _worldPacket >> Field2;
+}
+
+void GetVasTransferTargetRealmList::Read()
+{
+    _worldPacket >> Field1;
+    _worldPacket >> Field2;
+}
+
+void VasGetQueueMinutes::Read()
+{
+    _worldPacket >> Field1;
+}
+
+void VasCheckTransferOk::Read()
+{
+    _worldPacket >> Field1;
+}
+
+WorldPacket const* BattlePayDistributionAssignVasResponse::Write()
+{
+    _worldPacket << uint32(Field1);
+    _worldPacket << uint32(Field2);
+    _worldPacket << uint32(Result);
+
+    return &_worldPacket;
+}
 }

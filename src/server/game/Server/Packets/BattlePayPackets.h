@@ -683,6 +683,93 @@ namespace WorldPackets
 
             ObjectGuid CharacterGUID;
         };
+
+        // ---- VAS transfer/service request layer (client -> server) -------------------------------------
+        //
+        // CMSG read layouts recovered from the client deserializers (c:/dumps/all_cmsg_layouts_68275.json,
+        // opcode NAMES build-stable). The two-uint32 request bodies carry a request context whose exact
+        // send-side field names are not offline-proven; they are read verbatim and named by position so the
+        // server can echo/validate them without inventing semantics.
+
+        // CMSG_CHARACTER_CHECK_UPGRADE (0x4000F5) - empty body; a poll for boost eligibility of this account.
+        class CharacterCheckUpgrade final : public ClientPacket
+        {
+        public:
+            explicit CharacterCheckUpgrade(WorldPacket&& packet) : ClientPacket(CMSG_CHARACTER_CHECK_UPGRADE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // CMSG_CHARACTER_UPGRADE_MANUAL_UNREVOKE_REQUEST (0x4000F3) - one character guid: undo a revoked boost.
+        class CharacterUpgradeManualUnrevokeRequest final : public ClientPacket
+        {
+        public:
+            explicit CharacterUpgradeManualUnrevokeRequest(WorldPacket&& packet) : ClientPacket(CMSG_CHARACTER_UPGRADE_MANUAL_UNREVOKE_REQUEST, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid CharacterGUID;
+        };
+
+        // CMSG_GET_VAS_ACCOUNT_CHARACTER_LIST (0x400120) - two uint32 request context.
+        class GetVasAccountCharacterList final : public ClientPacket
+        {
+        public:
+            explicit GetVasAccountCharacterList(WorldPacket&& packet) : ClientPacket(CMSG_GET_VAS_ACCOUNT_CHARACTER_LIST, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Field1 = 0;
+            uint32 Field2 = 0;
+        };
+
+        // CMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST (0x400121) - two uint32 request context.
+        class GetVasTransferTargetRealmList final : public ClientPacket
+        {
+        public:
+            explicit GetVasTransferTargetRealmList(WorldPacket&& packet) : ClientPacket(CMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Field1 = 0;
+            uint32 Field2 = 0;
+        };
+
+        // CMSG_VAS_GET_QUEUE_MINUTES (0x400138) - one uint32 (the VAS service/product context to estimate).
+        class VasGetQueueMinutes final : public ClientPacket
+        {
+        public:
+            explicit VasGetQueueMinutes(WorldPacket&& packet) : ClientPacket(CMSG_VAS_GET_QUEUE_MINUTES, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Field1 = 0;
+        };
+
+        // CMSG_VAS_CHECK_TRANSFER_OK (0x400139) - one uint32 (the VAS service/product context to validate).
+        class VasCheckTransferOk final : public ClientPacket
+        {
+        public:
+            explicit VasCheckTransferOk(WorldPacket&& packet) : ClientPacket(CMSG_VAS_CHECK_TRANSFER_OK, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Field1 = 0;
+        };
+
+        // SMSG_BATTLE_PAY_DISTRIBUTION_ASSIGN_VAS_RESPONSE (0x420316) - three uint32 (client parser
+        // sub_7FF7290B7D50 reads exactly {uint32, uint32, uint32}, no strings, no vector).
+        class BattlePayDistributionAssignVasResponse final : public ServerPacket
+        {
+        public:
+            explicit BattlePayDistributionAssignVasResponse() : ServerPacket(SMSG_BATTLE_PAY_DISTRIBUTION_ASSIGN_VAS_RESPONSE, 12) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Field1 = 0;
+            uint32 Field2 = 0;
+            uint32 Result = 0;
+        };
     }
 }
 
