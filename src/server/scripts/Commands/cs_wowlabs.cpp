@@ -42,10 +42,11 @@ public:
     {
         static ChatCommandTable wowlabsCommandTable =
         {
-            { "enter",  HandleWowLabsEnterCommand,  rbac::RBAC_PERM_COMMAND_GO, Console::No },
-            { "join",   HandleWowLabsJoinCommand,   rbac::RBAC_PERM_COMMAND_GO, Console::No },
-            { "leave",  HandleWowLabsLeaveCommand,  rbac::RBAC_PERM_COMMAND_GO, Console::No },
-            { "status", HandleWowLabsStatusCommand, rbac::RBAC_PERM_COMMAND_GO, Console::No },
+            { "enter",   HandleWowLabsEnterCommand,   rbac::RBAC_PERM_COMMAND_GO, Console::No },
+            { "join",    HandleWowLabsJoinCommand,    rbac::RBAC_PERM_COMMAND_GO, Console::No },
+            { "leave",   HandleWowLabsLeaveCommand,   rbac::RBAC_PERM_COMMAND_GO, Console::No },
+            { "status",  HandleWowLabsStatusCommand,  rbac::RBAC_PERM_COMMAND_GO, Console::No },
+            { "ability", HandleWowLabsAbilityCommand, rbac::RBAC_PERM_COMMAND_GO, Console::No },
         };
         static ChatCommandTable commandTable =
         {
@@ -117,7 +118,10 @@ public:
             return false;
 
         if (WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->FindByInstanceId(player->GetWowLabsInstanceId()))
+        {
+            sWowLabsMatchMgr->ClearMatchAbilities(player, match);   // strip picked-up abilities before leaving
             sWowLabsMatchMgr->RemoveMatch(match->Id);
+        }
 
         player->SetWowLabsInstanceId(0);
 
@@ -164,6 +168,44 @@ public:
             float const dist = player->GetDistance2d(cx, cy);
             handler->PSendSysMessage("  circle: centre ({:.0f}, {:.0f}) radius {:.0f}; you are {:.0f} away ({}).",
                 cx, cy, radius, dist, dist > radius ? "OUTSIDE - taking storm damage" : "inside");
+        }
+        return true;
+    }
+
+    // .wowlabs ability [id] - pick up an ability (a specific pool id, or a random one). Repeat the same id to
+    // watch it stack up a rank. Mirrors the retail loot-pickup / stack-to-upgrade mechanic.
+    static bool HandleWowLabsAbilityCommand(ChatHandler* handler, Optional<uint32> abilityId)
+    {
+        Player* player = handler->GetPlayer();
+        if (!player)
+            return false;
+
+        WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->FindByInstanceId(player->GetWowLabsInstanceId());
+        if (!match)
+        {
+            handler->PSendSysMessage("WoW Labs: not in a match - use .wowlabs enter first.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        if (abilityId)
+        {
+            uint8 const rank = sWowLabsMatchMgr->GrantAbility(player, match, *abilityId);
+            if (!rank)
+            {
+                handler->PSendSysMessage("WoW Labs: no ability with id {} in the pool.", *abilityId);
+                handler->SetSentErrorMessage(true);
+                return false;
+            }
+            WowLabsMatchMgr::AbilityDef const* def = sWowLabsMatchMgr->FindAbility(*abilityId);
+            handler->PSendSysMessage("WoW Labs: {} is now rank {}/{}.", def ? def->Name : "ability", rank, WowLabsMatchMgr::ABILITY_RANKS);
+        }
+        else
+        {
+            sWowLabsMatchMgr->GrantRandomAbility(player, match);
+            handler->PSendSysMessage("WoW Labs: picked up a random ability. Pool ids:");
+            for (WowLabsMatchMgr::AbilityDef const& a : sWowLabsMatchMgr->GetAbilityPool())
+                handler->PSendSysMessage("  {} = {} ({})", a.Id, a.Name, a.Offensive ? "offensive" : "utility");
         }
         return true;
     }

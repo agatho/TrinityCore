@@ -25,6 +25,7 @@
 #include <vector>
 
 class Map;
+class Player;
 
 // Plunderstorm / WoW Labs live-match registry (design: scratchpad plunderstorm_design.md, P3).
 //
@@ -60,6 +61,26 @@ public:
     {
         ObjectGuid BnetAccountGuid;
         std::string Name;
+    };
+
+    // A Plunderstorm ability: a spell per rarity rank (Common..Epic). The real pool lives in the encrypted event
+    // spell data; GetAbilityPool returns a config-driven default so the pickup/stack mechanic is real and
+    // testable. Offensive abilities go to the two offensive action slots, utility to the two utility slots.
+    static constexpr uint8 ABILITY_RANKS = 4;   // Common, Uncommon, Rare, Epic
+    struct AbilityDef
+    {
+        uint32 Id = 0;
+        std::string Name;
+        bool Offensive = true;
+        uint32 RankSpell[ABILITY_RANKS] = { };   // spell id granted at each rank (1-based rank -> index rank-1)
+    };
+
+    // One ability a player currently holds in a match.
+    struct HeldAbility
+    {
+        uint32 AbilityId = 0;
+        uint8 Rank = 1;         // 1..ABILITY_RANKS
+        uint8 ActionSlot = 0;   // action-bar button it occupies
     };
 
     // A hand-authored WoW Labs drop zone (the real set lives in encrypted WoW Labs DB2s - see class comment).
@@ -114,6 +135,9 @@ public:
         std::unordered_map<uint64 /*player counter*/, uint32> Xp;
         std::unordered_map<uint64 /*player counter*/, uint8>  Level;          // 0/1 == level 1
         std::unordered_map<uint64 /*player counter*/, uint64> BaseMaxHealth;  // captured for restore on match end
+
+        // Abilities each player currently holds (pickup/stack, P7).
+        std::unordered_map<uint64 /*player counter*/, std::vector<HeldAbility>> Abilities;
 
         bool HasMember(ObjectGuid bnet) const;
     };
@@ -172,8 +196,22 @@ public:
     void EndMatch(Map* map, Match* match, ObjectGuid winner);
 
     // A player killed another player. If both are in the same active match, credit the kill and award the
-    // per-kill Plunder bounty (the in-match half of the economy; loot/abilities are the encrypted-DB2 ceiling).
+    // per-kill Plunder bounty, XP, and (retail) an ability drop.
     void OnPlayerKill(Player* killer, Player* killed);
+
+    // --- Ability pickup / stack (P7) ---
+
+    std::vector<AbilityDef> const& GetAbilityPool() const;
+    AbilityDef const* FindAbility(uint32 abilityId) const;
+
+    // Give a player an ability. A new ability is placed on a free action slot of its type (or replaces the
+    // oldest one of that type when both are full); an ability already held is upgraded one rank (up to Epic).
+    // Returns the resulting rank, or 0 on failure. This is the pickup + stack-to-upgrade mechanic.
+    uint8 GrantAbility(Player* player, Match* match, uint32 abilityId);
+    void GrantRandomAbility(Player* player, Match* match);   // a "loot drop" from the pool
+
+    // Remove every ability a player picked up this match (abilities reset between matches).
+    void ClearMatchAbilities(Player* player, Match* match);
 
 private:
     WowLabsMatchMgr() = default;

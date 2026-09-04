@@ -414,6 +414,113 @@ void WowLabsMatchMgr::UpdateInstance(Map* map, uint32 diff)
     }
 }
 
+std::vector<WowLabsMatchMgr::AbilityDef> const& WowLabsMatchMgr::GetAbilityPool() const
+{
+    // Config-driven default pool. The real Plunderstorm abilities are bespoke event spells (distinct spell per
+    // rarity rank, with an event resource model) that don't exist in this client's spell store, so the default
+    // uses stock spells - the same spell across ranks - purely to make the pickup/stack mechanic real and
+    // testable. Point WowLabs.AbilityPool at real per-rank spell ids to get true fidelity.
+    static std::vector<AbilityDef> const pool =
+    {
+        { 1, "Fireball",  true,  { 133,  133,  133,  133  } },
+        { 2, "Frostbolt", true,  { 116,  116,  116,  116  } },
+        { 3, "Blink",     false, { 1953, 1953, 1953, 1953 } },
+        { 4, "Levitate",  false, { 1706, 1706, 1706, 1706 } },
+    };
+    return pool;
+}
+
+WowLabsMatchMgr::AbilityDef const* WowLabsMatchMgr::FindAbility(uint32 abilityId) const
+{
+    for (AbilityDef const& a : GetAbilityPool())
+        if (a.Id == abilityId)
+            return &a;
+    return nullptr;
+}
+
+uint8 WowLabsMatchMgr::GrantAbility(Player* player, Match* match, uint32 abilityId)
+{
+    if (!player || !match)
+        return 0;
+    AbilityDef const* def = FindAbility(abilityId);
+    if (!def)
+        return 0;
+
+    uint64 const key = player->GetGUID().GetCounter();
+    std::vector<HeldAbility>& held = match->Abilities[key];
+
+    // Already held -> stack up one rank (capped at Epic).
+    for (HeldAbility& h : held)
+    {
+        if (h.AbilityId != abilityId)
+            continue;
+        if (h.Rank >= ABILITY_RANKS)
+            return h.Rank;                                   // already maxed
+        player->RemoveSpell(def->RankSpell[h.Rank - 1]);
+        ++h.Rank;
+        uint32 const spell = def->RankSpell[h.Rank - 1];
+        player->LearnSpell(spell, false);
+        player->AddActionButton(h.ActionSlot, spell, ACTION_BUTTON_SPELL);
+        return h.Rank;
+    }
+
+    // New pickup -> place on a free slot of the ability's type (offensive 0/1, utility 2/3).
+    uint8 const base = def->Offensive ? 0 : 2;
+    bool used[2] = { false, false };
+    for (HeldAbility const& h : held)
+    {
+        if (h.ActionSlot == base) used[0] = true;
+        else if (h.ActionSlot == base + 1) used[1] = true;
+    }
+    uint8 slot = !used[0] ? base : (!used[1] ? uint8(base + 1) : uint8(255));
+
+    if (slot == 255)
+    {
+        // Both slots of this type full: drop the one in the base slot to make room.
+        for (auto it = held.begin(); it != held.end(); ++it)
+        {
+            if (it->ActionSlot != base)
+                continue;
+            if (AbilityDef const* old = FindAbility(it->AbilityId))
+                player->RemoveSpell(old->RankSpell[it->Rank - 1]);
+            held.erase(it);
+            break;
+        }
+        slot = base;
+    }
+
+    uint32 const spell = def->RankSpell[0];
+    player->LearnSpell(spell, false);
+    player->AddActionButton(slot, spell, ACTION_BUTTON_SPELL);
+    held.push_back({ abilityId, 1, slot });
+    return 1;
+}
+
+void WowLabsMatchMgr::GrantRandomAbility(Player* player, Match* match)
+{
+    std::vector<AbilityDef> const& pool = GetAbilityPool();
+    if (pool.empty())
+        return;
+    static std::mt19937 rng{ std::random_device{}() };
+    GrantAbility(player, match, pool[rng() % pool.size()].Id);
+}
+
+void WowLabsMatchMgr::ClearMatchAbilities(Player* player, Match* match)
+{
+    if (!player || !match)
+        return;
+    auto it = match->Abilities.find(player->GetGUID().GetCounter());
+    if (it == match->Abilities.end())
+        return;
+    for (HeldAbility const& h : it->second)
+    {
+        if (AbilityDef const* def = FindAbility(h.AbilityId))
+            player->RemoveSpell(def->RankSpell[h.Rank - 1]);
+        player->RemoveActionButton(h.ActionSlot);
+    }
+    match->Abilities.erase(it);
+}
+
 void WowLabsMatchMgr::OnPlayerKill(Player* killer, Player* killed)
 {
     if (!killer || !killed || killer == killed)
@@ -445,6 +552,10 @@ void WowLabsMatchMgr::OnPlayerKill(Player* killer, Player* killed)
         level = newLevel;
         ApplyMatchLevelHealth(killer, match, level);
     }
+
+    // Retail: a kill drops an ability (guaranteed on the first kill / from elites). Auto-pick it onto the killer.
+    if (sConfigMgr->GetBoolDefault("WowLabs.AbilityDropOnKill", true))
+        GrantRandomAbility(killer, match);
 
     TC_LOG_DEBUG("network", "WowLabs: match {} - {} killed {} (+{} Plunder banked, level {}).",
         match->Id, killer->GetName(), killed->GetName(), bounty, level);
@@ -492,6 +603,9 @@ void WowLabsMatchMgr::EndMatch(Map* map, Match* match, ObjectGuid winner)
             player->SetMaxHealth(baseItr->second);
             player->SetHealth(std::min<uint64>(player->GetHealth(), baseItr->second));
         }
+
+        // Abilities reset between matches - strip everything picked up this match.
+        ClearMatchAbilities(player, match);
 
         auto itr = placement.find(key);
         uint32 const place = itr != placement.end() ? itr->second : std::max(total, 1u);   // stragglers = last
