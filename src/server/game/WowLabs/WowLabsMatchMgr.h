@@ -85,6 +85,17 @@ public:
         uint8 ActionSlot = 0;   // action-bar button it occupies
     };
 
+    // Captain's Orders - the per-match world quest (wiki/Wowhead). One is assigned on landing, tracked live, and
+    // pays WorldQuestPlunder on completion; the first Captain's Order completed per day also pays the daily.
+    enum ObjectiveType : uint8 { OBJ_KILL = 0, OBJ_KILL_ELITE = 1, OBJ_PLUNDER = 2, OBJ_SPELL = 3, OBJ_CONSUMABLE = 4, OBJ_CHEST = 5 };
+    struct MatchObjective
+    {
+        uint8 Type = OBJ_KILL;
+        uint32 Required = 0;
+        uint32 Progress = 0;
+        bool Complete = false;
+    };
+
     // A hand-authored WoW Labs drop zone (the real set lives in encrypted WoW Labs DB2s - see class comment).
     struct DropZone
     {
@@ -140,6 +151,9 @@ public:
 
         // Abilities each player currently holds (pickup/stack, P7).
         std::unordered_map<uint64 /*player counter*/, std::vector<HeldAbility>> Abilities;
+
+        // Each player's assigned Captain's Order for this match.
+        std::unordered_map<uint64 /*player counter*/, MatchObjective> Objectives;
 
         bool HasMember(ObjectGuid bnet) const;
     };
@@ -222,6 +236,15 @@ public:
 
     // Remove every ability a player picked up this match (abilities reset between matches).
     void ClearMatchAbilities(Player* player, Match* match);
+
+    // --- Captain's Orders (per-match world quest) ---
+
+    // Assign a random Captain's Order to a player entering the match and tell them the objective.
+    void AssignObjective(Player* player, Match* match);
+    // Advance a player's objective if it matches the event type; completes + rewards on reaching the target.
+    void AdvanceObjective(Player* player, Match* match, uint8 type, uint32 amount = 1);
+    // A player opened a chest (from GameObject::Use) - advances the "Coffer Collector" order. No-op off a match.
+    void OnChestOpened(Player* player);
 
 private:
     WowLabsMatchMgr() = default;

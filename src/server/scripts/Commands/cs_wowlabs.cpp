@@ -161,6 +161,9 @@ public:
             match->Id, match->InstanceId, phase, match->ActiveElapsedMs / 1000);
         handler->PSendSysMessage("  you: level {}, {} kills, {} Plunder banked (paid at match end).",
             level ? level : 1, kills, plunder);
+        if (auto oit = match->Objectives.find(key); oit != match->Objectives.end())
+            handler->PSendSysMessage("  captain's order: {} / {}{}", oit->second.Progress, oit->second.Required,
+                oit->second.Complete ? " (complete)" : "");
 
         float cx, cy, radius;
         if (sWowLabsMatchMgr->ComputeCircle(match, cx, cy, radius))

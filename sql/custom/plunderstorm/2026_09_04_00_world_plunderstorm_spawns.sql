@@ -1,49 +1,45 @@
 -- ============================================================================
 -- Plunderstorm enemy + loot spawn layer (feature/plunderstorm)
--- Real creature entry ids + names recovered from warcraft.wiki.gg NPC infoboxes;
--- spawn positions are the 31 real AreaPOI landmarks on map 2695 (Void Zone:
+-- Real Plunderstorm elite creature entry ids + names (from warcraft.wiki.gg NPC
+-- infoboxes) spawned at the 31 real AreaPOI landmarks on map 2695 (Void Zone:
 -- Arathi Highlands). One elite + one golden chest per POI.
 --
--- CAVEATS (documented, not verified against a live world DB here):
---  * CreatureDisplayID / gameobject displayId are VALID but placeholder models -
---    swap in each creature's true CreatureDisplayInfoID for exact appearance.
---  * creature levels come from ContentTuning in modern TC; left default here.
---  * loot is left empty (LootID 0) - attach a Plunder/ability loot template later.
---  * guids use a high private range (8_000_000+) to avoid collisions; adjust if
---    that range is in use on your world DB.
+-- The creature_template / _model / _difficulty rows below use INSERT IGNORE on
+-- purpose: if your imported TDB already carries these real creatures (it may -
+-- the TC team imports them from retail/sniffs), IGNORE keeps the TDB's real data
+-- (correct display, stats, loot) and only the SPAWNS are added. The template rows
+-- are a fallback for a DB that lacks them, with placeholder-but-valid display ids.
+--
+-- Not verified against a live world DB here (no DB access): review before import.
 -- Run against the WORLD database.
 -- ============================================================================
 
 SET @MAP := 2695;
 
--- Elite creature templates -------------------------------------------------
-DELETE FROM `creature_template` WHERE `entry` IN (429576,428679,428689,434437,438705);
-INSERT INTO `creature_template` (`entry`,`name`,`faction`,`npcflag`,`speed_walk`,`speed_run`,`scale`,`Classification`,`unit_class`,`type`,`RegenHealth`,`AIName`,`MovementType`) VALUES
+-- Fallback elite templates (skipped if the TDB already has them) ------------
+INSERT IGNORE INTO `creature_template` (`entry`,`name`,`faction`,`npcflag`,`speed_walk`,`speed_run`,`scale`,`Classification`,`unit_class`,`type`,`RegenHealth`,`AIName`,`MovementType`) VALUES
 (429576,'Horde Centurion',14,0,1,1.14286,1,1,1,7,1,'',0),
 (428679,'Arathi Lord',14,0,1,1.14286,1,1,1,7,1,'',0),
 (428689,'Boulderfist Warlock',14,0,1,1.14286,1,1,1,7,1,'',0),
 (434437,'Forsaken Abomination',14,0,1,1.14286,1,1,1,7,1,'',0),
 (438705,'Pieces of Hate',14,0,1,1.14286,1,2,1,7,1,'',0);
 
-DELETE FROM `creature_template_model` WHERE `CreatureID` IN (429576,428679,428689,434437,438705);
-INSERT INTO `creature_template_model` (`CreatureID`,`Idx`,`CreatureDisplayID`,`DisplayScale`,`Probability`,`VerifiedBuild`) VALUES
+INSERT IGNORE INTO `creature_template_model` (`CreatureID`,`Idx`,`CreatureDisplayID`,`DisplayScale`,`Probability`,`VerifiedBuild`) VALUES
 (429576,0,15507,1,1,0),
 (428679,0,15692,1,1,0),
 (428689,0,15836,1,1,0),
 (434437,0,15844,1,1,0),
 (438705,0,15823,1,1,0);
 
-DELETE FROM `creature_template_difficulty` WHERE `Entry` IN (429576,428679,428689,434437,438705);
-INSERT INTO `creature_template_difficulty` (`Entry`,`DifficultyID`,`HealthScalingExpansion`,`HealthModifier`,`ManaModifier`,`ArmorModifier`,`DamageModifier`,`LootID`,`GoldMin`,`GoldMax`) VALUES
+INSERT IGNORE INTO `creature_template_difficulty` (`Entry`,`DifficultyID`,`HealthScalingExpansion`,`HealthModifier`,`ManaModifier`,`ArmorModifier`,`DamageModifier`,`LootID`,`GoldMin`,`GoldMax`) VALUES
 (429576,0,-1,10,1,1,1.5,0,0,0),
 (428679,0,-1,10,1,1,1.5,0,0,0),
 (428689,0,-1,10,1,1,1.5,0,0,0),
 (434437,0,-1,10,1,1,1.5,0,0,0),
 (438705,0,-1,10,1,1,1.5,0,0,0);
 
--- Golden chest -------------------------------------------------------------
-DELETE FROM `gameobject_template` WHERE `entry`=6000001;
-INSERT INTO `gameobject_template` (`entry`,`type`,`displayId`,`name`,`size`,`Data0`,`Data1`) VALUES (6000001,3,259,'Golden Chest',1,0,0);
+-- Golden chest (fallback template) -----------------------------------------
+INSERT IGNORE INTO `gameobject_template` (`entry`,`type`,`displayId`,`name`,`size`,`Data0`,`Data1`) VALUES (6000001,3,259,'Golden Chest',1,0,0);
 
 -- Spawns: one elite + one golden chest at each of the 31 real POIs ----------
 DELETE FROM `creature` WHERE `map`=@MAP AND `guid` BETWEEN 8000000 AND 8000100;

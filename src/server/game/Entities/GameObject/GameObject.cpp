@@ -56,6 +56,7 @@
 #include "Util.h"
 #include "Vignette.h"
 #include "World.h"
+#include "WowLabsMatchMgr.h"
 #include <G3D/Box.h>
 #include <G3D/CoordinateFrame.h>
 #include <G3D/Quat.h>
@@ -2672,6 +2673,8 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
             Player* player = user->ToPlayer();
             if (!player)
                 return;
+
+            sWowLabsMatchMgr->OnChestOpened(player);        // Plunderstorm "Coffer Collector" objective (no-op off-map)
 
             GameObjectTemplate const* info = GetGOInfo();
             if (!m_loot && info->GetLootId())

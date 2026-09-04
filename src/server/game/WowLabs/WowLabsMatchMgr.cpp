@@ -16,8 +16,10 @@
  */
 
 #include "WowLabsMatchMgr.h"
+#include "Chat.h"
 #include "Config.h"
 #include "Creature.h"
+#include "GameTime.h"
 #include "LobbyMatchmakerPackets.h"
 #include "Log.h"
 #include "Map.h"
@@ -27,6 +29,7 @@
 #include "World.h"
 #include <algorithm>
 #include <random>
+#include <unordered_set>
 
 // Cadence of the out-of-ring storm damage tick - retail ticks every 3 seconds.
 static constexpr uint32 STORM_DAMAGE_INTERVAL_MS = 3000;
@@ -558,6 +561,9 @@ uint8 WowLabsMatchMgr::GrantAbility(Player* player, Match* match, uint32 ability
     player->LearnSpell(spell, false);
     player->AddActionButton(slot, spell, ACTION_BUTTON_SPELL);
     held.push_back({ abilityId, 1, slot });
+
+    // Captain's Orders: collecting a new spell / consumable.
+    AdvanceObjective(player, match, def->Kind == KIND_CONSUMABLE ? OBJ_CONSUMABLE : OBJ_SPELL, 1);
     return 1;
 }
 
@@ -593,6 +599,94 @@ void WowLabsMatchMgr::OnPlayerEnterMatch(Player* player, Match* match)
     uint64 const key = player->GetGUID().GetCounter();
     uint8 const level = match->Level.count(key) ? match->Level[key] : uint8(1);
     ApplyMatchLevelHealth(player, match, level ? level : uint8(1));
+    AssignObjective(player, match);   // Captain's Orders, on landing
+}
+
+// The Captain's Orders pool (warcraft.wiki.gg): {objective type, required count, display text}.
+namespace
+{
+    struct CaptainsOrder { uint8 Type; uint32 Required; char const* Name; };
+    CaptainsOrder const CAPTAINS_ORDERS[] =
+    {
+        { WowLabsMatchMgr::OBJ_CHEST,      2,  "Coffer Collector (open two chests)" },
+        { WowLabsMatchMgr::OBJ_PLUNDER,    30, "Flood and Plunder (collect 30 Plunder)" },
+        { WowLabsMatchMgr::OBJ_KILL,       10, "Kill Haul (kill ten enemies)" },
+        { WowLabsMatchMgr::OBJ_KILL_ELITE, 2,  "No Prey, No Pay (kill two elite enemies)" },
+        { WowLabsMatchMgr::OBJ_SPELL,      3,  "Plunderstudy (collect three spells)" },
+        { WowLabsMatchMgr::OBJ_CONSUMABLE, 1,  "X Marks the Spot (collect one consumable)" },
+    };
+
+    // "Daily Doubloons": Battle.net accounts that have claimed the daily this server-day (resets on restart).
+    std::unordered_set<uint64> g_dailyClaimed;
+    uint32 g_dailyDay = 0;
+}
+
+void WowLabsMatchMgr::AssignObjective(Player* player, Match* match)
+{
+    if (!player || !match)
+        return;
+    uint64 const key = player->GetGUID().GetCounter();
+    if (match->Objectives.count(key))
+        return;   // already has one this match
+
+    static std::mt19937 rng{ std::random_device{}() };
+    CaptainsOrder const& o = CAPTAINS_ORDERS[rng() % (sizeof(CAPTAINS_ORDERS) / sizeof(CAPTAINS_ORDERS[0]))];
+    MatchObjective& mo = match->Objectives[key];
+    mo.Type = o.Type;
+    mo.Required = o.Required;
+    mo.Progress = 0;
+    mo.Complete = false;
+
+    ChatHandler(player->GetSession()).PSendSysMessage("Captain's Orders: {}", o.Name);
+}
+
+void WowLabsMatchMgr::AdvanceObjective(Player* player, Match* match, uint8 type, uint32 amount)
+{
+    if (!player || !match)
+        return;
+    auto it = match->Objectives.find(player->GetGUID().GetCounter());
+    if (it == match->Objectives.end() || it->second.Complete || it->second.Type != type)
+        return;
+
+    MatchObjective& mo = it->second;
+    mo.Progress = std::min(mo.Required, mo.Progress + amount);
+    ChatHandler handler(player->GetSession());
+    if (mo.Progress < mo.Required)
+    {
+        handler.PSendSysMessage("Captain's Orders: {} / {}", mo.Progress, mo.Required);
+        return;
+    }
+
+    mo.Complete = true;
+    uint64 const key = player->GetGUID().GetCounter();
+    uint32 const reward = sConfigMgr->GetIntDefault("WowLabs.WorldQuestPlunder", 250);
+    match->PlunderEarned[key] += reward;
+    handler.PSendSysMessage("Captain's Order complete! +{} Plunder.", reward);
+
+    // Daily Doubloons: the first Captain's Order completed per day pays the daily bonus too.
+    uint32 const today = uint32(GameTime::GetGameTime() / DAY);
+    if (today != g_dailyDay)
+    {
+        g_dailyDay = today;
+        g_dailyClaimed.clear();
+    }
+    uint64 const bnet = player->GetSession()->GetBattlenetAccountGUID().GetCounter();
+    if (g_dailyClaimed.insert(bnet).second)
+    {
+        uint32 const daily = sConfigMgr->GetIntDefault("WowLabs.DailyPlunder", 800);
+        match->PlunderEarned[key] += daily;
+        handler.PSendSysMessage("Daily Doubloons: +{} Plunder (first order of the day).", daily);
+    }
+}
+
+void WowLabsMatchMgr::OnChestOpened(Player* player)
+{
+    if (!player)
+        return;
+    Match* match = FindByInstanceId(player->GetWowLabsInstanceId());
+    if (!match || match->MatchPhase != Phase::Active)
+        return;
+    AdvanceObjective(player, match, OBJ_CHEST, 1);
 }
 
 void WowLabsMatchMgr::OnCreatureKill(Player* killer, Creature* killed)
@@ -611,7 +705,14 @@ void WowLabsMatchMgr::OnCreatureKill(Player* killer, Creature* killed)
     bool const elite = killed->IsElite();
 
     // Plunder banked at match end; elites are worth much more (retail).
-    match->PlunderEarned[key] += sConfigMgr->GetIntDefault(elite ? "WowLabs.PlunderPerElite" : "WowLabs.PlunderPerMob", elite ? 50 : 10);
+    uint32 const mobPlunder = sConfigMgr->GetIntDefault(elite ? "WowLabs.PlunderPerElite" : "WowLabs.PlunderPerMob", elite ? 50 : 10);
+    match->PlunderEarned[key] += mobPlunder;
+
+    // Captain's Orders progress: any kill, elite kill, and Plunder collected.
+    AdvanceObjective(killer, match, OBJ_KILL, 1);
+    if (elite)
+        AdvanceObjective(killer, match, OBJ_KILL_ELITE, 1);
+    AdvanceObjective(killer, match, OBJ_PLUNDER, mobPlunder);
 
     // XP -> level, same curve as player kills.
     uint32 const xpPerLevel = std::max(1, sConfigMgr->GetIntDefault("WowLabs.XpPerLevel", 200));
@@ -649,6 +750,10 @@ void WowLabsMatchMgr::OnPlayerKill(Player* killer, Player* killed)
     uint32 const bounty = sConfigMgr->GetIntDefault("WowLabs.PlunderPerKill", 100);
     match->Kills[key] += 1;
     match->PlunderEarned[key] += bounty;
+
+    // Captain's Orders: a player kill counts as a kill and as Plunder collected.
+    AdvanceObjective(killer, match, OBJ_KILL, 1);
+    AdvanceObjective(killer, match, OBJ_PLUNDER, bounty);
 
     // XP -> level (1..10). The retail XP curve is server-internal; use a flat per-level threshold (config).
     uint32 const xpPerLevel = std::max(1, sConfigMgr->GetIntDefault("WowLabs.XpPerLevel", 200));
