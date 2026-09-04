@@ -586,6 +586,20 @@ namespace WorldPackets
 
             std::vector<WowLabsAreaOption> Areas;
         };
+
+        // 0x450327 - broadcast to the players of a match when its phase changes. The wire is a single uint32
+        // state (clean-exe: the match-state consumer branches on one dword; state == 3 is the pre-match / area-
+        // selection phase, GetConfirmedWoWLabsArea gates on it). The other phase values are not decidable from
+        // the image and are marked provisional where they are used server-side.
+        class WowLabsNotifyPlayersMatchStateChanged final : public ServerPacket
+        {
+        public:
+            explicit WowLabsNotifyPlayersMatchStateChanged() : ServerPacket(SMSG_WOW_LABS_NOTIFY_PLAYERS_MATCH_STATE_CHANGED, 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 State = 0;
+        };
     }
 }
 

@@ -36,6 +36,7 @@
 #include "WorldSession.h"
 #include "LobbyMatchmakerPackets.h"
 #include "Log.h"
+#include "WowLabsMatchMgr.h"
 
 // 0x3D02FA -> 0x450329 mit AreaID 0.
 // 0 ist die Marke "nichts ausgewaehlt", nicht ein Platzhalter: GetConfirmedWoWLabsArea
@@ -43,14 +44,19 @@
 // echten Zustand behandelt. Es MUESSEN genau vier Byte sein - der Reader 0x60D4B0 nimmt den Rest
 // des Pakets als Zeiger und liest daraus vier Byte ohne Laengenpruefung; bei leerer Nutzlast
 // laese der Konsument hinter den Paketpuffer.
+// The area opcodes are now backed by WowLabsMatchMgr when the caller is in a reserved match (found by the
+// Battle.net account, so this works both for a pre-login characterless session and for an in-world player). A
+// caller with no match still gets the honest empty / not-selected / failed answers described below.
 void WorldSession::HandleQuerySelectedWowLabsArea(WorldPackets::WowLabs::QuerySelectedWowLabsArea& querySelectedWowLabsArea)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_QUERY_SELECTED_WOW_LABS_AREA from {} player {} - no WoW Labs system in this tree",
-        GetPlayerInfo(), querySelectedWowLabsArea.PlayerGUID.ToString());
+    WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->FindByMember(GetBattlenetAccountGUID());
 
     WorldPackets::WowLabs::QuerySelectedWowLabsAreaResponse response;
-    response.WowLabsAreaID = 0;
+    response.WowLabsAreaID = int32(sWowLabsMatchMgr->GetSelectedArea(match, GetBattlenetAccountGUID()));   // 0 == nothing selected
     SendPacket(response.Write());
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_QUERY_SELECTED_WOW_LABS_AREA from {} player {} -> area {}",
+        GetPlayerInfo(), querySelectedWowLabsArea.PlayerGUID.ToString(), response.WowLabsAreaID);
 }
 
 // 0x3D02FB -> 0x45032A mit Count 0.
@@ -59,10 +65,16 @@ void WorldSession::HandleQuerySelectedWowLabsArea(WorldPackets::WowLabs::QuerySe
 // `if TableIsEmpty(areas) then return; end` sauber ab. Ein klarer Leerzustand, nichts haengt.
 void WorldSession::HandleQueryWowLabsAreaInfo(WorldPackets::WowLabs::QueryWowLabsAreaInfo& queryWowLabsAreaInfo)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_QUERY_WOW_LABS_AREA_INFO from {} player {} - no WoW Labs system in this tree",
-        GetPlayerInfo(), queryWowLabsAreaInfo.PlayerGUID.ToString());
+    WorldPackets::WowLabs::QueryWowLabsAreaInfoResponse response;
 
-    SendPacket(WorldPackets::WowLabs::QueryWowLabsAreaInfoResponse().Write());
+    if (WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->FindByMember(GetBattlenetAccountGUID()))
+        for (WowLabsMatchMgr::DropZone const& zone : sWowLabsMatchMgr->GetDropZones(match))
+            response.Areas.push_back({ int32(zone.Id), zone.Type, zone.X, zone.Y, zone.Z });
+
+    SendPacket(response.Write());
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_QUERY_WOW_LABS_AREA_INFO from {} player {} -> {} areas",
+        GetPlayerInfo(), queryWowLabsAreaInfo.PlayerGUID.ToString(), response.Areas.size());
 }
 
 // 0x3D02FC -> 0x450328 mit Success = false.
@@ -91,10 +103,23 @@ void WorldSession::HandleQueryWowLabsAreaInfo(WorldPackets::WowLabs::QueryWowLab
 // scharf. Das ist Verhalten des Blizzard-UI; keine Serverantwort kann es aufheben.
 void WorldSession::HandleSelectWowLabsArea(WorldPackets::WowLabs::SelectWowLabsArea& selectWowLabsArea)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_SELECT_WOW_LABS_AREA from {} player {} area {} - no WoW Labs system in this tree",
-        GetPlayerInfo(), selectWowLabsArea.PlayerGUID.ToString(), selectWowLabsArea.WowLabsAreaID);
+    WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->FindByMember(GetBattlenetAccountGUID());
+    bool const ok = sWowLabsMatchMgr->SelectArea(match, GetBattlenetAccountGUID(), selectWowLabsArea.WowLabsAreaID);
 
+    // The success path is two packets (see LobbyMatchmakerPackets.h): the set-response with Success = true is a
+    // silent no-op on its own, so the confirmed id must follow in SMSG_WOW_LABS_AREA_SELECTED. On failure only
+    // the set-response goes out with Success = false - the client's single error channel (GameError 1186).
     WorldPackets::WowLabs::WowLabsSetWowLabsAreaIdResponse response;
-    response.Success = false;
+    response.Success = ok;
     SendPacket(response.Write());
+
+    if (ok)
+    {
+        WorldPackets::WowLabs::WowLabsAreaSelected selected;
+        selected.WowLabsAreaID = int32(selectWowLabsArea.WowLabsAreaID);
+        SendPacket(selected.Write());
+    }
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_SELECT_WOW_LABS_AREA from {} player {} area {} -> {}",
+        GetPlayerInfo(), selectWowLabsArea.PlayerGUID.ToString(), selectWowLabsArea.WowLabsAreaID, ok ? "confirmed" : "rejected");
 }

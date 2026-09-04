@@ -145,6 +145,7 @@
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
 #include "WorldStatePackets.h"
+#include "WowLabsMatchMgr.h"
 #include <boost/dynamic_bitset.hpp>
 #include <G3D/g3dmath.h>
 #include <sstream>
@@ -25128,6 +25129,13 @@ void Player::SendInitialPacketsAfterAddToMap()
     }
 
     GetSceneMgr().TriggerDelayedScenes();
+
+    // Plunderstorm / WoW Labs: a player who has just finished entering a match instance enters the pre-match /
+    // area-selection phase. BeginPrematch sets the phase (idempotent) and sends SMSG..MATCH_STATE_CHANGED to
+    // everyone in the instance, so a player arriving into an already-running pre-match is told the state too.
+    if (m_wowLabsInstanceId)
+        if (WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->FindByInstanceId(m_wowLabsInstanceId))
+            sWowLabsMatchMgr->BeginPrematch(match);
 }
 
 void Player::SendUpdateToOutOfRangeGroupMembers()

@@ -49,10 +49,25 @@ public:
 
     static constexpr uint32 MAP_ID = 2695;   // MAP_WOWLABS
 
+    // Match phase. Only Prematch has a verified wire value (client state == 3); the others carry provisional
+    // wire values (WireState below) - the client only receives them under GameRule::CharacterlessLogin, which
+    // a normal realm never sets, so exact non-prematch values are not offline-decidable.
+    enum class Phase : uint8 { Reserved = 0, Prematch = 1, Active = 2, Ended = 3 };
+
     struct MatchMember
     {
         ObjectGuid BnetAccountGuid;
         std::string Name;
+    };
+
+    // A hand-authored WoW Labs drop zone (the real set lives in encrypted WoW Labs DB2s - see class comment).
+    struct DropZone
+    {
+        uint32 Id = 0;
+        int32 Type = 0;               // Enum.WoWLabsAreaType (values not offline-decidable)
+        float X = 0.0f;
+        float Y = 0.0f;
+        float Z = 0.0f;
     };
 
     struct Match
@@ -61,7 +76,9 @@ public:
         uint32 InstanceId = 0;        // this match's instance of MAP_WOWLABS
         uint32 Token = 0;             // one-time fast-login token echoed by the client
         uint8 GameMode = 0;           // PartyPlaylistEntry (Solo/Duo/Trio/Training)
+        Phase MatchPhase = Phase::Reserved;
         std::vector<MatchMember> Members;
+        std::unordered_map<uint64 /*bnet counter*/, uint32 /*areaId*/> SelectedArea;   // each member's drop pick
 
         bool HasMember(ObjectGuid bnet) const;
     };
@@ -78,6 +95,21 @@ public:
 
     // This realm's virtual realm address - the fast-login destination realm for a single-realm handoff.
     uint32 OwnRealmAddress() const;
+
+    // --- Prematch / area selection (P4) ---
+
+    // Move a match into the pre-match / area-selection phase and tell every player in its instance.
+    void BeginPrematch(Match* match);
+
+    // The drop zones offered this match (currently one hand-authored set for MAP_WOWLABS).
+    std::vector<DropZone> const& GetDropZones(Match const* match) const;
+
+    // Record a member's drop-zone pick. Returns false if the area id is not one of the offered zones.
+    bool SelectArea(Match* match, ObjectGuid bnet, uint32 areaId);
+    uint32 GetSelectedArea(Match const* match, ObjectGuid bnet) const;   // 0 == nothing selected
+
+    // The wire value the client expects for a phase (Prematch -> 3 verified; others provisional).
+    static uint32 WireState(Phase phase);
 
 private:
     WowLabsMatchMgr() = default;

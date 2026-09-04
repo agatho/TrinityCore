@@ -274,4 +274,12 @@ WorldPacket const* QueryWowLabsAreaInfoResponse::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* WowLabsNotifyPlayersMatchStateChanged::Write()
+{
+    // A single uint32 phase (clean-exe: the consumer branches on one dword; 3 == pre-match).
+    _worldPacket << uint32(State);
+
+    return &_worldPacket;
+}
 }
