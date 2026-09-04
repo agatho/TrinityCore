@@ -283,6 +283,19 @@ WorldPacket const* WowLabsNotifyPlayersMatchStateChanged::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* WowLabsSetPredictionCircle::Write()
+{
+    // RE-recovered wire (LobbyMatchmakerPackets.h): PackedGuid + two Vector3 centres + two radii, in the member
+    // order of struct WowLabsDataBR::CircleData (guid, centreCurrent, centreNext, radiusCurrent, radiusNext).
+    _worldPacket << CircleGuid;
+    _worldPacket << CenterCurrentX << CenterCurrentY << CenterCurrentZ;
+    _worldPacket << CenterNextX << CenterNextY << CenterNextZ;
+    _worldPacket << RadiusCurrent;
+    _worldPacket << RadiusNext;
+
+    return &_worldPacket;
+}
+
 WorldPacket const* WowLabsNotifyPlayersMatchEnd::Write()
 {
     // Field order follows the Lua MatchDetails struct (matchType, matchEnded, detailsList). Widths/order are a

@@ -306,6 +306,37 @@ void WowLabsMatchMgr::UpdateInstance(Map* map, uint32 diff)
 
     match->ActiveElapsedMs += diff;
 
+    // Storm circle: when the schedule advances to a new phase, push the new current+predicted ring to clients
+    // (SET_PREDICTION_CIRCLE). Wire recovered from the client (see the packet class); the client interpolates
+    // between the two rings locally, so one message per phase boundary is enough.
+    {
+        std::vector<CirclePhase> const& schedule = GetCircleSchedule();
+        uint32 t = match->ActiveElapsedMs;
+        int32 phaseIdx = int32(schedule.size()) - 1;
+        for (size_t i = 0; i < schedule.size(); ++i)
+        {
+            uint32 const span = schedule[i].HoldMs + schedule[i].ShrinkMs;
+            if (t < span) { phaseIdx = int32(i); break; }
+            t -= span;
+        }
+        if (phaseIdx != match->SentCirclePhase && phaseIdx >= 0)
+        {
+            match->SentCirclePhase = phaseIdx;
+            CirclePhase const& p = schedule[phaseIdx];
+
+            WorldPackets::WowLabs::WowLabsSetPredictionCircle packet;
+            packet.CircleGuid = ObjectGuid::Create<HighGuid::AreaTrigger>(MAP_ID, 0, match->InstanceId);
+            packet.CenterCurrentX = packet.CenterNextX = p.CenterX;
+            packet.CenterCurrentY = packet.CenterNextY = p.CenterY;
+            packet.RadiusCurrent = p.FromRadius;   // the ring now
+            packet.RadiusNext = p.ToRadius;        // where it is shrinking to
+            WorldPacket const* built = packet.Write();
+            for (MapReference const& ref : map->GetPlayers())
+                if (Player* player = ref.GetSource())
+                    player->SendDirectMessage(built);
+        }
+    }
+
     // Win condition: count the living, record death order, and end when a winner emerges. A multi-player match
     // ends the moment one player is left (last one standing); a match ends at zero alive too (e.g. a solo run
     // where the storm takes the lone player) - but a still-living solo player does NOT instantly "win".

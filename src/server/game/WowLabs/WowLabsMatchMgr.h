@@ -99,6 +99,7 @@ public:
         uint32 PrematchElapsedMs = 0;
         uint32 ActiveElapsedMs = 0;   // time since the match went Active - drives the circle schedule
         uint32 DamageAccumMs = 0;     // out-of-ring damage cadence accumulator
+        int32 SentCirclePhase = -1;   // last circle phase pushed to clients via SET_PREDICTION_CIRCLE
 
         // Win / placement state (P6).
         uint32 PeakPlayers = 0;                 // most alive players seen at once - the field size for placement

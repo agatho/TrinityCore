@@ -626,6 +626,25 @@ namespace WorldPackets
             bool MatchEnded = true;
             std::vector<MatchDetail> Details;
         };
+
+        // 0x45032C - the storm "prediction" circle. RE-recovered (not a guess): the framed message object is
+        // 48 bytes and equals struct WowLabsDataBR::CircleData; its front 16 bytes are an ObjectGuid (the client
+        // builder gates on the guid type bits, (guid.hi >> 58) < 0x3A), followed by two Vector3 centres and two
+        // radii - the current ring and the predicted (next) ring the client interpolates between locally. Wire:
+        // PackedGuid + 8 floats, in member order.
+        class WowLabsSetPredictionCircle final : public ServerPacket
+        {
+        public:
+            explicit WowLabsSetPredictionCircle() : ServerPacket(SMSG_WOW_LABS_SET_PREDICTION_CIRCLE, 8 + 32) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid CircleGuid;
+            float CenterCurrentX = 0.0f, CenterCurrentY = 0.0f, CenterCurrentZ = 0.0f;
+            float CenterNextX = 0.0f, CenterNextY = 0.0f, CenterNextZ = 0.0f;
+            float RadiusCurrent = 0.0f;
+            float RadiusNext = 0.0f;
+        };
     }
 }
 
