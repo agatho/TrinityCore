@@ -16,6 +16,7 @@
  */
 
 #include "WorldSession.h"
+#include "AccountMgr.h"
 #include "BattlePetMgr.h"
 #include "BattlePetPackets.h"
 #include "ObjectAccessor.h"
@@ -122,6 +123,17 @@ void WorldSession::HandleQueryBattlePetName(WorldPackets::BattlePet::QueryBattle
 void WorldSession::HandleBattlePetDeletePet(WorldPackets::BattlePet::BattlePetDeletePet& battlePetDeletePet)
 {
     GetBattlePetMgr()->RemovePet(battlePetDeletePet.PetGuid);
+}
+
+void WorldSession::HandleBattlePetDeletePetCheat(WorldPackets::BattlePet::BattlePetDeletePetCheat& battlePetDeletePetCheat)
+{
+    // Developer/GM cheat variant of CMSG_BATTLE_PET_DELETE_PET - the client only emits it in developer mode.
+    // Gate it on account security so a normal player cannot reach the cheat path; the effect is identical to
+    // the non-cheat handler (remove the pet from the journal).
+    if (AccountMgr::IsPlayerAccount(GetSecurity()))
+        return;
+
+    GetBattlePetMgr()->RemovePet(battlePetDeletePetCheat.PetGuid);
 }
 
 void WorldSession::HandleBattlePetSetFlags(WorldPackets::BattlePet::BattlePetSetFlags& battlePetSetFlags)
