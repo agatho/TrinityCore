@@ -25140,6 +25140,7 @@ void Player::SendInitialPacketsAfterAddToMap()
         if (WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->FindByInstanceId(m_wowLabsInstanceId))
         {
             SetPvpFlag(UNIT_BYTE2_FLAG_FFA_PVP);
+            sWowLabsMatchMgr->OnPlayerEnterMatch(this, match);   // normalize to the Plunderstorm health baseline
             sWowLabsMatchMgr->BeginPrematch(match);
         }
     }

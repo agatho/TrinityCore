@@ -34,24 +34,25 @@ static constexpr uint32 PLUNDER_CURRENCY = 2922;
 // Retail: players level from 1 to 10 during a match.
 static constexpr uint8 MAX_MATCH_LEVEL = 10;
 
-// Apply the max-health bonus for a player's current match level, capturing their base health once so it can be
-// restored when the match ends. Each level adds WowLabs.HealthPercentPerLevel of the base pool; the health
-// gained is added to current health so a level-up makes the player tankier mid-fight (retail behaviour).
+// Normalize a player's health to their Plunderstorm match level, capturing their real character health once so
+// it can be restored when the match ends. Retail values (Wowhead ability/level-up compendium): every pirate has
+// 100 base health at level 1 and gains a flat +16 per level (level 10 = 244), regardless of gear - the mode
+// equalizes everyone. Set to full on (re)normalization / level-up.
 static void ApplyMatchLevelHealth(Player* player, WowLabsMatchMgr::Match* match, uint8 level)
 {
     uint64 const key = player->GetGUID().GetCounter();
-    uint64& base = match->BaseMaxHealth[key];
-    if (!base)
-        base = player->GetMaxHealth();
+    uint64& realBase = match->BaseMaxHealth[key];
+    if (!realBase)
+        realBase = player->GetMaxHealth();   // the character's real health, restored in EndMatch
 
-    uint32 const pct = sConfigMgr->GetIntDefault("WowLabs.HealthPercentPerLevel", 20);
-    uint64 const newMax = base + base * uint64(level - 1) * pct / 100;
-    uint64 const oldMax = player->GetMaxHealth();
-    if (newMax == oldMax)
+    uint32 const base = sConfigMgr->GetIntDefault("WowLabs.BaseHealth", 100);
+    uint32 const perLevel = sConfigMgr->GetIntDefault("WowLabs.HealthPerLevel", 16);
+    uint64 const newMax = uint64(base) + uint64(perLevel) * (level > 0 ? level - 1u : 0u);
+    if (newMax == player->GetMaxHealth())
         return;
 
     player->SetMaxHealth(newMax);
-    player->SetHealth(std::min(newMax, player->GetHealth() + (newMax > oldMax ? newMax - oldMax : 0)));
+    player->SetHealth(newMax);
 }
 
 bool WowLabsMatchMgr::Match::HasMember(ObjectGuid bnet) const
@@ -561,6 +562,15 @@ void WowLabsMatchMgr::ClearMatchAbilities(Player* player, Match* match)
         player->RemoveActionButton(h.ActionSlot);
     }
     match->Abilities.erase(it);
+}
+
+void WowLabsMatchMgr::OnPlayerEnterMatch(Player* player, Match* match)
+{
+    if (!player || !match)
+        return;
+    uint64 const key = player->GetGUID().GetCounter();
+    uint8 const level = match->Level.count(key) ? match->Level[key] : uint8(1);
+    ApplyMatchLevelHealth(player, match, level ? level : uint8(1));
 }
 
 void WowLabsMatchMgr::OnPlayerKill(Player* killer, Player* killed)

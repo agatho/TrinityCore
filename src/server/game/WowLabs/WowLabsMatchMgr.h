@@ -195,6 +195,10 @@ public:
     // (MATCH_STATE_CHANGED -> Ended, and per-player MATCH_END when WowLabs.SendMatchEnd is enabled).
     void EndMatch(Map* map, Match* match, ObjectGuid winner);
 
+    // A player who has just entered a match instance: normalize their health to the Plunderstorm baseline for
+    // their current level (retail equalizes everyone to 100 + 16/level regardless of gear).
+    void OnPlayerEnterMatch(Player* player, Match* match);
+
     // A player killed another player. If both are in the same active match, credit the kill and award the
     // per-kill Plunder bounty, XP, and (retail) an ability drop.
     void OnPlayerKill(Player* killer, Player* killed);
