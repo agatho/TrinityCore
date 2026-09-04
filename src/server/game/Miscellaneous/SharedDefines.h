@@ -7053,6 +7053,8 @@ enum BattlegroundTypeId : uint32
     BATTLEGROUND_DOM_DG2        = 1039,     // Domination - Deepwind Gorge
     BATTLEGROUND_ED             = 1041,     // Empyrean Domain
     BATTLEGROUND_BLITZ          = 1101,     // Battleground Blitz (rated 8v8 solo queue)
+    BATTLEGROUND_SOLO_SHUFFLE   = 1065,     // Rated Solo Shuffle ("All Arenas" solo queue entry; map pool 1053-1064)
+    BATTLEGROUND_TRAINING_GROUNDS = 1145,   // Training Grounds (solo unrated PvP practice)
     BATTLEGROUND_RATED_BG       = 100,      // Rated Battleground (classic 10v10 premade)
 };
 

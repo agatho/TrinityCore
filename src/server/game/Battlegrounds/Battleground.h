@@ -257,7 +257,16 @@ enum class BattlegroundQueueIdType : uint8
     // QueueID 0x1F1000000019044D, which BattlegroundQueueTypeId::FromPacked decodes as
     // { BattlemasterListId = 1101, Type = 9, Rated = true, TeamSize = 0 }.
     // (C:\sniff\rated BG 12.0.7.pkt, the SMSG 366 ms after the join at tick 135643.)
-    RatedBattlegroundBlitz = 9
+    RatedBattlegroundBlitz = 9,
+    // Rated Solo Shuffle: 6 solo players (2 healers + 4 dps) shuffled into 6 rounds of 3v3. Like Blitz the
+    // join CMSG carries no queue id (just a Roles byte); the server assembles the lobby and runs it on a
+    // solo-only rated-arena map. Backing BattlemasterList = the solo-arena pool 1053-1064, with 1065
+    // ("All Arenas", solo) as the random-map queue entry (resolved via wago.tools - encrypted in client extract).
+    RatedSoloShuffle = 10,
+    // Training Grounds: a solo, unrated PvP practice instance (BattlemasterList 1145). The join CMSG carries a
+    // Roles byte + a TrainingGroundID selecting the practice map. No opponents - the queue pops the instant one
+    // player is queued and the match never auto-ends (the player leaves manually).
+    TrainingGrounds = 11
 };
 
 enum class BattlegroundPointCaptureStatus

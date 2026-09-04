@@ -213,6 +213,8 @@ namespace WorldPackets
         class BattlemasterJoin;
         class BattlemasterJoinArena;
         class BattlemasterJoinRatedBGBlitz;
+        class BattlemasterJoinRatedSoloShuffle;
+        class TrainingGroundsJoin;
         class BattlemasterJoinSkirmish;
         class BattlemasterJoinBrawl;
         class JoinRatedBattleground;
@@ -2932,6 +2934,8 @@ class TC_GAME_API WorldSession
         void HandleBattlefieldLeaveOpcode(WorldPackets::Battleground::BattlefieldLeave& battlefieldLeave);
         void HandleBattlemasterJoinArena(WorldPackets::Battleground::BattlemasterJoinArena& packet);
         void HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground::BattlemasterJoinRatedBGBlitz& packet);
+        void HandleBattlemasterJoinRatedSoloShuffle(WorldPackets::Battleground::BattlemasterJoinRatedSoloShuffle& packet);
+        void HandleTrainingGroundsJoin(WorldPackets::Battleground::TrainingGroundsJoin& packet);
         void HandleBattlemasterJoinSkirmish(WorldPackets::Battleground::BattlemasterJoinSkirmish& packet);
         void HandleBattlemasterJoinBrawl(WorldPackets::Battleground::BattlemasterJoinBrawl& packet);
         void HandleJoinRatedBattleground(WorldPackets::Battleground::JoinRatedBattleground& packet);

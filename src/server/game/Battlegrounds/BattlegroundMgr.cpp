@@ -17,6 +17,8 @@
 
 #include "BattlegroundMgr.h"
 #include "Arena.h"
+#include "BattlegroundSoloShuffle.h"
+#include "BattlegroundTrainingGrounds.h"
 #include "BattlegroundPackets.h"
 #include "Containers.h"
 #include "DB2Stores.h"
@@ -170,6 +172,12 @@ void BattlegroundMgr::Update(uint32 diff)
             BattlegroundQueueTypeId blitzQueueId = BGQueueTypeId(BATTLEGROUND_BLITZ, BattlegroundQueueIdType::RatedBattlegroundBlitz, true, 0);
             for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
                 GetBattlegroundQueue(blitzQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
+
+            // Rated Solo Shuffle uses the same solo-matchmaker (CheckSoloQueueMatch) and needs the same
+            // rating-independent periodic sweep for exactly the reasons above.
+            BattlegroundQueueTypeId soloShuffleQueueId = BGQueueTypeId(BATTLEGROUND_SOLO_SHUFFLE, BattlegroundQueueIdType::RatedSoloShuffle, true, 0);
+            for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
+                GetBattlegroundQueue(soloShuffleQueueId).BattlegroundQueueUpdate(diff, BattlegroundBracketId(bracket), 0);
 
             // Rated battlegrounds are matched by CheckPremadeMatch, which only runs when something
             // schedules an update. Sweep it on the same timer so a queue that could not pair two
@@ -501,7 +509,11 @@ Battleground* BattlegroundMgr::CreateNewBattleground(BattlegroundQueueTypeId que
     }
 
     Battleground* bg = nullptr;
-    if (bg_template->IsArena())
+    if (bgTypeId == BATTLEGROUND_SOLO_SHUFFLE)
+        bg = new BattlegroundSoloShuffle(bg_template);   // 6-round 3v3 shuffle controller
+    else if (bgTypeId == BATTLEGROUND_TRAINING_GROUNDS)
+        bg = new BattlegroundTrainingGrounds(bg_template);   // solo practice (never auto-ends)
+    else if (bg_template->IsArena())
         bg = new Arena(bg_template);
     else
         bg = new Battleground(bg_template);
@@ -846,6 +858,24 @@ bool BattlegroundMgr::IsValidQueueId(BattlegroundQueueTypeId bgQueueTypeId)
             if (battlemasterList->GetType() != BattlemasterType::Battleground)
                 return false;
             if (!bgQueueTypeId.Rated)
+                return false;
+            if (bgQueueTypeId.TeamSize)
+                return false;
+            break;
+        case BattlegroundQueueIdType::RatedSoloShuffle:
+            // BattlemasterList 1065 ("All Arenas", solo) is an arena entry, so GetType() is Arena. Rated must be
+            // set; TeamSize is 0 (the mode is implied by the queue Type - the lobby is always 6 players, 3v3 rounds).
+            if (battlemasterList->GetType() != BattlemasterType::Arena)
+                return false;
+            if (!bgQueueTypeId.Rated)
+                return false;
+            if (bgQueueTypeId.TeamSize)
+                return false;
+            break;
+        case BattlegroundQueueIdType::TrainingGrounds:
+            // Solo, unrated practice. BattlemasterList 1145 spans both arena and battleground practice maps, so
+            // the type is not constrained here; only Rated (must be false) and TeamSize (0) are.
+            if (bgQueueTypeId.Rated)
                 return false;
             if (bgQueueTypeId.TeamSize)
                 return false;

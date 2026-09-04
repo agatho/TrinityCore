@@ -1520,7 +1520,8 @@ void BattlegroundQueue::BattlegroundQueueUpdate(uint32 /*diff*/, BattlegroundBra
     // those lists are the only ones CheckSoloQueueMatch reads, so a single pass would empty the solo queue
     // into a list nothing rated ever looks at again.
     // The RatedBattlegroundBlitz branch at the end of this function is this queue's matchmaker.
-    bool const isSoloQueue = BattlegroundQueueIdType(m_queueId.Type) == BattlegroundQueueIdType::RatedBattlegroundBlitz;
+    bool const isSoloQueue = BattlegroundQueueIdType(m_queueId.Type) == BattlegroundQueueIdType::RatedBattlegroundBlitz
+        || BattlegroundQueueIdType(m_queueId.Type) == BattlegroundQueueIdType::RatedSoloShuffle;
 
     if (!bg_template->IsArena() && !isSoloQueue)
     {
@@ -1689,6 +1690,66 @@ void BattlegroundQueue::BattlegroundQueueUpdate(uint32 /*diff*/, BattlegroundBra
 
             TC_LOG_DEBUG("bg.battleground", "Starting rated arena match!");
             arena->StartBattleground();
+        }
+    }
+    else if (BattlegroundQueueIdType(m_queueId.Type) == BattlegroundQueueIdType::RatedSoloShuffle)
+    {
+        // Rated Solo Shuffle: assemble a 6-player lobby, exactly 3 per team, 1 healer per team (2 healers +
+        // 4 dps), no tanks. Same solo-matchmaker + all-or-nothing proposal machinery as Blitz.
+        uint32 const perTeam = sBattlegroundMgr->isTesting() ? 1 : 3;
+        uint32 const tanks   = 0;
+        uint32 const healers = sBattlegroundMgr->isTesting() ? 0 : 1;
+
+        for (std::pair<uint32 const, BattlegroundProposal> const& pending : m_Proposals)
+            if (pending.second.BracketId == bracket_id)
+                return;
+
+        if (CheckSoloQueueMatch(bracket_id, perTeam, tanks, healers))
+        {
+            Battleground* bg2 = sBattlegroundMgr->CreateNewBattleground(m_queueId, bracket_id);
+            if (!bg2)
+            {
+                TC_LOG_ERROR("bg.battleground", "BattlegroundQueue::Update - Cannot create Rated Solo Shuffle instance: {}", m_queueId.BattlemasterListId);
+                return;
+            }
+
+            bg2->StartBattleground();
+
+            for (uint32 i = 0; i < PVP_TEAMS_COUNT; ++i)
+                for (GroupsQueueType::const_iterator citr = m_SelectionPools[TEAM_ALLIANCE + i].SelectedGroups.begin(); citr != m_SelectionPools[TEAM_ALLIANCE + i].SelectedGroups.end(); ++citr)
+                    InviteGroupToBG((*citr), bg2, (*citr)->Team, PROPOSAL_CONFIRM_WAIT_TIME, true);
+
+            TC_LOG_DEBUG("bg.battleground", "Proposing a Rated Solo Shuffle match (3 per team, 1 healer per team)");
+
+            StartProposal(bg2, bracket_id, perTeam, SideQuota(perTeam, tanks, healers));
+
+            m_SelectionPools[TEAM_ALLIANCE].Init();
+            m_SelectionPools[TEAM_HORDE].Init();
+        }
+    }
+    else if (BattlegroundQueueIdType(m_queueId.Type) == BattlegroundQueueIdType::TrainingGrounds)
+    {
+        // Solo practice: pop the instant a single player is queued, with no opponents, into a
+        // BattlegroundTrainingGrounds instance (which never auto-ends). Direct invite (no proposal), like the
+        // rated-arena path - the player accepts via CMSG_BATTLEFIELD_PORT and the normal entry flow ports them.
+        for (uint32 qi = BG_QUEUE_NORMAL_ALLIANCE; qi <= BG_QUEUE_NORMAL_HORDE; ++qi)
+        {
+            for (GroupQueueInfo* ginfo : m_QueuedGroups[bracket_id][qi])
+            {
+                if (ginfo->IsInvitedToBGInstanceGUID)
+                    continue;
+
+                Battleground* bg2 = sBattlegroundMgr->CreateNewBattleground(m_queueId, bracket_id);
+                if (!bg2)
+                {
+                    TC_LOG_ERROR("bg.battleground", "BattlegroundQueue::Update - Cannot create Training Grounds instance: {}", m_queueId.BattlemasterListId);
+                    return;
+                }
+
+                InviteGroupToBG(ginfo, bg2, ginfo->Team);
+                bg2->StartBattleground();
+                return;   // one instance per pass
+            }
         }
     }
     else if (BattlegroundQueueIdType(m_queueId.Type) == BattlegroundQueueIdType::RatedBattlegroundBlitz)

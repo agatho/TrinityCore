@@ -524,6 +524,204 @@ void WorldSession::HandleBattlemasterJoinRatedBGBlitz(WorldPackets::Battleground
     sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
 }
 
+// CMSG_BATTLEMASTER_JOIN_RATED_SOLO_SHUFFLE (0x3E00BF) - rated 3v3-rounds solo queue. Like Blitz the packet
+// carries no queue identity (one Roles byte); the server builds the queue id. Strictly solo (BattlemasterList
+// 1065 GroupsAllowed=0), role-balanced into a 6-player lobby by CheckSoloQueueMatch(3,0,healers). This is the
+// queue/join half (P0); the 6-round shuffle controller is BattlegroundSoloShuffle.
+void WorldSession::HandleBattlemasterJoinRatedSoloShuffle(WorldPackets::Battleground::BattlemasterJoinRatedSoloShuffle& packet)
+{
+    BattlegroundQueueTypeId bgQueueTypeId =
+        BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_SOLO_SHUFFLE, BattlegroundQueueIdType::RatedSoloShuffle, true, 0);
+
+    if (!BattlegroundMgr::IsValidQueueId(bgQueueTypeId))
+    {
+        TC_LOG_ERROR("network", "Rated Solo Shuffle: queue id rejected by IsValidQueueId - BattlemasterList {} is missing from the client DB2.",
+            uint32(BATTLEGROUND_SOLO_SHUFFLE));
+        return;
+    }
+
+    BattlemasterListEntry const* battlemasterListEntry = sBattlemasterListStore.AssertEntry(bgQueueTypeId.BattlemasterListId);
+
+    if (DisableMgr::IsDisabledFor(DISABLE_TYPE_BATTLEGROUND, bgQueueTypeId.BattlemasterListId, nullptr) || battlemasterListEntry->GetFlags().HasFlag(BattlemasterListFlags::InternalOnly))
+    {
+        ChatHandler(this).PSendSysMessage(LANG_BG_DISABLED);
+        return;
+    }
+
+    if (_player->InBattleground())
+        return;
+
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BATTLEGROUND_SOLO_SHUFFLE);
+    if (!bgTemplate)
+    {
+        TC_LOG_ERROR("bg.battleground", "Rated Solo Shuffle: no battleground_template row for {} - apply the Solo Shuffle world migration.", uint32(BATTLEGROUND_SOLO_SHUFFLE));
+        return;
+    }
+
+    auto sendFailed = [&](GroupJoinBattlegroundResult result, ObjectGuid const* errorGuid = nullptr)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result, errorGuid);
+        SendPacket(battlefieldStatus.Write());
+    };
+
+    if (!_player->GetBGAccessByLevel(BattlegroundTypeId(bgQueueTypeId.BattlemasterListId)))
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
+
+    if (!packet.Roles)
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    // Strictly solo: BattlemasterList 1065 carries GroupsAllowed=0, so a premade cannot queue Solo Shuffle.
+    if (_player->GetGroup())
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    if (GetPlayer()->isUsingLfg())
+    {
+        sendFailed(ERR_LFG_CANT_USE_BATTLEGROUND);
+        return;
+    }
+
+    if (!_player->CanJoinToBattleground(bgTemplate))
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_TIMED_OUT);
+        return;
+    }
+
+    if (_player->IsDeserter())
+    {
+        sendFailed(ERR_GROUP_JOIN_BATTLEGROUND_DESERTERS);
+        return;
+    }
+
+    // random-BG exclusion on the solo path (same invariant Blitz/HandleBattlemasterJoin carry).
+    if (_player->InBattlegroundQueueForBattlegroundQueueType(BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_RB, BattlegroundQueueIdType::Battleground, false, 0))
+        || _player->InBattlegroundQueueForBattlegroundQueueType(BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_RANDOM_EPIC, BattlegroundQueueIdType::Battleground, false, 0)))
+    {
+        sendFailed(ERR_IN_RANDOM_BG);
+        return;
+    }
+
+    if (_player->GetBattlegroundQueueIndex(bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
+        return;
+
+    if (!_player->HasFreeBattlegroundQueueId())
+    {
+        sendFailed(ERR_BATTLEGROUND_TOO_MANY_QUEUES);
+        return;
+    }
+
+    if (_player->HasAura(9454))     // Freeze debuff
+        return;
+
+    BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
+    GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, nullptr, Team(_player->GetTeam()), bracketEntry, false, 0, 0, packet.Roles);
+    uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
+
+    uint32 queueSlot = _player->AddBattlegroundQueueId(bgQueueTypeId);
+    WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+    BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, _player, queueSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, false);
+    SendPacket(battlefieldStatus.Write());
+
+    TC_LOG_DEBUG("bg.battleground", "Rated Solo Shuffle: {} ({}) queued with roles {:#x}",
+        _player->GetName(), _player->GetGUID().ToString(), packet.Roles);
+
+    sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
+}
+
+// CMSG_TRAINING_GROUNDS_JOIN (0x3E00C6) - solo, unrated PvP practice. Wire: uint8 Roles + uint32 TrainingGroundID.
+// Queues the single player; the Training Grounds matcher pops the instant one player is queued (no opponents),
+// into a BattlegroundTrainingGrounds instance that never auto-ends.
+void WorldSession::HandleTrainingGroundsJoin(WorldPackets::Battleground::TrainingGroundsJoin& packet)
+{
+    BattlegroundQueueTypeId bgQueueTypeId =
+        BattlegroundMgr::BGQueueTypeId(BATTLEGROUND_TRAINING_GROUNDS, BattlegroundQueueIdType::TrainingGrounds, false, 0);
+
+    if (!BattlegroundMgr::IsValidQueueId(bgQueueTypeId))
+    {
+        TC_LOG_ERROR("network", "Training Grounds: queue id rejected by IsValidQueueId - BattlemasterList {} is missing from the client DB2.",
+            uint32(BATTLEGROUND_TRAINING_GROUNDS));
+        return;
+    }
+
+    BattlemasterListEntry const* battlemasterListEntry = sBattlemasterListStore.AssertEntry(bgQueueTypeId.BattlemasterListId);
+
+    if (DisableMgr::IsDisabledFor(DISABLE_TYPE_BATTLEGROUND, bgQueueTypeId.BattlemasterListId, nullptr) || battlemasterListEntry->GetFlags().HasFlag(BattlemasterListFlags::InternalOnly))
+    {
+        ChatHandler(this).PSendSysMessage(LANG_BG_DISABLED);
+        return;
+    }
+
+    if (_player->InBattleground())
+        return;
+
+    BattlegroundTemplate const* bgTemplate = sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BATTLEGROUND_TRAINING_GROUNDS);
+    if (!bgTemplate)
+    {
+        TC_LOG_ERROR("bg.battleground", "Training Grounds: no battleground_template row for {} - apply the Training Grounds world migration.", uint32(BATTLEGROUND_TRAINING_GROUNDS));
+        return;
+    }
+
+    auto sendFailed = [&](GroupJoinBattlegroundResult result)
+    {
+        WorldPackets::Battleground::BattlefieldStatusFailed battlefieldStatus;
+        BattlegroundMgr::BuildBattlegroundStatusFailed(&battlefieldStatus, bgQueueTypeId, _player, 0, result, nullptr);
+        SendPacket(battlefieldStatus.Write());
+    };
+
+    if (!_player->GetBGAccessByLevel(BattlegroundTypeId(bgQueueTypeId.BattlemasterListId)))
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    PVPDifficultyEntry const* bracketEntry = DB2Manager::GetBattlegroundBracketByLevel(bgTemplate->MapIDs.front(), _player->GetLevel());
+    if (!bracketEntry)
+        return;
+
+    // Solo practice: no premades.
+    if (_player->GetGroup())
+    {
+        sendFailed(ERR_BATTLEGROUND_JOIN_FAILED);
+        return;
+    }
+
+    if (_player->GetBattlegroundQueueIndex(bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
+        return;   // already queued
+
+    if (!_player->HasFreeBattlegroundQueueId())
+    {
+        sendFailed(ERR_BATTLEGROUND_TOO_MANY_QUEUES);
+        return;
+    }
+
+    BattlegroundQueue& bgQueue = sBattlegroundMgr->GetBattlegroundQueue(bgQueueTypeId);
+    GroupQueueInfo* ginfo = bgQueue.AddGroup(_player, nullptr, Team(_player->GetTeam()), bracketEntry, false, 0, 0, packet.Roles);
+    uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo, bracketEntry->GetBracketId());
+
+    uint32 queueSlot = _player->AddBattlegroundQueueId(bgQueueTypeId);
+    WorldPackets::Battleground::BattlefieldStatusQueued battlefieldStatus;
+    BattlegroundMgr::BuildBattlegroundStatusQueued(&battlefieldStatus, _player, queueSlot, ginfo->JoinTime, bgQueueTypeId, avgTime, false);
+    SendPacket(battlefieldStatus.Write());
+
+    TC_LOG_DEBUG("bg.battleground", "Training Grounds: {} ({}) queued (training ground {})",
+        _player->GetName(), _player->GetGUID().ToString(), packet.TrainingGroundID);
+
+    sBattlegroundMgr->ScheduleQueueUpdate(0, bgQueueTypeId, bracketEntry->GetBracketId());
+}
+
 // CMSG_BATTLEMASTER_JOIN_SKIRMISH (0x3E00C1) - unrated 3v3 arena, solo or small group.
 //
 // Like the Blitz join this packet carries no queue identity; the mode is implied by the opcode. It queues
@@ -1564,7 +1762,7 @@ void WorldSession::HandleGetPVPOptionsEnabled(WorldPackets::Battleground::GetPVP
     // (CheckSkirmishForSameFaction) pairs the entries up. This bit gates the client's Skirmish button.
     pvpOptionsEnabled.ArenaSkirmish = true;
     pvpOptionsEnabled.SoloShuffle = false;
-    pvpOptionsEnabled.RatedSoloShuffle = false;
+    pvpOptionsEnabled.RatedSoloShuffle = true;      // HandleBattlemasterJoinRatedSoloShuffle now really queues
     pvpOptionsEnabled.BattlegroundBlitz = false;
     // Flipped because HandleBattlemasterJoinRatedBGBlitz now exists and really queues: this bit gates the
     // client's "Battleground Blitz" button, and retail sets it (sniffed SMSG_PVP_OPTIONS_ENABLED body = FF C0,
