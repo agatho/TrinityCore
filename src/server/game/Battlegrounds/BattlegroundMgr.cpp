@@ -17,6 +17,7 @@
 
 #include "BattlegroundMgr.h"
 #include "Arena.h"
+#include "BattlegroundSoloShuffle.h"
 #include "BattlegroundPackets.h"
 #include "Containers.h"
 #include "DB2Stores.h"
@@ -507,7 +508,9 @@ Battleground* BattlegroundMgr::CreateNewBattleground(BattlegroundQueueTypeId que
     }
 
     Battleground* bg = nullptr;
-    if (bg_template->IsArena())
+    if (bgTypeId == BATTLEGROUND_SOLO_SHUFFLE)
+        bg = new BattlegroundSoloShuffle(bg_template);   // 6-round 3v3 shuffle controller
+    else if (bg_template->IsArena())
         bg = new Arena(bg_template);
     else
         bg = new Battleground(bg_template);
