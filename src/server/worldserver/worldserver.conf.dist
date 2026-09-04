@@ -4418,4 +4418,17 @@ Load.Locales = 1
 
 Shop.RealMoney.Mode = "instant"
 
+#
+#    VAS.TransferRealmDatabases
+#        Description: Maps each realm id to its characters-database name so a Value-Added-Service
+#                     character transfer (paid transfer, or the .character transfer GM command) can
+#                     move a character between the realms this bnetserver fronts. Format is a
+#                     comma-separated list of "realmId:database" pairs; include this realm too. All
+#                     databases must be reachable by the character-database login on the same server.
+#                     Leave empty to disable character transfer entirely.
+#        Example:     "1:tc_characters,2:playerbot_characters,3:integ_characters"
+#        Default:     ""  (disabled)
+
+VAS.TransferRealmDatabases = ""
+
 ###################################################################################################
