@@ -182,16 +182,20 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
     variables.Variables = vars;
     SendPacket(variables.Write());
 
-    // Plunderstorm / WoW Labs (ER-3): point the character-select selector at the event realm. When a WoW Labs
-    // event realm is published (ER-2), push the plunderStormRealm CVar the client feeds to
-    // C_RealmList.ConnectToEventRealm when Plunderstorm is picked. UNVERIFIED against a live client: the exact
-    // identifier ConnectToEventRealm expects (realm name vs address vs id) - "Plunderstorm" is the realm name we
-    // publish in the realmlist; confirm/adjust against a real client.
-    if (sConfigMgr->GetIntDefault("WowLabs.EventRealmId", 0))
+    // Plunderstorm / WoW Labs (ER-3): point the character-select selector at the event realm. The client CVar is
+    // named "plunderstormRealm" and holds a REALM_ADDRESS ("REALM_ADDRESS to connect to when pressing the
+    // Plunderstorm button" - confirmed from the client's own CVar registration), which the selector feeds to
+    // C_RealmList.ConnectToEventRealm([eventRealmAddress]). So push the event realm's virtual realm address
+    // (Region<<24 | Site<<16 | realmId), computed from this realm's handle + the event realm id (same bnet
+    // region/site as this realm, which ER-2's cloned realmlist row uses).
+    if (int32 const eventRealmId = sConfigMgr->GetIntDefault("WowLabs.EventRealmId", 0))
     {
+        Battlenet::RealmHandle const mainId = sRealmList->GetCurrentRealmId();
+        uint32 const eventAddress = Battlenet::RealmHandle(mainId.Region, mainId.Site, uint32(eventRealmId)).GetAddress();
+        std::string const eventAddressStr = std::to_string(eventAddress);
         WorldPackets::System::MirrorVarSingle eventVars[] =
         {
-            { "plunderStormRealm"sv, "Plunderstorm"sv },
+            { "plunderstormRealm"sv, eventAddressStr },
         };
         WorldPackets::System::MirrorVars eventVariables;
         eventVariables.Variables = eventVars;
