@@ -54,7 +54,12 @@ struct CompressedWorldPacket
 
 #pragma pack(pop)
 
-uint32 const WorldSocket::MinSizeForCompression = 0x400;
+// TEMP: compression disabled. The conn_44_4C send-loop rework desyncs the client's continuous zlib inflate
+// stream on the first large glue-screen packet, so every real client login dropped with CMSG_LOG_DISCONNECT(17)
+// ("client can no longer follow the deflate stream"). Only ever boot-tested, so this went unnoticed. Setting the
+// threshold past any packet size sends everything uncompressed (SMSG_COMPRESSED_PACKET is optional; the client
+// handles plain packets), which unblocks login while the deflate-stream rework is root-caused. Restore to 0x400.
+uint32 const WorldSocket::MinSizeForCompression = 0xFFFFFFFF;
 uint32 const WorldSocket::MaxBundlePayloadSize = 0x2000;
 uint32 const WorldSocket::MaxBundleEntries = 64;
 
