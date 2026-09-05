@@ -156,7 +156,15 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
     // Offer Plunderstorm (GameMode.db2 id 9) on the character-select game-mode selector when a WoW Labs event
     // realm is configured; selecting it makes the client C_RealmList.ConnectToEventRealm(plunderStormRealm).
     if (sConfigMgr->GetIntDefault("WowLabs.EventRealmId", 0))
+    {
         features.AvailableGameModeIDs.push_back(9); // GameMode.db2, plunderstorm
+
+        // The character-select NavBar (Blizzard_CharacterSelectNavBar.lua) force-shows the game-mode selector when
+        // C_GameRules.GetCurrentEventRealmQueues() ~= Enum.EventRealmQueues.None. That value is fed by this glue
+        // packet's EventRealmQueues field (a bitmask: Solo=1, Duo=2, Trio=4, Training=8). Advertise which
+        // Plunderstorm queues this event realm accepts so the selector actually appears; default Solo|Duo|Trio.
+        features.EventRealmQueues = uint32(sConfigMgr->GetIntDefault("WowLabs.EventRealmQueues", 0x7));
+    }
 
     SendPacket(features.Write());
 

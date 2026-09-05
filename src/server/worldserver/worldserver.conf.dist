@@ -4431,4 +4431,18 @@ WowLabs.CharacterlessLogin = 0
 WowLabs.EventRealmId = 0
 
 #
+#    WowLabs.EventRealmQueues
+#        Description: Bitmask of Plunderstorm queues the event realm advertises on the character-select
+#                     game-mode selector. The client NavBar only force-shows the selector when this is non-zero
+#                     (C_GameRules.GetCurrentEventRealmQueues() ~= Enum.EventRealmQueues.None). Bit flags:
+#                       1 - Plunderstorm Solo
+#                       2 - Plunderstorm Duo
+#                       4 - Plunderstorm Trio
+#                       8 - Plunderstorm Training
+#                     Only used when WowLabs.EventRealmId is set.
+#        Default:     7 - (Solo | Duo | Trio)
+
+WowLabs.EventRealmQueues = 7
+
+#
 ###################################################################################################
