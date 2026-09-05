@@ -1300,6 +1300,19 @@ void World::LoadConfigSettings(bool reload)
     if (!m_bool_configs[CONFIG_PERKS_PROGRAM_ENABLED])
         _gameRules.push_back({ .Rule = ::GameRule::PerksProgramActivityTrackingDisabled, .Value = true });
 
+    // Plunderstorm / WoW Labs event-realm mode. Set WowLabs.CharacterlessLogin=1 ONLY on a dedicated event-realm
+    // worldserver.conf (its own RealmID + port): the realm then runs in WoW Labs mode - characterless login (the
+    // glue-screen lobby that drives C_WoWLabsMatchmaking), plus the storm-circle and area-selection rules the
+    // client checks - which is what makes the character-select game-mode selector offer Plunderstorm and connect
+    // here via C_RealmList.ConnectToEventRealm. Leave OFF on normal realms: it replaces the standard character
+    // login flow with the characterless lobby.
+    if (sConfigMgr->GetBoolDefault("WowLabs.CharacterlessLogin", false))
+    {
+        _gameRules.push_back({ .Rule = ::GameRule::CharacterlessLogin, .Value = true });
+        _gameRules.push_back({ .Rule = ::GameRule::MapPlunderstormCircle, .Value = true });
+        _gameRules.push_back({ .Rule = ::GameRule::PlunderstormAreaSelection, .Value = true });
+    }
+
     if (reload)
     {
         sSupportMgr->SetSupportSystemStatus(m_bool_configs[CONFIG_SUPPORT_ENABLED]);
