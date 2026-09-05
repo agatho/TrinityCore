@@ -415,6 +415,22 @@ int main(int argc, char** argv)
     // Set server online (allow connecting now)
     LoginDatabase.DirectPExecute("UPDATE realmlist SET flag = flag & ~{}, population = 0 WHERE id = '{}'", Trinity::Legacy::REALM_FLAG_OFFLINE, realmId);
 
+    // Plunderstorm / WoW Labs event realm (ER-2): this one process also answers for a second realm id. Publish a
+    // realmlist row for it - cloned from THIS realm's connection info (same address:port, so the client's
+    // ConnectToEventRealm reaches this same worldserver) with its own id + name, brought online. WorldSocket
+    // accepts that id (WowLabs.EventRealmId) and serves those sessions in Plunderstorm mode. One data load, two
+    // realms. Left off unless WowLabs.EventRealmId is set.
+    uint32 const wowLabsRealmId = uint32(sConfigMgr->GetIntDefault("WowLabs.EventRealmId", 0));
+    if (wowLabsRealmId && wowLabsRealmId != realmId)
+    {
+        LoginDatabase.DirectPExecute(
+            "INSERT INTO realmlist (id, name, address, localAddress, address3, address4, localSubnetMask, port, icon, flag, timezone, allowedSecurityLevel, population, gamebuild, Region, Battlegroup) "
+            "SELECT {}, 'Plunderstorm', address, localAddress, address3, address4, localSubnetMask, port, icon, flag & ~{}, timezone, allowedSecurityLevel, 0, gamebuild, Region, Battlegroup FROM realmlist WHERE id = {} "
+            "ON DUPLICATE KEY UPDATE name = VALUES(name), address = VALUES(address), localAddress = VALUES(localAddress), address3 = VALUES(address3), address4 = VALUES(address4), localSubnetMask = VALUES(localSubnetMask), port = VALUES(port), flag = VALUES(flag), gamebuild = VALUES(gamebuild), Region = VALUES(Region), Battlegroup = VALUES(Battlegroup)",
+            wowLabsRealmId, Trinity::Legacy::REALM_FLAG_OFFLINE, realmId);
+        TC_LOG_INFO("server.worldserver", "WoW Labs event realm published as realm ID {} (Plunderstorm)", wowLabsRealmId);
+    }
+
     // Start the freeze check callback cycle in 5 seconds (cycle itself is 1 sec)
     std::shared_ptr<FreezeDetector> freezeDetector;
     if (int coreStuckTime = sConfigMgr->GetIntDefault("MaxCoreStuckTime", 60))
@@ -451,6 +467,8 @@ int main(int argc, char** argv)
 
     // set server offline
     LoginDatabase.DirectPExecute("UPDATE realmlist SET flag = flag | {} WHERE id = '{}'", Trinity::Legacy::REALM_FLAG_OFFLINE, realmId);
+    if (wowLabsRealmId && wowLabsRealmId != realmId)   // take the WoW Labs event realm offline too (ER-2)
+        LoginDatabase.DirectPExecute("UPDATE realmlist SET flag = flag | {} WHERE id = '{}'", Trinity::Legacy::REALM_FLAG_OFFLINE, wowLabsRealmId);
 
     TC_LOG_INFO("server.worldserver", "Halting process...");
 

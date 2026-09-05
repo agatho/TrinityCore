@@ -4417,4 +4417,18 @@ Load.Locales = 1
 WowLabs.CharacterlessLogin = 0
 
 #
+#    WowLabs.EventRealmId
+#        Description: One-process Plunderstorm event realm (no second worldserver, no duplicate data load). Set
+#                     this to a SECOND realm id (distinct from RealmID): this worldserver then also answers for
+#                     that id, publishes a "Plunderstorm" realmlist row cloned from this realm's address:port,
+#                     offers the mode on the character-select selector, and serves those sessions in Plunderstorm
+#                     mode per-session (the main realm stays normal). The client reaches it via
+#                     ConnectToEventRealm - one loaded dataset, two realm identities.
+#                     0 disables (single normal realm). Prefer this over WowLabs.CharacterlessLogin when you want
+#                     normal play AND Plunderstorm from one process.
+#        Default:     0 - (Disabled)
+
+WowLabs.EventRealmId = 0
+
+#
 ###################################################################################################

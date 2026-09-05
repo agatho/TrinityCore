@@ -19,6 +19,7 @@
 #include "AuthenticationPackets.h"
 #include "BattlenetRpcErrorCodes.h"
 #include "CharacterTemplateDataStore.h"
+#include "Config.h"
 #include "ClientConfigPackets.h"
 #include "DisableMgr.h"
 #include "GameTime.h"
@@ -138,7 +139,24 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
         }, gameRule.Value);
     }
 
+    // Plunderstorm / WoW Labs (ER-3): on the WoW Labs event realm this session gets the Plunderstorm game rules
+    // here at the glue screen too (so C_GameRules.GetActiveGameMode() reads Plunderstorm and the glue shows the
+    // Plunderstorm lobby), while the main realm's rules stay standard.
+    if (IsOnWowLabsRealm())
+    {
+        for (::GameRule rule : { ::GameRule::CharacterlessLogin, ::GameRule::MapPlunderstormCircle, ::GameRule::PlunderstormAreaSelection })
+        {
+            WorldPackets::System::GameRuleValuePair& pair = features.GameRules.emplace_back();
+            pair.Rule = AsUnderlyingType(rule);
+            pair.Value = 1;
+        }
+    }
+
     features.AvailableGameModeIDs.push_back(8); // GameMode.db2, standard
+    // Offer Plunderstorm (GameMode.db2 id 9) on the character-select game-mode selector when a WoW Labs event
+    // realm is configured; selecting it makes the client C_RealmList.ConnectToEventRealm(plunderStormRealm).
+    if (sConfigMgr->GetIntDefault("WowLabs.EventRealmId", 0))
+        features.AvailableGameModeIDs.push_back(9); // GameMode.db2, plunderstorm
 
     SendPacket(features.Write());
 
@@ -163,4 +181,20 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
     WorldPackets::System::MirrorVars variables;
     variables.Variables = vars;
     SendPacket(variables.Write());
+
+    // Plunderstorm / WoW Labs (ER-3): point the character-select selector at the event realm. When a WoW Labs
+    // event realm is published (ER-2), push the plunderStormRealm CVar the client feeds to
+    // C_RealmList.ConnectToEventRealm when Plunderstorm is picked. UNVERIFIED against a live client: the exact
+    // identifier ConnectToEventRealm expects (realm name vs address vs id) - "Plunderstorm" is the realm name we
+    // publish in the realmlist; confirm/adjust against a real client.
+    if (sConfigMgr->GetIntDefault("WowLabs.EventRealmId", 0))
+    {
+        WorldPackets::System::MirrorVarSingle eventVars[] =
+        {
+            { "plunderStormRealm"sv, "Plunderstorm"sv },
+        };
+        WorldPackets::System::MirrorVars eventVariables;
+        eventVariables.Variables = eventVars;
+        SendPacket(eventVariables.Write());
+    }
 }

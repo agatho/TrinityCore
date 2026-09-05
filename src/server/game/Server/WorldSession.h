@@ -1109,6 +1109,12 @@ class TC_GAME_API WorldSession
 
         AccountTypes GetSecurity() const { return _security; }
         uint32 GetAccountId() const { return _accountId; }
+
+        // Plunderstorm / WoW Labs event-realm routing: true when this session connected targeting the WoW Labs
+        // event realm id (same worldserver process, second realm identity) rather than the main realm. Drives the
+        // per-session game rules so only these sessions run in Plunderstorm mode.
+        bool IsOnWowLabsRealm() const { return _onWowLabsRealm; }
+        void SetOnWowLabsRealm(bool on) { _onWowLabsRealm = on; }
         ObjectGuid GetAccountGUID() const { return ObjectGuid::Create<HighGuid::WowAccount>(GetAccountId()); }
         std::string const& GetAccountName() const { return _accountName; }
         uint32 GetBattlenetAccountId() const;
@@ -2219,6 +2225,7 @@ class TC_GAME_API WorldSession
         PlayerDataAccount _playerDataAccount;
         std::vector<std::string> _registeredAddonPrefixes;
         bool _filterAddonMessages;
+        bool _onWowLabsRealm = false;   // connected targeting the WoW Labs event realm id (per-session Plunderstorm mode)
         uint32 recruiterId;
         bool isRecruiter;
         LockedQueue<WorldPacket*> _recvQueue;

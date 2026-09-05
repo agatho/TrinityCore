@@ -1571,6 +1571,20 @@ void WorldSession::SendFeatureSystemStatus()
         }, gameRule.Value);
     }
 
+    // Plunderstorm / WoW Labs event-realm routing: a session that connected targeting the WoW Labs event realm
+    // gets the WoW Labs game rules PER SESSION (the main realm's global rules stay standard). These are what make
+    // the client's character-select game-mode selector show Plunderstorm and drive C_WoWLabsMatchmaking. Only
+    // added here (not to the global set) so the same worldserver serves both realms from one loaded dataset.
+    if (IsOnWowLabsRealm())
+    {
+        for (::GameRule rule : { ::GameRule::CharacterlessLogin, ::GameRule::MapPlunderstormCircle, ::GameRule::PlunderstormAreaSelection })
+        {
+            WorldPackets::System::GameRuleValuePair& pair = features.GameRules.emplace_back();
+            pair.Rule = AsUnderlyingType(rule);
+            pair.Value = 1;
+        }
+    }
+
     features.AddonChatThrottle.MaxTries = 10;
     features.AddonChatThrottle.TriesRestoredPerSecond = 1;
     features.AddonChatThrottle.UsedTriesPerMessage = 1;

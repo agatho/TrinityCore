@@ -19,6 +19,7 @@
 #include "AuthenticationPackets.h"
 #include "BattlenetRpcErrorCodes.h"
 #include "CharacterPackets.h"
+#include "Config.h"
 #include "CryptoHash.h"
 #include "CryptoRandom.h"
 #include "DatabaseEnv.h"
@@ -756,7 +757,13 @@ void WorldSocket::HandleAuthSessionCallback(WorldPackets::Auth::AuthSession cons
         return;
     }
 
-    if (authSession->RealmID != sRealmList->GetCurrentRealmId().Realm)
+    // Plunderstorm / WoW Labs event-realm routing: this one worldserver process also answers for the WoW Labs
+    // event realm id (WowLabs.EventRealmId), so a client that picked Plunderstorm and reconnected via
+    // C_RealmList.ConnectToEventRealm targets that id. Accept it here (same process, same loaded data - only the
+    // realm identity + per-session game mode differ) and remember which realm this session hit.
+    int32 const eventRealmId = sConfigMgr->GetIntDefault("WowLabs.EventRealmId", 0);
+    bool const onEventRealm = eventRealmId != 0 && authSession->RealmID == uint32(eventRealmId);
+    if (authSession->RealmID != sRealmList->GetCurrentRealmId().Realm && !onEventRealm)
     {
         SendAuthResponseError(ERROR_DENIED);
         TC_LOG_ERROR("network", "WorldSocket::HandleAuthSession: Client {} requested connecting with realm id {} but this realm has id {} set in config.",
@@ -848,6 +855,8 @@ void WorldSocket::HandleAuthSessionCallback(WorldPackets::Auth::AuthSession cons
         std::move(account.BattleNet.Email), static_pointer_cast<WorldSocket>(shared_from_this()), account.Game.Security,
         account.Game.Expansion, mutetime, std::move(account.Game.OS), account.Game.TimezoneOffset, account.Game.Build, buildVariant,
         account.Game.Locale, account.Game.Recruiter, account.Game.IsRecruiter);
+
+    _worldSession->SetOnWowLabsRealm(onEventRealm);   // per-session Plunderstorm mode for event-realm connections
 
     QueueQuery(_worldSession->LoadPermissionsAsync().WithPreparedCallback([this](PreparedQueryResult result)
     {
