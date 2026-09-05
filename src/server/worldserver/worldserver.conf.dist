@@ -4403,4 +4403,18 @@ Pvp.FactionBalance.Pct20 = 0.8
 Load.Locales = 1
 
 #
+#    WowLabs.CharacterlessLogin
+#        Description: Turns this worldserver into a Plunderstorm / WoW Labs event realm. When enabled the realm
+#                     runs in WoW Labs mode (game rules CharacterlessLogin + Plunderstorm circle/area-selection),
+#                     so the character-select game-mode selector offers Plunderstorm and the glue-screen lobby
+#                     (C_WoWLabsMatchmaking) drives queueing + the fast-login handoff into a match.
+#                     ONLY set this on a dedicated event-realm worldserver.conf (its own RealmID + port); it
+#                     replaces the normal character login flow with the characterless lobby, so never enable it
+#                     on a standard realm.
+#        Default:     0 - (Disabled, normal realm)
+#                     1 - (Enabled, Plunderstorm event realm)
+
+WowLabs.CharacterlessLogin = 0
+
+#
 ###################################################################################################
