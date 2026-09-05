@@ -1711,7 +1711,10 @@ void WorldSession::InitializeSessionCallback(LoginDatabaseQueryHolder const& hol
         holder.GetPreparedResult(AccountInfoQueryHolder::ITEM_NEW_APPEARANCES));
     _collectionMgr->LoadAccountStorePurchases(holder.GetPreparedResult(AccountInfoQueryHolder::ACCOUNT_STORE_PURCHASES));
     _collectionMgr->LoadAccountFavoriteTransmogSets(holder.GetPreparedResult(AccountInfoQueryHolder::ITEM_FAVORITE_TRANSMOG_SETS));
-    _collectionMgr->LoadAccountItemAppearances(holder.GetPreparedResult(AccountInfoQueryHolder::ITEM_APPEARANCES), holder.GetPreparedResult(AccountInfoQueryHolder::ITEM_FAVORITE_APPEARANCES));
+    // NOTE: LoadAccountItemAppearances is already called above (with the fuller 3-arg overload incl.
+    // ITEM_NEW_APPEARANCES). A second call here was a merge artifact that re-Fetched the already-consumed
+    // ITEM_APPEARANCES result set (its row cursor is at end after the first call), tripping the
+    // PreparedResultSet::Fetch "m_rowPosition < m_rowCount" assertion and crashing on EVERY account login.
     _collectionMgr->LoadAccountTransmogIllusions(holder.GetPreparedResult(AccountInfoQueryHolder::TRANSMOG_ILLUSIONS));
     _collectionMgr->LoadAccountTransmogOutfits(holder.GetPreparedResult(AccountInfoQueryHolder::TRANSMOG_OUTFITS));
     _collectionMgr->LoadAccountWarbandScenes(holder.GetPreparedResult(AccountInfoQueryHolder::WARBAND_SCENES));
