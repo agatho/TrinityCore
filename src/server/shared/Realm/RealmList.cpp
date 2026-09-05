@@ -17,6 +17,7 @@
 
 #include "RealmList.h"
 #include "BattlenetRpcErrorCodes.h"
+#include "Config.h"
 #include "CryptoRandom.h"
 #include "DatabaseEnv.h"
 #include "DeadlineTimer.h"
@@ -275,7 +276,15 @@ void RealmList::FillRealmEntry(Realm const& realm, uint32 clientBuild, AccountTy
     realmEntry->set_name(realm.Name);
     realmEntry->set_cfgconfigsid(realm.GetConfigId());
     realmEntry->set_cfglanguagesid(1);
-    realmEntry->set_cfgcontentsetid(0);
+    // WoW Labs / Plunderstorm experiment: the char-select game-mode selector routes AutoConnectToGameModeRealm(9)
+    // to a realm by Battle.net config ids, and cfgContentSetID is the most likely game-mode discriminator. Let the
+    // event realm advertise a configurable content set (bnetserver.conf WowLabs.EventContentSetID) so we can probe
+    // which value the client accepts as the Plunderstorm realm; all other realms stay at 0.
+    uint32 contentSetId = 0;
+    if (uint32 const eventRealmId = uint32(sConfigMgr->GetIntDefault("WowLabs.EventRealmId", 0)))
+        if (realm.Id.Realm == eventRealmId)
+            contentSetId = uint32(sConfigMgr->GetIntDefault("WowLabs.EventContentSetID", 0));
+    realmEntry->set_cfgcontentsetid(contentSetId);
     realmEntry->set_usebleepchance(0.0f);
 }
 

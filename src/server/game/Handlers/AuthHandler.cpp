@@ -282,6 +282,16 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
         // packet's EventRealmQueues field (a bitmask: Solo=1, Duo=2, Trio=4, Training=8). Advertise which
         // Plunderstorm queues this event realm accepts so the selector actually appears; default Solo|Duo|Trio.
         features.EventRealmQueues = uint32(sConfigMgr->GetIntDefault("WowLabs.EventRealmQueues", 0x7));
+
+        // Tell the client which Battle.net ContentSetID the Plunderstorm game mode (record 9) maps to. The engine
+        // function C_GameRules.AutoConnectToGameModeRealm(9) resolves the target realm by matching this ContentSetID
+        // against each realm-list entry's cfgContentSetID - so without this mapping the client has no realm for the
+        // mode and fails with "no realms available" (WOW51900309). The event realm advertises the same content set
+        // (bnetserver WowLabs.EventContentSetID); keep both in sync via the same config key here.
+        WorldPackets::System::GameModeData& plunderstorm = features.DisabledGameModes.emplace_back();
+        plunderstorm.GameMode = uint8(sConfigMgr->GetIntDefault("WowLabs.EventGameModeEnum", 1)); // Enum.GameMode.Plunderstorm
+        plunderstorm.ContentSetID = int32(sConfigMgr->GetIntDefault("WowLabs.EventContentSetID", 9));
+        plunderstorm.GameModeRecordID = 9; // GameMode.db2 record id (tag "ps")
     }
 
     SendPacket(features.Write());
