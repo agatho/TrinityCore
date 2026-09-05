@@ -650,7 +650,7 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_INS_CHARACTER_SOCIAL, "INSERT INTO character_social (guid, friend, flags) VALUES (?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_CHARACTER_SOCIAL, "DELETE FROM character_social WHERE guid = ? AND friend = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_CHARACTER_SOCIAL_NOTE, "UPDATE character_social SET note = ? WHERE guid = ? AND friend = ?", CONNECTION_ASYNC);
-    PrepareStatement(CHAR_SEL_CONTENT_TRACKING, "SELECT targetType, targetId, collectableSourceInfoId FROM character_content_tracking WHERE ownerGuid = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_SEL_CONTENT_TRACKING, "SELECT targetType, targetId, collectableSourceInfoId FROM character_content_tracking WHERE ownerGuid = ?", CONNECTION_BOTH);
     PrepareStatement(CHAR_REP_CONTENT_TRACKING, "REPLACE INTO character_content_tracking (ownerGuid, targetType, targetId, collectableSourceInfoId) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_CONTENT_TRACKING, "DELETE FROM character_content_tracking WHERE ownerGuid = ? AND targetType = ? AND targetId = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_RECENT_ALLIES, "SELECT allyGuid, allyAccount, note FROM character_recent_allies WHERE ownerGuid = ? ORDER BY lastGrouped DESC LIMIT 100", CONNECTION_SYNCH);
