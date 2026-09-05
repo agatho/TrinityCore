@@ -65,6 +65,8 @@
 #include "WorldSession.h"
 #include "LobbyMatchmakerPackets.h"
 #include "Log.h"
+#include "WowLabsMatchmakingMgr.h"
+#include "WowLabsMatchMgr.h"
 
 namespace
 {
@@ -87,77 +89,45 @@ void SendQueueResult(WorldSession* session, WorldPackets::LobbyMatchmaker::Lobby
 // gibt, in die eingeladen werden koennte.
 void WorldSession::HandleLobbyMatchmakerPartyInvite(WorldPackets::LobbyMatchmaker::LobbyMatchmakerPartyInvite& lobbyMatchmakerPartyInvite)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_PARTY_INVITE from {} target {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerPartyInvite.TargetGUID.ToString());
-
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->Invite(this, lobbyMatchmakerPartyInvite.TargetGUID);
 }
 
 // 0x43016C. Es gibt keine Einladung, die angenommen werden koennte.
 void WorldSession::HandleLobbyMatchmakerAcceptPartyInvite(WorldPackets::LobbyMatchmaker::LobbyMatchmakerAcceptPartyInvite& lobbyMatchmakerAcceptPartyInvite)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_ACCEPT_PARTY_INVITE from {} target {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerAcceptPartyInvite.TargetGUID.ToString());
-
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->AcceptInvite(this, lobbyMatchmakerAcceptPartyInvite.TargetGUID);
 }
 
 // 0x43016D. Eine Ablehnung ist clientseitig folgenlos, wenn es die Einladung nicht gibt; der
 // Fehlerkanal ist trotzdem die richtige Antwort, damit das UI nicht auf eine Bestaetigung wartet.
 void WorldSession::HandleLobbyMatchmakerRejectPartyInvite(WorldPackets::LobbyMatchmaker::LobbyMatchmakerRejectPartyInvite& lobbyMatchmakerRejectPartyInvite)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_REJECT_PARTY_INVITE from {} target {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerRejectPartyInvite.TargetGUID.ToString());
-
-    // UNVERIFIED: dass Retail hier ueberhaupt ueber SMSG_WOW_LABS_PARTY_ERROR antwortet und
-    // mit welchem Wert - eine Ablehnung ist keine ungueltige Einladung. Abgeleitet, nicht am
-    // Konsumenten gemessen; belegt ist nur, dass 0..6 sichtbar und 7..15 stumm sind.
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->RejectInvite(this, lobbyMatchmakerRejectPartyInvite.TargetGUID);
 }
 
 // 0x43016E.
 void WorldSession::HandleLobbyMatchmakerPartyUninvite(WorldPackets::LobbyMatchmaker::LobbyMatchmakerPartyUninvite& lobbyMatchmakerPartyUninvite)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_PARTY_UNINVITE from {} target {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerPartyUninvite.TargetGUID.ToString());
-
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->Uninvite(this, lobbyMatchmakerPartyUninvite.TargetGUID);
 }
 
 // 0x43016F, leere Nutzlast.
 void WorldSession::HandleLobbyMatchmakerLeaveParty(WorldPackets::LobbyMatchmaker::LobbyMatchmakerLeaveParty& /*lobbyMatchmakerLeaveParty*/)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_LEAVE_PARTY from {} - no lobby matchmaker service", GetPlayerInfo());
-
-    // UNVERIFIED: dass Retail hier ueberhaupt ueber SMSG_WOW_LABS_PARTY_ERROR antwortet und
-    // mit welchem Wert - ein Verlassen ist keine ungueltige Einladung. Abgeleitet, nicht am
-    // Konsumenten gemessen; belegt ist nur, dass 0..6 sichtbar und 7..15 stumm sind.
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->LeaveParty(this);
 }
 
 // 0x430170, ein uint32 playlistEntryID. Das Feld gehoert in JamLobbyMatchmakerPartyInfo; ohne
 // Partei gibt es nichts zu setzen.
 void WorldSession::HandleLobbyMatchmakerSetPartyPlaylistEntry(WorldPackets::LobbyMatchmaker::LobbyMatchmakerSetPartyPlaylistEntry& lobbyMatchmakerSetPartyPlaylistEntry)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_SET_PARTY_PLAYLIST_ENTRY from {} playlist {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerSetPartyPlaylistEntry.PlaylistEntryID);
-
-    // UNVERIFIED: dass Retail hier ueberhaupt ueber SMSG_WOW_LABS_PARTY_ERROR antwortet und
-    // mit welchem Wert - eine Playlistwahl ist keine Einladung. Abgeleitet, nicht am
-    // Konsumenten gemessen; belegt ist nur, dass 0..6 sichtbar und 7..15 stumm sind.
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->SetPlaylistEntry(this, lobbyMatchmakerSetPartyPlaylistEntry.PlaylistEntryID);
 }
 
 // 0x430171, ein Bit. Setzt isReady in JamLobbyMatchmakerPartyMemberInfo - ohne Partei gegenstandslos.
 void WorldSession::HandleLobbyMatchmakerSetPlayerReady(WorldPackets::LobbyMatchmaker::LobbyMatchmakerSetPlayerReady& lobbyMatchmakerSetPlayerReady)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_SET_PLAYER_READY from {} ready {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerSetPlayerReady.IsReady);
-
-    // UNVERIFIED: dass Retail hier ueberhaupt ueber SMSG_WOW_LABS_PARTY_ERROR antwortet und
-    // mit welchem Wert - ein Bereitschaftsschalter ist keine Einladung. Abgeleitet, nicht am
-    // Konsumenten gemessen; belegt ist nur, dass 0..6 sichtbar und 7..15 stumm sind.
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::PARTY_INVITE_INVALID);
+    sWowLabsMatchmakingMgr->SetReady(this, lobbyMatchmakerSetPlayerReady.IsReady);
 }
 
 // 0x430173 -> SMSG_LOBBY_MATCHMAKER_QUEUE_RESULT mit Status 6.
@@ -166,15 +136,7 @@ void WorldSession::HandleLobbyMatchmakerSetPlayerReady(WorldPackets::LobbyMatchm
 // der Warteschlangenzustand, das andere die Fehlermeldung.
 void WorldSession::HandleLobbyMatchmakerEnterQueue(WorldPackets::LobbyMatchmaker::LobbyMatchmakerEnterQueue& lobbyMatchmakerEnterQueue)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_ENTER_QUEUE from {} playlist {} character {} race {} class {} sex {} - no lobby matchmaker service",
-        GetPlayerInfo(), lobbyMatchmakerEnterQueue.PlaylistEntryID,
-        lobbyMatchmakerEnterQueue.CharacterGUID.ToString(),
-        lobbyMatchmakerEnterQueue.Customization.RaceID,
-        lobbyMatchmakerEnterQueue.Customization.ClassID,
-        lobbyMatchmakerEnterQueue.Customization.SexID);
-
-    SendQueueResult(this, WorldPackets::LobbyMatchmaker::LobbyMatchmakerQueueResult::CANNOT_QUEUE);
-    SendPartyError(this, WorldPackets::LobbyMatchmaker::WowLabsPartyError::ENTER_QUEUE_FAILED);
+    sWowLabsMatchmakingMgr->EnterQueue(this);
 }
 
 // 0x430175, leere Nutzlast. Der Client will die Warteschlange verlassen. Er steht in keiner -
@@ -184,19 +146,14 @@ void WorldSession::HandleLobbyMatchmakerEnterQueue(WorldPackets::LobbyMatchmaker
 // "du stehst jetzt in keiner Warteschlange".
 void WorldSession::HandleLobbyMatchmakerAbandonQueue(WorldPackets::LobbyMatchmaker::LobbyMatchmakerAbandonQueue& /*lobbyMatchmakerAbandonQueue*/)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_ABANDON_QUEUE from {} - no lobby matchmaker service", GetPlayerInfo());
-
-    SendQueueResult(this, WorldPackets::LobbyMatchmaker::LobbyMatchmakerQueueResult::LEFT_QUEUE);
+    sWowLabsMatchmakingMgr->AbandonQueue(this);
 }
 
 // 0x430174, ein Bit. Antwort auf SMSG_LOBBY_MATCHMAKER_QUEUE_PROPOSED, das dieser Realm nie
 // sendet - die Nachricht ist also verwaist, wenn sie ankommt.
 void WorldSession::HandleLobbyMatchmakerQueueProposalResponse(WorldPackets::LobbyMatchmaker::LobbyMatchmakerQueueProposalResponse& lobbyMatchmakerQueueProposalResponse)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_LOBBY_MATCHMAKER_QUEUE_PROPSAL_RESPONSE from {} accept {} - no proposal was made by this realm",
-        GetPlayerInfo(), lobbyMatchmakerQueueProposalResponse.Accept);
-
-    SendQueueResult(this, WorldPackets::LobbyMatchmaker::LobbyMatchmakerQueueResult::CANNOT_QUEUE);
+    sWowLabsMatchmakingMgr->RespondToProposal(this, lobbyMatchmakerQueueProposalResponse.Accept);
 }
 
 // 0x43017E und 0x430172 sind selbst ANTWORTEN - auf
@@ -211,10 +168,28 @@ void WorldSession::HandleLobbyMatchmakerCreateCharacter(WorldPackets::LobbyMatch
         lobbyMatchmakerCreateCharacter.Customizations.size());
 }
 
+// The client sends this on the same connection right after SMSG_LOBBY_MATCHMAKER_LOBBY_ACQUIRED_SERVER (it has
+// no reply): it records where its next login should land - the WoW Labs match realm+map - then disconnects and
+// reconnects there. The destination carries no token (JamFastLoginDestination is realm+char+mode+map), so the
+// server ties the reconnect back to the reserved match by the account, not by an echoed handle. Here we just
+// validate that the registered destination is a match this account was actually proposed, and log the outcome;
+// the reconnecting session is bound to the match instance when it enters the world.
 void WorldSession::HandleRegisterFastLogin(WorldPackets::LobbyMatchmaker::RegisterFastLogin& registerFastLogin)
 {
-    TC_LOG_DEBUG("network.opcode", "CMSG_REGISTER_FAST_LOGIN from {} doFastLogin {} to realm {} map {} from realm {} map {} - this message is itself a reply, no counterpart exists",
-        GetPlayerInfo(), registerFastLogin.DoFastLogin,
-        registerFastLogin.ToDestination.RealmAddress, registerFastLogin.ToDestination.MapID,
-        registerFastLogin.FromDestination.RealmAddress, registerFastLogin.FromDestination.MapID);
+    WorldPackets::LobbyMatchmaker::FastLoginDestination const& to = registerFastLogin.ToDestination;
+
+    WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->FindByMember(GetBattlenetAccountGUID());
+    bool const destinationValid = match
+        && to.MapID == WowLabsMatchMgr::MAP_ID
+        && to.RealmAddress == sWowLabsMatchMgr->OwnRealmAddress();
+
+    if (!registerFastLogin.DoFastLogin || !destinationValid)
+    {
+        TC_LOG_DEBUG("network.opcode", "CMSG_REGISTER_FAST_LOGIN from {} doFastLogin {} to realm {} map {} - no matching reserved WoW Labs match, ignored",
+            GetPlayerInfo(), registerFastLogin.DoFastLogin, to.RealmAddress, to.MapID);
+        return;
+    }
+
+    TC_LOG_DEBUG("network.opcode", "CMSG_REGISTER_FAST_LOGIN from {} accepted: match {} instance {} char {} - reconnect will land on MAP_WOWLABS",
+        GetPlayerInfo(), match->Id, match->InstanceId, to.CharacterGUID.ToString());
 }

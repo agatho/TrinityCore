@@ -187,6 +187,7 @@
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
 #include "WorldStatePackets.h"
+#include "WowLabsMatchMgr.h"
 #include <boost/dynamic_bitset.hpp>
 #include <G3D/g3dmath.h>
 #include <sstream>
@@ -29449,6 +29450,21 @@ void Player::SendInitialPacketsAfterAddToMap()
     // at the correct elapsed value - previously the timer was only ever pushed once, at run start,
     // so anyone who was not present at that moment saw nothing.
     sElapsedTimerMgr->SendActiveTimers(this);
+
+    // Plunderstorm / WoW Labs: a player who has just finished entering a match instance enters the pre-match /
+    // area-selection phase. BeginPrematch sets the phase (idempotent) and sends SMSG..MATCH_STATE_CHANGED to
+    // everyone in the instance, so a player arriving into an already-running pre-match is told the state too.
+    // The match is free-for-all, so flag the player FFA-PvP - without it players cannot damage each other and no
+    // kill (OnPVPKill) would ever fire.
+    if (m_wowLabsInstanceId)
+    {
+        if (WowLabsMatchMgr::Match* match = sWowLabsMatchMgr->FindByInstanceId(m_wowLabsInstanceId))
+        {
+            SetPvpFlag(UNIT_BYTE2_FLAG_FFA_PVP);
+            sWowLabsMatchMgr->OnPlayerEnterMatch(this, match);   // normalize to the Plunderstorm health baseline
+            sWowLabsMatchMgr->BeginPrematch(match);
+        }
+    }
 }
 
 void Player::SendUpdateToOutOfRangeGroupMembers()

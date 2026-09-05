@@ -66,6 +66,7 @@ void AddSC_titles_commandscript();
 void AddSC_warfront_commandscript();
 void AddSC_delvenemesis_commandscript(); // TEMPORARY DEBUG stand-in for the Delve Nemesis seam
 void AddSC_voidassault_commandscript(); // TEMPORARY DEBUG stand-in for Void Assaults core loop
+void AddSC_wowlabs_commandscript();
 void AddSC_wp_commandscript();
 
 // The name of this function should match:
@@ -122,5 +123,6 @@ void AddCommandsScripts()
     AddSC_warfront_commandscript();
     AddSC_delvenemesis_commandscript(); // TEMPORARY DEBUG stand-in for the Delve Nemesis seam
     AddSC_voidassault_commandscript(); // TEMPORARY DEBUG stand-in for Void Assaults core loop
+    AddSC_wowlabs_commandscript();
     AddSC_wp_commandscript();
 }

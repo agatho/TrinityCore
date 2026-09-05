@@ -144,6 +144,71 @@ WorldPacket const* LobbyMatchmakerQueueResult::Write()
 
     return &_worldPacket;
 }
+
+WorldPacket const* LobbyMatchmakerReceiveInvite::Write()
+{
+    _worldPacket << InviterGuid;                                   // PackedGuid
+    _worldPacket << uint8(InviterName.length() << 2);              // len in high 6 bits (parser does byte>>2)
+    _worldPacket.append(InviterName.data(), InviterName.length());
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LobbyMatchmakerPartyInviteRejected::Write()
+{
+    _worldPacket << uint8(Name.length() << 2);
+    _worldPacket.append(Name.data(), Name.length());
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LobbyMatchmakerPartyInfo::Write()
+{
+    auto writeMember = [this](LobbyMatchmakerPartyInfoMember const& m)
+    {
+        _worldPacket << uint8((m.Name.length() << 2) | (m.ReadyBit ? 0x2 : 0x0));   // nameLen<<2 | bit1
+        _worldPacket << m.MemberGuid;                             // PackedGuid
+        _worldPacket << m.AccountGuid;                            // PackedGuid
+        _worldPacket << uint64(m.Field88);
+        _worldPacket << uint8(m.Field97);
+        _worldPacket << uint8(m.Field98);
+        _worldPacket << uint32(0);                               // countA (sub-list A empty)
+        for (uint32 v : m.Loadout)                              // 19x uint32 cosmetic loadout
+            _worldPacket << uint32(v);
+        _worldPacket << uint32(0);                               // countB (sub-list B empty)
+        _worldPacket.append(m.Name.data(), m.Name.length());    // name body (after countB, per the parser)
+    };
+
+    _worldPacket << LeaderGuid;                                   // PackedGuid
+    _worldPacket << uint32(PlaylistEntry);
+    _worldPacket << uint32(Members.size());                       // count1 (flat u32)
+    _worldPacket << uint32(Invited.size());                       // count2 (flat u32)
+    _worldPacket << Guid3;                                        // PackedGuid (outer role unproven; empty)
+    _worldPacket << Guid4;                                        // PackedGuid
+    _worldPacket << uint8(FlagByte);
+    for (LobbyMatchmakerPartyInfoMember const& m : Members)
+        writeMember(m);
+    for (LobbyMatchmakerPartyInfoMember const& m : Invited)
+        writeMember(m);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LobbyMatchmakerQueueProposed::Write()
+{
+    // No modelled body (see header) - the pop is correlated by session, the client answers with a bool.
+    return &_worldPacket;
+}
+
+WorldPacket const* LobbyMatchmakerLobbyAcquiredServer::Write()
+{
+    _worldPacket << uint32(RealmAddress);
+    _worldPacket << uint32(Token);
+    _worldPacket << uint8(GameMode);
+    _worldPacket << uint32(MapId);
+
+    return &_worldPacket;
+}
 }
 
 namespace WorldPackets::WowLabs
@@ -205,6 +270,44 @@ WorldPacket const* QueryWowLabsAreaInfoResponse::Write()
         _worldPacket << float(area.X);
         _worldPacket << float(area.Y);
         _worldPacket << float(area.Z);
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WowLabsNotifyPlayersMatchStateChanged::Write()
+{
+    // A single uint32 phase (clean-exe: the consumer branches on one dword; 3 == pre-match).
+    _worldPacket << uint32(State);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WowLabsSetPredictionCircle::Write()
+{
+    // RE-recovered wire (LobbyMatchmakerPackets.h): PackedGuid + two Vector3 centres + two radii, in the member
+    // order of struct WowLabsDataBR::CircleData (guid, centreCurrent, centreNext, radiusCurrent, radiusNext).
+    _worldPacket << CircleGuid;
+    _worldPacket << CenterCurrentX << CenterCurrentY << CenterCurrentZ;
+    _worldPacket << CenterNextX << CenterNextY << CenterNextZ;
+    _worldPacket << RadiusCurrent;
+    _worldPacket << RadiusNext;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WowLabsNotifyPlayersMatchEnd::Write()
+{
+    // Field order follows the Lua MatchDetails struct (matchType, matchEnded, detailsList). Widths/order are a
+    // best-effort pending a live sniff - this is only ever emitted when WowLabs.SendMatchEnd is enabled.
+    _worldPacket << uint32(MatchType);
+    _worldPacket << Bits<1>(MatchEnded);
+    _worldPacket.FlushBits();
+    _worldPacket << Size<uint32>(Details);
+    for (MatchDetail const& detail : Details)
+    {
+        _worldPacket << uint32(detail.Type);
+        _worldPacket << int32(detail.Value);
     }
 
     return &_worldPacket;

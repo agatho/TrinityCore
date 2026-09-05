@@ -3207,6 +3207,7 @@ struct MapEntry
     bool IsBattleArena() const { return InstanceType == MAP_ARENA; }
     bool IsBattlegroundOrArena() const { return InstanceType == MAP_BATTLEGROUND || InstanceType == MAP_ARENA; }
     bool IsScenario() const { return InstanceType == MAP_SCENARIO; }
+    bool IsWowLabs() const { return InstanceType == MAP_WOWLABS; }
     bool IsWorldMap() const { return InstanceType == MAP_COMMON; }
 
     bool GetEntrancePos(int32& mapid, float& x, float& y) const

@@ -22,6 +22,7 @@
 #include "ObjectGuid.h"
 #include "PacketUtilities.h"
 #include "CharacterPackets.h"
+#include <array>
 #include <vector>
 
 // ----------------------------------------------------------------------------------------------
@@ -316,6 +317,104 @@ namespace WorldPackets
 
             uint8 Status = CANNOT_QUEUE;
         };
+
+        // SMSG_LOBBY_MATCHMAKER_RECEIVE_INVITE (0x450321). Byte-aligned flat wire (parser sub_7FF7290B8440):
+        // PackedGuid inviter, then a u8 length byte where the display-name length is the high 6 bits
+        // (len = byte >> 2, low 2 bits unused here), then that many raw name bytes (no NUL). Drives the client
+        // event NEW_MATCHMAKING_PARTY_INVITE.
+        class LobbyMatchmakerReceiveInvite final : public ServerPacket
+        {
+        public:
+            explicit LobbyMatchmakerReceiveInvite() : ServerPacket(SMSG_LOBBY_MATCHMAKER_RECEIVE_INVITE, 24) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid InviterGuid;
+            std::string InviterName;
+        };
+
+        // SMSG_LOBBY_MATCHMAKER_PARTY_INVITE_REJECTED (0x450320). Parser sub_7FF7290B8390: just the rejector's
+        // name as a u8 (len = byte >> 2) + raw bytes. No guid. Drives REJECTED_MATCHMAKING_PARTY_INVITE{name}.
+        class LobbyMatchmakerPartyInviteRejected final : public ServerPacket
+        {
+        public:
+            explicit LobbyMatchmakerPartyInviteRejected() : ServerPacket(SMSG_LOBBY_MATCHMAKER_PARTY_INVITE_REJECTED, 8) { }
+
+            WorldPacket const* Write() override;
+
+            std::string Name;
+        };
+
+        // SMSG_LOBBY_MATCHMAKER_PARTY_INFO (0x45031F). The lobby roster broadcast; drives LOBBY_MATCHMAKER_
+        // PARTY_UPDATE. Byte-aligned flat wire (outer parser sub_7FF7290B81B0, member parser sub_7FF7291CCED0):
+        //   PackedGuid Leader; u32 PlaylistEntry; u32 count(Members); u32 count(Invited); PackedGuid; PackedGuid;
+        //   u8 flagByte {bits7:6=uint2, bit5, bit4, bit3}; Members[]; Invited[]
+        // Each 232-byte member (in wire order):
+        //   u8 M {nameLen = M>>2, bit1 = a bool}; PackedGuid; PackedGuid; u64; u8; u8; u32 countA;
+        //   u32[19] loadout (PlunderstormItemDisplayID cosmetic - structure certain, label inferred);
+        //   u32 countB; name[nameLen]; countA*{u32,u32}; countB*{u32,u32}
+        // The two 232B lists are structurally identical; list1 = confirmed members, list2 = pending invitees
+        // (inferred from the Lua GetCurrentParty vs GetPartyInvite split). The three member bools map to
+        // isReady/isPartyLeader/isLocalPlayer (exact assignment not offline-provable). P0 sends the members
+        // with the clear fields (guid, name, ready/leader/local) and leaves the cosmetic loadout + sub-lists 0.
+        struct LobbyMatchmakerPartyInfoMember
+        {
+            ObjectGuid MemberGuid;                        // partyMemberGUID (first member guid)
+            ObjectGuid AccountGuid;                       // second member guid (bnet/account)
+            uint64 Field88 = 0;
+            uint8 Field97 = 0;                             // one of isPartyLeader / isLocalPlayer
+            uint8 Field98 = 0;                             // the other of the two
+            bool ReadyBit = false;                        // M & 2
+            std::string Name;
+            std::array<uint32, 19> Loadout = { };         // PlunderstormItemDisplayID (cosmetic; 0 for now)
+        };
+
+        class LobbyMatchmakerPartyInfo final : public ServerPacket
+        {
+        public:
+            explicit LobbyMatchmakerPartyInfo() : ServerPacket(SMSG_LOBBY_MATCHMAKER_PARTY_INFO, 64) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid LeaderGuid;
+            uint32 PlaylistEntry = 0;
+            ObjectGuid Guid3;                             // two outer guids of unproven role - left empty
+            ObjectGuid Guid4;
+            uint8 FlagByte = 0;
+            std::vector<LobbyMatchmakerPartyInfoMember> Members;
+            std::vector<LobbyMatchmakerPartyInfoMember> Invited;
+        };
+
+        // SMSG_LOBBY_MATCHMAKER_QUEUE_PROPOSED (0x45031C / wire 0x420320). The queue "pop": drives the client
+        // event LOBBY_MATCHMAKER_QUEUE_POPPED, to which the client answers CMSG_..QUEUE_PROPSAL_RESPONSE{Accept}.
+        // The body is one of the runtime-dispatched WoW-Labs messages whose exact framing is NOT statically
+        // recoverable (opcode dwords are not immediates; needs a dynamic capture). The response correlates by
+        // session, so P2 sends the pop with no modelled fields; a proposal id / countdown is added once captured.
+        class LobbyMatchmakerQueueProposed final : public ServerPacket
+        {
+        public:
+            explicit LobbyMatchmakerQueueProposed() : ServerPacket(SMSG_LOBBY_MATCHMAKER_QUEUE_PROPOSED, 4) { }
+
+            WorldPacket const* Write() override;
+        };
+
+        // SMSG_LOBBY_MATCHMAKER_LOBBY_ACQUIRED_SERVER (0x45031E / wire 0x42031c). Sent once a proposal is fully
+        // accepted: tells the client which server/instance to fast-login to (it then ForceLogout()s). The client
+        // handler reads a dword at object offset +44; the fields below are the inferred fast-login target
+        // (~ FastLoginDestination: realm address, a token, game mode, map id) and are populated best-effort in
+        // P2, finalised in P3 when the MAP_WOWLABS instance handoff is built. Field framing is inferred.
+        class LobbyMatchmakerLobbyAcquiredServer final : public ServerPacket
+        {
+        public:
+            explicit LobbyMatchmakerLobbyAcquiredServer() : ServerPacket(SMSG_LOBBY_MATCHMAKER_LOBBY_ACQUIRED_SERVER, 16) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 RealmAddress = 0;
+            uint32 Token = 0;
+            uint8 GameMode = 0;
+            uint32 MapId = 0;
+        };
     }
 
     // --------------------------------------------------------------------------------------
@@ -486,6 +585,65 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             std::vector<WowLabsAreaOption> Areas;
+        };
+
+        // 0x450327 - broadcast to the players of a match when its phase changes. The wire is a single uint32
+        // state (clean-exe: the match-state consumer branches on one dword; state == 3 is the pre-match / area-
+        // selection phase, GetConfirmedWoWLabsArea gates on it). The other phase values are not decidable from
+        // the image and are marked provisional where they are used server-side.
+        class WowLabsNotifyPlayersMatchStateChanged final : public ServerPacket
+        {
+        public:
+            explicit WowLabsNotifyPlayersMatchStateChanged() : ServerPacket(SMSG_WOW_LABS_NOTIFY_PLAYERS_MATCH_STATE_CHANGED, 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 State = 0;
+        };
+
+        // One row of the end-of-match summary. Field SET is authoritative from Blizzard's own API doc
+        // (EndOfMatchUIDocumentation.lua: MatchDetail { type: MatchDetailType, value: number }); the concrete
+        // wire type of 'value' (int here) is a best-effort - see the packet comment.
+        struct MatchDetail
+        {
+            uint32 Type = 0;                    // MatchDetailType { Placement=0, Kills=1, PlunderAcquired=2 }
+            int32 Value = 0;
+        };
+
+        // 0x450326 - the per-player end-of-match summary that feeds C_EndOfMatchUI.GetEndOfMatchDetails() and
+        // fires SHOW_END_OF_MATCH_UI. Wire RE-confirmed from the client: GetEndOfMatchDetails (clean-exe
+        // 0x140E1E7C0) reads the stored result as matchType@+12 (int32), matchEnded@+16 (bool), detailsList@+24
+        // (8-byte MatchDetail { int32 type, int32 value }), in that order - matching EndOfMatchUIDocumentation.lua.
+        // The JAM bool (bit) and array (uint32 count) conventions match the sibling area packets in this file.
+        class WowLabsNotifyPlayersMatchEnd final : public ServerPacket
+        {
+        public:
+            explicit WowLabsNotifyPlayersMatchEnd() : ServerPacket(SMSG_WOW_LABS_NOTIFY_PLAYERS_MATCH_END, 16) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 MatchType = 1;               // EndOfMatchType { None=0, Plunderstorm=1 }
+            bool MatchEnded = true;
+            std::vector<MatchDetail> Details;
+        };
+
+        // 0x45032C - the storm "prediction" circle. RE-recovered (not a guess): the framed message object is
+        // 48 bytes and equals struct WowLabsDataBR::CircleData; its front 16 bytes are an ObjectGuid (the client
+        // builder gates on the guid type bits, (guid.hi >> 58) < 0x3A), followed by two Vector3 centres and two
+        // radii - the current ring and the predicted (next) ring the client interpolates between locally. Wire:
+        // PackedGuid + 8 floats, in member order.
+        class WowLabsSetPredictionCircle final : public ServerPacket
+        {
+        public:
+            explicit WowLabsSetPredictionCircle() : ServerPacket(SMSG_WOW_LABS_SET_PREDICTION_CIRCLE, 8 + 32) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid CircleGuid;
+            float CenterCurrentX = 0.0f, CenterCurrentY = 0.0f, CenterCurrentZ = 0.0f;
+            float CenterNextX = 0.0f, CenterNextY = 0.0f, CenterNextZ = 0.0f;
+            float RadiusCurrent = 0.0f;
+            float RadiusNext = 0.0f;
         };
     }
 }

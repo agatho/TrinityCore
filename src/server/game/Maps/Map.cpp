@@ -70,6 +70,7 @@
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
 #include "WorldStatePackets.h"
+#include "WowLabsMatchMgr.h"
 #include <boost/heap/fibonacci_heap.hpp>
 #include <sstream>
 
@@ -762,6 +763,11 @@ void Map::Update(uint32 t_diff)
 
     if (!m_mapRefManager.empty() || !m_activeNonPlayers.empty())
         ProcessRelocationNotifies(t_diff);
+
+    // Plunderstorm / WoW Labs: drive the match's pre-match timer + storm circle on the map's own update thread,
+    // so out-of-ring damage to players is applied thread-safely (P5).
+    if (i_mapEntry && i_mapEntry->IsWowLabs())
+        sWowLabsMatchMgr->UpdateInstance(this, t_diff);
 
     sScriptMgr->OnMapUpdate(this, t_diff);
 

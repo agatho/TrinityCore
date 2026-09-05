@@ -2598,6 +2598,10 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         TeleportState GetTeleportState() const { return m_teleport_state; }
         void SetTeleportState(TeleportState state) { m_teleport_state = state; }
         EnumFlag<TeleportToOptions> GetTeleportOptions() const { return m_teleport_options; }
+
+        // Plunderstorm / WoW Labs match instance binding (see m_wowLabsInstanceId).
+        uint32 GetWowLabsInstanceId() const { return m_wowLabsInstanceId; }
+        void SetWowLabsInstanceId(uint32 instanceId) { m_wowLabsInstanceId = instanceId; }
         int32 GetNewWorldCounter() const { return m_newWorldCounter; }
         bool IsBeingTeleported() const { return m_teleport_state != TeleportState::NotTeleporting; }
         bool IsBeingTeleportedNear() const { return m_teleport_state == TeleportState::DelayedTeleport
@@ -3941,6 +3945,11 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         TeleportToOptions m_teleport_options;
         uint32 m_teleportSpellId;
         int32 m_newWorldCounter;
+
+        // Plunderstorm / WoW Labs: the map-2695 match instance this player is bound to (0 = none). Set when a
+        // match is acquired (or by the .wowlabs GM command); MapManager::CreateMap reads it to give the player
+        // their own match instance of MAP_WOWLABS instead of a shared world map.
+        uint32 m_wowLabsInstanceId = 0;
 
         uint32 m_DelayedOperations;
         bool m_bCanDelayTeleport;
