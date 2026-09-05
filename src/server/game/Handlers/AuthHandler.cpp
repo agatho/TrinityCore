@@ -288,9 +288,12 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
         // against each realm-list entry's cfgContentSetID - so without this mapping the client has no realm for the
         // mode and fails with "no realms available" (WOW51900309). The event realm advertises the same content set
         // (bnetserver WowLabs.EventContentSetID); keep both in sync via the same config key here.
+        // Values taken from real retail 12.x glue sniffs (dump_12.0.1.65940 / 12.0.7.66102): retail carries
+        // Plunderstorm's GameModeData as { GameMode=2, middle field=5, GameModeRecordID=9 } (the middle field the
+        // TC proto calls ContentSetID is labelled "Unused1127" by the client parser - value 5 for Plunderstorm).
         WorldPackets::System::GameModeData& plunderstorm = features.DisabledGameModes.emplace_back();
-        plunderstorm.GameMode = uint8(sConfigMgr->GetIntDefault("WowLabs.EventGameModeEnum", 1)); // Enum.GameMode.Plunderstorm
-        plunderstorm.ContentSetID = int32(sConfigMgr->GetIntDefault("WowLabs.EventContentSetID", 9));
+        plunderstorm.GameMode = uint8(sConfigMgr->GetIntDefault("WowLabs.EventGameModeEnum", 2));    // Enum.GameMode.Plunderstorm
+        plunderstorm.ContentSetID = int32(sConfigMgr->GetIntDefault("WowLabs.EventContentSetID", 5)); // "Unused1127" = 5 on retail
         plunderstorm.GameModeRecordID = 9; // GameMode.db2 record id (tag "ps")
     }
 
