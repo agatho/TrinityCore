@@ -20184,12 +20184,6 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     _LoadCovenantCallings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_COVENANT_CALLINGS));
     ApplyConduitSpells();   // spell/aura systems are ready by here (mirrors _LoadGlyphAuras above)
 
-    _LoadCovenant(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_COVENANT));
-    _LoadSoulbindConduits(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUITS));
-    _LoadSoulbindConduitSockets(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SOULBIND_CONDUIT_SOCKETS));
-    _LoadRenownRewards(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_RENOWN_REWARDS));
-    ApplyConduitSpells();   // spell/aura systems are ready by here (mirrors _LoadGlyphAuras above)
-
     _LoadInventory(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_INVENTORY),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ARTIFACTS),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_AZERITE),
@@ -20402,12 +20396,6 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     // The vault row must load BEFORE the weekly runs: loading the runs prunes a week that has already reset,
     // and that prune both reads the stored claim/keystone boundaries and rewrites the row with the previous
     // week's captured summary. Loading it afterwards would clobber the capture with the pre-reset values.
-    _mythicPlusData->LoadVaultFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT));
-    _mythicPlusData->LoadWeeklyFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY));
-    UpdateDungeonScore();
-
-    _mythicPlusData = std::make_unique<MythicPlusData>(this);
-    _mythicPlusData->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS));
     _mythicPlusData->LoadVaultFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_VAULT));
     _mythicPlusData->LoadWeeklyFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_MYTHIC_PLUS_WEEKLY));
     UpdateDungeonScore();
