@@ -1150,6 +1150,50 @@ bool WorldSession::ValidateAppearance(Races race, Classes playerClass, Gender ge
 
 void WorldSession::HandleCharCreateOpcode(WorldPackets::Character::CreateCharacter& charCreate)
 {
+    // Plunderstorm / WoW Labs characterless login: the event realm provisions a disposable, account-named
+    // throwaway character (retail creates one per account on the Plunderstorm event realm; the player's normal
+    // roster lives on a different realm and is untouched). The client leaves the name EMPTY on this realm -
+    // CharacterCreate:GetSelectedName() returns "" under the Plunderstorm game rule and the name box is hidden -
+    // and expects the server to name it after the account. Combat comes entirely from picked-up abilities, so the
+    // class is not meaningful; a missing/invalid race+class combo is defaulted to a basic playable one rather than
+    // rejected. The normal roster gates (expansion race/class unlocks, race/class disable masks, reserved/profane
+    // name checks) do not apply to a throwaway on a dedicated event realm and are skipped below via `wowLabs`.
+    bool const wowLabs = IsOnWowLabsRealm();
+    if (wowLabs)
+    {
+        std::string& name = charCreate.CreateInfo->Name;
+        if (name.empty())
+        {
+            // Base the name on the account's letters (retail names the throwaway after the account), then append a
+            // base-26 letter encoding of the account id so two accounts whose names reduce to the same letters
+            // (e.g. "john123"/"john456") still get distinct, valid, <=12-char names - the name is a DB lookup key,
+            // so it must be unique per account rather than merely account-derived.
+            std::string base;
+            for (char c : GetAccountName())
+                if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))
+                    base.push_back(c);
+
+            std::string suffix;
+            for (uint32 acc = GetAccountId(); ; acc /= 26)
+            {
+                suffix.insert(suffix.begin(), char('a' + acc % 26));
+                if (acc < 26)
+                    break;
+            }
+
+            if (base.size() + suffix.size() > 12)       // MAX_PLAYER_NAME - keep the account id, trim the base
+                base.resize(12 - suffix.size());
+            name = base + suffix;
+            while (name.size() < 2)                     // guarantee the minimum name length (letters-only account id)
+                name.insert(name.begin(), 'p');
+        }
+
+        // Guarantee a creatable race/class: if the client's combination has no playercreateinfo, fall back to a
+        // universally playable class so Player::Create() succeeds (an invalid race is still caught below).
+        if (!sObjectMgr->GetPlayerInfo(charCreate.CreateInfo->Race, charCreate.CreateInfo->Class))
+            charCreate.CreateInfo->Class = CLASS_WARRIOR;
+    }
+
     if (!HasPermission(rbac::RBAC_PERM_SKIP_CHECK_CHARACTER_CREATION_TEAMMASK))
     {
         if (uint32 mask = sWorld->getIntConfig(CONFIG_CHARACTER_CREATING_DISABLED))
@@ -1202,7 +1246,7 @@ void WorldSession::HandleCharCreateOpcode(WorldPackets::Character::CreateCharact
         return;
     }
 
-    if (raceExpansionRequirement->Expansion > GetAccountExpansion())
+    if (!wowLabs && raceExpansionRequirement->Expansion > GetAccountExpansion())
     {
         TC_LOG_ERROR("entities.player.cheat", "Expansion {} account:[{}] tried to Create character with expansion {} race ({})",
             GetAccountExpansion(), GetAccountId(), raceExpansionRequirement->Expansion, charCreate.CreateInfo->Race);
@@ -1218,7 +1262,10 @@ void WorldSession::HandleCharCreateOpcode(WorldPackets::Character::CreateCharact
     //    return;
     //}
 
-    // prevent character creating Expansion class without Expansion account
+    // prevent character creating Expansion class without Expansion account (a WoW Labs throwaway is exempt - its
+    // race/class carries no unlock meaning and is defaulted above to a creatable combination)
+    if (!wowLabs)
+    {
     if (ClassAvailability const* raceClassExpansionRequirement = sObjectMgr->GetClassExpansionRequirement(charCreate.CreateInfo->Race, charCreate.CreateInfo->Class))
     {
         if (raceClassExpansionRequirement->ActiveExpansionLevel > GetExpansion() || raceClassExpansionRequirement->AccountExpansionLevel > GetAccountExpansion())
@@ -1248,8 +1295,9 @@ void WorldSession::HandleCharCreateOpcode(WorldPackets::Character::CreateCharact
         SendCharCreate(CHAR_CREATE_EXPANSION_CLASS);
         return;
     }
+    }
 
-    if (!HasPermission(rbac::RBAC_PERM_SKIP_CHECK_CHARACTER_CREATION_RACEMASK))
+    if (!wowLabs && !HasPermission(rbac::RBAC_PERM_SKIP_CHECK_CHARACTER_CREATION_RACEMASK))
     {
         if (raceEntry->GetFlags().HasFlag(ChrRacesFlag::NPCOnly))
         {
@@ -1266,7 +1314,7 @@ void WorldSession::HandleCharCreateOpcode(WorldPackets::Character::CreateCharact
         }
     }
 
-    if (!HasPermission(rbac::RBAC_PERM_SKIP_CHECK_CHARACTER_CREATION_CLASSMASK))
+    if (!wowLabs && !HasPermission(rbac::RBAC_PERM_SKIP_CHECK_CHARACTER_CREATION_CLASSMASK))
     {
         uint32 classMaskDisabled = sWorld->getIntConfig(CONFIG_CHARACTER_CREATING_DISABLED_CLASSMASK);
         if ((1 << (charCreate.CreateInfo->Class - 1)) & classMaskDisabled)
@@ -1284,18 +1332,22 @@ void WorldSession::HandleCharCreateOpcode(WorldPackets::Character::CreateCharact
         return;
     }
 
-    // check name limitations
-    ResponseCodes res = ObjectMgr::CheckPlayerName(charCreate.CreateInfo->Name, GetSessionDbcLocale(), true);
-    if (res != CHAR_NAME_SUCCESS)
+    // check name limitations (skipped for a WoW Labs throwaway: its name is server-derived from the account, not
+    // player-entered, so a profanity/reserved hit is not something the player could correct - the name box is hidden)
+    if (!wowLabs)
     {
-        SendCharCreate(res);
-        return;
-    }
+        ResponseCodes res = ObjectMgr::CheckPlayerName(charCreate.CreateInfo->Name, GetSessionDbcLocale(), true);
+        if (res != CHAR_NAME_SUCCESS)
+        {
+            SendCharCreate(res);
+            return;
+        }
 
-    if (!HasPermission(rbac::RBAC_PERM_SKIP_CHECK_CHARACTER_CREATION_RESERVEDNAME) && sObjectMgr->IsReservedName(charCreate.CreateInfo->Name))
-    {
-        SendCharCreate(CHAR_NAME_RESERVED);
-        return;
+        if (!HasPermission(rbac::RBAC_PERM_SKIP_CHECK_CHARACTER_CREATION_RESERVEDNAME) && sObjectMgr->IsReservedName(charCreate.CreateInfo->Name))
+        {
+            SendCharCreate(CHAR_NAME_RESERVED);
+            return;
+        }
     }
 
     // A Timerunning (Pandaria/Legion Remix) character is now allowed: the requested season is assigned and
@@ -1319,7 +1371,7 @@ void WorldSession::HandleCharCreateOpcode(WorldPackets::Character::CreateCharact
         stmt->setUInt32(0, GetAccountId());
         queryCallback.SetNextQuery(LoginDatabase.AsyncQuery(stmt));
     })
-        .WithChainingPreparedCallback([this](QueryCallback& queryCallback, PreparedQueryResult result)
+        .WithChainingPreparedCallback([this, wowLabs](QueryCallback& queryCallback, PreparedQueryResult result)
     {
         uint64 acctCharCount = 0;
         if (result)
@@ -1328,7 +1380,9 @@ void WorldSession::HandleCharCreateOpcode(WorldPackets::Character::CreateCharact
             acctCharCount = uint64(fields[0].GetDouble());
         }
 
-        if (acctCharCount >= sWorld->getIntConfig(CONFIG_CHARACTERS_PER_ACCOUNT))
+        // A WoW Labs throwaway does not count against the account roster limit - a player with a full roster must
+        // still be able to enter Plunderstorm on the event realm.
+        if (!wowLabs && acctCharCount >= sWorld->getIntConfig(CONFIG_CHARACTERS_PER_ACCOUNT))
         {
             SendCharCreate(CHAR_CREATE_ACCOUNT_LIMIT);
             return;
@@ -1338,14 +1392,14 @@ void WorldSession::HandleCharCreateOpcode(WorldPackets::Character::CreateCharact
         stmt->setUInt32(0, GetAccountId());
         queryCallback.SetNextQuery(CharacterDatabase.AsyncQuery(stmt));
     })
-        .WithChainingPreparedCallback([this, createInfo](QueryCallback& queryCallback, PreparedQueryResult result)
+        .WithChainingPreparedCallback([this, createInfo, wowLabs](QueryCallback& queryCallback, PreparedQueryResult result)
     {
         if (result)
         {
             Field* fields = result->Fetch();
             createInfo->CharCount = uint8(fields[0].GetUInt64()); // SQL's COUNT() returns uint64 but it will always be less than uint8.Max
 
-            if (createInfo->CharCount >= sWorld->getIntConfig(CONFIG_CHARACTERS_PER_REALM))
+            if (!wowLabs && createInfo->CharCount >= sWorld->getIntConfig(CONFIG_CHARACTERS_PER_REALM))
             {
                 SendCharCreate(CHAR_CREATE_SERVER_LIMIT);
                 return;
