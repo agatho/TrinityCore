@@ -19,6 +19,7 @@
 #include "AuthenticationPackets.h"
 #include "BattlenetRpcErrorCodes.h"
 #include "CharacterTemplateDataStore.h"
+#include "Config.h"
 #include "ClientConfigPackets.h"
 #include "DB2Stores.h"
 #include "DisableMgr.h"
@@ -256,7 +257,32 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
         }, gameRule.Value);
     }
 
+    // Plunderstorm / WoW Labs (ER-3): on the WoW Labs event realm this session gets the Plunderstorm game rules
+    // here at the glue screen too (so C_GameRules.GetActiveGameMode() reads Plunderstorm and the glue shows the
+    // Plunderstorm lobby), while the main realm's rules stay standard.
+    if (IsOnWowLabsRealm())
+    {
+        for (::GameRule rule : { ::GameRule::CharacterlessLogin, ::GameRule::MapPlunderstormCircle, ::GameRule::PlunderstormAreaSelection })
+        {
+            WorldPackets::System::GameRuleValuePair& pair = features.GameRules.emplace_back();
+            pair.Rule = AsUnderlyingType(rule);
+            pair.Value = 1;
+        }
+    }
+
     features.AvailableGameModeIDs.push_back(8); // GameMode.db2, standard
+    // Offer Plunderstorm (GameMode.db2 id 9) on the character-select game-mode selector when a WoW Labs event
+    // realm is configured; selecting it makes the client C_RealmList.ConnectToEventRealm(plunderStormRealm).
+    if (sConfigMgr->GetIntDefault("WowLabs.EventRealmId", 0))
+    {
+        features.AvailableGameModeIDs.push_back(9); // GameMode.db2, plunderstorm
+
+        // The character-select NavBar (Blizzard_CharacterSelectNavBar.lua) force-shows the game-mode selector when
+        // C_GameRules.GetCurrentEventRealmQueues() ~= Enum.EventRealmQueues.None. That value is fed by this glue
+        // packet's EventRealmQueues field (a bitmask: Solo=1, Duo=2, Trio=4, Training=8). Advertise which
+        // Plunderstorm queues this event realm accepts so the selector actually appears; default Solo|Duo|Trio.
+        features.EventRealmQueues = uint32(sConfigMgr->GetIntDefault("WowLabs.EventRealmQueues", 0x7));
+    }
 
     SendPacket(features.Write());
 
@@ -367,6 +393,26 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
     WorldPackets::System::MirrorVars variables;
     variables.Variables = vars;
     SendPacket(variables.Write());
+
+    // Plunderstorm / WoW Labs (ER-3): point the character-select selector at the event realm. The client CVar is
+    // named "plunderstormRealm" and holds a REALM_ADDRESS ("REALM_ADDRESS to connect to when pressing the
+    // Plunderstorm button" - confirmed from the client's own CVar registration), which the selector feeds to
+    // C_RealmList.ConnectToEventRealm([eventRealmAddress]). So push the event realm's virtual realm address
+    // (Region<<24 | Site<<16 | realmId), computed from this realm's handle + the event realm id (same bnet
+    // region/site as this realm, which ER-2's cloned realmlist row uses).
+    if (int32 const eventRealmId = sConfigMgr->GetIntDefault("WowLabs.EventRealmId", 0))
+    {
+        Battlenet::RealmHandle const mainId = sRealmList->GetCurrentRealmId();
+        uint32 const eventAddress = Battlenet::RealmHandle(mainId.Region, mainId.Site, uint32(eventRealmId)).GetAddress();
+        std::string const eventAddressStr = std::to_string(eventAddress);
+        WorldPackets::System::MirrorVarSingle eventVars[] =
+        {
+            { "plunderstormRealm"sv, eventAddressStr },
+        };
+        WorldPackets::System::MirrorVars eventVariables;
+        eventVariables.Variables = eventVars;
+        SendPacket(eventVariables.Write());
+    }
 
     TC_LOG_INFO("housing", "<<< SMSG_MIRROR_VARS sent: housingServiceEnabled=1, MaxExpansionLevel={}, AccountExpansion={}",
         sWorld->getIntConfig(CONFIG_EXPANSION), GetAccountExpansion());
