@@ -69,7 +69,12 @@ public:
 
         // Drop onto the real map: the "Circle of Inner Binding" AreaPOI on map 2695, the storm's final-ring
         // centre (needs map 2695's terrain extracted from the client for the ground to be there).
-        if (!player->TeleportTo(WowLabsMatchMgr::MAP_ID, -1527.48f, -2165.09f, 17.37f, 0.0f, TELE_TO_NONE, match->InstanceId))
+        // NOTE: do NOT pass an explicit instanceId here. HandleMoveWorldportAck uses FindMap (not CreateMap) when
+        // the teleport carries an instanceId, and the WoW Labs match instance is created on demand - FindMap would
+        // return null (instance never pre-created) and dump the player to homebind (client hangs at 66%). Omitting it
+        // routes through MapManager::CreateMap, whose IsWowLabs() branch builds the instance from GetWowLabsInstanceId()
+        // (set just above), so the match map is created as the player enters.
+        if (!player->TeleportTo(WowLabsMatchMgr::MAP_ID, -1527.48f, -2165.09f, 17.37f, 0.0f, TELE_TO_NONE))
         {
             player->SetWowLabsInstanceId(0);
             sWowLabsMatchMgr->RemoveMatch(match->Id);
@@ -99,7 +104,12 @@ public:
         sWowLabsMatchMgr->AddMemberToMatch(match, player->GetSession()->GetBattlenetAccountGUID(), player->GetName());
         player->SetWowLabsInstanceId(match->InstanceId);
 
-        if (!player->TeleportTo(WowLabsMatchMgr::MAP_ID, -1527.48f, -2165.09f, 17.37f, 0.0f, TELE_TO_NONE, match->InstanceId))
+        // NOTE: do NOT pass an explicit instanceId here. HandleMoveWorldportAck uses FindMap (not CreateMap) when
+        // the teleport carries an instanceId, and the WoW Labs match instance is created on demand - FindMap would
+        // return null (instance never pre-created) and dump the player to homebind (client hangs at 66%). Omitting it
+        // routes through MapManager::CreateMap, whose IsWowLabs() branch builds the instance from GetWowLabsInstanceId()
+        // (set just above), so the match map is created as the player enters.
+        if (!player->TeleportTo(WowLabsMatchMgr::MAP_ID, -1527.48f, -2165.09f, 17.37f, 0.0f, TELE_TO_NONE))
         {
             player->SetWowLabsInstanceId(0);
             handler->PSendSysMessage("WoW Labs: teleport to map {} failed - are the map data files for it extracted?", WowLabsMatchMgr::MAP_ID);
