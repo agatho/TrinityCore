@@ -18,6 +18,7 @@
 #include "WorldSession.h"
 #include "AccountMgr.h"
 #include "ArenaTeam.h"
+#include "Config.h"
 #include "ArenaTeamMgr.h"
 #include "ArtifactPackets.h"
 #include "AuctionHousePackets.h"
@@ -2294,6 +2295,14 @@ void WorldSession::SendFeatureSystemStatus()
     features.NPETutorialsEnabled = true;
     features.QuestSessionEnabled = true;
     /// END OF DUMMY VALUES
+
+    // Plunderstorm / WoW Labs: enable the in-game "queue Plunderstorm from mainline" entry (Group Finder PvP tab).
+    // The client's IsPlunderstormAvailable() (Blizzard_GroupFinder PVEFrame.lua) gates on
+    // C_LobbyMatchmakerInfo.GetQueueFromMainlineEnabled() - fed by this flag - AND GetCurrentEventRealmQueues()!=None.
+    // This path queues via the LobbyMatchmaker (our handlers) on the current realm, sidestepping the char-select
+    // event-realm selector routing entirely.
+    if (sConfigMgr->GetIntDefault("WowLabs.EventRealmId", 0))
+        features.LobbyMatchmakerQueueFromMainlineEnabled = true;
 
     features.EuropaTicketSystemStatus->TicketsEnabled = sWorld->getBoolConfig(CONFIG_SUPPORT_TICKETS_ENABLED);
     features.EuropaTicketSystemStatus->BugsEnabled = sWorld->getBoolConfig(CONFIG_SUPPORT_BUGS_ENABLED);
