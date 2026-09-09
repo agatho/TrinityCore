@@ -1,0 +1,79 @@
+-- ============================================================================
+-- Make `sql/content/` apply ITSELF, so a tester does not need a human (or a
+-- Claude instance) to hand-apply 30 files after every merge.
+-- ============================================================================
+-- THE PROBLEM. This fork keeps authored zone content in `sql/content/<continent>/
+-- <zone>/<feature>/`, which is a good convention for reading and reviewing it.
+-- But TrinityCore's updater does not scan that tree: the directories it walks
+-- come from the `updates_include` TABLE, and on integ_world that table says
+-- only:
+--
+--     $/sql/old/12.x/world    ARCHIVED
+--     $/sql/updates/world     RELEASED
+--
+-- So of the Arathi RPE's 61 SQL files, the 31 under sql/updates/world/master
+-- are reachable by the updater and the 30 under sql/content are NOT -- they
+-- have never been applied by any automated path, on any realm. That is the
+-- real reason PlayerChoice 902 is authored, committed, merged into
+-- integration/12_1_all, and still absent from integ_world.
+--
+-- It worked so far because whoever ran the merge applied them by hand. That
+-- does not survive contact with a second tester.
+--
+-- THE FIX. One row. The updater's FillFileListRecursively walks to depth 10,
+-- so registering the root picks up every zone folder beneath it automatically
+-- and no future zone needs its own registration.
+-- ============================================================================
+
+-- Idempotent: re-running changes nothing. `path` is the primary key on this
+-- table in TC's schema, but INSERT IGNORE keeps this safe even where it is not.
+INSERT IGNORE INTO `updates_include` (`path`, `state`) VALUES ('$/sql/content', 'RELEASED');
+
+-- ---------------------------------------------------------------------------
+-- WHAT THIS CHANGES IN PRACTICE -- read before applying
+-- ---------------------------------------------------------------------------
+-- * RELEASED, not ARCHIVED. UpdateFetcher::AppliedFileEntry::StateConvert maps
+--   anything that is not the literal "RELEASED" to ARCHIVED, and ARCHIVED
+--   directories skip redundancy checks (Updates.ArchivedRedundancy = 0). We
+--   WANT redundancy here: content slices get re-authored as captures improve,
+--   and Updates.Redundancy = 1 means an edited slice is detected and re-applied
+--   rather than silently ignored.
+--
+-- * Re-applying is SAFE FOR THESE FILES SPECIFICALLY, because every content
+--   slice is written DELETE-then-INSERT scoped to its own ids. That is a
+--   property of the current files, not a guarantee of the convention -- a
+--   future slice written as a bare INSERT would double its rows on re-apply.
+--   Keep the DELETE-first discipline.
+--
+-- * FILES ARE KEYED BY BASENAME, NOT PATH. UpdateFetcher compares
+--   `availableQuery.first.filename()`. Today that is safe: 31 content files,
+--   ZERO duplicate basenames, and ZERO collisions with sql/updates/world.
+--   But the convention numbers files per zone (10_creature_template.sql,
+--   11_gameobject_template.sql, ...), so the SECOND zone to adopt it will
+--   collide and the updater will report a rename/conflict instead of applying
+--   the file. Guard added: tools/check_content_sql_names.py -- run it before
+--   merging a new zone. Zone-prefixing new slices (arathi_10_creature_template
+--   .sql) avoids the problem entirely.
+--
+-- * ORDERING. Within a directory the updater applies files sorted by name, and
+--   the existing numeric prefixes already encode the intended order (10 before
+--   91 before 92). Cross-zone ordering is not defined and should not matter --
+--   if a slice depends on another zone's slice, that dependency is a bug.
+--
+-- * THE FIRST RUN WILL APPLY ALL 30 ARATHI SLICES. On a realm where they were
+--   previously hand-applied that is a re-apply, which the DELETE-first shape
+--   makes a no-op in effect. Take a backup anyway: this is the first time this
+--   path has ever been automated, and "should be idempotent" is a claim about
+--   files nobody has re-run yet.
+--
+-- * NOT SUFFICIENT ON integ_world AS IT STANDS. That database's `updates`
+--   table has ZERO rows, so the updater has never tracked anything there and
+--   would treat all 827 world updates as new. Registering this directory does
+--   not fix that, and the two problems should not be solved in the same step.
+-- ============================================================================
+
+-- Verify after applying:
+--   SELECT * FROM updates_include ORDER BY path;
+-- then start worldserver and watch the `sql.updates` log: it should report the
+-- 30 content slices as applied, and `SELECT COUNT(*) FROM updates WHERE name
+-- LIKE '9%_playerchoice%'` should become non-zero.
