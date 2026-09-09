@@ -23,7 +23,7 @@ target_link_libraries(tests
     trinity-core-interface
     game
     extractor_common
-    Catch2::Catch2)
+    Catch2::Catch2WithMain)
 
 target_include_directories(tests
   PRIVATE

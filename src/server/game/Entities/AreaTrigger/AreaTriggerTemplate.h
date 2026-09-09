@@ -61,9 +61,9 @@ enum class AreaTriggerCreatePropertiesFlag : uint32
 {
     None                           = 0x00000,
     HasAbsoluteOrientation         = 0x00001,
-    HasDynamicShape                = 0x00002,
+    HasDynamicShape                = 0x00002, // DEPRECATED
     HasAttached                    = 0x00004, // DEPRECATED
-    HasFaceMovementDir             = 0x00008,
+    HasFaceMovementDir             = 0x00008, // NYI
     HasFollowsTerrain              = 0x00010, // NYI
     AlwaysExterior                 = 0x00020,
     HasTargetRollPitchYaw          = 0x00040, // NYI
@@ -106,6 +106,7 @@ struct AreaTriggerShapeInfo
         float RadiusTarget;
 
         float GetMaxSearchRadius() const;
+        bool IsDynamic() const;
     };
 
     struct Box
@@ -119,6 +120,7 @@ struct AreaTriggerShapeInfo
         TaggedPosition<Position::XYZ> ExtentsTarget;
 
         float GetMaxSearchRadius() const;
+        bool IsDynamic() const;
     };
 
     struct Polygon
@@ -134,6 +136,7 @@ struct AreaTriggerShapeInfo
         float HeightTarget;
 
         float GetMaxSearchRadius() const;
+        bool IsDynamic() const;
     };
 
     struct Cylinder
@@ -151,6 +154,7 @@ struct AreaTriggerShapeInfo
         float LocationZOffsetTarget;
 
         float GetMaxSearchRadius() const;
+        bool IsDynamic() const;
     };
 
     struct Disk
@@ -172,19 +176,22 @@ struct AreaTriggerShapeInfo
         float LocationZOffsetTarget;
 
         float GetMaxSearchRadius() const;
+        bool IsDynamic() const;
     };
 
     struct BoundedPlane
     {
-        BoundedPlane()
-            : Extents(), ExtentsTarget() { }
+        BoundedPlane() = default;
         explicit BoundedPlane(std::array<float, MAX_AREATRIGGER_ENTITY_DATA> const& raw)
-            : Extents(raw[0], raw[1]), ExtentsTarget(raw[2], raw[3]) { }
+            : ExtentsY(raw[0]), ExtentsZ(raw[1]), ExtentsTargetY(raw[2]), ExtentsTargetZ(raw[3]) { }
 
-        TaggedPosition<Position::XY> Extents;
-        TaggedPosition<Position::XY> ExtentsTarget;
+        float ExtentsY = 0.0f;
+        float ExtentsZ = 0.0f;
+        float ExtentsTargetY = 0.0f;
+        float ExtentsTargetZ = 0.0f;
 
         float GetMaxSearchRadius() const;
+        bool IsDynamic() const;
     };
 
     std::variant<Sphere, Box, Polygon, Cylinder, Disk, BoundedPlane> Data;
@@ -196,6 +203,7 @@ struct AreaTriggerShapeInfo
     bool IsDisk()           const { return std::holds_alternative<Disk>(Data);          }
     bool IsBoundedPlane()   const { return std::holds_alternative<BoundedPlane>(Data);  }
     float GetMaxSearchRadius() const;
+    bool IsDynamic() const;
 };
 
 struct AreaTriggerOrbitInfo
