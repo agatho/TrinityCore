@@ -7,3 +7,12 @@ INSERT INTO `rbac_permissions` (`id`, `name`) VALUES
 DELETE FROM `rbac_linked_permissions` WHERE `linkedId` = 1002;
 INSERT INTO `rbac_linked_permissions` (`id`, `linkedId`) VALUES
 (196, 1002);
+
+-- feature/club-finder: cs_clubfinder.cpp references RBAC_PERM_COMMAND_CLUB_FINDER which the branch never declared.
+INSERT INTO `rbac_permissions` (`id`, `name`) VALUES
+(1003, 'Command: clubfinder')
+  ON DUPLICATE KEY UPDATE `name` = 'Command: clubfinder';
+
+DELETE FROM `rbac_linked_permissions` WHERE `linkedId` = 1003;
+INSERT INTO `rbac_linked_permissions` (`id`, `linkedId`) VALUES
+(196, 1003);

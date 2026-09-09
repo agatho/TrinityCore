@@ -588,6 +588,16 @@ namespace WorldPackets
             bool Disable = false;
         };
 
+        class SellAllJunkItems final : public ClientPacket
+        {
+        public:
+            explicit SellAllJunkItems(WorldPacket&& packet) : ClientPacket(CMSG_SELL_ALL_JUNK_ITEMS, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid VendorGUID;
+        };
+
         class SetBackpackSellJunkDisabled final : public ClientPacket
         {
         public:

@@ -2818,8 +2818,6 @@ class TC_GAME_API WorldSession
         void HandleSetBankAutosortDisabled(WorldPackets::Item::SetBankAutosortDisabled const& setBankAutosortDisabled);
         void SendOpenContainer(ObjectGuid containerGuid);
 
-        void HandleSetSortBagsRightToLeft(WorldPackets::Item::SetSortBagsRightToLeft const& setSortBagsRightToLeft);
-        void HandleSetInsertItemsLeftToRight(WorldPackets::Item::SetInsertItemsLeftToRight const& setInsertItemsLeftToRight);
         void HandleAttackSwingOpcode(WorldPackets::Combat::AttackSwing& packet);
         void HandleAttackStopOpcode(WorldPackets::Combat::AttackStop& packet);
         void HandleSetSheathedOpcode(WorldPackets::Combat::SetSheathed& packet);
@@ -3755,6 +3753,9 @@ class TC_GAME_API WorldSession
         // signer - was decorative. Session-scoped on purpose: a signature request is an
         // in-the-moment offer, so it does not survive a relog, and nothing is persisted.
         std::unordered_set<uint64> _pendingCharterSignatureRequests;
+#if defined(TRINITY_PLAYERBOT_V2)
+        bool _isBot;
+#endif
 
         WorldSession(WorldSession const& right) = delete;
         WorldSession& operator=(WorldSession const& right) = delete;

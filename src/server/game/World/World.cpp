@@ -77,6 +77,7 @@
 #include "DiscordBridge.h"
 #include "GuildMgr.h"
 #include "GuildRenameMgr.h"
+#include "HandcraftedRoadStorage.h"
 #include "IPLocation.h"
 #include "InstanceEncounterTimeline.h"
 #include "InstanceLockMgr.h"
