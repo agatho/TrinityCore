@@ -78,3 +78,34 @@ WorldPackets::PacketArrayMaxCapacityException::PacketArrayMaxCapacityException(s
     : ByteBufferException(Trinity::StringFormat("Attempted to read more array elements from packet {} than allowed {}", requestedSize, sizeLimit))
 {
 }
+
+// See PacketUtilities.h for the JamDynamicString wire contract this implements.
+void WorldPackets::WriteDynStringLength(ByteBuffer& data, std::string const& value)
+{
+    data.WriteBits(value.empty() ? 0u : uint32(value.length() + 1), 24);
+}
+
+void WorldPackets::WriteDynStringData(ByteBuffer& data, std::string const& value)
+{
+    if (value.empty())
+        return;
+
+    data.WriteString(value);
+    data << uint8(0);
+}
+
+uint32 WorldPackets::ReadDynStringLength(ByteBuffer& data)
+{
+    uint32 lengthWithNul = data.ReadBits(24);
+    return lengthWithNul ? lengthWithNul - 1 : 0;
+}
+
+void WorldPackets::ReadDynStringData(ByteBuffer& data, std::string& value, uint32 length)
+{
+    if (!length)
+        return;
+
+    value = data.ReadString(length);
+    if (data.read<uint8>() != 0)
+        throw ByteBufferInvalidValueException("JamDynamicString", "missing NUL terminator");
+}
