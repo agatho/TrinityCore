@@ -363,8 +363,8 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_CHROMIE_TIME_SELECT_EXPANSION,                      STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleChromieTimeSelectExpansion);
     DEFINE_HANDLER(CMSG_CLAIM_WEEKLY_REWARD,                                STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleClaimWeeklyReward);
     DEFINE_HANDLER(CMSG_CLASS_TALENTS_DELETE_CONFIG,                        STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleClassTalentsDeleteConfig);
-    DEFINE_HANDLER(CMSG_CLASS_TALENTS_NOTIFY_EMPTY_CONFIG,                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleClassTalentsNotifyEmptyConfig);
-    DEFINE_HANDLER(CMSG_CLASS_TALENTS_NOTIFY_VALIDATION_FAILED,             STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleClassTalentsNotifyValidationFailed);
+    DEFINE_HANDLER(CMSG_CLASS_TALENTS_NOTIFY_EMPTY_CONFIG,                  STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleClassTalentsNotifyEmptyConfig);
+    DEFINE_HANDLER(CMSG_CLASS_TALENTS_NOTIFY_VALIDATION_FAILED,             STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleClassTalentsNotifyValidationFailed);
     DEFINE_HANDLER(CMSG_CLASS_TALENTS_RENAME_CONFIG,                        STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleClassTalentsRenameConfig);
     DEFINE_HANDLER(CMSG_CLASS_TALENTS_REQUEST_NEW_CONFIG,                   STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleClassTalentsRequestNewConfig);
     DEFINE_HANDLER(CMSG_CLASS_TALENTS_SET_STARTER_BUILD_ACTIVE,             STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleClassTalentsSetStarterBuildActive);
@@ -1198,7 +1198,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_TRAINER_LIST,                                       STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleTrainerListOpcode);
     DEFINE_HANDLER(CMSG_TRAINING_GROUNDS_JOIN,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleTrainingGroundsJoin);
     DEFINE_HANDLER(CMSG_TRAITS_COMMIT_CONFIG,                               STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleTraitsCommitConfig);
-    DEFINE_HANDLER(CMSG_TRAITS_TALENT_TEST_UNLEARN_SPELLS,                  STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleTraitsTalentTestUnlearnSpells);
+    DEFINE_HANDLER(CMSG_TRAITS_TALENT_TEST_UNLEARN_SPELLS,                  STATUS_LOGGEDIN,  PROCESS_INPLACE,      &WorldSession::HandleTraitsTalentTestUnlearnSpells);
     DEFINE_HANDLER(CMSG_TRANSFER_CURRENCY_FROM_ACCOUNT_CHARACTER,           STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleTransferCurrencyFromAccountCharacter);
     DEFINE_HANDLER(CMSG_TRANSMOGRIFY_ITEMS,                                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleTransmogrifyItems);
     DEFINE_HANDLER(CMSG_TRANSMOG_OUTFIT_NEW,                                STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleTransmogOutfitNew);
