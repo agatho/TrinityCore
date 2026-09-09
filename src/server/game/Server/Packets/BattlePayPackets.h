@@ -724,6 +724,300 @@ namespace WorldPackets
 
             ObjectGuid CharacterGUID;
         };
+
+        // ---- VAS transfer/service request layer (client -> server) -------------------------------------
+        //
+        // CMSG read layouts recovered from the client deserializers (c:/dumps/all_cmsg_layouts_68275.json,
+        // opcode NAMES build-stable). The two-uint32 request bodies carry a request context whose exact
+        // send-side field names are not offline-proven; they are read verbatim and named by position so the
+        // server can echo/validate them without inventing semantics.
+
+        // CMSG_CHARACTER_CHECK_UPGRADE (0x4000F5) - empty body; a poll for boost eligibility of this account.
+        class CharacterCheckUpgrade final : public ClientPacket
+        {
+        public:
+            explicit CharacterCheckUpgrade(WorldPacket&& packet) : ClientPacket(CMSG_CHARACTER_CHECK_UPGRADE, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // CMSG_CHARACTER_UPGRADE_MANUAL_UNREVOKE_REQUEST (0x4000F3) - one character guid: undo a revoked boost.
+        class CharacterUpgradeManualUnrevokeRequest final : public ClientPacket
+        {
+        public:
+            explicit CharacterUpgradeManualUnrevokeRequest(WorldPacket&& packet) : ClientPacket(CMSG_CHARACTER_UPGRADE_MANUAL_UNREVOKE_REQUEST, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid CharacterGUID;
+        };
+
+        // CMSG_GET_VAS_ACCOUNT_CHARACTER_LIST (0x400120) - two uint32 request context.
+        class GetVasAccountCharacterList final : public ClientPacket
+        {
+        public:
+            explicit GetVasAccountCharacterList(WorldPacket&& packet) : ClientPacket(CMSG_GET_VAS_ACCOUNT_CHARACTER_LIST, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Field1 = 0;
+            uint32 Field2 = 0;
+        };
+
+        // CMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST (0x400121) - two uint32 request context.
+        class GetVasTransferTargetRealmList final : public ClientPacket
+        {
+        public:
+            explicit GetVasTransferTargetRealmList(WorldPacket&& packet) : ClientPacket(CMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Field1 = 0;
+            uint32 Field2 = 0;
+        };
+
+        // CMSG_VAS_GET_QUEUE_MINUTES (0x400138) - one uint32 (the VAS service/product context to estimate).
+        class VasGetQueueMinutes final : public ClientPacket
+        {
+        public:
+            explicit VasGetQueueMinutes(WorldPacket&& packet) : ClientPacket(CMSG_VAS_GET_QUEUE_MINUTES, std::move(packet)) { }
+
+            void Read() override;
+
+            uint64 Handle = 0;   // the correlation token the response echoes (client matches it in its pending table)
+        };
+
+        // SMSG_VAS_GET_QUEUE_MINUTES_RESPONSE (0x4202C1) - flat 12 bytes, VERIFIED from the client parser
+        // sub_7FF72AE70450: { uint64 Handle; uint32 QueueMinutes }. No sub-frame, no bits.
+        class VasGetQueueMinutesResponse final : public ServerPacket
+        {
+        public:
+            explicit VasGetQueueMinutesResponse() : ServerPacket(SMSG_VAS_GET_QUEUE_MINUTES_RESPONSE, 12) { }
+
+            WorldPacket const* Write() override;
+
+            uint64 Handle = 0;
+            uint32 QueueMinutes = 0;
+        };
+
+        // SMSG_CHARACTER_UPGRADE_MANUAL_UNREVOKE_RESULT (0x42026B) - flat 4 bytes, VERIFIED from the client
+        // parser sub_7FF72A663530: a single uint32 Result. No character guid on the wire (resolved client-side).
+        class CharacterUpgradeManualUnrevokeResult final : public ServerPacket
+        {
+        public:
+            explicit CharacterUpgradeManualUnrevokeResult() : ServerPacket(SMSG_CHARACTER_UPGRADE_MANUAL_UNREVOKE_RESULT, 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Result = 0;
+        };
+
+        // CMSG_VAS_CHECK_TRANSFER_OK (0x400139) - one uint32 (the VAS service/product context to validate).
+        class VasCheckTransferOk final : public ClientPacket
+        {
+        public:
+            explicit VasCheckTransferOk(WorldPacket&& packet) : ClientPacket(CMSG_VAS_CHECK_TRANSFER_OK, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Field1 = 0;
+        };
+
+        // CMSG_BATTLE_PAY_ACK_FAILED_RESPONSE - the client acknowledges a failed purchase result. One uint32
+        // (the server token being acked). Fire-and-forget: no response.
+        class BattlePayAckFailedResponse final : public ClientPacket
+        {
+        public:
+            explicit BattlePayAckFailedResponse(WorldPacket&& packet) : ClientPacket(CMSG_BATTLE_PAY_ACK_FAILED_RESPONSE, std::move(packet)) { }
+
+            void Read() override { _worldPacket >> ServerToken; }
+
+            uint32 ServerToken = 0;
+        };
+
+        // CMSG_BATTLE_PAY_REQUEST_PRICE_INFO - one uint32 (the product/context to price).
+        class BattlePayRequestPriceInfo final : public ClientPacket
+        {
+        public:
+            explicit BattlePayRequestPriceInfo(WorldPacket&& packet) : ClientPacket(CMSG_BATTLE_PAY_REQUEST_PRICE_INFO, std::move(packet)) { }
+
+            void Read() override { _worldPacket >> ProductID; }
+
+            uint32 ProductID = 0;
+        };
+
+        // CMSG_BATTLE_PAY_CANCEL_OPEN_CHECKOUT - the client abandons an open checkout. Small body that the
+        // server does not need to act on (the checkout it opened carries no server-side reservation to release).
+        class BattlePayCancelOpenCheckout final : public ClientPacket
+        {
+        public:
+            explicit BattlePayCancelOpenCheckout(WorldPacket&& packet) : ClientPacket(CMSG_BATTLE_PAY_CANCEL_OPEN_CHECKOUT, std::move(packet)) { }
+
+            void Read() override { _worldPacket.rfinish(); }
+        };
+
+        // CMSG_BATTLE_PAY_START_VAS_PURCHASE (0x400122) - begins a paid VAS purchase. The leading fields are
+        // resolved from the client builder sub_7FF72AE6E2F0: a request sequence id, the VAS service type, a
+        // guid (the selected character/product), a context uint32, then the TARGET REALM's wowRealmAddress
+        // (copied from the picked JamCliVASTargetRealm[+0]). The tail (name/blob strings, more guids) is not
+        // needed to identify the transfer and is consumed. The per-guid role is not offline-provable, but the
+        // first guid is the selected character in the transfer flow; downstream validation (VasTransferMgr)
+        // rejects a wrong guid safely.
+        class BattlePayStartVasPurchase final : public ClientPacket
+        {
+        public:
+            explicit BattlePayStartVasPurchase(WorldPacket&& packet) : ClientPacket(CMSG_BATTLE_PAY_START_VAS_PURCHASE, std::move(packet)) { }
+
+            void Read() override;
+
+            // Wire (client serializer sub_7FF72907C390, fully RE'd): 4x uint32 + 4x packed guid header, then a
+            // 5-byte bit block of five string-length prefixes (6,7,7,6,12 bits) and a single trailing bool bit
+            // = IsValidationOnly, then the string bodies (not needed here). The four guids carry the character
+            // plus account/bnet/target guids; the character is the one that is a Player guid.
+            uint32 SequenceId = 0;
+            uint32 ServiceType = 0;
+            uint32 Context = 0;
+            uint32 TargetRealmAddress = 0;     // wowRealmAddress of the picked target realm (JamCliVASTargetRealm[+0])
+            ObjectGuid Guid1;
+            ObjectGuid Guid2;
+            ObjectGuid Guid3;
+            ObjectGuid Guid4;
+            bool IsValidationOnly = false;     // flow calls validate-pass first, then commit-pass
+
+            ObjectGuid GetCharacterGuid() const  // the character is the sole Player-type guid among the four
+            {
+                for (ObjectGuid const& g : { Guid1, Guid2, Guid3, Guid4 })
+                    if (g.IsPlayer())
+                        return g;
+                return ObjectGuid::Empty;
+            }
+        };
+
+        // CMSG_BATTLE_PAY_DISTRIBUTION_ASSIGN_VAS (0x400167) - a large nested struct (client token, several
+        // guids, product choice and flag bytes). Only the leading uint32 (a client/distribution token used to
+        // correlate the answer) is modelled; the rest is consumed to keep the stream aligned. The exact struct
+        // is live-capture-pending and is not needed to refuse an assign for which no entitlement exists.
+        class BattlePayDistributionAssignVas final : public ClientPacket
+        {
+        public:
+            explicit BattlePayDistributionAssignVas(WorldPacket&& packet) : ClientPacket(CMSG_BATTLE_PAY_DISTRIBUTION_ASSIGN_VAS, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 Token = 0;
+        };
+
+        // SMSG_BATTLE_PAY_DISTRIBUTION_ASSIGN_VAS_RESPONSE (0x420316) - three uint32 (client parser
+        // sub_7FF7290B7D50 reads exactly {uint32, uint32, uint32}, no strings, no vector).
+        class BattlePayDistributionAssignVasResponse final : public ServerPacket
+        {
+        public:
+            explicit BattlePayDistributionAssignVasResponse() : ServerPacket(SMSG_BATTLE_PAY_DISTRIBUTION_ASSIGN_VAS_RESPONSE, 12) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Field1 = 0;
+            uint32 Field2 = 0;
+            uint32 Result = 0;
+        };
+
+        // ---- VAS transfer list responses (server -> client) --------------------------------------------
+        //
+        // Element layouts are VERIFIED from the client deserializers (cfunc_cache decompile). Outer headers
+        // and a few per-entry field SEMANTICS are not offline-provable (JamCliVASTargetRealm is a reflected
+        // type with no descriptor); those are populated with clearly-labeled best-effort values and are
+        // live-test-pending. String lengths are bit-packed exactly as the client reads them.
+
+        // One transferable character (SMSG_GET_VAS_ACCOUNT_CHARACTER_LIST_RESULT vector element, verified).
+        struct VasAccountCharacterInfo
+        {
+            ObjectGuid CharacterGUID;                  // the character
+            ObjectGuid AccountGUID;                    // 2nd guid: the owning bnet/wow-account guid (inferred)
+            uint32 VirtualRealmAddress = 0;            // field 3 (inferred: the character's home realm address)
+            uint8 Flags1 = 0;                          // 4 per-entry u8s (transfer eligibility flags - unlabeled)
+            uint8 Flags2 = 0;
+            uint8 Flags3 = 0;
+            uint8 Flags4 = 0;
+            uint64 HousingData = 0;                    // opaque 8-byte housing/plot key (verified width, opaque)
+            uint32 Field9 = 0;                         // trailing uint32 (unlabeled)
+            std::string CharacterName;                 // 6-bit length prefix
+            std::string RealmName;                     // 9-bit length prefix
+        };
+
+        // SMSG_GET_VAS_ACCOUNT_CHARACTER_LIST_RESULT (0x420297). Outer = 3 uint32 header + a FLAT uint32 count +
+        // the character vector - VERIFIED (deserializer sub_7FF7290AE4B0; the "4th uint32" earlier dumps showed
+        // is the list count, not a header field). Header field meanings are unlabeled offline; Field1 echoes the
+        // request token so the client can correlate, the other two are 0 until proven.
+        class GetVasAccountCharacterListResult final : public ServerPacket
+        {
+        public:
+            explicit GetVasAccountCharacterListResult() : ServerPacket(SMSG_GET_VAS_ACCOUNT_CHARACTER_LIST_RESULT, 32) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Field1 = 0;
+            uint32 Field2 = 0;
+            uint32 Field3 = 0;
+            std::vector<VasAccountCharacterInfo> Characters;
+        };
+
+        // One transfer-target realm (SMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST_RESULT element JamCliVASTargetRealm,
+        // verified widths). The 6 uint32s are an unlabeled reflected type; the mapping below is inferred so the
+        // client has a selectable, named realm - live-test-pending on which field it transfers TO.
+        struct VasTargetRealmInfo
+        {
+            // Field order mirrors the bnet JSON::RealmList::RealmEntry the client already consumes at login;
+            // wowRealmAddress (realm.Id.GetAddress()) is the value the client sends back to target the transfer.
+            uint32 WowRealmAddress = 0;                // field[0]: realm.Id.GetAddress() - the transfer target
+            uint32 RealmId = 0;                        // field[1]: cfgRealmsID
+            uint32 Flags = 0;                          // field[2]
+            uint32 PopulationState = 0;                // field[3]
+            uint32 CategoryId = 0;                     // field[4]: timezone/category
+            uint32 ConfigId = 0;                       // field[5]
+            std::string RealmName;                     // 9-bit length prefix
+        };
+
+        // One WoW account a character may transfer to (SMSG_VAS_CHECK_TRANSFER_OK_RESPONSE element
+        // JamVASTransferWowAccount, verified: an account guid + an 11-bit-length-prefixed account name).
+        struct VasTransferWowAccount
+        {
+            ObjectGuid AccountGUID;
+            std::string AccountName;                    // 11-bit length prefix
+        };
+
+        // SMSG_VAS_CHECK_TRANSFER_OK_RESPONSE (0x4202C3). Outer (deserializer sub_7FF7290B1A10) =
+        // { uint32, uint32, ObjectGuid, uint32-count, vector<VasTransferWowAccount> }. The two leading uint32
+        // are unlabeled offline; Field1 echoes the request context. An empty account list is the honest,
+        // byte-correct answer when the realm has no VAS transfer network.
+        class VasCheckTransferOkResponse final : public ServerPacket
+        {
+        public:
+            explicit VasCheckTransferOkResponse() : ServerPacket(SMSG_VAS_CHECK_TRANSFER_OK_RESPONSE, 28) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Field1 = 0;
+            uint32 Field2 = 0;
+            ObjectGuid CharacterGUID;
+            std::vector<VasTransferWowAccount> Accounts;
+        };
+
+        // SMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST_RESULT (0x420298). Outer = 3 uint32 header + a FLAT uint32
+        // count + the realm vector - VERIFIED from the deserializer sub_7FF7290AE5B0 (same shape as the account
+        // list; the earlier "10x uint32" / "u8+bitfield" dumps were miscounts of the element string prefix).
+        // Header field meanings are unlabeled offline and stay 0 until proven.
+        class GetVasTransferTargetRealmListResult final : public ServerPacket
+        {
+        public:
+            explicit GetVasTransferTargetRealmListResult() : ServerPacket(SMSG_GET_VAS_TRANSFER_TARGET_REALM_LIST_RESULT, 16) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Field1 = 0;
+            uint32 Field2 = 0;
+            uint32 Field3 = 0;
+            std::vector<VasTargetRealmInfo> Realms;
+        };
     }
 }
 

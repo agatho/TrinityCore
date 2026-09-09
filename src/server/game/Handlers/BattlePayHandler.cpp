@@ -34,6 +34,7 @@
 #include "Player.h"
 #include "QueryHolder.h"
 #include "RealmList.h"
+#include "VasTransferMgr.h"
 #include "World.h"
 #include "WowTokenMgr.h"
 #include <algorithm>
@@ -1609,4 +1610,233 @@ void WorldSession::HandleVasGetServiceStatus(WorldPackets::BattlePay::VasGetServ
     // so it is left 0 rather than given an invented value.
     WorldPackets::BattlePay::VasGetServiceStatusResponse response;
     SendPacket(response.Write());
+}
+
+void WorldSession::HandleGetVasAccountCharacterList(WorldPackets::BattlePay::GetVasAccountCharacterList& packet)
+{
+    // The account's characters, offered as VAS-transfer candidates. The verified per-entry wire carries the
+    // character guid, the owning account guid, the home realm's virtual address and the character name; the
+    // remaining per-entry fields (four flag bytes, an 8-byte housing key, a trailing uint32) have no proven
+    // offline meaning, so they stay 0. RealmName is left empty (the worldserver exposes no clean realm-name
+    // accessor here) - it is display-only and not required to identify a character.
+    WorldPackets::BattlePay::GetVasAccountCharacterListResult result;
+    result.Field1 = packet.Field1;   // echo the request token so the client can correlate the answer
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_VAS_ACCOUNT_CHARACTER_LIST);
+    stmt->setUInt32(0, GetAccountId());
+    if (PreparedQueryResult res = CharacterDatabase.Query(stmt))
+    {
+        uint32 const virtualRealm = GetVirtualRealmAddress();
+        ObjectGuid const accountGuid = GetAccountGUID();
+        do
+        {
+            Field* fields = res->Fetch();
+            WorldPackets::BattlePay::VasAccountCharacterInfo info;
+            info.CharacterGUID = ObjectGuid::Create<HighGuid::Player>(fields[0].GetUInt64());
+            info.AccountGUID = accountGuid;
+            info.VirtualRealmAddress = virtualRealm;
+            info.CharacterName = fields[1].GetString();
+            result.Characters.push_back(std::move(info));
+        }
+        while (res->NextRow());
+    }
+
+    SendPacket(result.Write());
+}
+
+void WorldSession::HandleGetVasTransferTargetRealmList(WorldPackets::BattlePay::GetVasTransferTargetRealmList& packet)
+{
+    // The realms a character may be transferred to: every other realm this bnetserver fronts (our setup runs
+    // three). Enumerated from the shared auth realmlist, excluding this realm and any that are offline. Each
+    // entry mirrors the bnet RealmEntry the client already consumes at login - wowRealmAddress (the value the
+    // client sends back to target the transfer) is realm.Id.GetAddress(); the remaining fields are populated
+    // best-effort from realm id/flags/population and are live-test-pending on the exact field order.
+    WorldPackets::BattlePay::GetVasTransferTargetRealmListResult result;
+    result.Field1 = packet.Field1;   // echo the request token for correlation
+
+    Battlenet::RealmHandle const currentRealm = sRealmList->GetCurrentRealmId();
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_REALMLIST);
+    if (PreparedQueryResult res = LoginDatabase.Query(stmt))
+    {
+        do
+        {
+            Field* fields = res->Fetch();
+            uint32 const realmId = fields[0].GetUInt32();
+            uint8 const flag = fields[8].GetUInt8();
+            uint8 const region = fields[13].GetUInt8();
+            uint8 const battlegroup = fields[14].GetUInt8();
+
+            if (realmId == currentRealm.Realm)          // not this realm
+                continue;
+            if (flag & Trinity::Legacy::REALM_FLAG_OFFLINE)   // only realms that are up can receive a transfer
+                continue;
+
+            Battlenet::RealmHandle const handle(region, battlegroup, realmId);
+
+            WorldPackets::BattlePay::VasTargetRealmInfo entry;
+            entry.WowRealmAddress = handle.GetAddress();
+            entry.RealmId = realmId;
+            entry.Flags = flag;
+            entry.PopulationState = uint32(fields[11].GetFloat());   // population column
+            entry.CategoryId = fields[9].GetUInt8();                 // timezone column
+            entry.RealmName = fields[1].GetString();
+            result.Realms.push_back(std::move(entry));
+        }
+        while (res->NextRow());
+    }
+
+    SendPacket(result.Write());
+}
+
+void WorldSession::HandleVasCheckTransferOk(WorldPackets::BattlePay::VasCheckTransferOk& packet)
+{
+    // Whether a VAS transfer is permitted for the requested context. This realm has no transfer network, so
+    // the honest, byte-correct answer is an empty target-account list; Field1 echoes the request context so
+    // the client can correlate the answer.
+    WorldPackets::BattlePay::VasCheckTransferOkResponse response;
+    response.Field1 = packet.Field1;
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleBattlePayDistributionAssignVas(WorldPackets::BattlePay::BattlePayDistributionAssignVas& packet)
+{
+    // Assign an ALREADY-PURCHASED VAS distribution to a target. RE of the client serializer (sub_7FF72907F4B0)
+    // showed this opcode carries a u64 DistributionID (+0x28) and target guids but NO realm address - the
+    // realm is chosen earlier, at START_VAS_PURCHASE. The distribution it references only exists after a
+    // web-side purchase settles, which this realm has none of, so there is nothing to assign: answer honestly
+    // with "distribution not found" rather than drop the packet. (The paid-character-transfer flow itself does
+    // NOT use this opcode - it drives START_VAS_PURCHASE, handled above; this is the shop's assign-a-bought-
+    // distribution path.)
+    TC_LOG_INFO("network", "BattlePay: DistributionAssignVas from {}: distributionId-token={} - no VAS "
+        "distribution to assign.", GetPlayerInfo(), packet.Token);
+
+    WorldPackets::BattlePay::BattlePayDistributionAssignVasResponse response;
+    response.Field1 = packet.Token;
+    response.Result = uint32(RESULT_DISTRIBUTION_NOT_FOUND);
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleBattlePayStartVasPurchase(WorldPackets::BattlePay::BattlePayStartVasPurchase& packet)
+{
+    // The paid-character-transfer flow's request (Lua AssignPCTDistribution): the selected character, the VAS
+    // service type, the TARGET realm's wowRealmAddress, and an IsValidationOnly bool (the flow validates, then
+    // commits). The character is the sole Player-type guid among the four the packet carries. Resolve the realm
+    // and drive VasTransferMgr - validate-only on the validation pass, a real cross-DB move on the commit pass -
+    // then answer with the SMSG the flow waits on (ASSIGN_VAS_RESPONSE: token, storeError, VasTransactionPurchaseResult).
+    ObjectGuid const character = packet.GetCharacterGuid();
+    uint32 const targetRealmId = packet.TargetRealmAddress ? Battlenet::RealmHandle(packet.TargetRealmAddress).Realm : 0;
+
+    // VasTransactionPurchaseResult values (Enum, from BattlepayConstantsDocumentation): 0 success, 2 no
+    // character, 5 invalid destination realm, 20 unique-key (a same-name character already on the target -
+    // exactly WoW's only hard transfer rejection), 43 locked-for-VAS (character online), 20011 realm not
+    // eligible, 44 generic.
+    auto mapResult = [](VasTransferMgr::TransferResult r) -> uint32
+    {
+        switch (r)
+        {
+            case VasTransferMgr::TRANSFER_OK:               return 0;
+            case VasTransferMgr::TRANSFER_ERR_CHAR_NOT_FOUND: return 2;
+            case VasTransferMgr::TRANSFER_ERR_NO_TARGET:    return 5;
+            case VasTransferMgr::TRANSFER_ERR_NO_SOURCE:    return 20011;
+            case VasTransferMgr::TRANSFER_ERR_IN_WORLD:     return 43;
+            case VasTransferMgr::TRANSFER_ERR_NAME_TAKEN:   return 20;
+            case VasTransferMgr::TRANSFER_ERR_GUID_COLLISION: return 20;
+            case VasTransferMgr::TRANSFER_ERR_DB:           return 44;
+            default:                                        return 44;
+        }
+    };
+
+    auto respond = [&](uint32 vasResult)
+    {
+        WorldPackets::BattlePay::BattlePayDistributionAssignVasResponse response;
+        response.Field1 = packet.SequenceId;   // token the client correlates the answer to
+        response.Field2 = 0;                    // storeError: no store-layer error
+        response.Result = vasResult;            // VasTransactionPurchaseResult
+        SendPacket(response.Write());
+    };
+
+    if (!sVasTransferMgr->IsEnabled())
+    {
+        TC_LOG_INFO("network", "BattlePay: StartVasPurchase from {}: character transfer is not configured "
+            "(VAS.TransferRealmDatabases).", GetPlayerInfo());
+        respond(20011);   // realm not eligible
+        return;
+    }
+
+    if (character.IsEmpty())
+    {
+        respond(2);       // no character guid in the request
+        return;
+    }
+
+    std::string name;
+    VasTransferMgr::TransferResult const result = sVasTransferMgr->TransferCharacter(
+        character.GetCounter(), targetRealmId, &name, nullptr, packet.IsValidationOnly);
+
+    TC_LOG_INFO("network", "BattlePay: StartVasPurchase from {}: seq={} serviceType={} character={} '{}' "
+        "targetRealm={} validateOnly={} -> {} (vasResult {}).", GetPlayerInfo(), packet.SequenceId,
+        packet.ServiceType, character.ToString(), name, targetRealmId, packet.IsValidationOnly,
+        VasTransferMgr::ResultString(result), mapResult(result));
+
+    respond(mapResult(result));
+}
+
+void WorldSession::HandleCharacterCheckUpgrade(WorldPackets::BattlePay::CharacterCheckUpgrade& /*packet*/)
+{
+    // The client polls whether this account can spend a character boost. Eligibility is already carried by the
+    // account's owned boost entitlements (delivered with the purchase list), and the boost is applied by its own
+    // opcode (CMSG_CHARACTER_UPGRADE_START, implemented), so this poll needs no separate answer. Logged rather
+    // than silently dropped.
+    TC_LOG_DEBUG("network", "BattlePay: CharacterCheckUpgrade from {} - boost eligibility comes from the owned "
+        "entitlement list; no separate response.", GetPlayerInfo());
+}
+
+void WorldSession::HandleCharacterUpgradeManualUnrevokeRequest(WorldPackets::BattlePay::CharacterUpgradeManualUnrevokeRequest& packet)
+{
+    // Undo a revoked boost on a character. That requires a revoked boost entitlement, which exists only after a
+    // web-side purchase/refund cycle this realm has none of, so there is nothing to unrevoke. Answer with the
+    // real result wire (client parser sub_7FF72A663530: a single uint32; no guid) - the Lua handler treats 0 as
+    // success and any non-zero as failure (ERROR_MANUAL_UNREVOKE_FAILURE), so a non-zero code is the honest
+    // "nothing to unrevoke" answer rather than falsely reporting success.
+    TC_LOG_INFO("network", "BattlePay: CharacterUpgradeManualUnrevokeRequest from {}: character={} - no revoked "
+        "boost to unrevoke; returning failure.", GetPlayerInfo(), packet.CharacterGUID.ToString());
+
+    WorldPackets::BattlePay::CharacterUpgradeManualUnrevokeResult result;
+    result.Result = 1;   // non-zero == failure (client shows the generic unrevoke-failure dialog)
+    SendPacket(result.Write());
+}
+
+void WorldSession::HandleVasGetQueueMinutes(WorldPackets::BattlePay::VasGetQueueMinutes& packet)
+{
+    // Estimated queue time for a VAS service. This realm processes transfers synchronously (the GM/transfer path
+    // runs inline), so the honest estimate is zero. Wire recovered from the client parser sub_7FF72AE70450:
+    // { uint64 Handle; uint32 QueueMinutes } - echo the request's correlation handle so the client matches it.
+    WorldPackets::BattlePay::VasGetQueueMinutesResponse response;
+    response.Handle = packet.Handle;
+    response.QueueMinutes = 0;
+    SendPacket(response.Write());
+}
+
+void WorldSession::HandleBattlePayAckFailedResponse(WorldPackets::BattlePay::BattlePayAckFailedResponse& packet)
+{
+    // The client acknowledges a purchase result it treated as failed. Fire-and-forget: there is nothing to send
+    // back, but it is read and logged rather than silently dropped.
+    TC_LOG_DEBUG("network", "BattlePay: AckFailedResponse from {}: serverToken={}.", GetPlayerInfo(), packet.ServerToken);
+}
+
+void WorldSession::HandleBattlePayRequestPriceInfo(WorldPackets::BattlePay::BattlePayRequestPriceInfo& packet)
+{
+    // The client asks for a product's price. This core delivers prices inline with the product list
+    // (BattlePayGetProductList), so a product the client can see already carries its DisplayPrice; there is no
+    // separate price message to send. Logged for wire confirmation.
+    TC_LOG_DEBUG("network", "BattlePay: RequestPriceInfo from {}: product={} - price is carried by the product list.",
+        GetPlayerInfo(), packet.ProductID);
+}
+
+void WorldSession::HandleBattlePayCancelOpenCheckout(WorldPackets::BattlePay::BattlePayCancelOpenCheckout& /*packet*/)
+{
+    // The client abandons a checkout it opened. The realm holds no server-side reservation for an open checkout
+    // (the web overlay owns that state), so there is nothing to release; acknowledged by log only.
+    TC_LOG_DEBUG("network", "BattlePay: CancelOpenCheckout from {}.", GetPlayerInfo());
 }

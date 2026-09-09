@@ -773,6 +773,7 @@ enum RBACPermissions
     // SMSG_CHAT_RESTRICTED with ERR_USER_SQUELCHED.
     RBAC_PERM_CHAT_MUTED_PARENTAL_CONTROLS                   = 1000,
     RBAC_PERM_COMMAND_RELOAD_CHAT_SPAM_RECORD                = 1001,
+    RBAC_PERM_COMMAND_SHOP                                   = 1002,
 
     RBAC_PERM_MAX
 };

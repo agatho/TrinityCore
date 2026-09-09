@@ -1017,6 +1017,17 @@ namespace WorldPackets
     {
         class UpdateVasPurchaseStates;
         class VasGetServiceStatus;
+        class GetVasAccountCharacterList;
+        class GetVasTransferTargetRealmList;
+        class VasCheckTransferOk;
+        class VasGetQueueMinutes;
+        class BattlePayDistributionAssignVas;
+        class BattlePayStartVasPurchase;
+        class BattlePayAckFailedResponse;
+        class BattlePayRequestPriceInfo;
+        class BattlePayCancelOpenCheckout;
+        class CharacterCheckUpgrade;
+        class CharacterUpgradeManualUnrevokeRequest;
         class GetProductList;
         class GetPurchaseList;
         class StartPurchase;
@@ -2231,6 +2242,17 @@ class TC_GAME_API WorldSession
         void HandleCharacterUpgradeStart(WorldPackets::BattlePay::CharacterUpgradeStart& upgradeStart);
         void HandleUpdateVasPurchaseStates(WorldPackets::BattlePay::UpdateVasPurchaseStates& packet);
         void HandleVasGetServiceStatus(WorldPackets::BattlePay::VasGetServiceStatus& packet);
+        void HandleGetVasAccountCharacterList(WorldPackets::BattlePay::GetVasAccountCharacterList& packet);
+        void HandleGetVasTransferTargetRealmList(WorldPackets::BattlePay::GetVasTransferTargetRealmList& packet);
+        void HandleVasCheckTransferOk(WorldPackets::BattlePay::VasCheckTransferOk& packet);
+        void HandleVasGetQueueMinutes(WorldPackets::BattlePay::VasGetQueueMinutes& packet);
+        void HandleBattlePayDistributionAssignVas(WorldPackets::BattlePay::BattlePayDistributionAssignVas& packet);
+        void HandleBattlePayStartVasPurchase(WorldPackets::BattlePay::BattlePayStartVasPurchase& packet);
+        void HandleBattlePayAckFailedResponse(WorldPackets::BattlePay::BattlePayAckFailedResponse& packet);
+        void HandleBattlePayRequestPriceInfo(WorldPackets::BattlePay::BattlePayRequestPriceInfo& packet);
+        void HandleBattlePayCancelOpenCheckout(WorldPackets::BattlePay::BattlePayCancelOpenCheckout& packet);
+        void HandleCharacterCheckUpgrade(WorldPackets::BattlePay::CharacterCheckUpgrade& packet);
+        void HandleCharacterUpgradeManualUnrevokeRequest(WorldPackets::BattlePay::CharacterUpgradeManualUnrevokeRequest& packet);
         void HandleCommerceTokenGetCount(WorldPackets::Token::CommerceTokenGetCount& commerceTokenGetCount);
         void SendCommerceTokenUpdate();
         int32 BattlePayCreateEntitlement(ShopProduct const& product, uint64 purchaseID);
