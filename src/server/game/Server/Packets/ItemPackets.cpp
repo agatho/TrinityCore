@@ -137,11 +137,6 @@ void SellItem::Read()
     _worldPacket >> Amount;
 }
 
-void SellAllJunkItems::Read()
-{
-    _worldPacket >> VendorGUID;
-}
-
 WorldPacket const* ItemTimeUpdate::Write()
 {
     _worldPacket << ItemGuid;
@@ -419,6 +414,21 @@ void SetBackpackSellJunkDisabled::Read()
 void SetBankAutosortDisabled::Read()
 {
     _worldPacket >> Bits<1>(Disable);
+}
+
+void SetSortBagsRightToLeft::Read()
+{
+    _worldPacket >> Bits<1>(Enable);
+}
+
+void SetInsertItemsLeftToRight::Read()
+{
+    _worldPacket >> Bits<1>(Enable);
+}
+
+void SellAllJunkItems::Read()
+{
+    _worldPacket >> VendorGUID;
 }
 
 WorldPacket const* AddItemPassive::Write()

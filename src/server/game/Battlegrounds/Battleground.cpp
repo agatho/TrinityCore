@@ -1049,7 +1049,20 @@ void Battleground::RemovePlayerAtLeave(ObjectGuid guid, bool Transport, bool Sen
         player->FailCriteria(CriteriaFailEvent::LeaveBattleground, 0);
 
         if (Transport)
-            player->TeleportToBGEntryPoint();
+        {
+            // The exit teleport CAN fail transiently (player mid-teleport /
+            // session loading) — and this object is deleted regardless, so a
+            // missed exit strands the player on the dead BG map with nothing
+            // left to remove them (observed 2026-06-11: 3 players brawling
+            // indefinitely on a post-match Eye of the Storm map). Surface it
+            // loudly; the playerbot module additionally self-recovers via its
+            // bg-orphan rules, and real players can /hearth out.
+            if (!player->TeleportToBGEntryPoint())
+                TC_LOG_ERROR("bg.battleground",
+                    "Battleground::RemovePlayerAtLeave: exit teleport FAILED for {} ({}) — "
+                    "player remains on BG map {} (instance {}) after battleground teardown!",
+                    player->GetName(), guid.ToString(), GetMapId(), m_InstanceID);
+        }
 
         TC_LOG_DEBUG("bg.battleground", "Removed player {} from Battleground.", player->GetName());
     }

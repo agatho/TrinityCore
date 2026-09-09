@@ -493,6 +493,9 @@ class TC_GAME_API GameObject : public WorldObject, public GridObject<GameObject>
             uint8 exteriorComponentType = 9, uint8 houseSize = 2, int32 exteriorComponentHookID = -1);
 
         TeamId GetControllingTeam() const;
+        // Live control-zone capture-bar value (0 horde .. 100 alliance);
+        // -1 when this GO is not a control zone. Diagnostic surface.
+        float GetControlZoneValue() const;
 
     protected:
         void CreateModel();

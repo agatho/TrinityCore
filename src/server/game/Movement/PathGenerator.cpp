@@ -16,6 +16,7 @@
  */
 
 #include "PathGenerator.h"
+#include "Config.h"
 #include "Creature.h"
 #include "DetourCommon.h"
 #include "DetourNavMeshQuery.h"
@@ -26,6 +27,35 @@
 #include "Map.h"
 #include "Metric.h"
 #include "PhasingHandler.h"
+#include <array>
+#include <mutex>
+
+namespace
+{
+    // The dtNavMeshQuery for a given {map,instance} is SHARED and NOT thread-safe
+    // (MMapManager.cpp: "we have to use single dtNavMeshQuery for every instance,
+    // since those are not thread safe"; MMapManager.h:68). In the Playerbot build
+    // three contexts reach BuildPolyPath -> dtNavMeshQuery::findPath / moveAlongSurface
+    // on the SAME query concurrently: the world thread (bot move_to via DrainIntents),
+    // AiWorkerPool workers (bot State_Idle reachability via BotAI::tick) and MapUpdater
+    // workers (creature pathing in Map::Update). With no synchronization they mutate
+    // the query's node pools at once, corrupting dtNodePool's m_next[] into a cycle ->
+    // dtNodePool::getNode spins forever -> 60s world-thread hang + 0xC0000005 AV ->
+    // FreezeDetector crash (observed live 2026-06-27 at the Deadmines harbor;
+    // docs/playerbot/DESIGN_ASYNC_PATHFINDING_20260620.md lists this exact race as a
+    // known, unimplemented fix). Serialize the node-pool-mutating A* per map with a
+    // striped lock keyed by the owner's map id: all pathfinds that can share a query
+    // share a stripe (correct), and distinct maps that collide on a stripe only suffer
+    // harmless extra serialization. findNearestPoly is read-only on the navmesh and is
+    // intentionally left UNGUARDED so spatial probes don't contend. Striping avoids a
+    // single global pathfinding bottleneck across all maps.
+    constexpr std::size_t kNavExecLockStripes = 64;
+    inline std::mutex& NavExecLock(uint32 mapId)
+    {
+        static std::array<std::mutex, kNavExecLockStripes> locks;
+        return locks[mapId % kNavExecLockStripes];
+    }
+}
 
 ////////////////// PathGenerator //////////////////
 PathGenerator::PathGenerator(WorldObject const* owner) :
@@ -68,6 +98,7 @@ bool PathGenerator::CalculatePath(float srcX, float srcY, float srcZ, float dest
     SetStartPosition(start);
 
     _forceDestination = forceDest;
+    _pathTraversesOffMesh = false;  // recomputed per path by FindSmoothPath
 
     TC_LOG_DEBUG("maps.mmaps", "++ PathGenerator::CalculatePath() for {}", _source->GetGUID().ToString());
 
@@ -84,7 +115,32 @@ bool PathGenerator::CalculatePath(float srcX, float srcY, float srcZ, float dest
 
     UpdateFilter();
 
-    BuildPolyPath(start, dest);
+    // Road-aware telemetry: reset per-pathfind slope tracker before A*
+    // begins. dtQueryFilterTC::getCost() updates it during edge eval.
+    _filter.BeginPathStats();
+
+    {
+        // SHARED non-thread-safe dtNavMeshQuery — serialize the node-pool-mutating A*
+        // per map (see NavExecLock above). Guards findPath + moveAlongSurface against
+        // the cross-thread node-pool corruption that crashed the server 2026-06-27.
+        std::lock_guard<std::mutex> navGuard(NavExecLock(_source->GetMapId()));
+        BuildPolyPath(start, dest);
+    }
+
+    // Tally outcome — total polys, road polys, slope outcome.
+    bool inInstance = false;
+    uint32 mapId = 0;
+    if (_source && _source->GetMap())
+    {
+        inInstance = _source->GetMap()->IsDungeon() || _source->GetMap()->IsRaid();
+        mapId = _source->GetMap()->GetId();
+    }
+    dtQueryFilterTC::TallyPath(_navMesh, _pathPolyRefs, _polyLength,
+        _filter.GetDisableRoadBonus(),
+        _filter.GetMaxSlopeFactorThisPath(),
+        inInstance,
+        mapId);
+
     return true;
 }
 
@@ -531,6 +587,42 @@ void PathGenerator::BuildPolyPath(G3D::Vector3 const& startPos, G3D::Vector3 con
     BuildPointPath(startPoint, endPoint);
 }
 
+// Drop near-coincident consecutive points (< 0.1y). The smooth-path walker and
+// off-mesh-connection handling can emit two points within rounding distance of each
+// other (typically at an off-mesh entry, but also after Z-normalization snaps two
+// near points to the same height); a sub-0.1y INTERIOR segment makes
+// MoveSplineInitArgs::_checkPathLengths() reject the ENTIRE spline, so
+// MoveSplineInit::Launch() silently returns 0 and the unit never moves -- the root
+// cause of units (bots, creatures AND vehicles) wedged at off-mesh bridge mouths and
+// at the entrance of dungeons whose route comes back as a partial (INCOMPLETE)
+// corridor on freshly-regenerated mmaps. Endpoints are always preserved so the true
+// start/destination are never dropped, and a 2-point path is never collapsed.
+void PathGenerator::RemoveNearCoincidentPathPoints()
+{
+    if (_pathPoints.size() <= 2)
+        return;
+    // In-place compaction (no per-pathfind allocation -- this is a fleet-hot path).
+    // Keep point 0, skip interior points coincident with the last kept point, always
+    // keep the final point.
+    size_t w = 1;
+    for (size_t r = 1; r < _pathPoints.size(); ++r)
+    {
+        const bool isLast = (r + 1 == _pathPoints.size());
+        if (!isLast && (_pathPoints[r] - _pathPoints[w - 1]).squaredLength() < 0.01f)
+            continue;
+        _pathPoints[w++] = _pathPoints[r];
+    }
+    // If the kept endpoint collapsed onto its predecessor, drop the predecessor
+    // (preserve the true destination).
+    if (w >= 3 && (_pathPoints[w - 1] - _pathPoints[w - 2]).squaredLength() < 0.01f)
+    {
+        _pathPoints[w - 2] = _pathPoints[w - 1];
+        --w;
+    }
+    if (w >= 2 && w < _pathPoints.size())
+        _pathPoints.resize(w);
+}
+
 void PathGenerator::BuildPointPath(const float *startPoint, const float *endPoint)
 {
     float pathPoints[MAX_POINT_PATH_LENGTH*VERTEX_SIZE];
@@ -586,11 +678,31 @@ void PathGenerator::BuildPointPath(const float *startPoint, const float *endPoin
         _type = PathType(_type | PATHFIND_NOPATH);
         return;
     }
-    else if (pointCount >= _pointPathLimit)
+    else if (pointCount >= _pointPathLimit || dtStatusDetail(dtResult, DT_PARTIAL_RESULT))
     {
-        TC_LOG_DEBUG("maps.mmaps", "++ PathGenerator::BuildPointPath FAILED! path sized {} returned, lower than limit set to {}", pointCount, _pointPathLimit);
-        BuildShortcut();
-        _type = PathType(_type | PATHFIND_SHORT);
+        // Long/winding corridor hit the point budget, OR the smoother returned a
+        // PARTIAL_RESULT (it stopped on a mid-corridor surface/height failure before
+        // reaching the destination — e.g. partway up a ship gangplank on a >74-poly
+        // route). Keep the REAL truncated corridor (a valid optimal sub-path of the
+        // full route) and flag INCOMPLETE so the caller walks to the last reachable
+        // waypoint and re-paths from there
+        // (incremental long-haul travel). The old BuildShortcut() replaced it with a
+        // blind 2-point straight line that walks THROUGH terrain and wedges on any
+        // slope/wall (observed: bots truncated 47y short on a Dun Morogh descent,
+        // 74-poly cap). Callers already treat INCOMPLETE as "partial -> advance and
+        // re-path", which the blind shortcut defeated.
+        TC_LOG_DEBUG("maps.mmaps", "++ PathGenerator::BuildPointPath point budget {} hit -> partial corridor (INCOMPLETE)", _pointPathLimit);
+        _pathPoints.resize(pointCount);
+        for (uint32 i = 0; i < pointCount; ++i)
+            _pathPoints[i] = G3D::Vector3(pathPoints[i*VERTEX_SIZE+2], pathPoints[i*VERTEX_SIZE], pathPoints[i*VERTEX_SIZE+1]);
+        NormalizePath();
+        // Dedupe the partial corridor too — without this a sub-0.1y interior
+        // segment makes _checkPathLengths() reject the spline, so the unit can't
+        // even walk the partial path the caller intends to "advance and re-path"
+        // along (root cause of bots wedged at the dungeon entrance on 12.0.7).
+        RemoveNearCoincidentPathPoints();
+        SetActualEndPosition(_pathPoints.back());
+        _type = PathType(_type | PATHFIND_INCOMPLETE);
         return;
     }
 
@@ -599,6 +711,12 @@ void PathGenerator::BuildPointPath(const float *startPoint, const float *endPoin
         _pathPoints[i] = G3D::Vector3(pathPoints[i*VERTEX_SIZE+2], pathPoints[i*VERTEX_SIZE], pathPoints[i*VERTEX_SIZE+1]);
 
     NormalizePath();
+
+    // Drop near-coincident consecutive points so MoveSplineInitArgs::
+    // _checkPathLengths() accepts the spline (see RemoveNearCoincidentPathPoints;
+    // the same dedupe is applied to the INCOMPLETE partial-corridor branch above).
+    RemoveNearCoincidentPathPoints();
+    pointCount = uint32(_pathPoints.size());
 
     // first point is always our current location - we need the next one
     SetActualEndPosition(_pathPoints[pointCount-1]);
@@ -666,12 +784,80 @@ void PathGenerator::CreateFilter()
     }
     else // assume Player
     {
-        // perfect support not possible, just stay 'safe'
-        includeFlags |= (NAV_GROUND | NAV_WATER | NAV_MAGMA_SLIME);
+        // perfect support not possible, just stay 'safe'.
+        //
+        // 2026-05-21: NAV_GROUND_STEEP added. The original conservative
+        // exclude (introduced when NAV_AREA_GROUND_STEEP was first
+        // separated from NAV_AREA_GROUND) caused findNearestPoly to
+        // return INVALID_POLYREF when a player STOOD on a steep poly —
+        // even though the wider navmesh was fully connected. Symptom
+        // observed 2026-05-21: bot Uraimus ghost at Teldrassil
+        // graveyard (9701, 945, 1291) → corpse (9853, 446, 1306):
+        // mmap_probe (filter includes STEEP) returned a 64-poly
+        // success; worldserver (player filter excluded STEEP) logged
+        // outcome=NoPath every tick and the ghost wedged at the
+        // spirit healer indefinitely. Slope penalty via
+        // SetSlopeCoefficient already discourages routing THROUGH
+        // steep terrain; the exclusion only ever blocked START/END
+        // resolution, never improved walk safety.
+        includeFlags |= (NAV_GROUND | NAV_GROUND_STEEP | NAV_WATER | NAV_MAGMA_SLIME);
     }
+
+    // Road-aware mmaps: always include NAV_ROAD so road-tagged polygons are
+    // walkable (otherwise old polygons that were ground but got promoted to
+    // road during regen would become invisible to pathfinding). The actual
+    // road PREFERENCE — biasing Detour's shortest-path search toward roads —
+    // is applied via setAreaCost(NAV_AREA_ROAD, < 1.0) below, gated on the
+    // Pathfinding.PreferRoads config flag.
+    includeFlags |= NAV_ROAD;
 
     _filter.setIncludeFlags(includeFlags);
     _filter.setExcludeFlags(excludeFlags);
+
+    // Road-cost biasing. Default = 1.0 (no preference). Owner enables in
+    // worldserver.conf via:
+    //   Pathfinding.PreferRoads = 1
+    //   Pathfinding.RoadCost          = 0.5   (lower = stronger preference)
+    //   Pathfinding.RoadCostMounted   = 0.35  (extra discount when mounted)
+    if (sConfigMgr->GetBoolDefault("Pathfinding.PreferRoads", false))
+    {
+        float roadCost = sConfigMgr->GetFloatDefault("Pathfinding.RoadCost", 0.5f);
+
+        // Mount-aware: a mounted unit gains additional benefit from
+        // roads (mount speed buff cleanly applies, no terrain skidding).
+        // Apply a tighter cost when the source unit is mounted.
+        if (Unit const* sourceUnit = _source ? _source->ToUnit() : nullptr)
+            if (sourceUnit->IsMounted())
+                roadCost = sConfigMgr->GetFloatDefault("Pathfinding.RoadCostMounted", 0.35f);
+
+        _filter.setAreaCost(NAV_AREA_ROAD, roadCost);
+    }
+    else
+    {
+        // Neutral cost — road tag exists but doesn't affect path selection.
+        _filter.setAreaCost(NAV_AREA_ROAD, 1.0f);
+    }
+
+    // Phase 3: slope-aware cost penalty. A 30° slope costs 1.30× a flat
+    // segment; tempers raw road preference so paths don't switchback up
+    // a hill for the road bonus alone. Default coefficient 1.0; tune via
+    // worldserver.conf:
+    //   Pathfinding.SlopeCoefficient = 1.0   (0.0 = disabled)
+    float slopeCoef = sConfigMgr->GetFloatDefault("Pathfinding.SlopeCoefficient", 1.0f);
+    _filter.SetSlopeCoefficient(slopeCoef);
+
+    // Map-type gate: dungeon/raid instances have spurious "road" tags on
+    // interior cobblestone (Stockades floor, Karazhan halls, etc.) that
+    // were classified during P2 WMO extraction. Inside a dungeon, biasing
+    // toward cobble polygons over plain stone produces bizarre routing
+    // because the whole floor is "road". Battlegrounds are kept ENABLED
+    // (Alterac Valley has real roads between graveyards/towers); arenas
+    // are kept enabled but pathfinds there are tiny so it doesn't matter.
+    if (_source && _source->GetMap()
+        && (_source->GetMap()->IsDungeon() || _source->GetMap()->IsRaid()))
+    {
+        _filter.SetDisableRoadBonus(true);
+    }
 
     UpdateFilter();
 }
@@ -821,6 +1007,29 @@ dtStatus PathGenerator::FindSmoothPath(float const* startPos, float const* endPo
 {
     *smoothPathSize = 0;
     uint32 nsmoothPath = 0;
+    // Track whether the smoother reached the destination, and whether it stopped
+    // because a mid-corridor surface/height query failed (vs. a clean end / budget
+    // exhaustion). A surface/height failure on a corridor that the poly search DID
+    // find (e.g. across an off-mesh gangplank, or on a >74-poly route already
+    // truncated by the poly cap) must NOT discard the partial smooth path — see the
+    // partial-return logic after the loop.
+    bool reachedEnd = false;
+    bool surfaceFail = false;
+    // True once the smoother has traversed an off-mesh connection (jump/bridge). The
+    // partial-keep below is SCOPED to pure-navmesh corridors only: across an off-mesh
+    // link the original DT_FAILURE behavior is preserved so the dungeon off-mesh-cross
+    // logic (DungeonHonorCross / set_dungeon_cross) keeps handling the hop as before —
+    // converting an off-mesh failure to a mid-gap partial strands the bot in the void
+    // (regressed the Deadmines Gap-1 bridge: tank parked off-mesh at the z51 hole).
+    bool sawOffMesh = false;
+
+    // Diagnostic gate: the Deadmines (map 36) foundry->ship corridor up to Admiral
+    // Ripsnarl (~ -62,-823,42.8). endPos is detour-order (y,z,x): [2]=x,[0]=y. Used to
+    // log WHY the Ripsnarl corridor smoothing fails; the route crosses an off-mesh
+    // descent bridge, so the smoother fails at the off-mesh (sawOffMesh path) — handled
+    // by the bot-layer off-mesh-cross machinery, NOT by a pure-mesh straight fallback.
+    const bool ripDbg = _source && _source->GetMapId() == 36 &&
+        std::fabs(endPos[2] - (-62.0f)) < 12.0f && std::fabs(endPos[0] - (-823.0f)) < 12.0f;
 
     dtPolyRef polys[MAX_PATH_LENGTH];
     memcpy(polys, polyPath, sizeof(dtPolyRef)*polyPathSize);
@@ -882,7 +1091,20 @@ dtStatus PathGenerator::FindSmoothPath(float const* startPos, float const* endPo
 
         uint32 nvisited = 0;
         if (dtStatusFailed(_navMeshQuery->moveAlongSurface(polys[0], iterPos, moveTgt, &_filter, result, visited, (int*)&nvisited, MAX_VISIT_POLY)))
-            return DT_FAILURE;
+        {
+            // Across an off-mesh hop, preserve the original discard-and-fail behavior
+            // (the off-mesh-cross logic depends on it). On a PURE-navmesh corridor,
+            // stop but KEEP the partial path built so far (handled after the loop)
+            // rather than discarding a valid long route as a straight-line NOPATH.
+            if (sawOffMesh)
+            {
+                if (ripDbg)
+                    TC_LOG_INFO("maps.mmaps", "[rip_dbg] FindSmoothPath FAIL@moveSurface-postOffmesh nsmooth={} polyN={}", nsmoothPath, polyPathSize);
+                return DT_FAILURE;
+            }
+            surfaceFail = true;
+            break;
+        }
         npolys = FixupCorridor(polys, npolys, MAX_PATH_LENGTH, visited, nvisited);
 
         if (dtStatusFailed(_navMeshQuery->getPolyHeight(polys[0], result, &result[1])))
@@ -894,6 +1116,7 @@ dtStatus PathGenerator::FindSmoothPath(float const* startPos, float const* endPo
         if (endOfPath && InRangeYZX(iterPos, steerPos, SMOOTH_PATH_SLOP, 1.0f))
         {
             // Reached end of path.
+            reachedEnd = true;
             dtVcopy(iterPos, targetPos);
             if (nsmoothPath < maxSmoothPathSize)
             {
@@ -904,6 +1127,7 @@ dtStatus PathGenerator::FindSmoothPath(float const* startPos, float const* endPo
         }
         else if (offMeshConnection && InRangeYZX(iterPos, steerPos, SMOOTH_PATH_SLOP, 1.0f))
         {
+            sawOffMesh = true;
             // Advance the path up to and over the off-mesh connection.
             dtPolyRef prevRef = INVALID_POLYREF;
             dtPolyRef polyRef = polys[0];
@@ -924,6 +1148,16 @@ dtStatus PathGenerator::FindSmoothPath(float const* startPos, float const* endPo
             float connectionStartPos[VERTEX_SIZE], connectionEndPos[VERTEX_SIZE];
             if (dtStatusSucceed(_navMesh->getOffMeshConnectionPolyEndPoints(prevRef, polyRef, connectionStartPos, connectionEndPos)))
             {
+                // Record the FIRST off-mesh crossing's landing point so movement
+                // steppers can honor the hop regardless of its span (short bridges
+                // were missed by length heuristics). connectionEndPos is the
+                // authoritative far endpoint in Detour (y,z,x) order; store it in
+                // game (x,y,z). A world position, immune to later path dedupe.
+                if (!_pathTraversesOffMesh)
+                {
+                    _pathTraversesOffMesh = true;
+                    _firstOffMeshLanding = G3D::Vector3(connectionEndPos[2], connectionEndPos[0], connectionEndPos[1]);
+                }
                 if (nsmoothPath < maxSmoothPathSize)
                 {
                     dtVcopy(&smoothPath[nsmoothPath*VERTEX_SIZE], connectionStartPos);
@@ -931,8 +1165,24 @@ dtStatus PathGenerator::FindSmoothPath(float const* startPos, float const* endPo
                 }
                 // Move position at the other side of the off-mesh link.
                 dtVcopy(iterPos, connectionEndPos);
+                // getPolyHeight just past the off-mesh link does a poly-containment
+                // test that float-precision-FAILS when connectionEndPos (the navmesh-
+                // authoritative far endpoint) lands on the landing poly's EDGE. The old
+                // code returned DT_FAILURE here, discarding the ENTIRE route so a path
+                // CROSSING this off-mesh always NOPATH'd and the bot wedged on the near
+                // side — the Deadmines HARBOR bridge to Admiral Ripsnarl (live 06-26:
+                // [rip_dbg] offmesh getPolyHeight FAIL nsmooth=9-11, tank pinned ~290y
+                // out, reach=0). Recover the SAME way the raycast branch does (clamp to
+                // poly boundary on a height miss) and CONTINUE the crossing natively onto
+                // the landing poly (solid ground, never the void). SAFE for the Gap-1
+                // bridge: its off-mesh getPolyHeight SUCCEEDS, so this branch never fires
+                // there (verified across Gap-1 runs — clamp count stayed 0).
                 if (dtStatusFailed(_navMeshQuery->getPolyHeight(polys[0], iterPos, &iterPos[1])))
-                    return DT_FAILURE;
+                {
+                    _navMeshQuery->closestPointOnPolyBoundary(polys[0], iterPos, iterPos);
+                    if (ripDbg)
+                        TC_LOG_INFO("maps.mmaps", "[rip_dbg] FindSmoothPath offmesh getPolyHeight FAIL -> clamped to landing poly + continue, nsmooth={}", nsmoothPath);
+                }
                 iterPos[1] += 0.5f;
             }
         }
@@ -947,8 +1197,60 @@ dtStatus PathGenerator::FindSmoothPath(float const* startPos, float const* endPo
 
     *smoothPathSize = nsmoothPath;
 
-    // this is most likely a loop
-    return nsmoothPath < MAX_POINT_PATH_LENGTH ? DT_SUCCESS : DT_FAILURE;
+    if (nsmoothPath >= maxSmoothPathSize)
+    {
+        // Point budget exhausted. Historically this returned DT_FAILURE
+        // unconditionally ("most likely a loop"), which also discarded
+        // every legitimately LONG corridor: the walker advances
+        // SMOOTH_PATH_STEP_SIZE (4y) per stored point, so any valid path
+        // longer than ~292y (74 points) was thrown away wholesale and the
+        // caller fell back to a straight-line shortcut flagged NOPATH —
+        // even though the poly corridor was fine and findStraightPath
+        // routes it (observed: Warsong Gulch spawn -> enemy flag stand,
+        // Undercity walkway corridors).
+        //
+        // Distinguish the two cases by net progress: a steering loop
+        // oscillates near its origin; a long corridor displaces the
+        // walker far from the start. Keep the partial path when real
+        // progress was made — trimming the last point so the caller's
+        // `pointCount >= _pointPathLimit` branch doesn't replace the
+        // result with a shortcut — and let movement re-path from the
+        // partial end as with any other incomplete path.
+        float disp[VERTEX_SIZE];
+        dtVsub(disp, iterPos, smoothPath);   // smoothPath[0..2] = start point
+        const float minProgress = 4.0f * SMOOTH_PATH_STEP_SIZE;
+        if (dtVdot(disp, disp) > minProgress * minProgress)
+        {
+            *smoothPathSize = nsmoothPath - 1;
+            return DT_SUCCESS;
+        }
+        return DT_FAILURE;
+    }
+
+    // A mid-corridor surface/height query failed (moveAlongSurface / getPolyHeight)
+    // BEFORE the budget was hit and WITHOUT reaching the destination. The old code
+    // returned DT_FAILURE here, discarding a partial smooth path that had made real
+    // progress; BuildPointPath then fell back to a straight-line shortcut flagged
+    // NOPATH and the bot wedged — observed on the Deadmines foundry->harbor->ship
+    // corridor (>74 polys, so the poly path is already truncated and the smoother
+    // stops partway up the gangplank). Keep the partial as PARTIAL_RESULT when real
+    // net progress was made so BuildPointPath marks it INCOMPLETE and movement
+    // advances to the partial end and re-paths (incremental, like a player walking a
+    // long route). Clean ends and steering-loop breaks are unaffected.
+    if (surfaceFail && !reachedEnd && nsmoothPath >= 2)
+    {
+        float disp[VERTEX_SIZE];
+        dtVsub(disp, iterPos, smoothPath);   // smoothPath[0..2] = start point
+        const float minProgress = 4.0f * SMOOTH_PATH_STEP_SIZE;
+        if (dtVdot(disp, disp) > minProgress * minProgress)
+            return DT_SUCCESS | DT_PARTIAL_RESULT;
+    }
+
+    if (ripDbg)
+        TC_LOG_INFO("maps.mmaps", "[rip_dbg] FindSmoothPath exit nsmooth={} polyN={} reachedEnd={} surfaceFail={} sawOff={}",
+            nsmoothPath, polyPathSize, reachedEnd, surfaceFail, sawOffMesh);
+
+    return DT_SUCCESS;
 }
 
 bool PathGenerator::InRangeYZX(float const* v1, float const* v2, float r, float h) const
@@ -1032,6 +1334,17 @@ void PathGenerator::ShortenPathUntilDist(G3D::Vector3 const& target, float dist)
     //   ... settle for a guesstimate since i'm not confident in doing trig on every chase motion tick...
     // (@todo review this)
     _pathPoints[i] += (_pathPoints[i - 1] - _pathPoints[i]).direction() * (dist - (_pathPoints[i] - target).length());
+    // The shortened endpoint can land within <0.1y of its predecessor when the
+    // "too far" vertex [i-1] sits right at the `dist` boundary (the move amount
+    // then ~= the entire last segment). A sub-0.1y final segment makes
+    // MoveSplineInitArgs::_checkPathLengths() reject the WHOLE spline, so the unit
+    // never moves -- root cause of bots/creatures/vehicles wedged mid-chase and
+    // during boss approach on 12.0.7 (a flood of "_checkPathLengths() failed").
+    // Drop the collapsed endpoint, keeping its predecessor as the path end (still
+    // >= 2 points). A 2-point path is never affected: _checkPathLengths only
+    // inspects paths with > 2 points.
+    if (i >= 2 && (_pathPoints[i] - _pathPoints[i - 1]).squaredLength() < 0.01f)
+        --i;
     _pathPoints.resize(i+1);
 }
 

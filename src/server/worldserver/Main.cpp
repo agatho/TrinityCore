@@ -18,6 +18,9 @@
 #include "Common.h"
 #include "AppenderDB.h"
 #include "AsyncAcceptor.h"
+#ifdef TRINITY_PLAYERBOT_V2
+#include "Diagnostics/BotInspector.h"   // freeze-dump forensics
+#endif
 #include "AuthenticationPackets.h"
 #include "Banner.h"
 #include "BattlegroundMgr.h"
@@ -28,6 +31,7 @@
 #include "DatabaseLoader.h"
 #include "DeadlineTimer.h"
 #include "GitRevision.h"
+#include "Modules/ModuleManager.h"
 #include "InstanceLockMgr.h"
 #include "IoContext.h"
 #include "IpNetwork.h"
@@ -51,6 +55,9 @@
 #include "World.h"
 #include "WorldSocketMgr.h"
 #include "Util.h"
+#ifdef TRINITY_PLAYERBOT_V2
+#include "PlayerbotV2.h"
+#endif
 #include <openssl/opensslv.h>
 #include <openssl/crypto.h>
 #include <boost/asio/signal_set.hpp>
@@ -354,6 +361,11 @@ int main(int argc, char** argv)
     if (!sWorld->SetInitialWorldSettings())
         return 1;
 
+#ifdef TRINITY_PLAYERBOT_V2
+    // Initialize Playerbot V2 after world is set up. See v2/PASS_B_INDEX.md.
+    Playerbot::V2::Module::instance().Init();
+#endif
+
     auto instanceLockMgrHandle = Trinity::make_unique_ptr_with_deleter<&InstanceLockMgr::Unload>(&sInstanceLockMgr);
 
     auto terrainMgrHandle = Trinity::make_unique_ptr_with_deleter<&TerrainMgr::UnloadAll>(&sTerrainMgr);
@@ -442,6 +454,9 @@ int main(int argc, char** argv)
 
     sScriptMgr->OnStartup();
 
+    // Initialize registered modules
+    ModuleManager::CallOnStartup();
+
     TC_LOG_INFO("server.worldserver", "{} (worldserver-daemon) ready...", GitRevision::GetFullVersion());
 
     // Launch CliRunnable thread
@@ -464,6 +479,11 @@ int main(int argc, char** argv)
     sLog->SetSynchronous();
 
     sScriptMgr->OnShutdown();
+
+#ifdef TRINITY_PLAYERBOT_V2
+    // Shutdown Playerbot V2 (joins AI workers + fleet thread).
+    Playerbot::V2::Module::instance().Shutdown();
+#endif
 
     // set server offline
     LoginDatabase.DirectPExecute("UPDATE realmlist SET flag = flag | {} WHERE id = '{}'", Trinity::Legacy::REALM_FLAG_OFFLINE, realmId);
@@ -628,6 +648,17 @@ void FreezeDetector::Handler(std::weak_ptr<FreezeDetector> freezeDetectorRef, bo
                 if (msTimeDiff > freezeDetector->_maxCoreStuckTimeInMs)
                 {
                     TC_LOG_ERROR("server.worldserver", "World Thread hangs for {} ms, forcing a crash!", msTimeDiff);
+#ifdef TRINITY_PLAYERBOT_V2
+                    // Forensic dump before abort: per-bot intent rings,
+                    // pipeline failure rings, population/budget/queue
+                    // health snapshot. Lands at <logs>/freeze_dump_<ts>.txt
+                    // so post-crash analysis has more than just the call
+                    // stack from the .dmp.
+                    std::string const fdump = ::Playerbot::Diagnostics::DumpFreezeForensics(
+                        Trinity::StringFormat("World thread hung {} ms", msTimeDiff));
+                    if (!fdump.empty())
+                        TC_LOG_ERROR("server.worldserver", "Freeze forensics written to: {}", fdump);
+#endif
                     ABORT_MSG("World Thread hangs for %u ms, forcing a crash!", msTimeDiff);
                 }
             }

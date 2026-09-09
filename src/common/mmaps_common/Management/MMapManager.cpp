@@ -23,6 +23,7 @@
 #include "MapUtils.h"
 #include "Memory.h"
 #include <algorithm>
+#include <mutex>
 
 namespace MMAP
 {
@@ -43,6 +44,22 @@ namespace MMAP
     // dummy struct to hold map's mmap data
     struct MMapData
     {
+        // Per-map mutex. Held by `MMapManager::loadMap` for the entire
+        // duration of `loadMapData` → `meshData.try_emplace` →
+        // `navMesh.addTile`. Without this, concurrent loadMap calls
+        // for the same mapId (e.g. multiple instance Maps of one
+        // dungeon being updated by different MapUpdater worker
+        // threads, sharing the same `MMapMapData` because most maps
+        // route through `GetInstanceIdForMeshLookup() == 0`) race on
+        // `meshData.try_emplace` AND on `dtNavMesh::addTile`'s tile
+        // list mutation. The race manifests as a 60s+ hang in
+        // `connectExtLinks::findConnectingPolys` walking a corrupted
+        // link list (cause of the FreezeDetector abort).
+        // Granularity is per-mapId: different maps don't contend, and
+        // same-map loads serialize — which is correct since they were
+        // never supposed to interleave inside dtNavMesh.
+        std::mutex loadLock;
+
         MeshDataMap meshData;
 
         // we have to use single dtNavMeshQuery for every instance, since those are not thread safe
@@ -205,6 +222,21 @@ namespace MMAP
 
     LoadResult MMapManager::loadMap(std::string_view basePath, uint32 mapId, uint32 instanceId, int32 x, int32 y)
     {
+        // Serialize per-mapId. `loadMapData` mutates `meshData` and
+        // `addTile` below mutates `navMesh` — both are non-thread-safe
+        // and two map worker threads loading tiles for the same mapId
+        // (different instance copies of one dungeon) hit the same
+        // `MMapMapData` instance for shared-mesh maps. Without this
+        // lock, concurrent `addTile` corrupts the dtNavMesh link list,
+        // and the next `connectExtLinks` walk hangs for 60+ seconds
+        // (FreezeDetector abort observed 2026-05-15).
+        // loadedMMaps itself is populated once at startup via
+        // InitializeThreadUnsafe so the outer lookup is read-only here.
+        MMapData* mmap = Trinity::Containers::MapGetValuePtr(loadedMMaps, mapId);
+        if (!mmap)
+            return LoadResult::FileNotFound;
+        std::lock_guard<std::mutex> loadGuard(mmap->loadLock);
+
         // make sure the mmap is loaded and ready to load tiles
         switch (LoadResult mapResult = loadMapData(basePath, mapId, instanceId))
         {
@@ -215,8 +247,10 @@ namespace MMAP
                 return mapResult;
         }
 
-        // get this mmap data
-        MMapData* mmap = Trinity::Containers::MapGetValuePtr(loadedMMaps, mapId);
+        // get this mmap data (re-fetch under lock — mmap pointer was
+        // resolved before the lock, so the MMapMapData inside may have
+        // been populated by another thread that won the race for first
+        // entry. We re-call GetMeshData / find under the lock.)
         MMapMapData& meshData = mmap->GetMeshData(mapId, instanceId).first->second;
 
         // check if we already have this tile loaded
@@ -304,6 +338,14 @@ namespace MMAP
 
     bool MMapManager::loadMapInstance(std::string_view basePath, uint32 meshMapId, uint32 instanceMapId, uint32 instanceId)
     {
+        // Per-mapId lock — protects navMeshQueries.try_emplace + meshData
+        // lookup against concurrent loadMap / unloadMap from other Map
+        // worker threads on the same mapId. See loadMap's comment.
+        MMapData* mmap = Trinity::Containers::MapGetValuePtr(loadedMMaps, meshMapId);
+        if (!mmap)
+            return false;
+        std::lock_guard<std::mutex> loadGuardMutex(mmap->loadLock);
+
         switch (loadMapData(basePath, meshMapId, instanceId))
         {
             case LoadResult::Success:
@@ -313,7 +355,6 @@ namespace MMAP
                 return false;
         }
 
-        MMapData* mmap = Trinity::Containers::MapGetValuePtr(loadedMMaps, meshMapId);
         auto [queryItr, inserted] = mmap->navMeshQueries.try_emplace({ instanceMapId, instanceId });
         if (!inserted)
             return true;
@@ -324,7 +365,13 @@ namespace MMAP
         });
 
         // allocate mesh query
-        if (dtStatusFailed(queryItr->second.init(&mmap->GetMeshData(meshMapId, instanceId).first->second.navMesh, 1024)))
+        // A* node pool raised 1024 -> 8192 (owner's call) to recover budget-wedged
+        // objectives (docs/MMAP_SWEEP_FINDINGS.md: ~41% of wedges, WEDGE 6587->3902
+        // on map 1). NOTE: at fleet scale this adds per-hard-path A* cost in
+        // Map::Update on an already-high tick (~524ms @ 869 bots, snapshot-build
+        // bound); watch for movement rubber-banding. The real headroom is in the
+        // 245ms snapshot build, not this pool.
+        if (dtStatusFailed(queryItr->second.init(&mmap->GetMeshData(meshMapId, instanceId).first->second.navMesh, 8192)))
         {
             TC_LOG_ERROR("maps", "MMAP:GetNavMeshQuery: Failed to initialize dtNavMeshQuery for mapId {:04} instanceId {}", instanceMapId, instanceId);
             return false;
@@ -333,6 +380,120 @@ namespace MMAP
         TC_LOG_DEBUG("maps", "MMAP:GetNavMeshQuery: created dtNavMeshQuery for mapId {:04} instanceId {}", instanceMapId, instanceId);
         (void)loadGuard.release();
         return true;
+    }
+
+    namespace
+    {
+        struct TileLinkCorruption
+        {
+            int polyIndex;              // poly whose chain is broken, or -1 for the free-link list
+            unsigned int badValue;      // the out-of-range link index that was found
+            void const* fieldAddress;   // address of the corrupt firstLink/next field
+        };
+
+        // Walks every poly link chain and the free-link list of a tile,
+        // verifying each link index is either DT_NULL_LINK or within
+        // [0, maxLinkCount), with a chain-length cap as a cycle guard.
+        // Returns false and fills `out` on the first violation.
+        //
+        // Why this exists (2026-06-12, worldserver.exe.335304.dmp): a single
+        // 4 KB page of a LIVE tile's poly array (map 1931, tile [25,07]) was
+        // found replaced with foreign data — decompressed BC1 texture pixels,
+        // every dword 0xFFxxxxxx — while the surrounding pages were intact.
+        // No code in worldserver produces texture pixels, the pattern existed
+        // exactly once in the whole address space, and all navmesh mutation
+        // paths are serialized by MMapData::loadLock (verified in the dump:
+        // 1 of 95 threads in mmap code). The corruption came from OUTSIDE the
+        // process: lost/garbled pagefile writes under commit exhaustion
+        // (System log: Ntfs event 50 "delayed write failed", Ntfs 140, and
+        // Resource-Exhaustion-Detector 2004 naming worldserver) or bad RAM.
+        // dtNavMesh::unconnectLinks then dereferenced a pixel value as a link
+        // index and died with an unattributable wild AV. Validating here
+        // converts that into an immediate, fully-attributed fatal report at
+        // the first point the corrupt chain would be walked. It never fires
+        // on healthy memory and costs no more than the unconnectLinks walk
+        // that removeTile performs anyway.
+        bool ValidateTileLinkIntegrity(dtMeshTile const* tile, TileLinkCorruption& out)
+        {
+            if (!tile || !tile->header || !tile->links || !tile->polys)
+                return true; // empty slot — nothing to validate
+
+            unsigned int const maxLinks = static_cast<unsigned int>(std::max(tile->header->maxLinkCount, 0));
+
+            auto chainValid = [&](unsigned int first, int polyIndex, void const* firstAddr)
+            {
+                unsigned int j = first;
+                void const* addr = firstAddr;
+                unsigned int steps = 0;
+                while (j != DT_NULL_LINK)
+                {
+                    if (j >= maxLinks || steps++ > maxLinks) // out-of-range index, or cycle
+                    {
+                        out = { polyIndex, j, addr };
+                        return false;
+                    }
+                    addr = &tile->links[j].next;
+                    j = tile->links[j].next;
+                }
+                return true;
+            };
+
+            for (int i = 0; i < tile->header->polyCount; ++i)
+                if (!chainValid(tile->polys[i].firstLink, i, &tile->polys[i].firstLink))
+                    return false;
+
+            return chainValid(tile->linksFreeList, -1, &tile->linksFreeList);
+        }
+
+        // Validates the exact tile set dtNavMesh::removeTile will mutate:
+        // the removed tile itself, the 8 surrounding grid cells and any
+        // other layers in the same column (matches removeTile's
+        // getNeighbourTilesAt(side 0..7) + getTilesAt walk). Aborts with a
+        // precise diagnostic instead of letting unconnectLinks dereference
+        // a corrupt link index.
+        void ValidateRemovalNeighborhood(dtNavMesh const& navMesh, dtTileRef tileRef, uint32 mapId, uint32 instanceId)
+        {
+            dtMeshTile const* target = navMesh.getTileByRef(tileRef);
+            if (!target || !target->header)
+                return; // stale/invalid ref — removeTile will reject it and the existing error path handles it
+
+            auto validateOrAbort = [&](dtMeshTile const* tile)
+            {
+                TileLinkCorruption c;
+                if (ValidateTileLinkIntegrity(tile, c))
+                    return;
+
+                TC_LOG_FATAL("maps", "MMAP: navmesh memory corruption detected on map {:04} instance {} while unloading tile [{:02},{:02}]: "
+                    "tile [{:02},{:02}] {} has link index 0x{:08X} (valid: < {} or DT_NULL_LINK) at {}. "
+                    "Foreign content in a live, lock-serialized navmesh tile indicates corruption from OUTSIDE the navmesh code "
+                    "(bad RAM / lost pagefile writes — check System log for WHEA, Ntfs 50/140 and Resource-Exhaustion-Detector 2004 events). "
+                    "Aborting before the corrupt link chain is dereferenced (ref: crash 2026-06-12, worldserver.exe.335304.dmp).",
+                    mapId, instanceId, target->header->x, target->header->y,
+                    tile->header->x, tile->header->y,
+                    c.polyIndex >= 0 ? Trinity::StringFormat("poly {}", c.polyIndex) : "free-link list",
+                    c.badValue, tile->header->maxLinkCount, c.fieldAddress);
+
+                ABORT_MSG("MMAP: navmesh tile link corruption (external memory corruption) on map %u tile [%d,%d] poly %d value 0x%08X",
+                    mapId, tile->header->x, tile->header->y, c.polyIndex, c.badValue);
+            };
+
+            validateOrAbort(target);
+
+            static int const offsets[8][2] = { { -1, -1 }, { -1, 0 }, { -1, 1 }, { 0, -1 }, { 0, 1 }, { 1, -1 }, { 1, 0 }, { 1, 1 } };
+            dtMeshTile const* neis[32];
+            for (auto const& off : offsets)
+            {
+                int nneis = navMesh.getTilesAt(target->header->x + off[0], target->header->y + off[1], neis, 32);
+                for (int n = 0; n < nneis; ++n)
+                    validateOrAbort(neis[n]);
+            }
+
+            // other layers in the same tile column (removeTile unconnects these too)
+            int nneis = navMesh.getTilesAt(target->header->x, target->header->y, neis, 32);
+            for (int n = 0; n < nneis; ++n)
+                if (neis[n] != target)
+                    validateOrAbort(neis[n]);
+        }
     }
 
     void MMapManager::unloadMap(uint32 mapId, int32 x, int32 y)
@@ -347,6 +508,11 @@ namespace MMAP
         }
 
         MMapData* mmap = itr->second.get();
+        // Serialize with loadMap on the same mapId — concurrent
+        // navMesh.removeTile during another thread's addTile would
+        // corrupt the tile/link list (same root cause as the load-load
+        // race fixed in loadMap above).
+        std::lock_guard<std::mutex> loadGuardMutex(mmap->loadLock);
         uint32 packedGridPos = packTileID(x, y);
         for (auto& [instanceId, meshData] : mmap->meshData)
         {
@@ -354,6 +520,10 @@ namespace MMAP
             auto tileRef = meshData.loadedTileRefs.extract(packedGridPos);
             if (!tileRef)
                 continue;
+
+            // fail fast (with attribution) on externally-corrupted tiles
+            // before removeTile walks their link chains
+            ValidateRemovalNeighborhood(meshData.navMesh, tileRef.mapped(), mapId, instanceId);
 
             // unload, and mark as non loaded
             if (dtStatusFailed(meshData.navMesh.removeTile(tileRef.mapped(), nullptr, nullptr)))
@@ -382,6 +552,9 @@ namespace MMAP
             return;
         }
 
+        // Serialize with loadMap / loadMapInstance on the same mapId.
+        std::lock_guard<std::mutex> loadGuardMutex(itr->second->loadLock);
+
         if (!isRebuildingTilesEnabledOnMap(mapId))
         {
             if (MeshDataMap::node_type meshNode = itr->second->RemoveMeshData(mapId, 0))
@@ -390,6 +563,7 @@ namespace MMAP
                 {
                     uint32 x = (tileId >> 16);
                     uint32 y = (tileId & 0x0000FFFF);
+                    ValidateRemovalNeighborhood(meshNode.mapped().navMesh, tileRef, mapId, 0);
                     if (dtStatusFailed(meshNode.mapped().navMesh.removeTile(tileRef, nullptr, nullptr)))
                         TC_LOG_ERROR("maps", "MMAP:unloadMap: Could not unload {:04}_{:02}_{:02}.mmtile from navmesh", mapId, x, y);
                     else
@@ -418,6 +592,9 @@ namespace MMAP
         }
 
         MMapData* mmap = itr->second.get();
+        // Serialize with loadMap / loadMapInstance / unloadMap on the
+        // same mapId.
+        std::lock_guard<std::mutex> loadGuardMutex(mmap->loadLock);
         std::size_t erased = mmap->navMeshQueries.erase({ instanceMapId, instanceId });
         if (!erased)
             TC_LOG_DEBUG("maps", "MMAP:unloadMapInstance: Asked to unload not loaded dtNavMeshQuery mapId {:04} instanceId {}", instanceMapId, instanceId);
@@ -431,6 +608,7 @@ namespace MMAP
                 {
                     uint32 x = (tileId >> 16);
                     uint32 y = (tileId & 0x0000FFFF);
+                    ValidateRemovalNeighborhood(meshNode.mapped().navMesh, tileRef, meshMapId, instanceId);
                     if (dtStatusFailed(meshNode.mapped().navMesh.removeTile(tileRef, nullptr, nullptr)))
                         TC_LOG_ERROR("maps", "MMAP:unloadMap: Could not unload {:04}_{:02}_{:02}.mmtile from navmesh", meshMapId, x, y);
                     else

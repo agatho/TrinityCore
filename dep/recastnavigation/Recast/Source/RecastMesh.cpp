@@ -62,6 +62,15 @@ static bool buildMeshAdjacency(unsigned short* polys, const int npolys,
 			if (t[j] == RC_MESH_NULL_IDX) break;
 			unsigned short v0 = t[j];
 			unsigned short v1 = (j+1 >= vertsPerPoly || t[j+1] == RC_MESH_NULL_IDX) ? t[0] : t[j+1];
+			// TRINITYCORE FIX: a polygon referencing a vertex index >= nverts would
+			// write firstEdge[v0] past the end of the allocation (heap corruption).
+			// Such indices can only come from corrupted/degenerate input; fail soft.
+			if (v0 >= nverts || v1 >= nverts)
+			{
+				rcFree(firstEdge);
+				rcFree(edges);
+				return false;
+			}
 			if (v0 < v1)
 			{
 				rcEdge& edge = edges[edgeCount];
@@ -87,6 +96,16 @@ static bool buildMeshAdjacency(unsigned short* polys, const int npolys,
 			if (t[j] == RC_MESH_NULL_IDX) break;
 			unsigned short v0 = t[j];
 			unsigned short v1 = (j+1 >= vertsPerPoly || t[j+1] == RC_MESH_NULL_IDX) ? t[0] : t[j+1];
+			// TRINITYCORE FIX: see matching bounds check in the first edge pass.
+			// firstEdge[v1] below must not be indexed with a corrupt vertex index;
+			// a wild value would follow a bogus edge chain and write out of bounds
+			// through edges[e].
+			if (v0 >= nverts || v1 >= nverts)
+			{
+				rcFree(firstEdge);
+				rcFree(edges);
+				return false;
+			}
 			if (v0 > v1)
 			{
 				for (unsigned short e = firstEdge[v1]; e != RC_MESH_NULL_IDX; e = nextEdge[e])
@@ -340,7 +359,18 @@ static int triangulate(int n, const int* verts, int* indices, int* tris)
 {
 	int ntris = 0;
 	int* dst = tris;
-	
+
+	// TRINITYCORE FIX (no upstream equivalent as of recastnavigation main, 2026-06):
+	// A degenerate input polygon (n < 3) used to fall through to the final
+	// "append remaining triangle" block below, reading indices[1]/indices[2]
+	// out of bounds of the caller's buffer and emitting a triangle with garbage
+	// indices. removeVertex() can produce such input (nhole < 3) from degenerate
+	// source polygons; the garbage vertex indices then propagate into
+	// rcPolyMesh::polys and corrupt the heap in buildMeshAdjacency().
+	// Fail soft instead: report 0 triangles.
+	if (n < 3)
+		return 0;
+
 	// The last bit of the index is used to indicate if the vertex can be removed.
 	for (int i = 0; i < n; i++)
 	{
@@ -822,6 +852,21 @@ static bool removeVertex(rcContext* ctx, rcPolyMesh& mesh, const unsigned short 
 			break;
 	}
 
+	// TRINITYCORE FIX (no upstream equivalent as of recastnavigation main, 2026-06):
+	// Degenerate input polygons (e.g. the removed vertex occurring more than once
+	// in a single polygon, produced by overlapping/duplicated collision geometry)
+	// can pass canRemoveVertex() yet leave a hole boundary with fewer than 3
+	// vertices here. Triangulating such a hole read past 'thole'/'hole' and fed
+	// garbage vertex indices into mesh.polys, corrupting the heap later in
+	// buildMeshAdjacency(). The mesh is still consistent at this point (the
+	// degenerate polygons and the vertex have been removed), so leave the
+	// degenerate hole unfilled and report success.
+	if (nhole < 3)
+	{
+		ctx->log(RC_LOG_WARNING, "removeVertex: Degenerate hole boundary (nhole=%d) while removing vertex %d. Skipping hole triangulation.", nhole, (int)rem);
+		return true;
+	}
+
 	rcScopedDelete<int> tris((int*)rcAlloc(sizeof(int)*nhole*3, RC_ALLOC_TEMP));
 	if (!tris)
 	{
@@ -890,6 +935,15 @@ static bool removeVertex(rcContext* ctx, rcPolyMesh& mesh, const unsigned short 
 	for (int j = 0; j < ntris; ++j)
 	{
 		int* t = &tris[j*3];
+		// TRINITYCORE FIX: defend against out-of-range triangle indices. All
+		// indices triangulate() emits must address the 'hole'/'hreg'/'harea'
+		// arrays (size nhole); anything else would read wild memory and store
+		// garbage vertex indices into mesh.polys (heap corruption downstream).
+		if (t[0] < 0 || t[0] >= nhole || t[1] < 0 || t[1] >= nhole || t[2] < 0 || t[2] >= nhole)
+		{
+			ctx->log(RC_LOG_WARNING, "removeVertex: triangulate() returned out of range index (%d/%d/%d, nhole=%d). Skipping triangle.", t[0], t[1], t[2], nhole);
+			continue;
+		}
 		if (t[0] != t[1] && t[0] != t[2] && t[1] != t[2])
 		{
 			polys[npolys*nvp+0] = (unsigned short)hole[t[0]];

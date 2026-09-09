@@ -39,7 +39,7 @@ endif()
 
 if (WIN32)
   # On windows the requirements are higher according to the wiki.
-  set(BOOST_REQUIRED_VERSION 1.78)
+  set(BOOST_REQUIRED_VERSION 1.89)
 else()
   set(BOOST_REQUIRED_VERSION 1.74)
 endif()

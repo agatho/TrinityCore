@@ -458,6 +458,11 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         HousingRoomEntity* GetHousingRoomEntity(ObjectGuid const& guid);
         Pet* GetPet(ObjectGuid const& guid);
         Transport* GetTransport(ObjectGuid const& guid);
+        // Read-only access to the map's MO-transport set (ships/zeppelins).
+        // These live in _transports, NOT the grid, so Cell::VisitGridObjects
+        // never returns them — the Playerbot AI needs this to find a nearby
+        // docked ship to board for cross-continent travel.
+        std::set<Transport*> const& GetTransports() const { return _transports; }
         Creature* GetCreatureBySpawnId(ObjectGuid::LowType spawnId) const;
         GameObject* GetGameObjectBySpawnId(ObjectGuid::LowType spawnId) const;
         AreaTrigger* GetAreaTriggerBySpawnId(ObjectGuid::LowType spawnId) const;
@@ -592,12 +597,15 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
 
         void AddUpdateObject(BaseEntity* obj)
         {
-            _updateObjects.insert(obj);
+            // Null check only - BaseEntity is forward declared, can't call methods here
+            if (obj)
+                _updateObjects.insert(obj);
         }
 
         void RemoveUpdateObject(BaseEntity* obj)
         {
-            _updateObjects.erase(obj);
+            if (obj)
+                _updateObjects.erase(obj);
         }
 
         size_t GetActiveNonPlayersCount() const

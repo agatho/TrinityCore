@@ -108,7 +108,24 @@ bool rcBuildHeightfieldLayers(rcContext* ctx, rcCompactHeightfield& chf,
 	}
 	memset(srcReg,0xff,sizeof(unsigned char)*chf.spanCount);
 	
-	const int nsweeps = chf.width;
+	// TRINITYCORE FIX (same class as recastnavigation issue #317): the sweep
+	// buffer was sized per grid COLUMN (chf.width) but sweep ids are
+	// allocated per SPAN below (sid = sweepId++) — a row whose total span
+	// count exceeds the width (tall stacked geometry; rcCompactCell::count
+	// is 8 bits, so up to 255 spans per cell) writes sweeps[sid] past the
+	// allocation. Size by the exact worst case: the maximum total span
+	// count over any single row. Capped at 256 because sid is an unsigned
+	// char with 0xff reserved as the "no sweep" sentinel — the sweepId
+	// exhaustion guard below fails soft before that bound can be exceeded.
+	int maxSpansPerRow = 0;
+	for (int y = 0; y < chf.height; ++y)
+	{
+		int rowSpans = 0;
+		for (int x = 0; x < chf.width; ++x)
+			rowSpans += (int)chf.cells[x+y*chf.width].count;
+		maxSpansPerRow = rcMax(maxSpansPerRow, rowSpans);
+	}
+	const int nsweeps = rcMin(maxSpansPerRow + 2, 256);
 	rcScopedDelete<rcLayerSweepSpan> sweeps((rcLayerSweepSpan*)rcAlloc(sizeof(rcLayerSweepSpan)*nsweeps, RC_ALLOC_TEMP));
 	if (!sweeps)
 	{
@@ -149,6 +166,15 @@ bool rcBuildHeightfieldLayers(rcContext* ctx, rcCompactHeightfield& chf,
 				
 				if (sid == 0xff)
 				{
+					// TRINITYCORE FIX: sweepId is an unsigned char with 0xff
+					// reserved as the sentinel — 255 sweeps in one row would
+					// hand out sid==0xff (corrupting the sentinel semantics)
+					// and then wrap. Fail soft instead.
+					if (sweepId == 0xff)
+					{
+						ctx->log(RC_LOG_ERROR, "rcBuildHeightfieldLayers: too many sweeps in one row (>= 255).");
+						return false;
+					}
 					sid = sweepId++;
 					sweeps[sid].nei = 0xff;
 					sweeps[sid].ns = 0;

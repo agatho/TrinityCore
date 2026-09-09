@@ -19,10 +19,11 @@
 #include "StringFormat.h"
 #include <CascLib.h>
 
-DB2CascFileSource::DB2CascFileSource(std::shared_ptr<CASC::Storage const> storage, uint32 fileDataId, bool printErrors /*= true*/)
+DB2CascFileSource::DB2CascFileSource(std::shared_ptr<CASC::Storage const> storage, uint32 fileDataId,
+                                     bool printErrors /*= true*/, uint32 localeMask /*= CASC_LOCALE_NONE*/)
 {
     _storageHandle = storage;
-    _fileHandle.reset(storage->OpenFile(fileDataId, CASC_LOCALE_NONE, printErrors, true));
+    _fileHandle.reset(storage->OpenFile(fileDataId, localeMask, printErrors, true));
     _fileName = Trinity::StringFormat("FileDataId: {}", fileDataId);
 }
 

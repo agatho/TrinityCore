@@ -398,6 +398,24 @@ namespace VMAP
         }
 
         success = model.writeFile((iDestDir / (pModelFilename + ".vmo")).string());
+
+        // Road-aware mmaps Phase 2: relocate the .road sidecar from the
+        // extractor's raw output (Buildings/<file>.road) into the
+        // assembled output (vmaps/<file>.vmo.road), where the runtime's
+        // WorldModel::readFile expects it. Absence is normal — most WMOs
+        // have no road materials and thus no sidecar.
+        if (success)
+        {
+            boost::filesystem::path srcSidecar = iSrcDir / (pModelFilename + ".road");
+            boost::system::error_code sidecarEc;
+            if (boost::filesystem::exists(srcSidecar, sidecarEc))
+            {
+                boost::filesystem::path destSidecar = iDestDir / (pModelFilename + ".vmo.road");
+                boost::filesystem::copy_file(srcSidecar, destSidecar,
+                    boost::filesystem::copy_options::overwrite_existing, sidecarEc);
+            }
+        }
+
         //std::cout << "readRawFile2: '" << pModelFilename << "' tris: " << nElements << " nodes: " << nNodes << std::endl;
         return success;
     }

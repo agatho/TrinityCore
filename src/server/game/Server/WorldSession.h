@@ -58,6 +58,13 @@ class Player;
 class Unit;
 class WorldPacket;
 class WorldSession;
+
+namespace Playerbot {
+    class BotSession;
+    namespace V2 {
+        class BotSession;
+    }
+}
 class WorldSocket;
 struct AuctionPosting;
 struct BlackMarketTemplate;
@@ -1690,8 +1697,12 @@ class TC_GAME_API WorldSession
     public:
         WorldSession(uint32 id, std::string&& name, uint32 battlenetAccountId, std::string&& battlenetAccountEmail,
             std::shared_ptr<WorldSocket>&& sock, AccountTypes sec, uint8 expansion, time_t mute_time, std::string&& os, Minutes timezoneOffset,
-            uint32 build, ClientBuild::VariantId clientBuildVariant, LocaleConstant locale, uint32 recruiter, bool isARecruiter);
-        ~WorldSession();
+            uint32 build, ClientBuild::VariantId clientBuildVariant, LocaleConstant locale, uint32 recruiter, bool isARecruiter
+#if defined(TRINITY_PLAYERBOT_V2)
+            , bool is_bot = false
+#endif
+            );
+        virtual ~WorldSession();  // Virtual for BotSession inheritance
 
         bool PlayerLoading() const { return !m_playerLoading.IsEmpty(); }
         bool PlayerLogout() const { return m_playerLogout; }
@@ -1704,7 +1715,7 @@ class TC_GAME_API WorldSession
         // Client accessibility preference (screen-flash effects), mirrored from CMSG_OVERRIDE_SCREEN_FLASH.
         bool HasScreenFlashOverride() const { return _overrideScreenFlash; }
 
-        void SendPacket(WorldPacket const* packet, bool forced = false);
+        virtual void SendPacket(WorldPacket const* packet, bool forced = false);
 
         void SendNotification(char const* format, ...) ATTR_PRINTF(2, 3);
         void SendNotification(uint32 stringId, ...);
@@ -1800,6 +1811,10 @@ class TC_GAME_API WorldSession
         std::string const& GetOS() const { return _os; }
         uint32 GetClientBuild() const { return _clientBuild; }
         ClientBuild::VariantId const& GetClientBuildVariant() const { return _clientBuildVariant; }
+
+#if defined(TRINITY_PLAYERBOT_V2)
+        bool IsBot() const { return _isBot; }
+#endif
 
         bool CanAccessAlliedRaces() const;
 
@@ -2803,6 +2818,8 @@ class TC_GAME_API WorldSession
         void HandleSetBankAutosortDisabled(WorldPackets::Item::SetBankAutosortDisabled const& setBankAutosortDisabled);
         void SendOpenContainer(ObjectGuid containerGuid);
 
+        void HandleSetSortBagsRightToLeft(WorldPackets::Item::SetSortBagsRightToLeft const& setSortBagsRightToLeft);
+        void HandleSetInsertItemsLeftToRight(WorldPackets::Item::SetInsertItemsLeftToRight const& setInsertItemsLeftToRight);
         void HandleAttackSwingOpcode(WorldPackets::Combat::AttackSwing& packet);
         void HandleAttackStopOpcode(WorldPackets::Combat::AttackStop& packet);
         void HandleSetSheathedOpcode(WorldPackets::Combat::SetSheathed& packet);
@@ -3483,6 +3500,8 @@ class TC_GAME_API WorldSession
         AsyncCallbackProcessor<SQLQueryHolderCallback> _queryHolderProcessor;
 
     friend class World;
+    friend class Playerbot::BotSession;
+    friend class Playerbot::V2::BotSession;
     protected:
         class DosProtection
         {
@@ -3740,5 +3759,6 @@ class TC_GAME_API WorldSession
         WorldSession(WorldSession const& right) = delete;
         WorldSession& operator=(WorldSession const& right) = delete;
 };
+
 
 #endif

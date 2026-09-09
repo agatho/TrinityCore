@@ -18,3 +18,11 @@ endif(SERVERS)
 if(TOOLS)
   add_subdirectory(tools)
 endif(TOOLS)
+
+# Deferred link: src/server/game/CMakeLists.txt needs to link against
+# extractor_common for Road::ApplyCorridorsToNavmesh, but at the time game
+# is processed the tools subtree hasn't been visited yet — so the target
+# does not exist.  Wire the link here, after both subtrees are configured.
+if(SERVERS AND TOOLS AND TARGET game AND TARGET extractor_common)
+  target_link_libraries(game PRIVATE extractor_common)
+endif()

@@ -18,6 +18,8 @@
 #include "WorldModel.h"
 #include "MapTree.h"
 #include "VMapDefinitions.h"
+#include "ModelIgnoreFlags.h"
+#include "WmoRoadFile.h"
 #include <array>
 #include <cstring>
 
@@ -643,6 +645,68 @@ namespace VMAP
         }
 
         fclose(rf);
+
+        // Road-aware mmaps Phase 2: attempt to load the parallel
+        // .vmo.road sidecar if present. Absence is normal — old WMOs
+        // (extracted before Phase 2) have no sidecar, and WMOs with no
+        // road materials also don't produce one. Failure to read is
+        // silent and non-fatal; the runtime path doesn't depend on this
+        // data.
+        if (result)
+            LoadRoadSidecar(filename);
+
         return result;
+    }
+
+    void WorldModel::LoadRoadSidecar(const std::string& vmoFilename)
+    {
+        std::string sidecar = vmoFilename + ".road";
+        FILE* rf = fopen(sidecar.c_str(), "rb");
+        if (!rf)
+            return;
+
+        TrinityCore::WmoRoad::WmoRoadFileHeader hdr;
+        if (fread(&hdr, sizeof(hdr), 1, rf) != 1 ||
+            hdr.magic != TrinityCore::WmoRoad::kWmoRoadMagic ||
+            hdr.version != TrinityCore::WmoRoad::kWmoRoadVersion)
+        {
+            fclose(rf);
+            return;
+        }
+
+        uint32 nGroups = hdr.nGroups;
+        // The sidecar lists groups in the same order they appear in the
+        // .vmo. The .vmo only writes groups that pass ShouldSkip + have
+        // collision triangles, matching our extractor side. Iterate and
+        // attach flags to matching GroupModels by ordinal index.
+        std::size_t modelIdx = 0;
+        for (uint32 g = 0; g < nGroups; ++g)
+        {
+            TrinityCore::WmoRoad::WmoRoadGroupHeader gh;
+            if (fread(&gh, sizeof(gh), 1, rf) != 1)
+                break;
+            std::vector<uint8> packed(gh.flagsBytes);
+            if (gh.flagsBytes > 0 &&
+                fread(packed.data(), 1, gh.flagsBytes, rf) != gh.flagsBytes)
+                break;
+
+            // Find the next GroupModel with matching nColTriangles. We
+            // don't store group ordinals in the .vmo, so use a count match
+            // as a sanity check.
+            while (modelIdx < groupModels.size() &&
+                   groupModels[modelIdx].GetTriangles().size() != gh.nColTriangles)
+                ++modelIdx;
+            if (modelIdx >= groupModels.size())
+                break;
+
+            std::vector<uint8> flags(gh.nColTriangles, 0);
+            for (uint32 t = 0; t < gh.nColTriangles; ++t)
+                if (TrinityCore::WmoRoad::GetTriangleRoadBit(packed.data(), t))
+                    flags[t] = 1;
+            groupModels[modelIdx].triangleRoadFlags = std::move(flags);
+            ++modelIdx;
+        }
+
+        fclose(rf);
     }
 }

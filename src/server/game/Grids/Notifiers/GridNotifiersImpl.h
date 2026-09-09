@@ -205,6 +205,13 @@ inline void Trinity::WorldObjectSearcherBase<Check, Result, MapTypeMaskCheck>::V
 template<typename Localizer>
 void Trinity::LocalizedDo<Localizer>::operator()(Player const* p)
 {
+    // Logout race: a Player can sit briefly in the grid with m_session
+    // detached. Skip locale resolution when there's no session — caller
+    // (creature broadcast / area_aura visit) just doesn't see a packet
+    // for this player, which is the right outcome since they're going
+    // away anyway. Same surface as the SendDirectMessage crash.
+    if (!p->GetSession())
+        return;
     LocaleConstant loc_idx = p->GetSession()->GetSessionDbLocaleIndex();
     uint32 cache_idx = loc_idx + 1;
     LocalizedAction* action;

@@ -1,0 +1,26 @@
+## Interface: 120000
+## Title: PlayerbotControl
+## Notes: Owner-side cockpit for PlayerbotV2 fleet. Roster, commands, debug, stats.
+## Author: PlayerbotV2 (Wave G)
+## Version: 0.1.0
+## SavedVariables: PlayerbotControlDB
+## SavedVariablesPerCharacter: PlayerbotControlCharDB
+## DefaultState: enabled
+## LoadOnDemand: 0
+## OptionalDeps:
+## X-Category: Combat
+## X-Website: https://github.com/TrinityCore/TrinityCore
+## X-License: AGPLv3
+
+# Load order matters: Comms first (defines protocol API used by everyone else),
+# then state-bearing modules, then UI frames, then the main entry that wires
+# slash commands and event registrations.
+
+Comms.lua
+BotRoster.lua
+BotCommands.lua
+BotToolbar.lua
+BotAlts.lua
+BotDebug.lua
+BotStats.lua
+PlayerbotControl.lua

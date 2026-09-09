@@ -646,6 +646,11 @@ public:
         _value = RoundToInterval<float>(value, 0.0f, 100.0f);
     }
 
+    // Diagnostic read of the live capture-bar value (0 = horde captured,
+    // 100 = alliance captured, between = contested/neutral band). Consumed
+    // by GameObject::GetControlZoneValue for GM tooling.
+    float GetValue() const { return _value; }
+
     void HandleHeartbeat()
     {
         // update player list inside control zone
@@ -654,6 +659,15 @@ public:
 
         TeamId oldControllingTeam = GetControllingTeam();
         float pointsGained = CalculatePointsPerSecond(targetList) * _heartbeatRate.count() / 1000.0f;
+
+        // Diagnostic (2026-06-11, EotS towers frozen with eligible players
+        // inside): expose what the grid searcher actually returned vs the
+        // resulting gain. Debug-gated — silent at default log levels.
+        TC_LOG_DEBUG("bg.battleground",
+            "ControlZone {} (map {} inst {}) heartbeat: targets={} gain={} value={}",
+            _owner.GetEntry(), _owner.GetMapId(), _owner.GetMap()->GetInstanceId(),
+            uint32(targetList.size()), pointsGained, _value);
+
         if (pointsGained == 0)
             return;
 
@@ -739,7 +753,7 @@ public:
     float CalculateTimeNeeded(int32 hordePlayers, int32 alliancePlayers) const
     {
         uint32 const uncontestedTime = _owner.GetGOInfo()->controlZone.UncontestedTime;
-        uint32 const delta = std::abs(alliancePlayers - hordePlayers);
+        uint32 delta = std::abs(alliancePlayers - hordePlayers);
         uint32 const minSuperiority = _owner.GetGOInfo()->controlZone.minSuperiority;
 
         if (delta < minSuperiority)
@@ -753,7 +767,23 @@ public:
         uint32 const maxTime = _owner.GetGOInfo()->controlZone.maxTime;
         uint32 const maxSuperiority = _owner.GetGOInfo()->controlZone.maxSuperiority;
 
-        float const slope = static_cast<float>(minTime - maxTime) / static_cast<float>(std::max<uint32>(maxSuperiority - minSuperiority, 1));
+        // Superiority beyond maxSuperiority caps the capture speed at
+        // minTime — it must NOT keep extrapolating the line. Unclamped,
+        // EotS tower data (minSup 1, maxSup 5, minTime 90, maxTime 180 →
+        // slope -22.5) hits timeNeeded == 0 at delta 9 (zone freezes via
+        // the ==0 guard) and goes NEGATIVE past it, INVERTING the gain
+        // direction.
+        delta = std::min<uint32>(delta, maxSuperiority);
+
+        // minTime and maxTime are uint32: subtracting them BEFORE the float
+        // cast underflows to ~2^32 whenever minTime < maxTime (always),
+        // turning the slope into +2^30 instead of -22.5. Live-proven
+        // 2026-06-11 via per-heartbeat gain logging in EotS: gain came out
+        // 100/(delta*2^30 - 2^30) — 2.33e-08 at delta 5, 7.76e-09 at
+        // delta 13 — i.e. towers froze for any superiority >= 2, and a
+        // lone player needed ~192s instead of 180s. Cast each operand
+        // first so the subtraction happens in float.
+        float const slope = (static_cast<float>(minTime) - static_cast<float>(maxTime)) / static_cast<float>(std::max<uint32>(maxSuperiority - minSuperiority, 1));
         float const intercept = static_cast<float>(maxTime) - slope * static_cast<float>(minSuperiority);
         return slope * static_cast<float>(delta) + intercept;
     }
@@ -5021,6 +5051,18 @@ TeamId GameObject::GetControllingTeam() const
         return TEAM_NEUTRAL;
 
     return controlZone->GetControllingTeam();
+}
+
+float GameObject::GetControlZoneValue() const
+{
+    if (GetGoType() != GAMEOBJECT_TYPE_CONTROL_ZONE)
+        return -1.0f;
+
+    GameObjectType::ControlZone const* controlZone = dynamic_cast<GameObjectType::ControlZone const*>(m_goTypeImpl.get());
+    if (!controlZone)
+        return -1.0f;
+
+    return controlZone->GetValue();
 }
 
 void GameObject::CreateModel()

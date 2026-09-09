@@ -801,7 +801,11 @@ bool Pet::CreateBaseAtCreature(Creature* creature)
     SetDisplayId(creature->GetDisplayId());
 
     if (CreatureFamilyEntry const* cFamily = sCreatureFamilyStore.LookupEntry(cinfo->family))
-        SetName(cFamily->Name[GetOwner()->GetSession()->GetSessionDbcLocale()]);
+    {
+        WorldSession const* osess = GetOwner() ? GetOwner()->GetSession() : nullptr;
+        LocaleConstant loc = osess ? osess->GetSessionDbcLocale() : DEFAULT_LOCALE;
+        SetName(cFamily->Name[loc]);
+    }
     else
         SetName(creature->GetNameForLocaleIdx(sObjectMgr->GetDBCLocaleIndex()));
 
@@ -1498,7 +1502,9 @@ void Pet::learnSpells(std::vector<uint32> const& spellIds)
     }
 
     if (!m_loading)
-        GetOwner()->GetSession()->SendPacket(packet.Write());
+        if (Player* o = GetOwner())
+            if (WorldSession* sess = o->GetSession())
+                sess->SendPacket(packet.Write());
 }
 
 void Pet::InitLevelupSpellsForLevel()
@@ -1566,7 +1572,9 @@ void Pet::unlearnSpells(std::vector<uint32> const& spellIds, bool learn_prev, bo
     }
 
     if (!m_loading)
-        GetOwner()->GetSession()->SendPacket(packet.Write());
+        if (Player* o = GetOwner())
+            if (WorldSession* sess = o->GetSession())
+                sess->SendPacket(packet.Write());
 }
 
 bool Pet::removeSpell(uint32 spell_id, bool learn_prev, bool clear_ab)
@@ -1943,7 +1951,9 @@ void Pet::SetSpecialization(uint16 spec)
 
     WorldPackets::Pet::SetPetSpecialization setPetSpecialization;
     setPetSpecialization.SpecID = m_petSpecialization;
-    GetOwner()->GetSession()->SendPacket(setPetSpecialization.Write());
+    if (Player* o = GetOwner())
+        if (WorldSession* sess = o->GetSession())
+            sess->SendPacket(setPetSpecialization.Write());
 }
 
 std::string Pet::GenerateActionBarData() const

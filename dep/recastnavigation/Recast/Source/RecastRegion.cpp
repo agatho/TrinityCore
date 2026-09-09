@@ -1331,6 +1331,29 @@ struct rcSweepSpan
 	unsigned short nei;	// neighbour id
 };
 
+// TRINITYCORE FIX (upstream issue #317, still unfixed in recastnavigation main
+// as of 2026-06): rcBuildRegionsMonotone and rcBuildLayerRegions sized their
+// 'sweeps' buffer as rcMax(width, height), i.e. one entry per grid column.
+// But a new sweep id is allocated per *span* that does not inherit a region
+// from its -x neighbour, and a single cell can stack up to 255 spans (layered
+// geometry such as multi-floor raid WMOs). On span-dense rows the sweep id
+// counter exceeds the buffer size and 'sweeps[previd] = ...' writes past the
+// rcAlloc'd allocation (heap corruption). Size the buffer by the worst-case
+// span count of any single row instead; each span can introduce at most one
+// new sweep id and 'rid' starts at 1, so maxRowSpans+2 entries always suffice.
+static int countMaxSpansPerRow(const rcCompactHeightfield& chf)
+{
+	int maxRowSpans = 0;
+	for (int y = 0; y < chf.height; ++y)
+	{
+		int rowSpans = 0;
+		for (int x = 0; x < chf.width; ++x)
+			rowSpans += (int)chf.cells[x + y*chf.width].count;
+		maxRowSpans = rcMax(maxRowSpans, rowSpans);
+	}
+	return maxRowSpans;
+}
+
 /// @par
 /// 
 /// Non-null regions will consist of connected, non-overlapping walkable spans that form a single contour.
@@ -1369,7 +1392,9 @@ bool rcBuildRegionsMonotone(rcContext* ctx, rcCompactHeightfield& chf,
 	}
 	memset(srcReg,0,sizeof(unsigned short)*chf.spanCount);
 
-	const int nsweeps = rcMax(chf.width,chf.height);
+	// TRINITYCORE FIX: was rcMax(chf.width,chf.height) — too small for rows with
+	// stacked spans, leading to out-of-bounds writes. See countMaxSpansPerRow.
+	const int nsweeps = countMaxSpansPerRow(chf) + 2;
 	rcScopedDelete<rcSweepSpan> sweeps((rcSweepSpan*)rcAlloc(sizeof(rcSweepSpan)*nsweeps, RC_ALLOC_TEMP));
 	if (!sweeps)
 	{
@@ -1425,6 +1450,15 @@ bool rcBuildRegionsMonotone(rcContext* ctx, rcCompactHeightfield& chf,
 				
 				if (!previd)
 				{
+					// TRINITYCORE FIX: 'rid' is 16-bit; if a single row produces
+					// more than 0xFFFE sweep spans it would wrap and alias earlier
+					// sweeps (sweeps[] itself is sized for the worst case above).
+					// Fail soft instead of producing a corrupt region partition.
+					if (rid == 0xFFFF)
+					{
+						ctx->log(RC_LOG_ERROR, "rcBuildRegions(Monotone/Layer): sweep id overflow on row %d.", y);
+						return false;
+					}
 					previd = rid++;
 					sweeps[previd].rid = previd;
 					sweeps[previd].ns = 0;
@@ -1467,6 +1501,16 @@ bool rcBuildRegionsMonotone(rcContext* ctx, rcCompactHeightfield& chf,
 			}
 			else
 			{
+				// TRINITYCORE FIX: region ids share their 16-bit value space with
+				// the RC_BORDER_REG flag (0x8000). An id reaching that bit would be
+				// misinterpreted as a border region, and a full 16-bit wrap would
+				// shrink the 'prev' table below the ids still referenced by
+				// 'prev[nr]++' (heap corruption). Fail soft before either happens.
+				if (id >= RC_BORDER_REG)
+				{
+					ctx->log(RC_LOG_ERROR, "rcBuildRegions(Monotone/Layer): region id overflow (%d regions).", (int)id);
+					return false;
+				}
 				sweeps[i].id = id++;
 			}
 		}
@@ -1678,7 +1722,9 @@ bool rcBuildLayerRegions(rcContext* ctx, rcCompactHeightfield& chf,
 	}
 	memset(srcReg,0,sizeof(unsigned short)*chf.spanCount);
 	
-	const int nsweeps = rcMax(chf.width,chf.height);
+	// TRINITYCORE FIX: was rcMax(chf.width,chf.height) — too small for rows with
+	// stacked spans, leading to out-of-bounds writes. See countMaxSpansPerRow.
+	const int nsweeps = countMaxSpansPerRow(chf) + 2;
 	rcScopedDelete<rcSweepSpan> sweeps((rcSweepSpan*)rcAlloc(sizeof(rcSweepSpan)*nsweeps, RC_ALLOC_TEMP));
 	if (!sweeps)
 	{
@@ -1734,6 +1780,15 @@ bool rcBuildLayerRegions(rcContext* ctx, rcCompactHeightfield& chf,
 				
 				if (!previd)
 				{
+					// TRINITYCORE FIX: 'rid' is 16-bit; if a single row produces
+					// more than 0xFFFE sweep spans it would wrap and alias earlier
+					// sweeps (sweeps[] itself is sized for the worst case above).
+					// Fail soft instead of producing a corrupt region partition.
+					if (rid == 0xFFFF)
+					{
+						ctx->log(RC_LOG_ERROR, "rcBuildRegions(Monotone/Layer): sweep id overflow on row %d.", y);
+						return false;
+					}
 					previd = rid++;
 					sweeps[previd].rid = previd;
 					sweeps[previd].ns = 0;
@@ -1776,6 +1831,16 @@ bool rcBuildLayerRegions(rcContext* ctx, rcCompactHeightfield& chf,
 			}
 			else
 			{
+				// TRINITYCORE FIX: region ids share their 16-bit value space with
+				// the RC_BORDER_REG flag (0x8000). An id reaching that bit would be
+				// misinterpreted as a border region, and a full 16-bit wrap would
+				// shrink the 'prev' table below the ids still referenced by
+				// 'prev[nr]++' (heap corruption). Fail soft before either happens.
+				if (id >= RC_BORDER_REG)
+				{
+					ctx->log(RC_LOG_ERROR, "rcBuildRegions(Monotone/Layer): region id overflow (%d regions).", (int)id);
+					return false;
+				}
 				sweeps[i].id = id++;
 			}
 		}

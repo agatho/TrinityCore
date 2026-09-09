@@ -40,6 +40,7 @@
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "Playerbot/PlayerbotHooks.h"
 #include "ScriptMgr.h"
 #include "SocialMgr.h"
 #include "World.h"
@@ -3121,6 +3122,11 @@ bool Guild::AddMember(CharacterDatabaseTransaction trans, ObjectGuid guid, Optio
 
     // Call scripts if member was succesfully added (and stored to database)
     sScriptMgr->OnGuildAddMember(this, player, AsUnderlyingType(*rankId));
+
+    // PlayerbotV2 SC-P2b: notify the reactor so one online bot guildmate
+    // can drop a welcome line a few seconds later (per-guild throttle).
+    // `name` is resolved above for both online and offline joins.
+    Playerbot::Hooks::OnGuildMemberAdded(m_id, guid, name);
 
     return true;
 }

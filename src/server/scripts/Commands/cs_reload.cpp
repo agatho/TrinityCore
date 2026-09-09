@@ -35,6 +35,7 @@ EndScriptData */
 #include "CreatureTextMgr.h"
 #include "DatabaseEnv.h"
 #include "DisableMgr.h"
+#include "HandcraftedRoadStorage.h"
 #include "ItemEnchantmentMgr.h"
 #include "Language.h"
 #include "LFGMgr.h"
@@ -49,6 +50,7 @@ EndScriptData */
 #include "SpellMgr.h"
 #include "StringConvert.h"
 #include "SupportMgr.h"
+#include "TerrainMgr.h"
 #include "WaypointManager.h"
 #include "World.h"
 #include "WorldSession.h"
@@ -79,6 +81,11 @@ public:
             { "scripts",                       rbac::RBAC_PERM_COMMAND_RELOAD_ALL_SCRIPTS,                      true,  &HandleReloadAllScriptsCommand,                  "" },
             { "spell",                         rbac::RBAC_PERM_COMMAND_RELOAD_ALL_SPELL,                        true,  &HandleReloadAllSpellCommand,                    "" },
             { "",                              rbac::RBAC_PERM_COMMAND_RELOAD_ALL,                              true,  &HandleReloadAllCommand,                         "" },
+        };
+        static ChatCommandTable reloadHandcraftedRoadCommandTable =
+        {
+            { "apply",                         rbac::RBAC_PERM_COMMAND_RELOAD_CONFIG,                           true,  &HandleReloadHandcraftedRoadApplyCommand,        "" },
+            { "",                              rbac::RBAC_PERM_COMMAND_RELOAD_CONFIG,                           true,  &HandleReloadHandcraftedRoadCommand,             "" },
         };
         static ChatCommandTable reloadCommandTable =
         {
@@ -114,6 +121,7 @@ public:
             { "fishing_loot_template",         rbac::RBAC_PERM_COMMAND_RELOAD_FISHING_LOOT_TEMPLATE,            true,  &HandleReloadLootTemplatesFishingCommand,       "" },
             { "graveyard_zone",                rbac::RBAC_PERM_COMMAND_RELOAD_GRAVEYARD_ZONE,                   true,  &HandleReloadGameGraveyardZoneCommand,          "" },
             { "game_tele",                     rbac::RBAC_PERM_COMMAND_RELOAD_GAME_TELE,                        true,  &HandleReloadGameTeleCommand,                   "" },
+            { "handcrafted_road",              rbac::RBAC_PERM_COMMAND_RELOAD_CONFIG,                           true,  nullptr,                                        "Reloads handcrafted_road from DB. New segments apply on next map (re)load only. To re-apply to a currently-loaded map use 'reload handcrafted_road apply <mapId>' or 'reload mmaps' / restart.", reloadHandcraftedRoadCommandTable },
             { "gameobject_questender",         rbac::RBAC_PERM_COMMAND_RELOAD_GAMEOBJECT_QUESTENDER,            true,  &HandleReloadGOQuestEnderCommand,               "" },
             { "gameobject_loot_template",      rbac::RBAC_PERM_COMMAND_RELOAD_GAMEOBJECT_QUEST_LOOT_TEMPLATE,   true,  &HandleReloadLootTemplatesGameobjectCommand,    "" },
             { "gameobject_queststarter",       rbac::RBAC_PERM_COMMAND_RELOAD_GAMEOBJECT_QUESTSTARTER,          true,  &HandleReloadGOQuestStarterCommand,             "" },
@@ -173,9 +181,15 @@ public:
             { "vehicle_accessory",             rbac::RBAC_PERM_COMMAND_RELOAD_VEHICLE_ACCESORY,                 true,  &HandleReloadVehicleAccessoryCommand,           "" },
             { "vehicle_template_accessory",    rbac::RBAC_PERM_COMMAND_RELOAD_VEHICLE_TEMPLATE_ACCESSORY,       true,  &HandleReloadVehicleTemplateAccessoryCommand,   "" },
         };
+        static ChatCommandTable handcraftedRoadCommandTable =
+        {
+            { "status",                        rbac::RBAC_PERM_COMMAND_RELOAD_CONFIG,                           true,  &HandleHandcraftedRoadStatusCommand,            "" },
+            { "apply",                         rbac::RBAC_PERM_COMMAND_RELOAD_CONFIG,                           true,  &HandleReloadHandcraftedRoadApplyCommand,       "" },
+        };
         static ChatCommandTable commandTable =
         {
             { "reload",                        reloadCommandTable },
+            { "handcrafted_road",              rbac::RBAC_PERM_COMMAND_RELOAD_CONFIG,                           true,  nullptr,                                        "Diagnostics and on-demand apply for the handcrafted_road table. Subcommands: status, apply.", handcraftedRoadCommandTable },
         };
         return commandTable;
     }
@@ -1184,6 +1198,85 @@ public:
         sAccountMgr->LoadRBAC();
         sWorld->ReloadRBAC();
         handler->SendGlobalGMSysMessage("RBAC data reloaded.");
+        return true;
+    }
+
+    static bool HandleReloadHandcraftedRoadCommand(ChatHandler* handler, char const* /*args*/)
+    {
+        TC_LOG_INFO("misc", "Re-Loading `handcrafted_road` table...");
+        HandcraftedRoadStorage::LoadFromDB();
+        // Reset the per-Map "applied" cache so the next map-load wave
+        // re-applies the (possibly updated) segments. Note: this does
+        // NOT untag polys that were tagged by previous segments — area
+        // flips are destructive. To revert tags you must force a full
+        // mmap reload (server restart, or unload + reload the affected
+        // map). See `.reload handcrafted_road apply <mapId>` help text.
+        TerrainMgrDetail::ClearAppliedHandcraftedRoads();
+        handler->PSendSysMessage("DB table `handcrafted_road` reloaded: %u segments across %u map(s). "
+            "New segments will apply on next map (re)load. Use 'reload handcrafted_road apply <mapId>' "
+            "to re-apply to a currently-loaded map without restart (does NOT untag removed segments).",
+            uint32(HandcraftedRoadStorage::SegmentCount()), uint32(HandcraftedRoadStorage::MapCount()));
+        return true;
+    }
+
+    static bool HandleHandcraftedRoadStatusCommand(ChatHandler* handler, char const* /*args*/)
+    {
+        std::vector<uint32> const mapIds = HandcraftedRoadStorage::MapIds();
+        handler->PSendSysMessage("[Handcrafted roads] storage: %u segments across %u map(s).",
+            uint32(HandcraftedRoadStorage::SegmentCount()), uint32(HandcraftedRoadStorage::MapCount()));
+
+        if (mapIds.empty())
+        {
+            handler->SendSysMessage("[Handcrafted roads] no maps have segments loaded — check the `handcrafted_road` DB table.");
+            return true;
+        }
+
+        for (uint32 mapId : mapIds)
+        {
+            std::size_t const segCount = HandcraftedRoadStorage::GetForMap(mapId).size();
+            bool const applied = TerrainMgrDetail::IsHandcraftedRoadsApplied(mapId, 0);
+            if (applied)
+            {
+                std::size_t const tagged = TerrainMgrDetail::GetHandcraftedRoadTaggedCount(mapId, 0);
+                handler->PSendSysMessage("[Handcrafted roads] map %u: %u segments loaded, applied=YES, tagged=%u polys",
+                    mapId, uint32(segCount), uint32(tagged));
+            }
+            else
+            {
+                handler->PSendSysMessage("[Handcrafted roads] map %u: %u segments loaded, applied=NO",
+                    mapId, uint32(segCount));
+            }
+        }
+        return true;
+    }
+
+    static bool HandleReloadHandcraftedRoadApplyCommand(ChatHandler* handler, char const* args)
+    {
+        if (!args || !*args)
+        {
+            handler->SendSysMessage("Usage: .reload handcrafted_road apply <mapId>");
+            handler->SendSysMessage("Re-applies in-memory handcrafted_road segments to the currently-loaded "
+                "navmesh for mapId (shared-mesh / instance 0). Does NOT clear previously tagged polys — "
+                "removing a segment then running apply will not untag the old corridor. A full mmap reload "
+                "is required to revert tags.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        Optional<uint32> mapIdArg = Trinity::StringTo<uint32>(args);
+        if (!mapIdArg)
+        {
+            handler->PSendSysMessage("Invalid mapId '%s'. Expected an unsigned integer.", args);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        uint32 const mapId = *mapIdArg;
+        std::size_t const tagged = TerrainMgrDetail::ApplyHandcraftedRoadsToLiveMap(mapId);
+        std::vector<HandcraftedRoadSegment> const& segs = HandcraftedRoadStorage::GetForMap(mapId);
+        handler->PSendSysMessage("Applied %u handcrafted road segments to map %u (newly tagged %u polys). "
+            "Note: this does NOT untag polys from removed segments — restart or reload mmaps to revert.",
+            uint32(segs.size()), mapId, uint32(tagged));
         return true;
     }
 };

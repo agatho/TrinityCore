@@ -19,17 +19,21 @@ add_executable(tests)
 # src/server/game/Server/Packets on the include path for the packet layout tests.
 CollectAndAddSourceFiles(
   tests
-  ${CMAKE_CURRENT_SOURCE_DIR})
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  EXCLUDE
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 
 target_link_libraries(tests
   PRIVATE
     trinity-core-interface
     game
+    extractor_common
     Catch2::Catch2WithMain)
 
 target_include_directories(tests
   PRIVATE
-    ${CMAKE_CURRENT_BINARY_DIR})
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_SOURCE_DIR}/src/tools/extractor_common)
 
 catch_discover_tests(tests)
 
@@ -37,3 +41,7 @@ set_target_properties(tests
     PROPERTIES
       FOLDER
         "tests")
+
+# Tools-layer tests live in their own executable so pre-existing breakage in
+# tests/game/ doesn't block tooling tests from linking.
+add_subdirectory(tools)

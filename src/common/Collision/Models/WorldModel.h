@@ -105,6 +105,14 @@ namespace VMAP
             std::vector<MeshTriangle> triangles;
             BIH meshTree;
             WmoLiquid* iLiquid;
+        public:
+            // Road-aware mmaps Phase 2: optional per-triangle road flag.
+            // Parallel to `triangles` (one byte per collision triangle).
+            // Populated from the .vmo.road sidecar in WorldModel::readFile
+            // (mmaps_generator's path). Empty when no sidecar exists —
+            // runtime LoS/collision queries don't consult this field, so
+            // adding it has no behavioral impact for the worldserver.
+            std::vector<uint8> triangleRoadFlags;
     };
 
     struct WorldModelLocationInfoQueryResult
@@ -130,6 +138,12 @@ namespace VMAP
             bool readFile(const std::string &filename);
             bool IsM2() const { return Flags.HasFlag(ModelFlags::IsM2); }
             std::vector<GroupModel> const& getGroupModels() const { return groupModels; }
+
+            // Road-aware mmaps Phase 2: load the optional .vmo.road sidecar
+            // (filename + ".road") and populate per-group triangleRoadFlags.
+            // Called from readFile() — silent no-op when sidecar is absent
+            // or has unknown magic/version. Public for testability.
+            void LoadRoadSidecar(const std::string &vmoFilename);
         protected:
             EnumFlag<ModelFlags> Flags;
             uint32 RootWMOID;

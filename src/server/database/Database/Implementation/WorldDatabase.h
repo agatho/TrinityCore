@@ -88,6 +88,10 @@ enum WorldDatabaseStatements : uint32
     WORLD_INS_CONDITION,
     WORLD_SEL_WARBAND_REPUTATION_FACTIONS,
 
+    // Playerbot module statements
+    WORLD_SEL_QUEST_GIVER_SPAWNS,               // SELECT c.guid, c.id, c.position_x, c.position_y, c.position_z, c.map, ct.faction, COALESCE(c.zoneId, 0) as zoneId FROM creature c INNER JOIN creature_template ct ON c.id = ct.entry WHERE ct.npcflag & 2 != 0
+    WORLD_SEL_REPAIR_VENDOR_SPAWNS,             // SELECT c.guid, c.id, c.position_x, c.position_y, c.position_z, c.map, ct.faction, COALESCE(c.zoneId, 0) as zoneId FROM creature c INNER JOIN creature_template ct ON c.id = ct.entry WHERE ct.npcflag & 4096 != 0
+
     MAX_WORLDDATABASE_STATEMENTS
 };
 

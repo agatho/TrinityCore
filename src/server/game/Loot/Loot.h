@@ -263,6 +263,14 @@ public:
 
     bool IsLootItem(ObjectGuid const& lootObject, uint32 lootListId) const;
 
+    // Read-only inspection: Playerbot V2 surfaces in-flight rolls in the
+    // bot snapshot so AI can decide pass/greed/need without a per-roll
+    // poke. Stay non-mutating; do not expose internal m_rollVoteMap.
+    LootItem const* GetItem() const { return m_lootItem; }
+    Loot const*     GetLoot() const { return m_loot; }
+    RollMask        GetVoteMask() const { return m_voteMask; }
+    bool            IsStarted() const { return m_isStarted; }
+
 private:
     void SendStartRoll();
     void SendAllPassed();

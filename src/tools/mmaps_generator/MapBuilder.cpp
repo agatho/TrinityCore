@@ -26,6 +26,8 @@
 #include "StringConvert.h"
 #include "StringFormat.h"
 #include <boost/filesystem/directory.hpp>
+#include <filesystem>
+#include <mutex>
 
 namespace FileExtensions
 {
@@ -256,6 +258,25 @@ namespace MMAP
         for (unsigned int i = 0; i < m_threads; ++i)
             m_tileBuilders[i].reset(new MapTileBuilder(this, m_maxWalkableAngle, m_maxWalkableAngleNotSteep,
                 m_skipLiquid, m_bigBaseUnit, m_debugOutput, &m_offMeshConnections));
+
+        // Instanced dungeon/raid maps default to the Monotone partition: the
+        // Layers default islands winding WMO mine tunnels into disconnected
+        // navmesh regions (root-caused on Deadmines 2026-07-01). Fill the set
+        // ONCE here — before any tile is queued to the concurrent workers, which
+        // only ever read it — so buildMoveMapTile can switch these maps to
+        // Monotone. An explicit --partition still overrides (partitionExplicit).
+        g_mmapGenTuning.instanceMaps.clear();
+        auto markInstanceMap = [](uint32 mid)
+        {
+            if (MapEntry const* me = Trinity::Containers::MapGetValuePtr(sMapStore, mid))
+                if (me->InstanceType == 1 || me->InstanceType == 2) // 1=party dungeon, 2=raid
+                    g_mmapGenTuning.instanceMaps.insert(mid);
+        };
+        if (mapID)
+            markInstanceMap(*mapID);
+        else
+            for (auto& [mapId, _] : m_tiles)
+                markInstanceMap(mapId);
 
         if (mapID)
         {
@@ -586,6 +607,70 @@ namespace MMAP
 
         if (header.mmapVersion != MMAP_VERSION)
             return false;
+
+        // Road-aware mmaps Phase 1/2: invalidate this tile if its .road
+        // sidecar (terrain road mask) is newer than the .mmtile. Without
+        // this check, mmtiles built before road tagging was added skip
+        // regeneration even though .road / .vmo.road files are now
+        // available — silently dropping all road-area tagging.
+        //
+        // We close the .mmtile read handle implicitly via the
+        // unique_ptr_with_deleter; std::filesystem::last_write_time
+        // doesn't need it open. fs::exists is checked because the
+        // .road file is optional (a tile with no road textures has none).
+        std::filesystem::path mmtilePath(fileName);
+        std::error_code ec;
+        auto mmtileMTime = std::filesystem::last_write_time(mmtilePath, ec);
+        if (ec)
+            return true;  // can't stat — keep old behavior, skip rebuild
+
+        std::string roadFileName = Trinity::StringFormat("{}/maps/{:04}_{:02}_{:02}.road",
+            m_outputDirectory.generic_string(), mapID, tileX, tileY);
+        std::filesystem::path roadPath(roadFileName);
+        if (std::filesystem::exists(roadPath, ec))
+        {
+            auto roadMTime = std::filesystem::last_write_time(roadPath, ec);
+            if (!ec && roadMTime > mmtileMTime)
+                return false;  // .road is newer — must regen this tile
+        }
+
+        // Phase 2 follow-up: WMO road sidecars live under vmaps/ as
+        // `*.vmo.road`. A vmap re-extraction (without a corresponding
+        // map re-extraction) updates those sidecars but doesn't touch
+        // the ADT `.road` file above — so the per-tile mtime check
+        // above misses WMO road updates entirely. Result: bots get
+        // terrain road tagging but city interior / bridge road tagging
+        // silently goes stale until a forced full regen.
+        //
+        // Coarse fix: stat the vmaps dir for the maximum `*.vmo.road`
+        // mtime ONCE at first call (lazy + static), then per-tile
+        // compare that maximum against this tile's mmtile mtime.
+        // Causes a full regen if ANY WMO sidecar changed — which is
+        // exactly what we want when the user re-extracts vmaps.
+        // Cached so the 1.4K-file scan only runs once per binary invocation.
+        static std::once_flag s_vmoScanOnce;
+        static std::filesystem::file_time_type s_vmoRoadMaxMTime{};
+        static bool s_vmoRoadAny = false;
+        std::call_once(s_vmoScanOnce, [this]() {
+            std::filesystem::path vmapsDir(m_outputDirectory.generic_string() + "/vmaps");
+            std::error_code scec;
+            if (!std::filesystem::exists(vmapsDir, scec)) return;
+            for (auto const& e : std::filesystem::recursive_directory_iterator(vmapsDir, scec))
+            {
+                if (scec) { scec.clear(); continue; }
+                if (!e.is_regular_file(scec)) continue;
+                if (e.path().extension() != ".road") continue;
+                auto mt = std::filesystem::last_write_time(e.path(), scec);
+                if (scec) { scec.clear(); continue; }
+                if (!s_vmoRoadAny || mt > s_vmoRoadMaxMTime)
+                {
+                    s_vmoRoadMaxMTime = mt;
+                    s_vmoRoadAny = true;
+                }
+            }
+        });
+        if (s_vmoRoadAny && s_vmoRoadMaxMTime > mmtileMTime)
+            return false;  // some WMO sidecar is newer than this mmtile
 
         return TileBuilder::shouldSkipTile(mapID, tileX, tileY);
     }

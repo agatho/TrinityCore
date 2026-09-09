@@ -16,6 +16,7 @@
  */
 
 #include "WorldSession.h"
+#include "Playerbot/PlayerbotHooks.h"
 #include "AccountMgr.h"
 #include "ArenaTeam.h"
 #include "Config.h"
@@ -44,6 +45,7 @@
 #include "Item.h"
 #include "Language.h"
 #include "Log.h"
+#include "LoginQueryHolder.h"
 #include "Map.h"
 #include "MapManager.h"
 #include "MapUtils.h"
@@ -72,20 +74,9 @@
 #include <boost/circular_buffer.hpp>
 #include <sstream>
 
-class LoginQueryHolder : public CharacterDatabaseQueryHolder
-{
-    private:
-        uint32 m_accountId;
-        uint32 m_battlenetAccountId;
-        ObjectGuid m_guid;
-    public:
-        LoginQueryHolder(uint32 accountId, uint32 battlenetAccountId, ObjectGuid guid)
-            : m_accountId(accountId), m_battlenetAccountId(battlenetAccountId), m_guid(guid) { }
-        ObjectGuid GetGuid() const { return m_guid; }
-        uint32 GetAccountId() const { return m_accountId; }
-        uint32 GetBattlenetAccountId() const { return m_battlenetAccountId; }
-        bool Initialize();
-};
+// LoginQueryHolder declaration moved to Handlers/LoginQueryHolder.h so the
+// V2 playerbot module can build/submit the same holder for headless bot
+// logins. The Initialize() body still lives here (~250 prepared statements).
 
 bool LoginQueryHolder::Initialize()
 {
@@ -2015,9 +2006,19 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     stmt->setUInt64(0, pCurrChar->GetGUID().GetCounter());
     CharacterDatabase.Execute(stmt);
 
-    LoginDatabasePreparedStatement* loginStmt = LoginDatabase.GetPreparedStatement(LOGIN_UPD_ACCOUNT_ONLINE);
-    loginStmt->setUInt32(0, GetAccountId());
-    LoginDatabase.Execute(loginStmt);
+#if defined(TRINITY_PLAYERBOT_V2)
+    // Bot sessions share the owner's account id. Setting account.online=1
+    // here would (in auto-resume mode where the GM is offline) block them
+    // from later logging into their own account — the login server treats
+    // online=1 as "another session active". The character.online flag above
+    // is per-character and correctly reflects the bot's in-world state.
+    if (!IsBot())
+#endif
+    {
+        LoginDatabasePreparedStatement* loginStmt = LoginDatabase.GetPreparedStatement(LOGIN_UPD_ACCOUNT_ONLINE);
+        loginStmt->setUInt32(0, GetAccountId());
+        LoginDatabase.Execute(loginStmt);
+    }
 
     pCurrChar->SetInGameTime(GameTime::GetGameTimeMS());
 
@@ -2202,6 +2203,8 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     _player->UpdateCriteria(CriteriaType::Login, 1);
 
     sScriptMgr->OnPlayerLogin(pCurrChar, firstLogin);
+
+    Playerbot::Hooks::OnPlayerLogin(pCurrChar);
 
     TC_METRIC_EVENT("player_events", "Login", pCurrChar->GetName());
 }

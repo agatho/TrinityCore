@@ -34,6 +34,11 @@
 #include <algorithm>
 #include <utility>
 
+// PlayerbotV2: synchronous BG-invite hook so bots port within the same world
+// tick the invite is sent (otherwise the snapshot-poll fallback can miss the
+// 90s INVITE_ACCEPT_WAIT_TIME under load and only the fastest 5-6 bots port).
+#include "Playerbot/PlayerbotHooks.h"
+
 /*********************************************************/
 /***            BATTLEGROUND QUEUE SYSTEM              ***/
 /*********************************************************/
@@ -533,6 +538,34 @@ uint32 BattlegroundQueue::GetPlayersInQueue(TeamId id)
     return m_SelectionPools[id].GetPlayerCount();
 }
 
+uint32 BattlegroundQueue::GetQueuedPlayersCount(TeamId teamId, BattlegroundBracketId bracketId) const
+{
+    // Count players from the actual queue, not the selection pool
+    // Selection pool is only populated during matchmaking
+    uint32 count = 0;
+
+    // Determine which queue type to check based on team
+    uint32 queueType = (teamId == TEAM_ALLIANCE) ? BG_QUEUE_NORMAL_ALLIANCE : BG_QUEUE_NORMAL_HORDE;
+
+    // Count players in normal queue for this bracket
+    for (GroupQueueInfo const* ginfo : m_QueuedGroups[bracketId][queueType])
+    {
+        // Only count players not already invited to a BG
+        if (!ginfo->IsInvitedToBGInstanceGUID)
+            count += static_cast<uint32>(ginfo->Players.size());
+    }
+
+    // Also check premade queue for this team
+    queueType = (teamId == TEAM_ALLIANCE) ? BG_QUEUE_PREMADE_ALLIANCE : BG_QUEUE_PREMADE_HORDE;
+    for (GroupQueueInfo const* ginfo : m_QueuedGroups[bracketId][queueType])
+    {
+        if (!ginfo->IsInvitedToBGInstanceGUID)
+            count += static_cast<uint32>(ginfo->Players.size());
+    }
+
+    return count;
+}
+
 bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg, Team side, uint32 inviteTime /*= INVITE_ACCEPT_WAIT_TIME*/, bool proposalManaged /*= false*/)
 {
     // set side if needed
@@ -618,6 +651,11 @@ bool BattlegroundQueue::InviteGroupToBG(GroupQueueInfo* ginfo, Battleground* bg,
             WorldPackets::Battleground::BattlefieldStatusNeedConfirmation battlefieldStatus;
             BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(bgQueueTypeId), inviteTime, bgQueueTypeId, itr->second->Role);
             player->SendDirectMessage(battlefieldStatus.Write());
+
+            // PlayerbotV2 path: pushes a BgPortIntent into the bot's intent
+            // queue immediately (idempotent for non-bots; inline no-op when
+            // V2 not built).
+            Playerbot::Hooks::OnBGInvitationReceived(player, bg->GetInstanceID(), bg->GetTypeID());
         }
         return true;
     }
@@ -1878,6 +1916,11 @@ bool BGQueueInviteEvent::Execute(uint64 /*e_time*/, uint32 /*p_time*/)
             WorldPackets::Battleground::BattlefieldStatusNeedConfirmation battlefieldStatus;
             BattlegroundMgr::BuildBattlegroundStatusNeedConfirmation(&battlefieldStatus, bg, player, queueSlot, player->GetBattlegroundQueueJoinTime(m_QueueId), remaining, m_QueueId, bgQueue.GetPlayerRole(m_PlayerGuid));
             player->SendDirectMessage(battlefieldStatus.Write());
+
+            // PlayerbotV2: reminder-event re-fire — handler is idempotent
+            // (the per-bot BgPort cooldown stamped on first invite suppresses
+            // duplicate intent emission within the 5s window).
+            Playerbot::Hooks::OnBGInvitationReceived(player, m_BgInstanceGUID, m_BgTypeId);
         }
     }
     return true;                                            //event will be deleted

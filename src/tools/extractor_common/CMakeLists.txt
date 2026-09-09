@@ -20,7 +20,14 @@ target_link_libraries(extractor_common
   PUBLIC
     casc
     common
-    network)
+    network
+    Detour)
+
+# RoadCorridor uses dtNavMesh from Detour. Header is included only by the
+# .cpp so consumers do not need Detour include paths on their own.
+target_include_directories(extractor_common
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/dep/recastnavigation/Detour/Include)
 
 set_target_properties(extractor_common
   PROPERTIES

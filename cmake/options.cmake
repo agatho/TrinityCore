@@ -34,6 +34,7 @@ foreach(SCRIPT_MODULE ${SCRIPT_MODULE_LIST})
 endforeach()
 
 option(TOOLS            "Build map/vmap/mmap extraction/assembler tools"              1)
+option(BUILD_PLAYERBOT_V2 "Build the Playerbot V2 module (next-generation, see v2/REQUIREMENTS.md)" 0)
 option(USE_SCRIPTPCH    "Use precompiled headers when compiling scripts"              1)
 option(USE_COREPCH      "Use precompiled headers when compiling servers"              1)
 option(WITH_DYNAMIC_LINKING "Enable dynamic library linking."                         0)

@@ -1,0 +1,3 @@
+# Editor crash/save backup artifacts (see docs/refactor)
+*.tmp.*
+editor_backups/

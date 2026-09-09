@@ -95,6 +95,7 @@
 #include "WorldSession.h"
 #include "WowLabsMatchMgr.h"
 #include <array>
+#include "Playerbot/PlayerbotHooks.h"
 #include <queue>
 #include <sstream>
 #include <cmath>
@@ -443,9 +444,25 @@ void Unit::Update(uint32 p_time)
 
     _UpdateSpells(p_time);
 
-    // If this is set during update SetCantProc(false) call is missing somewhere in the code
-    // Having this would prevent spells from being proced, so let's crash
-    ASSERT(!m_procDeep);
+    // Defensive reset: if m_procDeep leaked between updates (the RAII
+    // guard + per-handler try/catch in TriggerAurasProcOnEvent should
+    // make this impossible, yet it has been observed to still happen
+    // under heavy bot-driven proc load on Paladin/Monk), log + reset
+    // instead of crashing the world thread. The next tick's procs
+    // will fire normally. The original ASSERT was correct as a canary
+    // but unconditionally fatal in production. Keeping the log line at
+    // ERROR level so the GUID of the offending unit surfaces every
+    // time and we can chase the underlying TC bug as a separate
+    // workstream without taking the server down.
+    if (m_procDeep)
+    {
+        TC_LOG_ERROR("entities.unit",
+            "Unit::Update entered with m_procDeep={} (leak — reset). "
+            "Unit GUID {} class {} mapId {}",
+            m_procDeep, GetGUID().ToString(), uint32(GetClass()),
+            GetMapId());
+        m_procDeep = 0;
+    }
 
     m_combatManager.Update(p_time);
 
@@ -858,6 +875,11 @@ bool Unit::HasBreakableByDamageCrowdControlAura(Unit const* excludeCasterChannel
 
         // Hook for OnDamage Event
         sScriptMgr->OnDamage(attacker, victim, tmpDamage);
+
+        // PLAYERBOT V2 HOOK: feed BotEventInbox so reactive AI sees per-hit
+        // events. Filtered to player victims inside the hook.
+        Playerbot::Hooks::OnDamageTaken(attacker, victim, int32(tmpDamage),
+                                        spellProto ? spellProto->Id : 0u);
 
         // if any script modified damage, we need to also apply the same modification to unscaled damage value
         if (tmpDamage != damageTaken)
@@ -3254,6 +3276,7 @@ void Unit::InterruptSpell(CurrentSpellTypes spellType, bool withDelayed, bool wi
             spell->SetReferencedFromCurrent(false);
         }
 
+
         if (GetTypeId() == TYPEID_UNIT && IsAIEnabled())
             ToCreature()->AI()->OnSpellFailed(spell->GetSpellInfo());
     }
@@ -3625,8 +3648,14 @@ void Unit::_ApplyAuraEffect(Aura* aura, uint8 effIndex)
     ASSERT(aurApp);
     if (!aurApp->GetEffectMask())
         _ApplyAura(aurApp, 1 << effIndex);
-    else
+    else if (!aurApp->HasEffect(effIndex))
         aurApp->_HandleEffect(effIndex, true);
+    else
+        // The HasEffect pre-check for this path lives one frame up in
+        // Aura::_ApplyEffectForTargets and goes stale across its multi-target
+        // loop when an earlier target's handler re-enters the spell system.
+        TC_LOG_ERROR("spells", "Unit::_ApplyAuraEffect: aura {} eff {} on {} was applied re-entrantly (effMask 0x{:X})",
+            aura->GetId(), uint32(effIndex), GetGUID().ToString(), aurApp->GetEffectMask());
 }
 
 namespace
@@ -3699,7 +3728,17 @@ void Unit::_ApplyAura(AuraApplication* aurApp, uint32 effMask)
     {
         if (effMask & 1 << aurEff->GetEffIndex())
         {
-            aurApp->_HandleEffect(aurEff->GetEffIndex(), true);
+            // A handler above (HandleAuraSpecificMods linked cast, ModifyAuraState
+            // passive cast, no-stack removal script, or an earlier effect handler)
+            // can re-enter the spell system and apply this effect through a nested
+            // hit of the same aura application. The contract here is "ensure these
+            // effects are applied" — re-applying an already-applied effect would
+            // double its handler (and trips the _HandleEffect assert).
+            if (!aurApp->HasEffect(aurEff->GetEffIndex()))
+                aurApp->_HandleEffect(aurEff->GetEffIndex(), true);
+            else
+                TC_LOG_ERROR("spells", "Unit::_ApplyAura: aura {} eff {} on {} was applied re-entrantly during application (effMask 0x{:X})",
+                    aura->GetId(), uint32(aurEff->GetEffIndex()), GetGUID().ToString(), aurApp->GetEffectMask());
             if (aurApp->GetRemoveMode())
                 break;
         }
@@ -6600,6 +6639,11 @@ void Unit::SetCharm(Unit* charm, bool apply)
     // Hook for OnHeal Event
     sScriptMgr->OnHeal(healer, victim, (uint32&)gain);
 
+    // PLAYERBOT V2 HOOK: feed BotEventInbox with heal events. Filtered to
+    // player victims inside the hook.
+    Playerbot::Hooks::OnHealReceived(healer, victim, int32(gain),
+                                     healInfo.GetSpellInfo() ? healInfo.GetSpellInfo()->Id : 0u);
+
     Unit* unit = healer;
     if (healer && healer->GetTypeId() == TYPEID_UNIT && healer->IsTotem())
         unit = healer->GetOwner();
@@ -8757,7 +8801,8 @@ int64 Unit::ModifyHealth(int64 dVal)
         packet.Health = GetHealth();
 
         if (Player* player = GetCharmerOrOwnerPlayerOrPlayerItself())
-            player->GetSession()->SendPacket(packet.Write());
+            if (WorldSession* sess = player->GetSession())
+                sess->SendPacket(packet.Write());
     }
 
     return gain;
@@ -9493,6 +9538,7 @@ void Unit::AtEnterCombat()
 
     if (!IsInteractionAllowedInCombat())
         UpdateNearbyPlayersInteractions();
+
 }
 
 void Unit::AtExitCombat()
@@ -9511,6 +9557,7 @@ void Unit::AtExitCombat()
 
     if (!IsInteractionAllowedInCombat())
         UpdateNearbyPlayersInteractions();
+
 }
 
 void Unit::AtEngage(Unit* /*target*/)
@@ -9539,7 +9586,17 @@ void Unit::AtTargetAttacked(Unit* target, bool canInitialAggro)
 
 void Unit::UpdatePetCombatState()
 {
-    ASSERT(!IsPet()); // player pets do not use UNIT_FLAG_PET_IN_COMBAT for this purpose - but player pets should also never have minions of their own to call this
+    // Player pets do not use UNIT_FLAG_PET_IN_COMBAT for this purpose, and a pet
+    // should never have minions of its own to call this. In practice a pet CAN
+    // transiently end up with a controlled minion (e.g. a bot hunter pet that got
+    // a temp-summon/guardian attributed to it), and that minion's combat-state
+    // transition then calls master->UpdatePetCombatState() ON the pet — which used
+    // to ASSERT(!IsPet()) and HARD-CRASH the world (observed 2026-06-16: pet
+    // 'Kreezhum' entry 417, Northrend, took the server down ~15 min). Early-return
+    // instead: a pet has no use for UNIT_FLAG_PET_IN_COMBAT, so skipping is a
+    // semantic no-op and crash-safe.
+    if (IsPet())
+        return;
 
     bool state = false;
     for (Unit* minion : m_Controlled)
@@ -10593,7 +10650,24 @@ bool Unit::PopAI()
 
 void Unit::RefreshAI()
 {
-    ASSERT(!m_aiLocked, "Tried to change current AI during UpdateAI()");
+    // Was: ASSERT(!m_aiLocked, "Tried to change current AI during UpdateAI()");
+    // Re-entrance happens when a spell / aura handler inside UpdateAI() flips
+    // the unit's AI (typical: charm/possess scripts, vehicle-eject handlers,
+    // mind-control proc chains). Original behavior crashed the world thread;
+    // we instead defer the AI swap to the next tick. The current i_AI keeps
+    // running for THIS tick (its UpdateAI is still on the stack); the next
+    // ScheduleAIChange / RefreshAI after UpdateAI() exits will apply cleanly.
+    // Without this defensive skip, a single mis-timed AI swap takes the
+    // process down — observed today as a 0xC0000420 ASSERT_FAILURE loop
+    // after the procDeep / BIH fixes.
+    if (m_aiLocked)
+    {
+        TC_LOG_ERROR("entities.unit",
+            "RefreshAI called during UpdateAI (unit {} entry {}); skipped, "
+            "next tick will apply the swap",
+            GetGUID().ToString(), GetEntry());
+        return;
+    }
     if (i_AIs.empty())
         i_AI = nullptr;
     else
@@ -11016,7 +11090,27 @@ void Unit::TriggerAurasProcOnEvent(ProcEventInfo& eventInfo, AuraApplicationProc
     Spell const* triggeringSpell = eventInfo.GetProcSpell();
     bool const disableProcs = triggeringSpell && triggeringSpell->IsProcDisabled();
 
-    int32 oldProcChainLength = std::exchange(m_procChainLength, std::max(m_procChainLength + 1, triggeringSpell ? triggeringSpell->GetProcChainLength() : 0));
+    int32 const oldProcChainLength = std::exchange(m_procChainLength, std::max(m_procChainLength + 1, triggeringSpell ? triggeringSpell->GetProcChainLength() : 0));
+
+    // RAII guard: m_procDeep and m_procChainLength are unwound even if
+    // a TriggerProcOnEvent handler throws. The original code unwound at
+    // the bottom of the function, so an exception in the loop bypassed
+    // the cleanup and left m_procDeep > 0; the NEXT Unit::Update tick
+    // then tripped the !m_procDeep ASSERT at line 439 and crashed the
+    // worker thread. Observed multiple times on proc-heavy classes
+    // (Paladin/Monk) under playerbot fleet load.
+    struct ProcDepthGuard
+    {
+        Unit* self;
+        int32 saved_chain_length;
+        bool  need_can_proc_restore;
+        ~ProcDepthGuard()
+        {
+            if (need_can_proc_restore)
+                self->SetCantProc(false);
+            self->m_procChainLength = saved_chain_length;
+        }
+    } guard{this, oldProcChainLength, disableProcs};
 
     if (disableProcs)
         SetCantProc(true);
@@ -11026,13 +11120,34 @@ void Unit::TriggerAurasProcOnEvent(ProcEventInfo& eventInfo, AuraApplicationProc
         if (aurApp->GetRemoveMode())
             continue;
 
-        aurApp->GetBase()->TriggerProcOnEvent(procEffectMask, aurApp, eventInfo);
+        // Per-handler catch so one badly-behaved proc doesn't take down
+        // the worker thread (or — combined with the guard above — leak
+        // m_procDeep into the next tick and trip the ASSERT). We swallow
+        // and log, then continue iterating the remaining procs. Without
+        // this the entire batch is aborted on the first exception, and
+        // an uncaught exception propagates up to Map::Update (no
+        // try/catch there) and terminates the process.
+        try
+        {
+            aurApp->GetBase()->TriggerProcOnEvent(procEffectMask, aurApp, eventInfo);
+        }
+        catch (std::exception const& e)
+        {
+            TC_LOG_ERROR("entities.unit",
+                "TriggerProcOnEvent threw std::exception (caster {} spell {}): {}; aura skipped",
+                GetGUID().ToString(),
+                triggeringSpell ? triggeringSpell->GetSpellInfo()->Id : 0,
+                e.what());
+        }
+        catch (...)
+        {
+            TC_LOG_ERROR("entities.unit",
+                "TriggerProcOnEvent threw non-std exception (caster {} spell {}); aura skipped",
+                GetGUID().ToString(),
+                triggeringSpell ? triggeringSpell->GetSpellInfo()->Id : 0);
+        }
     }
-
-    if (disableProcs)
-        SetCantProc(false);
-
-    m_procChainLength = oldProcChainLength;
+    // Unwinding handled by guard destructor — no explicit cleanup here.
 }
 
 ///----------Pet responses methods-----------------
@@ -11547,9 +11662,12 @@ bool Unit::InitTamedPet(Pet* pet, uint8 level, uint32 spell_id)
 
 void Unit::SendDurabilityLoss(Player* receiver, uint32 percent)
 {
+    if (!receiver) return;
+    WorldSession* sess = receiver->GetSession();
+    if (!sess) return;     // logging-out receiver — drop the durability-loss packet
     WorldPackets::Misc::DurabilityDamageDeath packet;
     packet.Percent = percent;
-    receiver->GetSession()->SendPacket(packet.Write());
+    sess->SendPacket(packet.Write());
 }
 
 void Unit::PlayOneShotAnimKitId(uint16 animKitId)
@@ -11625,6 +11743,11 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
 
     if (attacker && !attacker->IsInMap(victim))
         attacker = nullptr;
+
+
+    // PLAYERBOT V2 HOOK: drives auto-loot enqueueing for bots in the tap list
+    // and (eventually) state transitions when a bot itself dies.
+    Playerbot::Hooks::OnDeath(victim, attacker);
 
     // find player: owner of controlled `this` or `this` itself maybe
     Player* player = nullptr;
@@ -13772,7 +13895,7 @@ bool Unit::SetWalk(bool enable)
     return true;
 }
 
-bool Unit::SetDisableGravity(bool disable, bool updateAnimTier /*= true*/)
+bool Unit::SetDisableGravity(bool disable, bool updateAnimTier /*= true*/, bool updatePlayHoverAnim /*= true*/)
 {
     if (disable == IsGravityDisabled())
         return false;
@@ -13809,7 +13932,7 @@ bool Unit::SetDisableGravity(bool disable, bool updateAnimTier /*= true*/)
         SendMessageToSet(packet.Write(), true);
     }
 
-    if (!GetVehicle())
+    if (updatePlayHoverAnim && !GetVehicle())
     {
         if (IsAlive())
         {
@@ -14930,7 +15053,8 @@ void Unit::DestroyForPlayer(Player const* target) const
         {
             WorldPackets::Battleground::DestroyArenaUnit destroyArenaUnit;
             destroyArenaUnit.Guid = GetGUID();
-            target->GetSession()->SendPacket(destroyArenaUnit.Write());
+            if (WorldSession* sess = target->GetSession())
+                sess->SendPacket(destroyArenaUnit.Write());
         }
     }
 

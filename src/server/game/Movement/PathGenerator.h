@@ -22,13 +22,24 @@
 #include "DetourNavMeshQuery.h"
 #include "MMapDefines.h"
 #include "MoveSplineInitArgs.h"
+#include "dtQueryFilterTC.h"
 #include <G3D/Vector3.h>
 
 class WorldObject;
 
-// 74*4.0f=296y number_of_points*interval = max_path_len
-// this is way more than actual evade range
-// I think we can safely cut those down even more
+// number_of_points*interval = max_path_len. Stock 74 → smooth-path cap 74*4.0f =
+// 296y; any longer path returns PATHFIND_INCOMPLETE (PathGenerator.cpp:609).
+// HISTORY: raising this to 256 (2026-06-16) to fix the travel-graph from_attach=0
+// (FMs at 300-600y came back INCOMPLETE) WORKED for route_ok (18%→~52% with the
+// flight-learn fix) BUT caused a WORLD-THREAD FREEZE: the snapshot-build phase
+// runs UnifiedTravelGraph::FindRoute → sourceWalkable per-node Detour path builds,
+// and at 256 polys each build does ~3.5x more navmesh A* work; under sustained
+// load a single map's build task exceeded the 60s FreezeDetector and crashed the
+// server (run_and_wait hang; 21:22 dump). REVERTED to stock 74 for stability —
+// the global cap was the wrong lever (it makes EVERY build-phase route probe
+// expensive). The from_attach fix belongs in a CHEAP reachability check inside
+// sourceWalkable (e.g. navmesh raycast / bounded poly probe), NOT a global cap
+// raise. Do NOT re-raise this without bounding the build-phase probe cost.
 #define MAX_PATH_LENGTH         74
 #define MAX_POINT_PATH_LENGTH   74
 
@@ -84,6 +95,17 @@ class TC_GAME_API PathGenerator
 
         PathType GetPathType() const { return _type; }
 
+        // Off-mesh crossing info. True when the smoothed path traverses at least one
+        // off-mesh connection (e.g. an offmesh.txt bridge). GetFirstOffMeshLanding()
+        // is the FAR (landing) endpoint, in game (x,y,z), of the FIRST off-mesh
+        // connection along the path. It is an authoritative WORLD POSITION (not a
+        // point index), so it survives path dedupe / NormalizePath mutations — used
+        // by movement steppers to honor a crossing regardless of its (possibly short)
+        // span, instead of guessing from segment length. Only populated by
+        // FindSmoothPath (the default path mode); false for raycast/straight paths.
+        bool PathTraversesOffMesh() const { return _pathTraversesOffMesh; }
+        G3D::Vector3 const& GetFirstOffMeshLanding() const { return _firstOffMeshLanding; }
+
         // shortens the path until the destination is the specified distance from the target point
         void ShortenPathUntilDist(G3D::Vector3 const& target, float dist);
 
@@ -94,6 +116,12 @@ class TC_GAME_API PathGenerator
 
         Movement::PointsArray _pathPoints;  // our actual (x,y,z) path to the target
         PathType _type;                     // tells what kind of path this is
+
+        // Off-mesh crossing info (see PathTraversesOffMesh()/GetFirstOffMeshLanding()).
+        // Reset at the start of each CalculatePath; set by FindSmoothPath when the
+        // smoothed path crosses an off-mesh connection.
+        bool _pathTraversesOffMesh = false;
+        G3D::Vector3 _firstOffMeshLanding;
 
         bool _useStraightPath;  // type of path will be generated
         bool _forceDestination; // when set, we will always arrive at given point
@@ -108,7 +136,27 @@ class TC_GAME_API PathGenerator
         dtNavMesh const* _navMesh;              // the nav mesh
         dtNavMeshQuery const* _navMeshQuery;    // the nav mesh query used to find the path
 
-        dtQueryFilter _filter;  // use single filter for all movements, update it when needed
+        // Custom filter: stock dtQueryFilter behavior PLUS slope penalty PLUS
+        // per-instance road-bonus disable (for tanks pulling / healers
+        // following). See dtQueryFilterTC.h.
+        dtQueryFilterTC _filter;  // use single filter for all movements, update it when needed
+
+    public:
+        // Per-pathfind opt-out from the road-cost bonus. When set, this
+        // PathGenerator's NEXT and subsequent path queries treat
+        // NAV_AREA_ROAD polygons with neutral cost (no preference).
+        // Reset to false to re-enable. Useful for combat-pulling tanks
+        // and tight-formation followers that shouldn't detour for roads.
+        void SetDisableRoadBonus(bool disable) { _filter.SetDisableRoadBonus(disable); }
+        bool GetDisableRoadBonus() const { return _filter.GetDisableRoadBonus(); }
+
+        // Slope-penalty coefficient (0.0 = disabled, 1.0 = default).
+        // Default is set in CreateFilter; callers can override for one
+        // specific path (e.g. flying-mount-style "ignore slope" mode).
+        void  SetSlopeCoefficient(float c) { _filter.SetSlopeCoefficient(c); }
+        float GetSlopeCoefficient() const  { return _filter.GetSlopeCoefficient(); }
+
+    private:
 
         void SetStartPosition(G3D::Vector3 const& point) { _startPosition = point; }
         void SetEndPosition(G3D::Vector3 const& point) { _actualEndPosition = point; _endPosition = point; }
@@ -132,6 +180,11 @@ class TC_GAME_API PathGenerator
         void BuildPolyPath(G3D::Vector3 const& startPos, G3D::Vector3 const& endPos);
         void BuildPointPath(float const* startPoint, float const* endPoint);
         void BuildShortcut();
+        // Drop near-coincident consecutive path points (< 0.1y). A sub-0.1y
+        // INTERIOR segment makes MoveSplineInitArgs::_checkPathLengths() reject
+        // the ENTIRE spline (unit never moves). Applied to BOTH the complete and
+        // the INCOMPLETE (partial-corridor) path so a partial path stays walkable.
+        void RemoveNearCoincidentPathPoints();
 
         NavTerrainFlag GetNavTerrain(float x, float y, float z) const;
         void CreateFilter();

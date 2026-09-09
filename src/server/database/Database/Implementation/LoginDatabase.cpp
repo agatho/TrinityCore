@@ -278,6 +278,9 @@ void LoginDatabaseConnection::DoPrepareStatements()
     PrepareStatement(LOGIN_SEL_ACCOUNT_DISCORD, "SELECT discordUserId, discordUserName, accountType, accessToken FROM account_discord WHERE id = ?", CONNECTION_SYNCH); // 0: uint32
     PrepareStatement(LOGIN_REP_ACCOUNT_DISCORD, "REPLACE INTO account_discord (id, discordUserId, discordUserName, accountType, accessToken) VALUES (?, ?, ?, ?, ?)", CONNECTION_ASYNC); // 0: uint32, 1: uint64, 2: string, 3: uint8, 4: string
     PrepareStatement(LOGIN_DEL_ACCOUNT_DISCORD, "DELETE FROM account_discord WHERE id = ?", CONNECTION_ASYNC); // 0: uint32
+    // Playerbot module statements
+    PrepareStatement(LOGIN_SEL_BNET_ACCOUNT_EXISTS, "SELECT ba.id FROM battlenet_accounts ba LEFT JOIN account a ON a.battlenet_account = ba.id WHERE ba.id = ? LIMIT 1", CONNECTION_SYNCH);
+    PrepareStatement(LOGIN_SEL_BOT_ACCOUNTS_ALL, "SELECT ba.id, ba.email, a.id as legacy_account_id FROM battlenet_accounts ba LEFT JOIN account a ON a.battlenet_account = ba.id WHERE ba.email LIKE '%#%' OR ba.email LIKE '%@playerbot.local' ORDER BY ba.email", CONNECTION_SYNCH);
 }
 
 LoginDatabaseConnection::LoginDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

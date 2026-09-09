@@ -20,10 +20,17 @@
 
 #include "Define.h"
 #include "vec3d.h"
+#include <atomic>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_set>
 #include <vector>
+
+// Diagnostic counters (defined in wmo.cpp): WMO groups whose collision came
+// from the precomputed BSP (MOBR) vs. the MOPY material-flag heuristic fallback.
+extern std::atomic<uint64_t> g_wmoGroupsWithMOBR;
+extern std::atomic<uint64_t> g_wmoGroupsNoMOBR;
 
 // MOPY flags
 enum MopyFlags
@@ -92,6 +99,14 @@ public:
     std::unordered_set<uint32> ValidDoodadNames;
     std::vector<uint32> groupFileDataIDs;
 
+    // Road-aware mmaps Phase 2: per-material road bitmap (one bit per
+    // material — set iff IsRoadTexturePath returns true for that material's
+    // texture). Computed in open() after MOTX/MOMT/MDID parsing. Used by
+    // WMOGroup::ConvertToVMAPGroupWmo to classify per-collision-triangle.
+    // Empty bitmap = WMO has no road materials (or texture parsing failed).
+    std::vector<uint8> materialRoadBitmap;
+    std::size_t materialCount = 0;
+
     WMORoot(std::string const& filename);
 
     bool open();
@@ -127,6 +142,13 @@ public:
 
     std::unique_ptr<uint16[]> MPY2;
     std::unique_ptr<uint32[]> MOVX;
+    // MOBR — BSP triangle-index refs = the file's precomputed collidable
+    // triangle set (indices into the MOVI/MOVX triangle list). This is the
+    // file's authoritative collision source; ConvertToVMAPGroupWmo replays
+    // it instead of guessing collision from MOPY material flags. nMOBR == 0
+    // means the group ships no BSP (treat every triangle as collidable).
+    std::unique_ptr<uint16[]> MOBR;
+    uint32 nMOBR = 0;
     float* MOVT;
     uint16* MOBA;
     int* MobaEx;
@@ -160,10 +182,23 @@ public:
     ~WMOGroup();
 
     bool open(WMORoot* rootWMO);
-    int ConvertToVMAPGroupWmo(FILE* output, bool preciseVectorData);
+    // Existing API: returns number of collision triangles written.
+    // If roadFlagsOut is non-null, fills it with one byte per collision
+    // triangle (0 = not road, 1 = road material per WMORoot bitmap).
+    int ConvertToVMAPGroupWmo(FILE* output, bool preciseVectorData,
+                               WMORoot const* rootWMO = nullptr,
+                               std::vector<uint8>* roadFlagsOut = nullptr);
     uint32 GetLiquidTypeId(uint32 liquidTypeId);
     bool ShouldSkip(WMORoot const* root) const;
 };
+
+namespace Road { class ListfileMap; }
+
+// Global pointer set by vmapexport.cpp main() when --listfile is provided.
+// Used by WMORoot::open() to resolve MDID FileDataIDs to BLP paths for
+// road-material classification. nullptr → modern MDID materials get
+// `[FDID:N]` placeholders (won't match road classifier).
+extern Road::ListfileMap const* g_wmoListfile;
 
 namespace MapObject
 {

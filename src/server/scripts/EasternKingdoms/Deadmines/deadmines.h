@@ -45,6 +45,10 @@ enum DMCreatureIds
     NPC_ADMIRAL_RIPSNARL    = 47626,
     NPC_CAPTAIN_COOKIE      = 47739,
     NPC_VANESSA_VAN_CLEEF   = 49541
+    // NOTE: the static immune/untargetable "decoy" creatures this unscripted
+    // dataset leaves behind (Glubtok firewall platters, boss cutscene doubles,
+    // Vanessa lightning stalkers) are neutralized at spawn — see the
+    // DecoyNeutralizeEntries[] table in instance_deadmines.cpp.
 };
 
 enum DMGameObjectIds

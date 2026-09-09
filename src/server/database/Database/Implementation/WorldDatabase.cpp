@@ -81,6 +81,14 @@ void WorldDatabaseConnection::DoPrepareStatements()
     PrepareStatement(WORLD_SEL_GUILD_REWARDS_REQ_ACHIEVEMENTS, "SELECT AchievementRequired FROM guild_rewards_req_achievements WHERE ItemID = ?", CONNECTION_SYNCH);
     PrepareStatement(WORLD_INS_CONDITION, "INSERT INTO conditions (SourceTypeOrReferenceId, SourceGroup, SourceEntry, SourceId, ElseGroup, ConditionTypeOrReference, ConditionTarget, ConditionValue1, ConditionValue2, ConditionValue3, NegativeCondition, ErrorType, ErrorTextId, ScriptName, Comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(WORLD_SEL_WARBAND_REPUTATION_FACTIONS, "SELECT factionId FROM warband_reputation_faction", CONNECTION_SYNCH);
+
+    // Playerbot module statements
+    PrepareStatement(WORLD_SEL_QUEST_GIVER_SPAWNS, "SELECT c.guid, c.id, c.position_x, c.position_y, c.position_z, c.map, ct.faction, COALESCE(c.zoneId, 0) as zoneId FROM creature c INNER JOIN creature_template ct ON c.id = ct.entry WHERE ct.npcflag & 2 != 0", CONNECTION_SYNCH);
+    // npcflag is a single bigint column on creature_template (no npcflag2 in this
+    // schema); UNIT_NPC_FLAG_REPAIR = 0x1000 (4096). Same columns/connection as
+    // the quest-giver statement above so the Playerbot RepairVendorIndex can clone
+    // the QuestHubDatabase load path verbatim.
+    PrepareStatement(WORLD_SEL_REPAIR_VENDOR_SPAWNS, "SELECT c.guid, c.id, c.position_x, c.position_y, c.position_z, c.map, ct.faction, COALESCE(c.zoneId, 0) as zoneId FROM creature c INNER JOIN creature_template ct ON c.id = ct.entry WHERE ct.npcflag & 4096 != 0", CONNECTION_SYNCH);
 }
 
 WorldDatabaseConnection::WorldDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

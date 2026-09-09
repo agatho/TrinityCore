@@ -21,6 +21,7 @@
 #include "MMapDefines.h"
 #include "WorldModel.h"
 #include <G3D/Vector3.h>
+#include <array>
 #include <boost/filesystem/path.hpp>
 
 namespace VMAP
@@ -77,6 +78,22 @@ namespace MMAP
         std::vector<unsigned char> offMeshConnectionDirs;
         std::vector<unsigned char> offMeshConnectionsAreas;
         std::vector<unsigned short> offMeshConnectionsFlags;
+
+        // Road-aware mmaps: per-MCNK road mask sourced from the parallel
+        // <map>_<x>_<y>.road file. Indexed [iy * 16 + ix]; nonzero means
+        // "this MCNK's dominant texture is a road". TileBuilder consults
+        // this when assigning polygon area tags. Default-zeroed when no
+        // .road file is present (legacy maps, road extraction disabled).
+        std::array<uint8, 256> roadMask{};
+        bool hasRoadMask = false;
+
+        // Road-aware mmaps Phase 2 (WMO): per-triangle road flag, parallel
+        // to `solidTris` (one byte per triangle in `solidTris` / 3).
+        // Populated by TerrainBuilder::loadVMapModel from each GroupModel's
+        // triangleRoadFlags (which the WorldModel reader loads from the
+        // sidecar). Triangles from terrain MCNKs leave the byte = 0.
+        // TileBuilder consults this when seeding triangle area_id.
+        std::vector<uint8> solidTriRoadFlags;
     };
 
     class TC_MMAPS_COMMON_API TerrainBuilder
@@ -85,6 +102,13 @@ namespace MMAP
             explicit TerrainBuilder(boost::filesystem::path const& inputDirectory, bool skipLiquid);
 
             void loadMap(uint32 mapID, uint32 tileX, uint32 tileY, MeshData& meshData, VMAP::VMapManager* vmapManager);
+
+            // Loads the optional parallel road-mask file for the given ADT.
+            // Populates meshData.roadMask + meshData.hasRoadMask. No-op when
+            // the .road file is absent (legacy map, road extraction disabled).
+            // Returns true if a road file was found and parsed.
+            bool loadRoadMask(uint32 mapID, uint32 tileX, uint32 tileY, MeshData& meshData);
+
             bool loadVMap(uint32 mapID, uint32 tileX, uint32 tileY, MeshData& meshData, VMAP::VMapManager* vmapManager);
             void loadVMapModel(VMAP::WorldModel const* worldModel, G3D::Vector3 const& position, G3D::Matrix3 const& rotation, float scale,
                 MeshData& meshData, VMAP::VMapManager* vmapManager);

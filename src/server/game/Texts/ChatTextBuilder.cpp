@@ -85,8 +85,15 @@ void ChatPacketSender::operator()(Player const* player) const
 
     if (!TranslatedPacket)
     {
+        // Locale lookup on a logging-out player would null-deref m_session.
+        // Use DEFAULT_LOCALE as fallback — slightly stale text is far
+        // better than a world-thread crash. This same surface produced
+        // the SendDirectMessage prod crash earlier.
+        LocaleConstant loc = player->GetSession()
+                           ? player->GetSession()->GetSessionDbcLocale()
+                           : DEFAULT_LOCALE;
         TranslatedPacket.emplace();
-        TranslatedPacket->Initialize(Type, Language, Sender, Receiver, sLanguageMgr->Translate(Text, Language, player->GetSession()->GetSessionDbcLocale()),
+        TranslatedPacket->Initialize(Type, Language, Sender, Receiver, sLanguageMgr->Translate(Text, Language, loc),
             AchievementId, "", Locale);
         TranslatedPacket->Write();
     }

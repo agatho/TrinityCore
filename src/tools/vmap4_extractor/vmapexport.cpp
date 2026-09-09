@@ -21,6 +21,7 @@
 #include "Common.h"
 #include "DB2CascFileSource.h"
 #include "ExtractorDB2LoadInfo.h"
+#include "ListfileMap.h"
 #include "Locales.h"
 #include "MapDefines.h"
 #include "MapUtils.h"
@@ -30,6 +31,7 @@
 #include "ThreadPool.h"
 #include "Util.h"
 #include "VMapDefinitions.h"
+#include "WmoRoadFile.h"
 #include "wdtfile.h"
 #include "wmo.h"
 #include <boost/filesystem/directory.hpp>
@@ -73,6 +75,12 @@ std::unordered_map<uint32, LiquidTypeEntry> LiquidTypes;
 std::vector<MapEntry> map_ids;
 boost::filesystem::path input_path;
 bool preciseVectorData = false;
+
+// Road-aware mmaps Phase 2: CLI-provided listfile path; loaded into
+// g_wmoListfile (declared in wmo.h) on startup.
+std::string ListfilePath;
+Road::ListfileMap g_wmoListfileStorage;
+Road::ListfileMap const* g_wmoListfile = nullptr;
 char const* CascProduct = "wow";
 char const* CascRegion = "eu";
 bool UseRemoteCasc = false;
@@ -265,6 +273,11 @@ ExtractedModelData const* ExtractSingleWmo(std::string& fname)
         }
     }
 
+    // Road-aware mmaps Phase 2: per-group road flag buffers. Each entry =
+    // one byte per collision triangle in that group's contribution to .vmo.
+    std::vector<std::vector<uint8>> perGroupRoadFlags;
+    bool anyRoadMaterial = !froot.materialRoadBitmap.empty();
+
     for (WMOGroup& fgroup : groups)
     {
         if (fgroup.ShouldSkip(&froot))
@@ -275,7 +288,12 @@ ExtractedModelData const* ExtractSingleWmo(std::string& fname)
             && size_t(fgroup.parentOrFirstChildSplitGroupIndex) < groups.size())
             fgroup.groupWMOID = groups[fgroup.parentOrFirstChildSplitGroupIndex].groupWMOID;
 
-        Wmo_nVertices += fgroup.ConvertToVMAPGroupWmo(output, preciseVectorData);
+        std::vector<uint8> groupRoadFlags;
+        Wmo_nVertices += fgroup.ConvertToVMAPGroupWmo(
+            output, preciseVectorData, &froot,
+            anyRoadMaterial ? &groupRoadFlags : nullptr);
+        if (anyRoadMaterial)
+            perGroupRoadFlags.push_back(std::move(groupRoadFlags));
         ++groupCount;
         for (uint16 groupReference : fgroup.DoodadReferences)
         {
@@ -295,6 +313,41 @@ ExtractedModelData const* ExtractSingleWmo(std::string& fname)
     // store the correct no of groups
     fwrite(&groupCount, sizeof(uint32), 1, output);
     fclose(output);
+
+    // Road-aware mmaps Phase 2: write the .vmo.road sidecar IF this WMO
+    // had any road materials. Skipping when there are no road materials
+    // saves disk space and makes "absent sidecar = no road tags" the
+    // natural fast path at load time.
+    bool hasAnyRoadTriangle = false;
+    for (auto const& flags : perGroupRoadFlags)
+        for (uint8 b : flags) if (b) { hasAnyRoadTriangle = true; break; }
+    if (anyRoadMaterial && hasAnyRoadTriangle)
+    {
+        std::string sidecarPath = szLocalFile + ".road";
+        FILE* sf = fopen(sidecarPath.c_str(), "wb");
+        if (sf)
+        {
+            TrinityCore::WmoRoad::WmoRoadFileHeader hdr;
+            hdr.nGroups = static_cast<uint32>(perGroupRoadFlags.size());
+            fwrite(&hdr, sizeof(hdr), 1, sf);
+            for (auto const& flags : perGroupRoadFlags)
+            {
+                TrinityCore::WmoRoad::WmoRoadGroupHeader gh;
+                gh.nColTriangles = static_cast<uint32>(flags.size());
+                gh.flagsBytes    = static_cast<uint32>(
+                    TrinityCore::WmoRoad::BytesNeededForFlags(gh.nColTriangles));
+                fwrite(&gh, sizeof(gh), 1, sf);
+                // Pack one bit per triangle.
+                std::vector<uint8> packed(gh.flagsBytes, 0);
+                for (uint32 i = 0; i < gh.nColTriangles; ++i)
+                    if (flags[i])
+                        TrinityCore::WmoRoad::SetTriangleRoadBit(packed.data(), i);
+                if (gh.flagsBytes > 0)
+                    fwrite(packed.data(), 1, packed.size(), sf);
+            }
+            fclose(sf);
+        }
+    }
 
     if (!Wmo_nVertices && (doodads.Sets.empty() || doodads.References.empty()))
         file_ok = false;
@@ -584,6 +637,17 @@ bool processArgv(int argc, char ** argv, const char *versionString)
             else
                 result = false;
         }
+        else if (strcmp("--listfile", argv[i]) == 0 || strcmp("-L", argv[i]) == 0)
+        {
+            // Road-aware mmaps Phase 2: optional FileDataID → path listfile
+            // for modern (Legion+) WMOs that reference textures via MDID.
+            // Without it, modern WMOs produce empty .vmo.road sidecars
+            // (no road classification possible).
+            if (i + 1 < argc && strlen(argv[i + 1]))
+                ListfilePath = argv[++i];
+            else
+                result = false;
+        }
         else
         {
             result = false;
@@ -658,6 +722,30 @@ int main(int argc, char ** argv)
     if (!RetardCheck())
         return 1;
 
+    // Road-aware mmaps Phase 2: optional FileDataID → BLP path listfile
+    // used by WMORoot::open to resolve MDID texture references.
+    if (!ListfilePath.empty())
+    {
+        std::vector<std::string> warns;
+        if (g_wmoListfileStorage.LoadFromFile(ListfilePath, &warns))
+        {
+            printf("WMO road listfile: loaded %zu FileDataID->path entries from %s\n",
+                   g_wmoListfileStorage.Size(), ListfilePath.c_str());
+            if (!warns.empty())
+                printf("  (%zu malformed rows skipped)\n", warns.size());
+            g_wmoListfile = &g_wmoListfileStorage;
+        }
+        else
+        {
+            printf("WMO road listfile: FAILED to load %s — modern MDID-based WMOs will not get road tags\n",
+                   ListfilePath.c_str());
+        }
+    }
+    else
+    {
+        printf("WMO road listfile: not provided (--listfile). Modern MDID-based WMOs will not get road tags.\n");
+    }
+
     // some simple check if working dir is dirty
     boost::filesystem::path sdir_bin = boost::filesystem::path(szWorkDirWmo) / "dir_bin";
     {
@@ -731,6 +819,10 @@ int main(int argc, char ** argv)
         printf("ERROR: Extract %s. Work NOT complete.\n   Precise vector data=%d.\nPress any key.\n", VMAP::VMAP_MAGIC, preciseVectorData);
         getchar();
     }
+
+    printf("WMO collision source: %llu groups via MOBR (baked BSP), %llu groups via MOPY heuristic fallback.\n",
+        static_cast<unsigned long long>(g_wmoGroupsWithMOBR.load()),
+        static_cast<unsigned long long>(g_wmoGroupsNoMOBR.load()));
 
     printf("Extract %s. Work complete. No errors.\n", VMAP::VMAP_MAGIC);
     return 0;

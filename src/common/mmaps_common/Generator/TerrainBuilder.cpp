@@ -22,9 +22,11 @@
 #include "MMapDefines.h"
 #include "Memory.h"
 #include "ModelInstance.h"
+#include "RoadMapDefines.h"
 #include "StringFormat.h"
 #include "Util.h"
 #include "VMapManager.h"
+#include <cstring>
 #include <unordered_map>
 
 namespace MMAP
@@ -79,7 +81,61 @@ namespace MMAP
             loadMap(mapID, tileX, tileY-1, meshData, vmapManager, RIGHT);
             loadMap(mapID, tileX+1, tileY, meshData, vmapManager, TOP);
             loadMap(mapID, tileX-1, tileY, meshData, vmapManager, BOTTOM);
+
+            // Road-aware mmaps: opportunistic load of the parallel .road file
+            // for the center tile. Absence is fine — meshData.roadMask stays
+            // zero and TileBuilder behaves as it did pre-feature.
+            loadRoadMask(mapID, tileX, tileY, meshData);
         }
+    }
+
+    bool TerrainBuilder::loadRoadMask(uint32 mapID, uint32 tileX, uint32 tileY, MeshData& meshData)
+    {
+        // The road extractor writes <mapID>_<tileX>_<tileY> in the order the
+        // map extractor expects (see System.cpp's WriteRoadFileForAdt call).
+        // Note the historical TileX vs ADT-x: the existing TC convention
+        // passes (tileX, tileY) where tileX corresponds to the ADT row index
+        // and tileY to the column when read by MapBuilder. We mirror the
+        // exact .map filename pattern for the .road sibling.
+        std::string roadFileName = Trinity::StringFormat("{}/maps/{:04}_{:02}_{:02}.road",
+            m_inputDirectory.generic_string(), mapID, tileX, tileY);
+
+        auto roadFile = Trinity::make_unique_ptr_with_deleter<&::fclose>(fopen(roadFileName.c_str(), "rb"));
+        if (!roadFile)
+        {
+            // Absent file is normal — see header comment.
+            meshData.hasRoadMask = false;
+            return false;
+        }
+
+        TrinityCore::RoadMap::RoadFileHeader header;
+        if (fread(&header, sizeof(header), 1, roadFile.get()) != 1)
+        {
+            TC_LOG_ERROR("maps.mmapgen", "Could not read .road header for {}", roadFileName);
+            return false;
+        }
+
+        if (header.magic != TrinityCore::RoadMap::kRoadFileMagic)
+        {
+            TC_LOG_ERROR("maps.mmapgen", "{} has wrong magic (got 0x{:x})", roadFileName, header.magic);
+            return false;
+        }
+        if (header.version != TrinityCore::RoadMap::kRoadFileVersion)
+        {
+            TC_LOG_ERROR("maps.mmapgen", "{} has unknown version {} (expected {})",
+                roadFileName, header.version, TrinityCore::RoadMap::kRoadFileVersion);
+            return false;
+        }
+
+        if (fread(meshData.roadMask.data(), meshData.roadMask.size(), 1, roadFile.get()) != 1)
+        {
+            TC_LOG_ERROR("maps.mmapgen", "Could not read .road mask for {}", roadFileName);
+            std::memset(meshData.roadMask.data(), 0, meshData.roadMask.size());
+            return false;
+        }
+
+        meshData.hasRoadMask = true;
+        return true;
     }
 
     /**************************************************************************/
@@ -616,8 +672,25 @@ namespace MMAP
         {
             // first handle collision mesh
             int offset = meshData.solidVerts.size() / 3;
+            std::size_t triCountBefore = meshData.solidTris.size() / 3;
             transformVertices(it->GetVertices(), meshData.solidVerts, scale, rotation, position);
             copyIndices(it->GetTriangles(), meshData.solidTris, offset, isM2);
+            std::size_t triCountAfter = meshData.solidTris.size() / 3;
+            std::size_t trianglesAdded = triCountAfter - triCountBefore;
+
+            // Road-aware mmaps Phase 2: extend solidTriRoadFlags in parallel
+            // to solidTris. If this group has road flags from the sidecar,
+            // copy them in; otherwise pad with zeros.
+            meshData.solidTriRoadFlags.resize(triCountAfter, 0);
+            std::vector<uint8> const& groupFlags = it->triangleRoadFlags;
+            if (!groupFlags.empty() && groupFlags.size() == it->GetTriangles().size())
+            {
+                // The group's triangle count must match what copyIndices
+                // appended (this->GetTriangles().size()). M2 triangle flip
+                // doesn't change count, so 1:1 mapping holds.
+                for (std::size_t i = 0; i < trianglesAdded && i < groupFlags.size(); ++i)
+                    meshData.solidTriRoadFlags[triCountBefore + i] = groupFlags[i];
+            }
 
             // now handle liquid data
             VMAP::WmoLiquid const* liquid = it->GetLiquid();

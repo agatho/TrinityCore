@@ -25,7 +25,13 @@
 
 struct DB2CascFileSource : public DB2FileSource
 {
-    DB2CascFileSource(std::shared_ptr<CASC::Storage const> storage, uint32 fileDataId, bool printErrors = true);
+    // localeMask selects which locale variant of the file to open. Default 0
+    // (CASC_LOCALE_NONE) preserves the historical behaviour (CascLib picks);
+    // callers reading localized strings on a multi-locale storage should pass an
+    // explicit locale (e.g. CASC_LOCALE_ENUS) so they don't get whatever the
+    // client's install locale happens to be.
+    DB2CascFileSource(std::shared_ptr<CASC::Storage const> storage, uint32 fileDataId,
+                      bool printErrors = true, uint32 localeMask = 0 /*CASC_LOCALE_NONE*/);
     DB2CascFileSource(DB2CascFileSource const& other) = delete;
     DB2CascFileSource(DB2CascFileSource&& other) noexcept = delete;
     DB2CascFileSource& operator=(DB2CascFileSource const& other) = delete;

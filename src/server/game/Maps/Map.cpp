@@ -1916,7 +1916,8 @@ void Map::SendUpdateTransportVisibility(Player* player)
 
     WorldPacket packet;
     transData.BuildPacket(&packet);
-    player->GetSession()->SendPacket(&packet);
+    if (WorldSession* sess = player->GetSession())
+        sess->SendPacket(&packet);
 }
 
 inline void Map::setNGrid(NGridType *grid, uint32 x, uint32 y)
@@ -1936,8 +1937,30 @@ void Map::SendObjectUpdates()
     while (!_updateObjects.empty())
     {
         BaseEntity* obj = *_updateObjects.begin();
-        ASSERT(obj->IsInWorld());
         _updateObjects.erase(_updateObjects.begin());
+
+        // PLAYERBOT FIX: Multiple safety checks for race condition prevention
+        //
+        // Race condition scenarios:
+        // 1. BaseEntity::RemoveFromWorld() sets m_inWorld=false before ClearUpdateMask removes from set
+        // 2. Bot marked for removal (SetDestroyedObject) but still in _updateObjects due to re-add
+        // 3. Object freed but memory not yet overwritten - partial corruption
+        //
+        // Check 1: Skip objects not in world
+        if (!obj->IsInWorld())
+        {
+            TC_LOG_DEBUG("maps", "Map::SendObjectUpdates: Skipping object not in world");
+            continue;
+        }
+
+        // Check 2: Skip objects marked for destruction (prevents use-after-free)
+        // This catches objects that passed IsInWorld() but are being destroyed
+        if (obj->IsDestroyedObject())
+        {
+            TC_LOG_DEBUG("maps", "Map::SendObjectUpdates: Skipping destroyed object");
+            continue;
+        }
+
         obj->BuildUpdate(update_players);
     }
 
@@ -2527,10 +2550,33 @@ void Map::DelayedUpdate(uint32 t_diff)
         for (GridRefManager<NGridType>::iterator i = GridRefManager<NGridType>::begin(); i != GridRefManager<NGridType>::end();)
         {
             NGridType *grid = i->GetSource();
-            GridInfo* info = i->GetSource()->getGridInfoRef();
             ++i;                                                // The update might delete the map and we need the next map before the iterator gets invalid
-            ASSERT(grid->GetGridState() >= 0 && grid->GetGridState() < MAX_GRID_STATE);
-            si_GridStates[grid->GetGridState()]->Update(*this, *grid, *info, t_diff);
+            // Defensive: under heavy bot load (V2 1000+ bots), the grid
+            // iteration occasionally sees a null grid pointer here —
+            // likely a race between grid unload and DelayedUpdate. Skip
+            // and log so we don't AV instead of crashing the world.
+            // Crash 2026-05-13 08:38: AV at Map.cpp:2595 with grid=null.
+            if (!grid)
+            {
+                TC_LOG_WARN("maps", "Map::DelayedUpdate: null grid in iterator (map={} inst={})",
+                            GetId(), GetInstanceId());
+                continue;
+            }
+            GridInfo* info = grid->getGridInfoRef();
+            if (!info)
+            {
+                TC_LOG_WARN("maps", "Map::DelayedUpdate: null GridInfo (map={} inst={})",
+                            GetId(), GetInstanceId());
+                continue;
+            }
+            int const state = int(grid->GetGridState());
+            if (state < 0 || state >= MAX_GRID_STATE)
+            {
+                TC_LOG_WARN("maps", "Map::DelayedUpdate: invalid grid state {} (map={} inst={})",
+                            state, GetId(), GetInstanceId());
+                continue;
+            }
+            si_GridStates[state]->Update(*this, *grid, *info, t_diff);
         }
     }
 }

@@ -3941,8 +3941,17 @@ class spell_pri_holy_10_1_class_set_4pc_aura : public AuraScript
         if (GetTargetApplication()->GetRemoveMode() != AURA_REMOVE_BY_EXPIRE)
             return;
 
-        if (GetCaster()->HasAura(SPELL_PRIEST_HOLY_10_1_CLASS_SET_4P))
-            GetCaster()->CastSpell(GetCaster(), SPELL_PRIEST_HOLY_10_1_CLASS_SET_4P_EFFECT, CastSpellExtraArgs(TRIGGERED_IGNORE_GCD).SetTriggeringAura(aurEff));
+        // Prayer of Mending caster can be offline / despawned by the time
+        // the aura expires (PoM has a long duration and bounces between
+        // targets). GetCaster() returns nullptr in that case and the
+        // unchecked HasAura/CastSpell on the next line crashed with
+        // ACCESS_VIOLATION on the world thread. Null-check before use.
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        if (caster->HasAura(SPELL_PRIEST_HOLY_10_1_CLASS_SET_4P))
+            caster->CastSpell(caster, SPELL_PRIEST_HOLY_10_1_CLASS_SET_4P_EFFECT, CastSpellExtraArgs(TRIGGERED_IGNORE_GCD).SetTriggeringAura(aurEff));
     }
 
     void Register() override

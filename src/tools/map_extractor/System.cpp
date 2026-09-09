@@ -15,6 +15,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "AdtTextureReader.h"
 #include "Banner.h"
 #include "CascHandles.h"
 #include "Common.h"
@@ -23,10 +24,12 @@
 #include "DBFilesClientList.h"
 #include "ExtractorDB2LoadInfo.h"
 #include "IteratorPair.h"
+#include "ListfileMap.h"
 #include "Locales.h"
 #include "MapDefines.h"
 #include "MapUtils.h"
 #include "Memory.h"
+#include "RoadFileWriter.h"
 #include "StringFormat.h"
 #include "Util.h"
 #include "adt.h"
@@ -49,6 +52,13 @@
 #endif
 
 std::shared_ptr<CASC::Storage> CascStorage;
+
+// Optional FileDataID→path listfile used to resolve MDID texture references
+// in modern (Legion+) ADTs. Set via -L on the CLI. Loaded once in main
+// after CASC open; passed by const-ref to each AdtTextureReader instance.
+// See ListfileMap.h for the file format expectation.
+std::string CONF_RoadListfilePath;
+Road::ListfileMap g_roadListfile;
 
 struct MapEntry
 {
@@ -247,6 +257,18 @@ void HandleArgs(int argc, char* arg[])
             case 'r':
                 if (c + 1 < argc && strlen(arg[c + 1]))      // all ok
                     CONF_Region = arg[c++ + 1];
+                else
+                    Usage(arg[0]);
+                break;
+            case 'L':
+                // Road-aware mmaps: path to a wow-listfile community CSV
+                // (id,path) used to resolve modern (Legion+) ADT MDID
+                // texture references into BLP paths for road
+                // classification. Optional — without it, modern ADTs get
+                // [FDID:N] placeholders and the road mask stays empty for
+                // those maps.
+                if (c + 1 < argc && strlen(arg[c + 1]))
+                    CONF_RoadListfilePath = arg[c++ + 1];
                 else
                     Usage(arg[0]);
                 break;
@@ -658,12 +680,11 @@ bool ConvertADT(ChunkedFile& adt, std::string const& mapName, std::string const&
 
                 liquid_entry[i][j] = h2o->GetLiquidType(h);
                 auto liquidTypeEntry = LiquidTypes.find(liquid_entry[i][j]);
-                if (liquidTypeEntry == LiquidTypes.end())
-                    continue;
 
-                if (LiquidMaterialEntry const* liquidMaterial = Trinity::Containers::MapGetValuePtr(LiquidMaterials, liquidTypeEntry->second.MaterialID))
-                    if (liquidMaterial->Flags.HasFlag(LiquidMaterialFlags::VisualOnly))
-                        continue;
+                if (liquidTypeEntry != LiquidTypes.end())
+                    if (LiquidMaterialEntry const* liquidMaterial = Trinity::Containers::MapGetValuePtr(LiquidMaterials, liquidTypeEntry->second.MaterialID))
+                        if (liquidMaterial->Flags.HasFlag(LiquidMaterialFlags::VisualOnly))
+                            continue;
 
                 adt_liquid_attributes attrs = h2o->GetLiquidAttributes(i, j);
 
@@ -684,13 +705,20 @@ bool ConvertADT(ChunkedFile& adt, std::string const& mapName, std::string const&
                     }
                 }
 
-                switch (liquidTypeEntry->second.SoundBank)
+                if (liquidTypeEntry == LiquidTypes.end())
+                {
+                    // Client resolves an unrecognized liquid id to plain water, never to walkable land.
+                    liquid_flags[i][j] |= map_liquidHeaderTypeFlags::Water;
+                }
+                else switch (liquidTypeEntry->second.SoundBank)
                 {
                     case LIQUID_TYPE_WATER: liquid_flags[i][j] |= map_liquidHeaderTypeFlags::Water; break;
                     case LIQUID_TYPE_OCEAN: liquid_flags[i][j] |= map_liquidHeaderTypeFlags::Ocean; if (!ignoreDeepWater && attrs.Deep) liquid_flags[i][j] |= map_liquidHeaderTypeFlags::DarkWater; break;
                     case LIQUID_TYPE_MAGMA: liquid_flags[i][j] |= map_liquidHeaderTypeFlags::Magma; break;
                     case LIQUID_TYPE_SLIME: liquid_flags[i][j] |= map_liquidHeaderTypeFlags::Slime; break;
                     default:
+                        // Client resolves an unrecognized liquid id to plain water, never to walkable land.
+                        liquid_flags[i][j] |= map_liquidHeaderTypeFlags::Water;
                         printf("\nCan't find Liquid type %u for map %s [%u,%u]\nchunk %d,%d\n", h->LiquidType, mapName.c_str(), gx, gy, i, j);
                         break;
                 }
@@ -1095,9 +1123,17 @@ void ExtractMaps(uint32 build)
     CreateDir(output_path / "maps");
 
     printf("Convert map files\n");
+    // Road-aware mmaps: aggregate stats across the whole extract run so the
+    // owner can see at the end which maps produced how much road coverage.
+    std::size_t totalRoadFiles = 0;
+    std::size_t totalRoadMcnks = 0;
     for (std::size_t z = 0; z < map_ids.size(); ++z)
     {
         printf("Extract %s (" SZFMTD "/" SZFMTD ")                  \n", map_ids[z].Name.c_str(), z + 1, map_ids.size());
+        // Per-map road counters; printed at the end of the map loop body.
+        std::size_t mapRoadFiles = 0;
+        std::size_t mapRoadMcnks = 0;
+
         // Loadup map grid data
         ChunkedFile wdt;
         std::bitset<(WDT_MAP_SIZE) * (WDT_MAP_SIZE)> existingTiles;
@@ -1115,14 +1151,60 @@ void ExtractMaps(uint32 build)
 
                     outputFileName = Trinity::StringFormat("{}/maps/{:04}_{:02}_{:02}.map", output_path.string(), map_ids[z].Id, y, x);
                     bool ignoreDeepWater = IsDeepWaterIgnored(map_ids[z].Id, y, x);
+                    bool tileOk = false;
                     if (mphd && mphd->As<wdt_MPHD>()->flags & 0x200)
                     {
-                        existingTiles[y * WDT_MAP_SIZE + x] = ConvertADT(maid->As<wdt_MAID>()->adt_files[y][x].rootADT, map_ids[z].Name, outputFileName, y, x, build, ignoreDeepWater);
+                        auto const& maidEntry =
+                            maid->As<wdt_MAID>()->adt_files[y][x];
+                        tileOk = ConvertADT(maidEntry.rootADT, map_ids[z].Name, outputFileName, y, x, build, ignoreDeepWater);
+
+                        // Road-aware mmaps: write parallel .road file alongside
+                        // the .map. Best-effort; failure here doesn't fail the
+                        // overall extraction. See ROAD_AWARE_PATHFINDING_PLAN.md.
+                        if (tileOk)
+                        {
+                            uint32 mphdFlags = mphd->As<wdt_MPHD>()->flags;
+                            Road::AdtTexture::WdtFlags wdtFlags;
+                            wdtFlags.adtHasBigAlpha        = (mphdFlags & 0x4)   != 0;
+                            wdtFlags.adtHasHeightTexturing = (mphdFlags & 0x80)  != 0;
+                            wdtFlags.wdtHasMaid            = (mphdFlags & 0x200) != 0;
+                            Road::AdtTexture::AdtTextureReader roadReader(CascStorage);
+                            if (!g_roadListfile.Empty())
+                                roadReader.SetListfileMap(&g_roadListfile);
+                            std::string roadOutputDir = Trinity::StringFormat("{}/maps", output_path.string());
+                            std::size_t roadMcnks = 0;
+
+                            // Coordinate convention: pass (y, x) — TC's .map
+                            // filename pattern is `<map>_<y>_<x>.map` (see
+                            // System.cpp:1116 + TerrainBuilder.cpp:88 + the
+                            // MapBuilder discoverTiles tilesData[] decode).
+                            // We mirror that exact pattern for the parallel
+                            // .road sibling so TerrainBuilder::loadRoadMask
+                            // can find it by the same key.
+                            if (!Road::WriteRoadFileForAdt(roadReader, roadOutputDir,
+                                                           map_ids[z].Id, y, x,
+                                                           wdtFlags,
+                                                           maidEntry.rootADT,
+                                                           maidEntry.tex0ADT,
+                                                           &roadMcnks))
+                            {
+                                printf("  road: ADT (%u,%u) — failed to write .road file\n", x, y);
+                            }
+                            else
+                            {
+                                ++mapRoadFiles;
+                                mapRoadMcnks += roadMcnks;
+                            }
+                        }
+                        existingTiles[y * WDT_MAP_SIZE + x] = tileOk;
                     }
                     else
                     {
                         std::string storagePath = Trinity::StringFormat(R"(World\Maps\{}\{}_{}_{}.adt)", map_ids[z].Directory, map_ids[z].Directory, x, y);
                         existingTiles[y * WDT_MAP_SIZE + x] = ConvertADT(storagePath, map_ids[z].Name, outputFileName, y, x, build, ignoreDeepWater);
+                        // No .road file emitted for legacy MAID-less ADTs in
+                        // P1.0c. Pre-MAID maps are vanilla-era content and
+                        // not the primary target of road-aware pathfinding.
                     }
                 }
 
@@ -1139,8 +1221,22 @@ void ExtractMaps(uint32 build)
             fwrite(&build, sizeof(build), 1, tileList.get());
             fwrite(existingTiles.to_string().c_str(), 1, existingTiles.size(), tileList.get());
         }
+
+        // Per-map road extraction summary.
+        if (mapRoadFiles > 0 || mapRoadMcnks > 0)
+        {
+            printf("  road: map %u %s wrote %zu .road files, %zu road MCNKs total\n",
+                   map_ids[z].Id, map_ids[z].Name.c_str(),
+                   mapRoadFiles, mapRoadMcnks);
+            totalRoadFiles += mapRoadFiles;
+            totalRoadMcnks += mapRoadMcnks;
+        }
     }
 
+    printf("\nRoad-aware extraction summary: %zu .road files written, %zu road MCNKs total.\n",
+           totalRoadFiles, totalRoadMcnks);
+    if (totalRoadFiles == 0)
+        printf("(no .road files emitted — check that maps used MAID-based ADTs)\n");
     printf("\n");
 }
 
@@ -1494,6 +1590,33 @@ int main(int argc, char * arg[])
 
     if (!RetardCheck())
         return 1;
+
+    // Optional listfile load for road-aware mmaps. The listfile resolves
+    // FileDataIDs to BLP paths so MDID-based texture references in modern
+    // (Legion+) ADTs can be classified by IsRoadTexturePath. Without it,
+    // modern zones produce empty road masks.
+    if (!CONF_RoadListfilePath.empty())
+    {
+        std::vector<std::string> warnings;
+        if (g_roadListfile.LoadFromFile(CONF_RoadListfilePath, &warnings))
+        {
+            printf("Road listfile: loaded %zu FileDataID->path entries from %s\n",
+                   g_roadListfile.Size(), CONF_RoadListfilePath.c_str());
+            if (!warnings.empty())
+                printf("  (with %zu malformed rows skipped)\n", warnings.size());
+        }
+        else
+        {
+            printf("Road listfile: FAILED to open %s — modern ADT MDID textures will not be classified\n",
+                   CONF_RoadListfilePath.c_str());
+        }
+    }
+    else
+    {
+        printf("Road listfile: not provided (-L). Modern ADT MDID textures will not be classified.\n"
+               "  Without a listfile, road masks for Legion+ zones will be empty.\n"
+               "  See ListfileMap.h for the expected format.\n");
+    }
 
     uint32 installedLocalesMask = GetInstalledLocalesMask();
     int32 firstInstalledLocale = -1;

@@ -18,6 +18,7 @@
 #include "WorldSession.h"
 #include "HousingPlayerHouseEntity.h"
 #include "HousingNeighborhoodMirrorEntity.h"
+#include "Playerbot/PlayerbotHooks.h"
 #include "Account.h"
 #include "HousingNeighborhoodMirrorEntity.h"
 #include "HousingPlayerHouseEntity.h"
@@ -114,7 +115,11 @@ bool WorldSessionFilter::Process(WorldPacket* packet)
 /// WorldSession constructor
 WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccountId, std::string&& battlenetAccountEmail,
     std::shared_ptr<WorldSocket>&& sock, AccountTypes sec, uint8 expansion, time_t mute_time, std::string&& os, Minutes timezoneOffset,
-    uint32 build, ClientBuild::VariantId clientBuildVariant, LocaleConstant locale, uint32 recruiter, bool isARecruiter) :
+    uint32 build, ClientBuild::VariantId clientBuildVariant, LocaleConstant locale, uint32 recruiter, bool isARecruiter
+#if defined(TRINITY_PLAYERBOT_V2)
+    , bool is_bot
+#endif
+    ) :
     m_muteTime(mute_time),
     m_timeOutTime(0),
     AntiDOS(this),
@@ -174,6 +179,9 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _engineSurveyReceived(false),
     _lastReportServerLagTime(0),
     _warden3DisabledSent(false)
+#if defined(TRINITY_PLAYERBOT_V2)
+    , _isBot(is_bot)
+#endif
 {
     if (m_Socket[CONNECTION_TYPE_REALM])
     {
@@ -181,6 +189,12 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
         ResetTimeOutTime(false);
         LoginDatabase.PExecute("UPDATE account SET online = 1 WHERE id = {};", GetAccountId());     // One-time query
     }
+#if defined(TRINITY_PLAYERBOT_V2)
+    else if (is_bot)
+    {
+        m_Address = "bot";
+    }
+#endif
 
     _instanceConnectKey.Raw = UI64LIT(0);
 }
@@ -197,7 +211,10 @@ WorldSession::~WorldSession()
     {
         if (m_Socket[i])
         {
-            m_Socket[i]->CloseSocket();
+#if defined(TRINITY_PLAYERBOT_V2)
+            if (!IsBot())  // Bot sessions have nullptr sockets
+#endif
+                m_Socket[i]->CloseSocket();
             m_Socket[i].reset();
         }
     }
@@ -237,7 +254,15 @@ WorldSession::~WorldSession()
     while (_recvQueue.next(packet))
         delete packet;
 
-    LoginDatabase.PExecute("UPDATE account SET online = 0 WHERE id = {};", GetAccountId());     // One-time query
+#if defined(TRINITY_PLAYERBOT_V2)
+    // Bot sessions share the owner GM's account id. The ctor never sets
+    // online=1 for them (the ctor's online=1 query is gated on a non-null
+    // socket), so the dtor must symmetrically skip clearing it — otherwise
+    // a bot logging out flips the GM's account.online to 0 while the GM is
+    // still in-world.
+    if (!IsBot())
+#endif
+        LoginDatabase.PExecute("UPDATE account SET online = 0 WHERE id = {};", GetAccountId());     // One-time query
 }
 
 bool WorldSession::PlayerDisconnected() const
@@ -433,7 +458,12 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
     ///- Before we process anything:
     /// If necessary, kick the player because the client didn't send anything for too long
     /// (or they've been idling in character select)
+    /// Note: Bots don't have sockets, so skip idle check for them
+#if defined(TRINITY_PLAYERBOT_V2)
+    if (!IsBot() && IsConnectionIdle() && !HasPermission(rbac::RBAC_PERM_IGNORE_IDLE_CONNECTION) && m_Socket[CONNECTION_TYPE_REALM])
+#else
     if (IsConnectionIdle() && !HasPermission(rbac::RBAC_PERM_IGNORE_IDLE_CONNECTION))
+#endif
         m_Socket[CONNECTION_TYPE_REALM]->CloseSocket();
 
     ///- Retrieve packets from the receive queue and call the appropriate handlers
@@ -678,6 +708,11 @@ void WorldSession::LogoutPlayer(bool save)
         sLFGListMgr.RemoveListingsBy(_player->GetGUID());
         sLFGListMgr.RemoveApplicationsBy(_player->GetGUID());
         sLFGListMgr.UnregisterSearch(_player->GetGUID());
+#if defined(TRINITY_PLAYERBOT_V2)
+        // Captured early because the bot-only per-character offline write
+        // below runs after _player is nulled out by SetPlayer(nullptr).
+        uint64 const playerGuidLow = _player->GetGUID().GetCounter();
+#endif
 
         if (!_player->GetLootGUID().IsEmpty())
             DoLootReleaseAll();
@@ -813,6 +848,8 @@ void WorldSession::LogoutPlayer(bool save)
         //! Call script hook before deletion
         sScriptMgr->OnPlayerLogout(_player);
 
+        Playerbot::Hooks::OnPlayerLogout(_player);
+
         TC_METRIC_EVENT("player_events", "Logout", _player->GetName());
 
         //! Remove the player from the world
@@ -835,10 +872,24 @@ void WorldSession::LogoutPlayer(bool save)
         SendPacket(WorldPackets::Character::LogoutComplete().Write());
         TC_LOG_DEBUG("network", "SESSION: Sent SMSG_LOGOUT_COMPLETE Message");
 
-        //! Since each account can only have one online character at any given time, ensure all characters for active account are marked as offline
-        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_ACCOUNT_ONLINE);
-        stmt->setUInt32(0, GetAccountId());
-        CharacterDatabase.Execute(stmt);
+#if defined(TRINITY_PLAYERBOT_V2)
+        // Bots violate the "one online char per account" assumption: a GM can
+        // be in-world alongside several bot chars on the same account. The
+        // bulk `WHERE account = ?` query below would mark the GM's own char
+        // (and other still-active bots) offline. For bot sessions, restrict
+        // the offline write to just this character.
+        if (IsBot())
+        {
+            CharacterDatabase.PExecute("UPDATE characters SET online = 0 WHERE guid = {}", playerGuidLow);
+        }
+        else
+#endif
+        {
+            //! Since each account can only have one online character at any given time, ensure all characters for active account are marked as offline
+            CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_ACCOUNT_ONLINE);
+            stmt->setUInt32(0, GetAccountId());
+            CharacterDatabase.Execute(stmt);
+        }
     }
 
     if (m_Socket[CONNECTION_TYPE_INSTANCE])

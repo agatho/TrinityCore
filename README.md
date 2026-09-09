@@ -1,97 +1,43 @@
-# ![logo](https://community.trinitycore.org/public/style_images/1_trinitycore.png) TrinityCore (master)
+# TrinityCore + Playerbot V2
 
-[![Average time to resolve an issue](https://isitmaintained.com/badge/resolution/TrinityCore/TrinityCore.svg)](https://isitmaintained.com/project/TrinityCore/TrinityCore "Average time to resolve an issue") [![Percentage of issues still open](https://isitmaintained.com/badge/open/TrinityCore/TrinityCore.svg)](https://isitmaintained.com/project/TrinityCore/TrinityCore "Percentage of issues still open")
+A [TrinityCore](https://www.trinitycore.org/) server with the **Playerbot V2**
+module — large-scale, AI-controlled player bots that quest, group, run dungeons
+and battlegrounds, trade, and populate the world, for a single-player or
+low-population MMORPG experience.
 
---------------
+This is a standard TrinityCore tree with one extra optional module under
+`src/modules/PlayerbotV2`. With the module disabled it builds and runs exactly
+like upstream TrinityCore.
 
+## Build
 
-* [Build Status](#build-status)
-* [Introduction](#introduction)
-* [Requirements](#requirements)
-* [Install](#install)
-* [Reporting issues](#reporting-issues)
-* [Submitting fixes](#submitting-fixes)
-* [Copyright](#copyright)
-* [Authors &amp; Contributors](#authors--contributors)
-* [Links](#links)
+Configure with the module enabled, then build `worldserver`:
 
+```
+cmake <path-to-source> -DBUILD_PLAYERBOT_V2=1 -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build . --config RelWithDebInfo --target worldserver
+```
 
+`BUILD_PLAYERBOT_V2` is the only Playerbot build flag. On Windows the
+`configure_*.bat` scripts at the repo root wrap this (override `VCPKG_ROOT`,
+`BOOST_ROOT`, `QT_PREFIX` via environment variables or by editing the script).
 
-## Build Status
+## Setup
 
-master | 3.3.5 | cata_classic
-:------------: | :------------: | :------------:
-[![master Build Status](https://circleci.com/gh/TrinityCore/TrinityCore/tree/master.svg?style=shield)](https://circleci.com/gh/TrinityCore/TrinityCore/tree/master) | [![3.3.5 Build Status](https://circleci.com/gh/TrinityCore/TrinityCore/tree/3.3.5.svg?style=shield)](https://circleci.com/gh/TrinityCore/TrinityCore/tree/3.3.5) | [![cata_classic Build Status](https://circleci.com/gh/TrinityCore/TrinityCore/tree/cata_classic.svg?style=shield)](https://circleci.com/gh/TrinityCore/TrinityCore/tree/cata_classic)
-[![master Build status](https://ci.appveyor.com/api/projects/status/54d0u1fxe50ad80o/branch/master?svg=true)](https://ci.appveyor.com/project/DDuarte/trinitycore/branch/master) | [![Build status](https://ci.appveyor.com/api/projects/status/54d0u1fxe50ad80o/branch/3.3.5?svg=true)](https://ci.appveyor.com/project/DDuarte/trinitycore/branch/3.3.5) | [![Build status](https://ci.appveyor.com/api/projects/status/54d0u1fxe50ad80o/branch/cata_classic?svg=true)](https://ci.appveyor.com/project/DDuarte/trinitycore/branch/cata_classic)
-[![master Windows Build status](https://github.com/TrinityCore/TrinityCore/actions/workflows/win-x64-build.yml/badge.svg?branch=master&event=push)](https://github.com/TrinityCore/TrinityCore/actions?query=workflow%3A%22Windows%20x64%22+branch%3Amaster+event%3Apush) | [![3.3.5 Windows Build status](https://github.com/TrinityCore/TrinityCore/actions/workflows/win-x64-build.yml/badge.svg?branch=3.3.5&event=push)](https://github.com/TrinityCore/TrinityCore/actions?query=workflow%3A%22Windows%20x64%22+branch%3A3.3.5+event%3Apush) | [![cata_classic GCC Build status](https://github.com/TrinityCore/TrinityCore/actions/workflows/gcc-build.yml/badge.svg?branch=cata_classic&event=push)](https://github.com/TrinityCore/TrinityCore/actions?query=workflow%3AGCC+branch%3Acata_classic+event%3Apush)
-[![master Ubuntu Build status](https://github.com/TrinityCore/TrinityCore/actions/workflows/linux-build.yml/badge.svg?branch=master&event=push)](https://github.com/TrinityCore/TrinityCore/actions?query=workflow%3A%22Ubuntu%20x64%22+branch%3Amaster+event%3Apush) | [![3.3.5 Ubuntu Build status](https://github.com/TrinityCore/TrinityCore/actions/workflows/linux-build.yml/badge.svg?branch=3.3.5&event=push)](https://github.com/TrinityCore/TrinityCore/actions?query=workflow%3A%22Ubuntu%20x64%22+branch%3A3.3.5+event%3Apush) | [![cata_classic GCC Build status](https://github.com/TrinityCore/TrinityCore/actions/workflows/gcc-build.yml/badge.svg?branch=cata_classic&event=push)](https://github.com/TrinityCore/TrinityCore/actions?query=workflow%3AGCC+branch%3Acata_classic+event%3Apush)
-[![master macOS arm64 Build status](https://github.com/TrinityCore/TrinityCore/actions/workflows/macos-arm-build.yml/badge.svg?branch=master&event=push)](https://github.com/TrinityCore/TrinityCore/actions?query=workflow%3A%22macOS%20arm64%22+branch%3Amaster+event%3Apush) | [![3.3.5 macOS arm64 Build status](https://github.com/TrinityCore/TrinityCore/actions/workflows/macos-arm-build.yml/badge.svg?branch=3.3.5&event=push)](https://github.com/TrinityCore/TrinityCore/actions?query=workflow%3A%22macOS%20arm64%22+branch%3A3.3.5+event%3Apush) | [![cata_classic macOS arm64 Build status](https://github.com/TrinityCore/TrinityCore/actions/workflows/macos-arm-build.yml/badge.svg?branch=cata_classic&event=push)](https://github.com/TrinityCore/TrinityCore/actions?query=workflow%3A%22macOS%20arm64%22+branch%3Acata_classic+event%3Apush)
-[![Coverity Scan Build Status](https://scan.coverity.com/projects/435/badge.svg)](https://scan.coverity.com/projects/435) | [![Coverity Scan Build Status](https://scan.coverity.com/projects/4656/badge.svg)](https://scan.coverity.com/projects/4656) |
+See **[`v2/INSTALL.md`](v2/INSTALL.md)** for the full setup: creating the
+playerbot database schema, applying the SQL (the name pool and tables auto-apply
+at first boot), the world-database fixes, and the configuration file
+(`playerbot.conf`).
 
-## Introduction
+## Documentation
 
-TrinityCore is a *MMORPG* Framework based mostly in C++.
+- [`v2/INSTALL.md`](v2/INSTALL.md) — installation and setup
+- [`v2/CONFIG.md`](v2/CONFIG.md) — configuration options (also documented inline in `playerbot.conf.dist`)
+- [`v2/ARCHITECTURE.md`](v2/ARCHITECTURE.md), [`v2/BUILD.md`](v2/BUILD.md), [`v2/SCHEMA.md`](v2/SCHEMA.md) — design, build wiring, database schema
 
-It is derived from *MaNGOS*, the *Massive Network Game Object Server*, and is
-based on the code of that project with extensive changes over time to optimize,
-improve and cleanup the codebase at the same time as improving the in-game
-mechanics and functionality.
+For the underlying emulator, see the upstream
+[TrinityCore documentation](https://trinitycore.info/) and `INSTALL`.
 
-It is completely open source; community involvement is highly encouraged.
+## License
 
-If you wish to contribute ideas or code, please visit our site linked below or
-make pull requests to our [Github repository](https://github.com/TrinityCore/TrinityCore/pulls).
-
-For further information on the TrinityCore project, please visit our project
-website at [TrinityCore.org](https://www.trinitycore.org).
-
-## Requirements
-
-
-Software requirements are available in the [wiki](https://trinitycore.info/en/install/requirements) for
-Windows, Linux and macOS.
-
-
-## Install
-
-Detailed installation guides are available in the [wiki](https://trinitycore.info/en/home) for
-Windows, Linux and macOS.
-
-
-## Reporting issues
-
-Issues can be reported via the [Github issue tracker](https://github.com/TrinityCore/TrinityCore/labels/Branch-master).
-
-Please take the time to review existing issues before submitting your own to
-prevent duplicates.
-
-In addition, thoroughly read through the [issue tracker guide](https://community.trinitycore.org/topic/37-the-trinitycore-issuetracker-and-you/) to ensure
-your report contains the required information. Incorrect or poorly formed
-reports are wasteful and are subject to deletion.
-
-
-## Submitting fixes
-
-C++ fixes are submitted as pull requests via Github. For more information on how to
-properly submit a pull request, read the [how-to: maintain a remote fork](https://community.trinitycore.org/topic/9002-howto-maintain-a-remote-fork-for-pull-requests-tortoisegit/).
-For SQL only fixes, open a ticket; if a bug report exists for the bug, post on an existing ticket.
-
-
-## Copyright
-
-License: GPL 2.0
-
-Read file [COPYING](COPYING).
-
-
-## Authors &amp; Contributors
-
-Read file [AUTHORS](AUTHORS).
-
-
-## Links
-
-* [Website](https://www.trinitycore.org)
-* [Wiki](https://www.trinitycore.info)
-* [Forums](https://talk.trinitycore.org/)
-* [Discord](https://discord.trinitycore.org/)
+GPL-2.0, same as TrinityCore. See `COPYING`.

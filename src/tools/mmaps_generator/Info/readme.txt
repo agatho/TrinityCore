@@ -50,6 +50,18 @@ R"(Generator command line args
 
                                     false: don't create debugging files (default)
 
+--textureRoads      []              Consume the texture-based road auto-detector's
+                                    output (per-ADT texture mask + WMO material
+                                    flags) when tagging NAV_AREA_ROAD polygons.
+
+                                    OFF by default: the texture detector tags
+                                    stone-textured mountains as roads (substring
+                                    texture-name match, no slope gate). The
+                                    curated handcrafted_road runtime overlay and
+                                    the RoadOverrides CSV (world_metadata.csv)
+                                    are always the road sources; this flag is an
+                                    opt-in escape hatch for experiments only.
+
 --tile              [#,#]           Build the specified tile
                                     seperate number with a comma ','
                                     must specify a map number (see below)

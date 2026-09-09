@@ -16,6 +16,8 @@
  */
 
 #include "wmo.h"
+#include "ListfileMap.h"
+#include "WmoRoadClassifier.h"
 #include "adtfile.h"
 #include "cascfile.h"
 #include "Errors.h"
@@ -24,6 +26,8 @@
 #include "VMapDefinitions.h"
 #include "vmapexport.h"
 #include <algorithm>
+#include <atomic>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 
@@ -37,6 +41,13 @@ WMORoot::WMORoot(std::string const& filename)
 
 extern std::shared_ptr<CASC::Storage> CascStorage;
 
+// Diagnostic counters: WMO groups that used the precomputed BSP (MOBR) for
+// collision vs. those that fell back to the MOPY material-flag heuristic.
+// Printed at the end of extraction (vmapexport.cpp) to confirm whether the
+// MOBR-replay path is actually engaging on this client's WMOs.
+std::atomic<uint64_t> g_wmoGroupsWithMOBR{0};
+std::atomic<uint64_t> g_wmoGroupsNoMOBR{0};
+
 bool WMORoot::open()
 {
     CASCFile f(CascStorage, filename.c_str());
@@ -48,6 +59,13 @@ bool WMORoot::open()
 
     uint32 size;
     char fourcc[4];
+
+    // Road-aware mmaps Phase 2: scratch buffers populated as the chunk
+    // loop encounters MOTX/MOMT/MDID. Materials are classified into
+    // materialRoadBitmap at the END of the loop.
+    std::vector<uint8> motxBlob;
+    std::vector<uint32> momtTexture1Offsets;
+    std::vector<uint32> mdidFileDataIds;
 
     while (!f.isEof())
     {
@@ -151,13 +169,52 @@ bool WMORoot::open()
                 }
             //}
         }
-        /*
         else if (!memcmp(fourcc, "MOTX", 4))
         {
+            // Legacy texture-string blob. Materials' texture1 field is a
+            // byte offset into this blob. Captured for road classification.
+            motxBlob.assign(size, 0);
+            f.read(motxBlob.data(), size);
         }
         else if (!memcmp(fourcc, "MOMT", 4))
         {
+            // Material entries. Modern layout is 64 bytes per material;
+            // we only need the texture1 offset (bytes 12..15 per WoWdev).
+            //
+            // struct SMOMaterial {
+            //   uint32 flags;        // 0..3
+            //   uint32 shader;       // 4..7
+            //   uint32 blendMode;    // 8..11
+            //   uint32 texture1;     // 12..15  ← OFFSET INTO MOTX
+            //   uint32 emissiveColor;// 16..19
+            //   ...
+            // } — total 64 bytes for current client builds.
+            //
+            // Different client versions have slightly different sizes
+            // (legacy 64, modern 64). We probe the stride from
+            // (size / nTextures) when nTextures is known, but for safety
+            // we hard-code 64 here; this matches retail 12.0+.
+            constexpr std::size_t kMomtStride = 64;
+            uint32 nMaterials = size / kMomtStride;
+            momtTexture1Offsets.reserve(nMaterials);
+            std::vector<uint8> buf(size);
+            f.read(buf.data(), size);
+            for (uint32 i = 0; i < nMaterials; ++i)
+            {
+                uint32 texture1 = 0;
+                std::memcpy(&texture1, buf.data() + i * kMomtStride + 12, 4);
+                momtTexture1Offsets.push_back(texture1);
+            }
         }
+        else if (!memcmp(fourcc, "MDID", 4))
+        {
+            // Modern (Legion+) WMO: replaces MOTX/MOMT.texture1 with a
+            // direct FileDataID per material. One uint32 per material.
+            uint32 n = size / sizeof(uint32);
+            mdidFileDataIds.assign(n, 0);
+            f.read(mdidFileDataIds.data(), size);
+        }
+        /*
         else if (!memcmp(fourcc, "MOGI", 4))
         {
         }
@@ -183,6 +240,37 @@ bool WMORoot::open()
         f.seek((int)nextpos);
     }
     f.close ();
+
+    // -------------------------------------------------------------------
+    // Road-aware mmaps Phase 2: classify materials.
+    //
+    // Modern WMOs (Legion+) use MDID (FileDataIDs) — resolve via listfile.
+    // Legacy WMOs use MOTX (string blob) + MOMT.texture1 byte offsets.
+    // -------------------------------------------------------------------
+    std::vector<Road::WmoRoad::WmoMaterialTexture> materials;
+    if (!mdidFileDataIds.empty())
+    {
+        // Some WMOs ship MDID as a parallel chunk alongside MOMT.
+        materials = Road::WmoRoad::ResolveFromModi(
+            std::span<uint32 const>(mdidFileDataIds), g_wmoListfile);
+    }
+    else if (!momtTexture1Offsets.empty() && motxBlob.empty())
+    {
+        // Modern client (7.1.0+): MOMT.texture1 is a FileDataID, not a
+        // MOTX byte offset. Detected by "MOMT present, MOTX absent".
+        materials = Road::WmoRoad::ResolveFromModi(
+            std::span<uint32 const>(momtTexture1Offsets), g_wmoListfile);
+    }
+    else if (!motxBlob.empty() && !momtTexture1Offsets.empty())
+    {
+        // Legacy: MOMT.texture1 is byte offset into MOTX string blob.
+        materials = Road::WmoRoad::ResolveFromMotx(
+            std::span<uint8 const>(motxBlob),
+            std::span<uint32 const>(momtTexture1Offsets));
+    }
+    materialCount = materials.size();
+    materialRoadBitmap = Road::WmoRoad::ClassifyMaterials(materials);
+
     return true;
 }
 
@@ -306,6 +394,16 @@ bool WMOGroup::open(WMORoot* rootWMO)
             moba_size = size / 2;
             f.read(MOBA, size);
         }
+        else if (!memcmp(fourcc, "MOBR", 4))
+        {
+            // MOBR — BSP triangle-index refs: the precomputed set of collidable
+            // triangles (each entry is a triangle index into MOVI/MOVX). This is
+            // the file's authoritative collision set;
+            // ConvertToVMAPGroupWmo replays it rather than guessing from MOPY.
+            nMOBR = size / static_cast<uint32>(sizeof(uint16));
+            MOBR = std::make_unique<uint16[]>(nMOBR);
+            f.read(MOBR.get(), size);
+        }
         else if (!memcmp(fourcc, "MODR", 4))
         {
             DoodadReferences.resize(size / sizeof(uint16));
@@ -356,8 +454,20 @@ bool WMOGroup::open(WMORoot* rootWMO)
     return true;
 }
 
-int WMOGroup::ConvertToVMAPGroupWmo(FILE* output, bool preciseVectorData)
+int WMOGroup::ConvertToVMAPGroupWmo(FILE* output, bool preciseVectorData,
+                                     WMORoot const* rootWMO,
+                                     std::vector<uint8>* roadFlagsOut)
 {
+    // Road-aware mmaps Phase 2: helper to consult rootWMO's per-material
+    // road bitmap by materialId byte from MPY2.
+    auto materialIsRoad = [rootWMO](uint8 materialId) -> bool {
+        if (!rootWMO) return false;
+        if (materialId == 0xFF) return false;  // no-collision sentinel
+        std::size_t byteIdx = materialId / 8;
+        if (byteIdx >= rootWMO->materialRoadBitmap.size())
+            return false;
+        return (rootWMO->materialRoadBitmap[byteIdx] >> (materialId % 8)) & 1u;
+    };
     fwrite(&mogpFlags,sizeof(uint32),1,output);
     fwrite(&groupWMOID,sizeof(uint32),1,output);
     // group bound
@@ -436,6 +546,18 @@ int WMOGroup::ConvertToVMAPGroupWmo(FILE* output, bool preciseVectorData)
         }
 
         nColTriangles = nTriangles;
+        // Precise-vector mode keeps EVERY triangle. Per-triangle road
+        // flags follow the same one-to-one index mapping.
+        if (roadFlagsOut)
+        {
+            roadFlagsOut->clear();
+            roadFlagsOut->reserve(nTriangles);
+            for (int i = 0; i < nTriangles; ++i)
+            {
+                uint8 matId = static_cast<uint8>(MPY2[2 * i + 1] & 0xFF);
+                roadFlagsOut->push_back(materialIsRoad(matId) ? 1 : 0);
+            }
+        }
     }
     else
     {
@@ -457,25 +579,100 @@ int WMOGroup::ConvertToVMAPGroupWmo(FILE* output, bool preciseVectorData)
 
         //-------INDX------------------------------------
         //-------MOPY/MPY2--------
-        std::unique_ptr<uint32[]> MovxEx = std::make_unique<uint32[]>(nTriangles*3); // "worst case" size...
+        // Worst case: every loaded triangle is collidable (no-MOBR fallback), or
+        // MOBR references more entries than nTriangles (malformed dup refs).
+        uint32 const maxColTris = (nMOBR > static_cast<uint32>(nTriangles)) ? nMOBR : static_cast<uint32>(nTriangles);
+        std::unique_ptr<uint32[]> MovxEx = std::make_unique<uint32[]>(maxColTris * 3);
         std::unique_ptr<int32[]> IndexRenum = std::make_unique<int32[]>(nVertices);
         std::fill_n(IndexRenum.get(), nVertices, -1);
-        for (int i=0; i<nTriangles; ++i)
+        if (roadFlagsOut)
+            roadFlagsOut->clear();
+        // Collision triangle selection -- REPLAY THE BAKED BSP.
+        //
+        // Collidable WMO geometry is NOT chosen from MOPY material flags. The
+        // collidable set is the precomputed BSP shipped in the file: MOBN
+        // (nodes) + MOBR (triangle-
+        // index refs) over MOVI/MOVX. Collision is gated on MOBN
+        // presence: a group with no MOBN gets NO collision at all (it does not
+        // fall back to all-triangles). In this client every processed group
+        // ships a BSP (validation: 27758/27758 via MOBR, 0 fallback).
+        //
+        // The previous MOPY OR-chain heuristic
+        // (COLLISION | RENDER&!DETAIL | WALL_SURFACE&RENDER | COLLIDE_HIT | HINT)
+        // was a guess that silently dropped any collidable triangle whose flags
+        // didn't match. Thin horizontal decks (piers, docks, bridges, ramps)
+        // carry exactly the odd flag combos that fell through -- the structural
+        // cause of the Boralus-pier "disconnected dock" navmesh holes (and the
+        // earlier Aldrassil-ramp hole the WMO_COLLIDE_HIT_FIX band-aid chased).
+        // We now emit the triangle set the file itself declares collidable.
+        // MPY2 material id is still consumed -- for the road side-channel
+        // (materialIsRoad) only, never as the collision gate.
+        auto emitCollisionTriangle = [&](uint32 tri)
         {
-            // Skip no collision triangles
-            bool isRenderFace = (MPY2[2 * i] & WMO_MATERIAL_RENDER) && !(MPY2[2 * i] & WMO_MATERIAL_DETAIL);
-            bool isCollision = MPY2[2 * i] & WMO_MATERIAL_COLLISION || isRenderFace;
-
-            if (!isCollision)
-                continue;
-
-            // Use this triangle
-            for (int j=0; j<3; ++j)
+            for (int j = 0; j < 3; ++j)
             {
-                IndexRenum[MOVX[3*i + j]] = 1;
-                MovxEx[3*nColTriangles + j] = MOVX[3*i + j];
+                IndexRenum[MOVX[3 * tri + j]] = 1;
+                MovxEx[3 * nColTriangles + j] = MOVX[3 * tri + j];
+            }
+            // Road-aware mmaps: one byte per emitted collision triangle,
+            // parallel to MovxEx, flagging road-material membership.
+            if (roadFlagsOut)
+            {
+                uint8 matId = static_cast<uint8>(MPY2[2 * tri + 1] & 0xFF);
+                roadFlagsOut->push_back(materialIsRoad(matId) ? 1 : 0);
             }
             ++nColTriangles;
+        };
+
+        if (nMOBR > 0)
+        {
+            // Precomputed BSP present: collide the triangles MOBR references --
+            // the client-authoritative collision set (each entry is a triangle
+            // index into MOVI/MOVX).
+            //
+            // MOBR is the BSP's per-leaf triangle-ref array, so a triangle that
+            // straddles a split plane is referenced from MULTIPLE leaves and
+            // therefore appears in MOBR multiple times. The client keeps the
+            // tree (duplicate refs are fine for spatial queries), but the vmap
+            // output is a flat triangle SOUP -- emitting one triangle per ref
+            // duplicates straddlers and bloated giant map-object WMO collision
+            // ~13x (12 MB -> 161 MB .vmo) in the 2026-05-30 validation. Emit
+            // each unique triangle exactly once via a seen bitmap.
+            g_wmoGroupsWithMOBR.fetch_add(1, std::memory_order_relaxed);
+            std::vector<bool> seenTri(nTriangles, false);
+            for (uint32 k = 0; k < nMOBR; ++k)
+            {
+                uint16 const tri = MOBR[k];
+                if (static_cast<uint32>(tri) < static_cast<uint32>(nTriangles) && !seenTri[tri])
+                {
+                    seenTri[tri] = true;
+                    emitCollisionTriangle(tri);
+                }
+            }
+        }
+        else
+        {
+            // No BSP for this group. The client emits NO collision here (it
+            // gates strictly on MOBN presence). This path does not execute on
+            // the current client -- every processed group ships a BSP
+            // (validation: 0/27758 groups). We keep the previous MOPY material-
+            // flag heuristic as a conservative net rather than emitting nothing,
+            // so a future no-BSP group degrades to the historical behavior
+            // instead of silently losing collision. The counter below makes any
+            // future occurrence visible.
+            g_wmoGroupsNoMOBR.fetch_add(1, std::memory_order_relaxed);
+            for (int i = 0; i < nTriangles; ++i)
+            {
+                uint16 const matFlags = MPY2[2 * i];
+                bool isRenderFace  = (matFlags & WMO_MATERIAL_RENDER) && !(matFlags & WMO_MATERIAL_DETAIL);
+                bool isWallSurface = (matFlags & WMO_MATERIAL_WALL_SURFACE) && (matFlags & WMO_MATERIAL_RENDER);
+                bool isCollideHit  = (matFlags & WMO_MATERIAL_COLLIDE_HIT) != 0;
+                bool isHint        = (matFlags & WMO_MATERIAL_HINT) != 0;
+                bool isCollision   = (matFlags & WMO_MATERIAL_COLLISION) || isRenderFace || isWallSurface || isCollideHit || isHint;
+                if (!isCollision)
+                    continue;
+                emitCollisionTriangle(static_cast<uint32>(i));
+            }
         }
 
         // assign new vertex index numbers

@@ -2391,7 +2391,29 @@ void Spell::EffectLearnSkill()
     uint32 skillid = effectInfo->MiscValue;
     SkillRaceClassInfoEntry const* rcEntry = sDB2Manager.GetSkillRaceClassInfo(skillid, playerTarget->GetRace(), playerTarget->GetClass());
     if (!rcEntry)
+    {
+        // Modern 12.0+ client DB2 dropped SkillRaceClassInfo entries for the
+        // classic primary-profession skill lines (165 Leatherworking, 164
+        // Blacksmithing, 186 Mining, 182 Herbalism, 393 Skinning, ...) while
+        // the "Learn <Profession>" spells (e.g. 264578) still carry
+        // SPELL_EFFECT_SKILL and are taught castable. Without this fallback
+        // the cast silently no-ops here (the player clicks "Learn
+        // Leatherworking" at the trainer, confirms, and nothing happens —
+        // the skill is never granted). Mirror the Player::AddSpell fallback:
+        // for a primary profession with no rcInfo, derive the max from the
+        // classic apprentice→grand-master tier table and grant the skill.
+        if (IsPrimaryProfessionSkill(skillid))
+        {
+            static constexpr uint16 kPrimaryProfessionTierMax[] = { 75, 150, 225, 300, 375, 450 };
+            uint16 tierIdx = skillTier >= 1 ? uint16(skillTier - 1) : uint16(0);
+            if (tierIdx >= std::size(kPrimaryProfessionTierMax))
+                tierIdx = uint16(std::size(kPrimaryProfessionTierMax) - 1);
+            uint16 const maxSkillVal = kPrimaryProfessionTierMax[tierIdx];
+            uint16 const skillval = std::max<uint16>(1, playerTarget->GetPureSkillValue(skillid));
+            playerTarget->SetSkill(skillid, skillTier, skillval, maxSkillVal);
+        }
         return;
+    }
 
     SkillTiersEntry const* tier = sObjectMgr->GetSkillTier(rcEntry->SkillTierID);
     if (!tier)

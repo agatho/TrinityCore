@@ -380,6 +380,7 @@ class TC_GAME_API Group
         void ChangeMembersGroup(ObjectGuid guid, uint8 group);
         void SwapMembersGroups(ObjectGuid firstGuid, ObjectGuid secondGuid);
         void SetTargetIcon(uint8 symbol, ObjectGuid target, ObjectGuid changedBy);
+        ObjectGuid GetTargetIcon(uint8 symbol) const { return symbol < TARGET_ICONS_COUNT ? m_targetIcons[symbol] : ObjectGuid::Empty; }
         void SetGroupMemberFlag(ObjectGuid guid, bool apply, GroupMemberFlags flag);
         void RemoveUniqueGroupMemberFlag(GroupMemberFlags flag);
 
@@ -503,4 +504,5 @@ class TC_GAME_API Group
         struct NoopGroupDeleter { void operator()(Group*) const { /*noop - not managed*/ } };
         Trinity::unique_trackable_ptr<Group> m_scriptRef;
 };
+
 #endif

@@ -26,6 +26,7 @@
 #include <array>
 #include <atomic>
 #include <bitset>
+#include <cstddef>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -115,6 +116,8 @@ private:
     std::atomic<uint16> _referenceCountFromMap[MAX_NUMBER_OF_GRIDS][MAX_NUMBER_OF_GRIDS];
     std::array<uint64, MAX_NUMBER_OF_GRIDS> _loadedGrids;
     std::bitset<MAX_NUMBER_OF_GRIDS * MAX_NUMBER_OF_GRIDS> _gridFileExists; // cache what grids are available for this map (not including parent/child maps)
+    std::bitset<MAX_NUMBER_OF_GRIDS * MAX_NUMBER_OF_GRIDS> _vmapLoadFailed;  // PLAYERBOT FIX: cache failed VMAP loads to prevent repeated attempts
+    std::bitset<MAX_NUMBER_OF_GRIDS * MAX_NUMBER_OF_GRIDS> _mmapLoadFailed;  // PLAYERBOT FIX: cache failed MMAP loads to prevent repeated attempts
 
     static constexpr Milliseconds CleanupInterval = 1min;
 
@@ -165,5 +168,37 @@ private:
 };
 
 #define sTerrainMgr TerrainMgr::Instance()
+
+namespace TerrainMgrDetail
+{
+    // Clears the "applied handcrafted roads" cache so the next first-
+    // tile-load on each map re-applies the (potentially refreshed)
+    // HandcraftedRoadStorage segments. Called by the
+    // `.reload handcrafted_road` command after LoadFromDB().
+    TC_GAME_API void ClearAppliedHandcraftedRoads();
+
+    // Force-applies handcrafted road segments to the currently-loaded
+    // navmesh for `mapId` (shared-mesh / instance 0 path). Used by
+    // `.reload handcrafted_road apply <mapId>`. Returns the number of
+    // polys whose area was newly flipped to NAV_AREA_ROAD. Does NOT
+    // untag previously tagged polys — only a full mmap reload
+    // (server restart or unload/reload of that map) can do that.
+    TC_GAME_API std::size_t ApplyHandcraftedRoadsToLiveMap(uint32 mapId);
+
+    // Diagnostics accessors for the `.handcrafted_road status` command.
+    // Both default to instanceId=0 (the shared-mesh path used by all
+    // non-instanced maps).
+    TC_GAME_API bool IsHandcraftedRoadsApplied(uint32 mapId, uint32 instanceId = 0);
+    TC_GAME_API std::size_t GetHandcraftedRoadTaggedCount(uint32 mapId, uint32 instanceId = 0);
+
+    // Iterates every currently-loaded Map and force-applies handcrafted
+    // road segments to its navmesh. Called immediately after
+    // HandcraftedRoadStorage::LoadFromDB so the case where mmaps were
+    // preloaded BEFORE the storage finished loading is caught without
+    // waiting for a tile-load event. Returns the number of maps that
+    // received a newly-tagged corridor (apply pass that produced
+    // tagged>0 OR was first-time-applied).
+    TC_GAME_API std::size_t ApplyHandcraftedRoadsToAllLoadedMaps();
+}
 
 #endif // TERRAIN_MGR_H

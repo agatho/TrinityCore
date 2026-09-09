@@ -21,6 +21,7 @@
 #include "Object.h"
 #include "CombatManager.h"
 #include "FlatSet.h"
+#include "IteratorPair.h"
 #include "SpellAuraDefines.h"
 #include "ThreatManager.h"
 #include "Timer.h"
@@ -1172,7 +1173,7 @@ class TC_GAME_API Unit : public WorldObject
         bool IsWalking() const { return m_movementInfo.HasMovementFlag(MOVEMENTFLAG_WALKING); }
         bool IsHovering() const { return m_movementInfo.HasMovementFlag(MOVEMENTFLAG_HOVER); }
         bool SetWalk(bool enable);
-        bool SetDisableGravity(bool disable, bool updateAnimTier = true);
+        bool SetDisableGravity(bool disable, bool updateAnimTier = true, bool updatePlayHoverAnim = true);
         void BeginDeferDashMovementSpeedUpdates();
         void EndDeferDashMovementSpeedUpdates();
         bool IsDeferringDashMovementSpeedUpdates() const { return _deferDashMovementSpeedUpdates > 0; }

@@ -1137,7 +1137,10 @@ void Group::BroadcastAddonMessagePacket(WorldPacket const* packet, const std::st
         if ((!ignore.IsEmpty() && player->GetGUID() == ignore) || (ignorePlayersInBGRaid && player->GetGroup() != this))
             continue;
 
-        if (player->GetSession()->IsAddonRegistered(prefix) && (group == -1 || itr.getSubGroup() == group))
+        // Null-session guard for mid-logout group members in addon-msg
+        // broadcast path. Skipping a logging-out target is the right
+        // outcome — they can't process the addon msg anyway.
+        if (player->GetSession() && player->GetSession()->IsAddonRegistered(prefix) && (group == -1 || itr.getSubGroup() == group))
             player->SendDirectMessage(packet);
     }
 }

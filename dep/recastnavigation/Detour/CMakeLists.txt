@@ -39,6 +39,14 @@ target_link_libraries(Detour
   PRIVATE
     trinity-dependency-interface)
 
+# Road-aware mmaps Phase 3: enable dtQueryFilter::getCost / passFilter as
+# virtual so TC's dtQueryFilterTC subclass can override the cost formula
+# with slope penalty + per-bot road-bonus disable. Without this define
+# the Detour vtable is empty and override is a no-op.
+target_compile_definitions(Detour
+  PUBLIC
+    DT_VIRTUAL_QUERYFILTER=1)
+
 set_target_properties(Detour
     PROPERTIES
       FOLDER
