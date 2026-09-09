@@ -1,24 +1,44 @@
-﻿// Marksmanship Hunter - WoW 12.0 enterprise rotation. Pure ranged DPS with
-// Aimed Shot as the heavy hitter, Rapid Fire as a focus generator + spike,
-// Trueshot burst window, and Precise Shots procs spent on Arcane Shot.
-// Steady Shot is the cast-while-moving filler.
+﻿// Marksmanship Hunter - WoW 12.1.0.69587 (Midnight) enterprise rotation.
+// Pure ranged, PETLESS DPS (MM hunts with a Spotting Eagle since 11.1 - no
+// beast companion) with Aimed Shot as the heavy hitter, Rapid Fire as a
+// focus generator + spike, Explosive Shot on cooldown (Precision Detonation),
+// Trueshot burst window, Precise Shots procs spent on Arcane Shot, and
+// Kill Shot (or Black Arrow when the Dark Ranger hero talent replaces it)
+// as the execute. Steady Shot is the cast-while-moving filler.
 //
 // Layered survival: Aspect of the Turtle -> Exhilaration -> Survival of the
 // Fittest -> Disengage -> Feign Death. Group utility: Misdirection (tank
-// threat redirect), Aspect of the Wild (group crit), Primal Rage
-// (Bloodlust). CC: Counter Shot, Tar Trap, Binding Shot. Major CDs:
-// Trueshot, Volley (talent ground AoE), Wailing Arrow (talent silence +
-// damage), Salvo (talent — auto-explosive shot proc), Death Chakram
-// (talent — focus gen + AoE), Harrier's Cry (L48 hero-talent group haste).
+// threat redirect), Harrier's Cry (L48 spec spell: raid haste / Bloodlust
+// equivalent, Sated-gated). CC: Counter Shot, Intimidation (eagle stun,
+// interrupt fallback), Tar Trap, Binding Shot. Major CDs: Trueshot, Volley
+// (ground AoE, also grants Trick Shots).
 //
-// Validated against wago.tools SpellName.csv 2026-05-27. Every ID below
-// resolves to its expected name.
+// Validated spell IDs (WoW 12.1.0.69587, kit + SpellName.csv):
+//   19434  Aimed Shot       | 185358 Arcane Shot      | 257044 Rapid Fire
+//   56641  Steady Shot      | 53351  Kill Shot        | 466930 Black Arrow
+//   288613 Trueshot         | 260243 Volley           | 212431 Explosive Shot
+//   257620 Multi-Shot       | 466904 Harrier's Cry    | 257284 Hunter's Mark
+//   147362 Counter Shot     | 474421 Intimidation(MM) | 109248 Binding Shot
+//   187698 Tar Trap         | 34477  Misdirection     | 264735 Survival o.t.Fit.
+//   186265 Aspect of Turtle | 109304 Exhilaration     | 781    Disengage
+//   5384   Feign Death      | 136    Mend Pet         | 982    Revive Pet
+//   260242 Precise Shots (buff aura; talent passive is 260240)
 //
-// Skipped spec spells (not rotation-relevant — intentional omissions):
-//   * Spotter's Mark (1219616) — passive proc that buffs the next Aimed
-//                                Shot; no active cast surface.
-//   * Eagle Eye     (    6197) — vanilla scout-vision spell, removes bot
-//                                control and has no combat effect.
+// Skipped (deliberate, 12.1):
+//   * Salvo            ( 400456) - PASSIVE in 12.1 (Volley applies Explosive
+//                                  Shot); was wrongly cast as a spell.
+//   * Wailing Arrow    ( 392060/355589) - no 12.1 learn path for MM (355589 is
+//                                  the Shadowlands legendary-bow leftover).
+//   * Death Chakram    ( 375891/325028) - covenant leftover, not learnable.
+//   * Serpent Sting    ( 271788) - removed from MM.
+//   * Aspect of the Wild (193530) - removed from the game.
+//   * Primal Rage      ( 264667) - Ferocity PET ability; MM has no pet in 12.1.
+//   * Lone Wolf        ( 155228) - not in the 12.1 MM kit (petless is baseline).
+//   * Steady Focus     ( 193533) - passive, never cast.
+//   * Tranquilizing Shot (19801) - class talent not in either curated build.
+//   * Eagle Eye        (   6197) - scout-vision spell, removes bot control.
+//   * Fetch: Eagle (1232995) / Air Superiority (470937) - loot / passive DR
+//                                  granted by passives, no combat cast.
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -31,40 +51,40 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
-constexpr uint32 AIMED_SHOT          = 19434;
-constexpr uint32 ARCANE_SHOT         = 185358;
-constexpr uint32 RAPID_FIRE          = 257044;
-constexpr uint32 STEADY_SHOT         = 56641;
-constexpr uint32 KILL_SHOT_MM        = 53351;
-constexpr uint32 TRUESHOT            = 288613;
-constexpr uint32 PRECISE_SHOTS       = 260242;       // proc — buffs Arcane Shot
-constexpr uint32 VOLLEY               = 260243;      // talent — ground AoE
-constexpr uint32 WAILING_ARROW        = 392060;      // talent — AoE silence + damage
-constexpr uint32 SALVO                = 400456;      // talent — auto explosive
-constexpr uint32 EXPLOSIVE_SHOT       = 212431;      // talent — AoE bomb
-constexpr uint32 DEATH_CHAKRAM        = 375891;      // talent — focus + AoE
-constexpr uint32 SERPENT_STING        = 271788;      // MM Serpent Sting (different id from SV)
-constexpr uint32 MULTI_SHOT_MM        = 257620;
+// ---- Spell IDs (WoW 12.1.0.69587, validated against the 12.1 kit and
+// SpellName.csv; see the header table) ----
+constexpr uint32 AIMED_SHOT          = 19434;        // spec talent [R][M] (L10), 2.5s cast, 35 focus
+constexpr uint32 ARCANE_SHOT         = 185358;       // baseline L2 - Precise Shots spender
+constexpr uint32 RAPID_FIRE          = 257044;       // spec talent [R][M], 16s cd, focus generator
+constexpr uint32 STEADY_SHOT         = 56641;        // baseline L1 filler, usable while moving
+constexpr uint32 KILL_SHOT_MM        = 53351;        // spec talent [R] (L42), <20% execute
+constexpr uint32 BLACK_ARROW         = 466930;       // Dark Ranger active; 466932 [R] REPLACES Kill Shot with it
+constexpr uint32 TRUESHOT            = 288613;       // spec talent [R][M], 120s cd burst
+constexpr uint32 PRECISE_SHOTS       = 260242;       // buff aura after Aimed Shot (talent passive 260240)
+constexpr uint32 VOLLEY               = 260243;      // spec talent [R][M] - ground AoE, 45s cd
+constexpr uint32 EXPLOSIVE_SHOT       = 212431;      // spec talent [R][M] - 30s cd, 20 focus, ST + AoE
+constexpr uint32 MULTI_SHOT_MM        = 257620;      // spec spell L10, 30 focus
 constexpr uint32 HUNTERS_MARK         = 257284;
-constexpr uint32 COUNTER_SHOT         = 147362;
+constexpr uint32 COUNTER_SHOT         = 147362;      // class talent [R][M] (L18)
+constexpr uint32 INTIMIDATION_MM      = 474421;      // class talent [R][M] - MM variant (Spotting Eagle stun, 40y)
 constexpr uint32 MISDIRECTION         = 34477;
 constexpr uint32 ASPECT_TURTLE        = 186265;
 constexpr uint32 EXHILARATION         = 109304;
 constexpr uint32 SURVIVAL_FITTEST     = 264735;
 constexpr uint32 DISENGAGE            = 781;
-constexpr uint32 MEND_PET             = 136;
-constexpr uint32 REVIVE_PET           = 982;
+constexpr uint32 MEND_PET             = 136;         // class baseline; inert for a petless MM (has_pet gate)
+constexpr uint32 REVIVE_PET           = 982;         // class baseline; inert for a petless MM (pet_guid gate)
 constexpr uint32 FEIGN_DEATH          = 5384;
-constexpr uint32 ASPECT_WILD          = 193530;
-constexpr uint32 PRIMAL_RAGE          = 264667;
-constexpr uint32 TAR_TRAP             = 187698;
-constexpr uint32 BINDING_SHOT         = 109248;
-constexpr uint32 LONE_WOLF            = 155228;       // (passive — no cast)
-constexpr uint32 STEADY_FOCUS         = 193533;      // proc
-constexpr uint32 HARRIERS_CRY         = 466904;      // L48 hero-talent self/raid haste CD
+constexpr uint32 TAR_TRAP             = 187698;      // class talent [R]
+constexpr uint32 BINDING_SHOT         = 109248;      // class talent [R][M]
+constexpr uint32 HARRIERS_CRY         = 466904;      // spec spell L48 - raid haste (Bloodlust-class, applies Sated)
 
 constexpr uint8 POWER_FOCUS_IDX = 2;
+
+constexpr int32 AIMED_SHOT_COST     = 35;
+constexpr int32 MULTI_SHOT_COST     = 30;
+constexpr int32 EXPLOSIVE_SHOT_COST = 20;
+constexpr int32 BLACK_ARROW_COST    = 10;
 
 bool HasLiveTarget(ApPredicateContext const& ctx)
 {
@@ -93,19 +113,35 @@ bool BotHasSatedDebuff(ApPredicateContext const& ctx)
         || ctx.bot.has_aura(FATIGUED_DEBUFF);
 }
 
-bool TargetExecuteRange(ApPredicateContext const& ctx)
+int64 TargetHpPct(ApPredicateContext const& ctx)
 {
     NearbyUnit const* t = ctx.bot.victim_info();
-    if (!t || t->max_hp <= 0 || t->hp <= 0) return false;
-    return (t->hp * 100) / t->max_hp <= 20;
+    if (!t || t->max_hp <= 0 || t->hp <= 0) return -1;
+    return (int64_t(t->hp) * 100) / t->max_hp;
+}
+
+bool TargetExecuteRange(ApPredicateContext const& ctx)
+{
+    const int64 pct = TargetHpPct(ctx);
+    return pct >= 0 && pct <= 20;
+}
+
+// Black Arrow window (466930): "Only usable on enemies above 80% health or
+// below 20% health".
+bool TargetBlackArrowWindow(ApPredicateContext const& ctx)
+{
+    const int64 pct = TargetHpPct(ctx);
+    return pct >= 0 && (pct <= 20 || pct >= 80);
 }
 
 int32 FocusVal(ApPredicateContext const& ctx) { return ctx.bot.power(POWER_FOCUS_IDX); }
 
 // ---- Pet maintenance ----
+// MM is petless in 12.1 (Spotting Eagle). Both rules stay for the class
+// baseline spells but self-gate on pet_guid()/has_pet(), so they are inert
+// unless a pet somehow exists (e.g. spec swap mid-session).
 bool ShouldRevivePet(ApPredicateContext const& ctx)
 {
-    if (ctx.bot.has_aura(LONE_WOLF)) return false;     // Lone Wolf — pet not used
     // See note on the BM version: only resurrect when there's actually a
     // dead pet to bring back. pet_guid().IsEmpty() means the bot never
     // tamed/summoned one, so Revive Pet is a no-op that would otherwise
@@ -192,26 +228,6 @@ void DoMisdirection(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(MISDIRECTION, tank->guid);
 }
 
-bool ShouldAspectWild(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(ASPECT_WILD)) return false;
-    if (!ctx.bot.is_ready(ASPECT_WILD)) return false;
-    return BossLikeTargetEngaged(ctx);
-}
-void DoAspectWild(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(ASPECT_WILD); }
-
-bool ShouldPrimalRage(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.has_pet()) return false;
-    if (!ctx.bot.knows_spell(PRIMAL_RAGE)) return false;
-    if (!ctx.bot.is_ready(PRIMAL_RAGE)) return false;
-    if (BotHasSatedDebuff(ctx)) return false;
-    return BossLikeTargetEngaged(ctx);
-}
-void DoPrimalRage(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(PRIMAL_RAGE); }
-
 // ---- Interrupt / CC ----
 bool ShouldCounterShot(ApPredicateContext const& ctx)
 {
@@ -225,6 +241,24 @@ void DoCounterShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
     const bool pvp = ctx.pvp.in_battleground || ctx.pvp.in_arena;
     if (auto const* c = ctx.bot.kick_target(pvp, 40.0f))
         e.cast(COUNTER_SHOT, c->guid);
+}
+
+// Intimidation, MM variant (474421, [R][M]): the Spotting Eagle stuns the
+// target for 5s at 40y - no pet required. Used as the interrupt fallback
+// when Counter Shot is on cooldown (same slot Intimidation holds in BM).
+bool ShouldIntimidation(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.knows_spell(INTIMIDATION_MM)) return false;
+    if (!ctx.bot.is_ready(INTIMIDATION_MM)) return false;
+    if (ctx.bot.is_ready(COUNTER_SHOT)) return false;
+    const bool pvp = ctx.pvp.in_battleground || ctx.pvp.in_arena;
+    return ctx.bot.kick_target(pvp, 40.0f) != nullptr;
+}
+void DoIntimidation(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    const bool pvp = ctx.pvp.in_battleground || ctx.pvp.in_arena;
+    if (auto const* c = ctx.bot.kick_target(pvp, 40.0f))
+        e.cast(INTIMIDATION_MM, c->guid);
 }
 
 bool ShouldBindingShot(ApPredicateContext const& ctx)
@@ -265,25 +299,29 @@ bool ShouldTrueshot(ApPredicateContext const& ctx)
 }
 void DoTrueshot(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(TRUESHOT); }
 
-// Harrier's Cry (466904, L48 hero-talent). Burst CD that buffs the
-// hunter (and per the Sentinel/Dark Ranger hero-tree wording, allies
-// near her) with attack speed for ~10s. Fire it on a boss-like target
-// so the CD isn't wasted on trash. Gate on alive target + readiness.
+// Harrier's Cry (466904, L48 spec spell): "Increases haste by $s1% for all
+// party and raid members for 40s ... Allies receiving this effect will
+// become Sated". It is MM's Bloodlust, so it takes the Bloodlust gates:
+// boss-like target only and never while the bot itself is Sated / Temporal
+// Displacement / Fatigued (the cast would be wasted).
 bool ShouldHarriersCry(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(HARRIERS_CRY)) return false;
     if (!ctx.bot.is_ready(HARRIERS_CRY)) return false;
+    if (BotHasSatedDebuff(ctx)) return false;
     return BossLikeTargetEngaged(ctx);
 }
 void DoHarriersCry(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(HARRIERS_CRY); }
 
+// Volley (260243, [R][M], 45s cd): 12.1 MM presses it on cooldown in single
+// target too (it grants Trick Shots + Salvo's Explosive Shot spread and is
+// a large chunk of damage on its own), so the only gate is readiness.
 bool ShouldVolley(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(VOLLEY)) return false;
-    if (!ctx.bot.is_ready(VOLLEY)) return false;
-    return ctx.aoe_preference || ctx.bot.enemies_within(40.0f) >= 2;
+    return ctx.bot.is_ready(VOLLEY);
 }
 void DoVolley(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
@@ -293,59 +331,46 @@ void DoVolley(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(VOLLEY);
 }
 
-bool ShouldWailingArrow(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(WAILING_ARROW)) return false;
-    if (!ctx.bot.is_ready(WAILING_ARROW)) return false;
-    const bool pvp = ctx.pvp.in_battleground || ctx.pvp.in_arena;
-    return ctx.bot.enemies_within(20.0f) >= 2 ||
-           ctx.bot.kick_target(pvp, 40.0f) != nullptr;
-}
-void DoWailingArrow(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(WAILING_ARROW, ctx.bot.victim());
-}
-
-bool ShouldSalvo(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SALVO)) return false;
-    if (!ctx.bot.is_ready(SALVO)) return false;
-    return ctx.bot.enemies_within(40.0f) >= 2;
-}
-void DoSalvo(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SALVO); }
-
+// Explosive Shot (212431, [R][M], 30s cd, 20 focus): single-target AND AoE
+// button in 12.1 (Precision Detonation / Unstable Trigger build around it),
+// so it fires whenever ready and affordable.
 bool ShouldExplosiveShot(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(EXPLOSIVE_SHOT)) return false;
     if (!ctx.bot.is_ready(EXPLOSIVE_SHOT)) return false;
-    return ctx.bot.enemies_within(40.0f) >= 2;
+    return FocusVal(ctx) >= EXPLOSIVE_SHOT_COST;
 }
 void DoExplosiveShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(EXPLOSIVE_SHOT, ctx.bot.victim());
 }
 
-bool ShouldDeathChakram(ApPredicateContext const& ctx)
+// ---- Execute ----
+// Two-branch pattern (see Victory Rush / Impending Victory in Arms): the
+// Dark Ranger passive 466932 [R] REPLACES Kill Shot with Black Arrow
+// (466930). When the bot knows Black Arrow, fire it in its <20% / >80%
+// window and keep Kill Shot silent; non-hero bots keep the plain execute.
+bool ShouldBlackArrow(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(DEATH_CHAKRAM)) return false;
-    if (!ctx.bot.is_ready(DEATH_CHAKRAM)) return false;
-    return true;
+    if (!ctx.bot.knows_spell(BLACK_ARROW)) return false;
+    if (!ctx.bot.is_ready(BLACK_ARROW)) return false;
+    if (FocusVal(ctx) < BLACK_ARROW_COST) return false;
+    return TargetBlackArrowWindow(ctx);
 }
-void DoDeathChakram(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoBlackArrow(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    e.cast(DEATH_CHAKRAM, ctx.bot.victim());
+    e.cast(BLACK_ARROW, ctx.bot.victim());
 }
 
-// ---- Execute ----
 bool ShouldKillShot(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
+    if (ctx.bot.knows_spell(BLACK_ARROW)) return false;   // replaced by Black Arrow
     if (!ctx.bot.knows_spell(KILL_SHOT_MM)) return false;
     if (!ctx.bot.is_ready(KILL_SHOT_MM)) return false;
+    if (FocusVal(ctx) < BLACK_ARROW_COST) return false;   // Kill Shot also costs 10
     return TargetExecuteRange(ctx);
 }
 void DoKillShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -354,18 +379,6 @@ void DoKillShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Damage rotation ----
-bool ShouldSerpentSting(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SERPENT_STING)) return false;
-    AuraEntry const* a = ctx.bot.find_aura(SERPENT_STING, ctx.bot.victim());
-    return !a || a->remaining.count() <= 4500;
-}
-void DoSerpentSting(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(SERPENT_STING, ctx.bot.victim());
-}
-
 bool ShouldRapidFire(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -392,7 +405,7 @@ bool ShouldMultiShot(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(MULTI_SHOT_MM)) return false;
-    if (FocusVal(ctx) < 40) return false;   // real cost — 20 let it claim ticks it couldn't pay for
+    if (FocusVal(ctx) < MULTI_SHOT_COST) return false;   // 30 focus in 12.1 (kit); under-costing let it claim ticks it couldn't pay for
     // attackers_count (mobs actually fighting us), not "2 enemies anywhere
     // within 40y" — the old gate made MM bots Multi-Shot single targets
     // all through any populated camp.
@@ -408,7 +421,7 @@ bool ShouldAimedShot(ApPredicateContext const& ctx)
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(AIMED_SHOT)) return false;
     if (!ctx.bot.is_ready(AIMED_SHOT)) return false;
-    if (FocusVal(ctx) < 35) return false;
+    if (FocusVal(ctx) < AIMED_SHOT_COST) return false;
     // Don't cast Aimed Shot while moving — it's a 2.5s channel that gets
     // interrupted. Steady Shot fills the gap.
     if (ctx.bot.is_moving()) return false;
@@ -475,21 +488,17 @@ ApRule const kRules[] = {
     { ShouldFeignDeath,     DoFeignDeath,     "Feign Death (drop aggro)"    },
     { ShouldMisdirection,   DoMisdirection,   "Misdirection (tank threat)"  },
     { ShouldCounterShot,    DoCounterShot,    "Counter Shot (interrupt)"    },
+    { ShouldIntimidation,   DoIntimidation,   "Intimidation (interrupt fb)" },
     { ShouldBindingShot,    DoBindingShot,    "Binding Shot (3+ AoE)"       },
     { ShouldTarTrap,        DoTarTrap,        "Tar Trap (slow)"             },
-    { ShouldAspectWild,     DoAspectWild,     "Aspect of the Wild (boss)"   },
-    { ShouldPrimalRage,     DoPrimalRage,     "Primal Rage (Bloodlust)"     },
+    { ShouldHarriersCry,    DoHarriersCry,    "Harrier's Cry (raid haste)"  },
     { ShouldTrueshot,       DoTrueshot,       "Trueshot (boss)"             },
-    { ShouldHarriersCry,    DoHarriersCry,    "Harrier's Cry (boss haste)"  },
-    { ShouldDeathChakram,   DoDeathChakram,   "Death Chakram"               },
-    { ShouldWailingArrow,   DoWailingArrow,   "Wailing Arrow"               },
-    { ShouldSalvo,          DoSalvo,          "Salvo (2+ AoE)"              },
-    { ShouldVolley,         DoVolley,         "Volley (2+ AoE)"             },
-    { ShouldExplosiveShot,  DoExplosiveShot,  "Explosive Shot (2+ AoE)"     },
+    { ShouldVolley,         DoVolley,         "Volley (on cd)"              },
+    { ShouldExplosiveShot,  DoExplosiveShot,  "Explosive Shot (on cd)"      },
     { ShouldHuntersMark,    DoHuntersMark,    "Hunter's Mark (debuff)"      },
+    { ShouldBlackArrow,     DoBlackArrow,     "Black Arrow (<20% / >80%)"   },
     { ShouldKillShot,       DoKillShot,       "Kill Shot (<=20%)"           },
     { ShouldRapidFire,      DoRapidFire,      "Rapid Fire"                  },
-    { ShouldSerpentSting,   DoSerpentSting,   "Serpent Sting (refresh)"     },
     { ShouldArcaneShotProc, DoArcaneShot,     "Arcane Shot (Precise Shots)" },
     { ShouldMultiShot,      DoMultiShot,      "Multi-Shot (2+ AoE)"         },
     { ShouldAimedShot,      DoAimedShot,      "Aimed Shot"                  },

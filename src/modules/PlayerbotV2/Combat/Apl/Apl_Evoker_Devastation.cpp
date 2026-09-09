@@ -1,66 +1,72 @@
-﻿// Devastation Evoker - WoW 12.0 enterprise rotation. Caster DPS resourced
-// by Essence (max 5–6 with talents). Empower spells (Fire Breath, Eternity
-// Surge) charge to higher ranks the longer they're held — we treat them as
-// instants since the action queue does not expose empower-rank cancellation.
+﻿// Devastation Evoker - WoW 12.1.0.69587 (Midnight) rotation. Caster DPS
+// resourced by Essence (max 5-6 with talents). Empower spells (Fire Breath,
+// Eternity Surge) charge to higher ranks the longer they're held - we treat
+// them as instants since the action queue does not expose empower-rank
+// cancellation.
 //
 // Rule ORDER (per APL convention):
 //   1) Mobility / Hover (cast-while-moving + speed)
-//   2) Defensives: Obsidian Scales, Renewing Blaze, Verdant Embrace self,
-//                  Zephyr, Emerald Blossom self-heal (<=50% HP), Emerald
-//                  Communion OOC
-//   3) Interrupt / CC: Quell, Sleep Walk off-target, Tail Swipe / Wing
-//                       Buffet panic knockbacks
-//   4) Group utility:  Rescue peel, Cauterizing Flame cleanse, Source of
-//                       Magic
+//   2) Defensives: Obsidian Scales (Renewing Blaze rides on it passively),
+//                  Verdant Embrace self, Zephyr, Emerald Blossom self-heal
+//                  (<=50% HP)
+//   3) Interrupt / CC: Quell, Sleep Walk off-target, Tail Swipe panic
+//                       knockback, Landslide panic root
+//   4) Group utility:  Rescue peel, Expunge / Cauterizing Flame cleanse,
+//                       Source of Magic
 //   5) Lust:           Fury of the Aspects (Sated guarded)
 //   6) Major CDs:      Dragonrage, Tip the Scales, Time Spiral
-//   7) AoE windows:    Eternity Surge (Empower AoE), Fire Breath (Empower
-//                       cone), Firestorm, Deep Breath, Pyre (3+ AoE spend)
-//   8) ST burst:       Shattering Star (debuff)
-//   9) Channel:        Disintegrate (3+ Essence)
-//  10) Filler:         Azure Strike, Living Flame
+//   7) AoE windows:    Eternity Surge (Empower, fires Shattering Star via
+//                       the passive), Fire Breath (Empower cone), Deep
+//                       Breath, Pyre (3+ AoE spend)
+//   8) Channel:        Disintegrate (3 Essence or Essence Burst)
+//   9) Filler:         Azure Strike, Living Flame
 //
-// Validated IDs (cross-referenced against SpellName.csv +
-// SpecializationSpells.csv + SkillLineAbility.csv on 2026-05-27):
-//   361469 Living Flame           — class baseline
-//   362969 Azure Strike           — class baseline
-//   356995 Disintegrate           — class baseline
-//   382266 Fire Breath            — Empower (Devastation specialization
-//                                   override; 357208 is the class-baseline
-//                                   variant — we use the spec ID)
-//   359073 Eternity Surge         — Empower (Devastation)
-//   357211 Pyre                   — Devastation Essence spender
-//   233269 Shattering Star        — CORRECTED from 370452 (which does not
-//                                   exist in SpellName.csv — 233269 is the
-//                                   canonical Devastation talent)
-//   368847 Firestorm              — talent
-//   357210 Deep Breath            — class baseline
-//   375087 Dragonrage             — Devastation CD
-//   370553 Tip the Scales         — CD
-//   374968 Time Spiral            — talent
-//   351338 Quell                  — interrupt
-//   360806 Sleep Walk             — off-target CC
-//   368970 Tail Swipe             — knockback
-//   357214 Wing Buffet            — knockback
-//   363916 Obsidian Scales        — CORRECTED from 235450 (which is
-//                                   Prismatic Barrier / Mage)
-//   374348 Renewing Blaze         — self HoT
-//   374227 Zephyr                 — talent group magic DR
-//   360995 Verdant Embrace        — heal
-//   358267 Hover                  — mobility + cast-while-moving
-//   370665 Rescue                 — peel
-//   369459 Source of Magic        — mana regen on caster
-//   374251 Cauterizing Flame      — cleanse
-//   390386 Fury of the Aspects    — lust
-//   365261 Emerald Blossom        — self-heal at ≤50% HP (Initial Evoker
-//                                   grant — class baseline as of 12.0)
-//   370960 Emerald Communion      — talent OOC heal+essence
+// Validated IDs (WoW 12.1.0.69587, cross-referenced against the 12.1 kit:
+// SkillLineAbility + SpecializationSpells + simc trait data, 2026-09-09):
+//   361469 Living Flame           - class baseline
+//   362969 Azure Strike           - class baseline
+//   356995 Disintegrate           - class baseline (3 Essence channel)
+//   357208 Fire Breath            - class baseline Empower cone (382266 is
+//                                   the Font of Magic variant, not castable)
+//   359073 Eternity Surge         - spec talent Empower [R]
+//   357211 Pyre                   - spec talent Essence spender [R]
+//   357210 Deep Breath            - class baseline flyover AoE
+//   375087 Dragonrage             - spec talent 120s burst CD [R]
+//   370553 Tip the Scales         - class talent, free max empower [R]
+//   374968 Time Spiral            - class talent [R]
+//   351338 Quell                  - spec talent interrupt (Devastation-only
+//                                   in 12.1) [R]
+//   360806 Sleep Walk             - class talent off-target CC (not in the
+//                                   default build; knows_spell-gated)
+//   368970 Tail Swipe             - class baseline knockback
+//   358385 Landslide              - class talent ground root [R]
+//   363916 Obsidian Scales        - class talent 30% DR [R]
+//   374227 Zephyr                 - class talent AoE DR [R]
+//   360995 Verdant Embrace        - class talent heal [R]
+//   358267 Hover                  - class baseline mobility
+//   370665 Rescue                 - class talent peel [R]
+//   369459 Source of Magic        - class talent [R]
+//   365585 Expunge                - class talent Poison dispel [R]
+//   374251 Cauterizing Flame      - class talent Bleed/Poison/Curse/Disease
+//                                   cleanse [M]
+//   390386 Fury of the Aspects    - class baseline lust (L48)
+//   355913 Emerald Blossom        - class baseline castable (365261 is the
+//                                   passive rank marker)
+//   359618 Essence Burst          - aura only: next Disintegrate/Pyre free
 //
 // Skipped spells (and why):
-//   355913 Emerald Blossom        — older class-baseline ID; 365261 is the
-//                                   modern Initial Evoker grant. Keep one.
-//   355627 Azure Strike           — alternate ID; class baseline uses
-//                                   362969.
+//   374348 Renewing Blaze         - passive in 12.1: rides on Obsidian
+//                                   Scales, no cast
+//   233269 Shattering Star        - no longer castable; 12.1 passive
+//                                   Shattering Stars (1265802) fires it from
+//                                   Eternity Surge (bolt 1265804)
+//   368847 Firestorm              - removed from the Devastation tree
+//   357214 Wing Buffet            - removed from the class kit
+//   370960 Emerald Communion      - removed from the class tree
+//   372048 Oppressing Roar        - not in either curated build
+//   406732 Spatial Paradox        - not in either curated build
+//   364342 Blessing of the Bronze - movement-CD buff, no combat value
+//   1229376 Single-Button Assistant - client rotation helper
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -74,34 +80,31 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
+// ---- Spell IDs (WoW 12.1.0.69587, validated) ----
 constexpr uint32 LIVING_FLAME           = 361469;
 constexpr uint32 AZURE_STRIKE           = 362969;
-constexpr uint32 FIRE_BREATH            = 382266;
-constexpr uint32 DISINTEGRATE           = 356995;
-constexpr uint32 ETERNITY_SURGE         = 359073;
-constexpr uint32 PYRE                   = 357211;
-constexpr uint32 SHATTERING_STAR        = 233269;       // talent — debuff + chargen
-constexpr uint32 FIRESTORM              = 368847;       // talent — ground AoE
+constexpr uint32 FIRE_BREATH            = 357208;       // empower cone (382266 = Font of Magic variant)
+constexpr uint32 DISINTEGRATE           = 356995;       // 3 Essence channel
+constexpr uint32 ETERNITY_SURGE         = 359073;       // empower - also fires Shattering Star (passive 1265802)
+constexpr uint32 PYRE                   = 357211;       // 3 Essence AoE spender
 constexpr uint32 DEEP_BREATH            = 357210;       // big AoE flyover
-constexpr uint32 DRAGONRAGE             = 375087;       // 30s burst CD
+constexpr uint32 DRAGONRAGE             = 375087;       // 120s burst CD
 constexpr uint32 TIP_THE_SCALES         = 370553;       // free max-rank empower CD
-constexpr uint32 TIME_SPIRAL            = 374968;       // talent — group blink CD
-constexpr uint32 QUELL                  = 351338;
-constexpr uint32 SLEEP_WALK             = 360806;       // off-target incap
-constexpr uint32 TAIL_SWIPE             = 368970;       // 8yd cone knockback
-constexpr uint32 WING_BUFFET            = 357214;       // frontal cone knockback
-constexpr uint32 OBSIDIAN_SCALES        = 363916;       // CORRECTED — 235450 is Mage Prismatic Barrier
-constexpr uint32 RENEWING_BLAZE         = 374348;
-constexpr uint32 ZEPHYR                 = 374227;       // talent — magic DR group
+constexpr uint32 TIME_SPIRAL            = 374968;       // talent - group blink CD
+constexpr uint32 QUELL                  = 351338;       // Devastation-only interrupt in 12.1
+constexpr uint32 SLEEP_WALK             = 360806;       // off-target incap (not in default build)
+constexpr uint32 TAIL_SWIPE             = 368970;       // 8yd knockback
+constexpr uint32 LANDSLIDE              = 358385;       // talent - ground root at target location
+constexpr uint32 OBSIDIAN_SCALES        = 363916;       // 30% DR; Renewing Blaze rides on it passively
+constexpr uint32 ZEPHYR                 = 374227;       // talent - AoE DR group
 constexpr uint32 VERDANT_EMBRACE        = 360995;       // self/friendly heal
 constexpr uint32 HOVER                  = 358267;       // cast-while-moving + speed
 constexpr uint32 RESCUE                 = 370665;       // friendly pull peel
 constexpr uint32 SOURCE_OF_MAGIC        = 369459;       // mana regen on caster
-constexpr uint32 CAUTERIZING_FLAME      = 374251;       // friendly cleanse Disease+Poison+Bleed
+constexpr uint32 EXPUNGE                = 365585;       // talent - Poison dispel (default build)
+constexpr uint32 CAUTERIZING_FLAME      = 374251;       // talent - Bleed/Poison/Curse/Disease (M+ build)
 constexpr uint32 FURY_OF_THE_ASPECTS    = 390386;
-constexpr uint32 EMERALD_BLOSSOM        = 365261;       // Initial Evoker grant — self-heal at <=50% HP
-constexpr uint32 EMERALD_COMMUNION      = 370960;       // talent — full mana/essence channel
+constexpr uint32 EMERALD_BLOSSOM        = 355913;       // class baseline castable - self-heal at <=50% HP
 
 // Lust debuffs
 constexpr uint32 SATED_DEBUFF           = 57724;
@@ -110,7 +113,7 @@ constexpr uint32 INSANITY_HUNTER_DEBUFF = 95809;
 constexpr uint32 FATIGUED_DEBUFF        = 264689;
 
 // Aura tracker
-constexpr uint32 SHATTERING_STAR_DEBUFF = 233269;       // same id
+constexpr uint32 ESSENCE_BURST_BUFF     = 359618;       // next Disintegrate / Pyre costs no Essence
 
 // ---- Helpers ----
 bool HasLiveTarget(ApPredicateContext const& ctx)
@@ -136,6 +139,7 @@ bool BossLikeTargetEngaged(ApPredicateContext const& ctx)
     return false;
 }
 
+// Cauterizing Flame covers Bleed, Poison, Curse and Disease in 12.1.
 GroupMemberSummary const* DispelTarget(ApPredicateContext const& ctx)
 {
     return DispelTargetWithPriority(ctx, [](GroupSnapshotView const& g)
@@ -143,7 +147,19 @@ GroupMemberSummary const* DispelTarget(ApPredicateContext const& ctx)
     {
         if (auto const* m = g.dispel_candidate(DispelType::Disease)) return m;
         if (auto const* m = g.dispel_candidate(DispelType::Poison))  return m;
+        if (auto const* m = g.dispel_candidate(DispelType::Curse))   return m;
+        if (auto const* m = g.dispel_candidate(DispelType::Bleed))   return m;
         return nullptr;
+    });
+}
+
+// Expunge (default build) only clears Poison.
+GroupMemberSummary const* PoisonDispelTarget(ApPredicateContext const& ctx)
+{
+    return DispelTargetWithPriority(ctx, [](GroupSnapshotView const& g)
+        -> GroupMemberSummary const*
+    {
+        return g.dispel_candidate(DispelType::Poison);
     });
 }
 
@@ -190,26 +206,26 @@ bool ShouldTailSwipe(ApPredicateContext const& ctx)
 }
 void DoTailSwipe(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(TAIL_SWIPE); }
 
-bool ShouldWingBuffet(ApPredicateContext const& ctx)
+// Landslide - ground root in a line towards the target. Panic peel when
+// we're being swarmed and Tail Swipe is spent (or the pack is at range).
+bool ShouldLandslide(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(WING_BUFFET)) return false;
-    if (!ctx.bot.is_ready(WING_BUFFET)) return false;
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(LANDSLIDE)) return false;
+    if (!ctx.bot.is_ready(LANDSLIDE)) return false;
     if (ctx.bot.is_ready(TAIL_SWIPE)) return false;
     return ctx.bot.attackers_count() >= 2 && ctx.bot.hp_pct() <= 60;
 }
-void DoWingBuffet(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(WING_BUFFET); }
+void DoLandslide(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    if (auto const* t = ctx.bot.victim_info())
+        e.cast_at(LANDSLIDE, t->x, t->y, t->z);
+    else
+        e.cast(LANDSLIDE, ctx.bot.victim());
+}
 
 // ---- Survival ----
-bool ShouldRenewingBlaze(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(RENEWING_BLAZE)) return false;
-    if (!ctx.bot.is_ready(RENEWING_BLAZE)) return false;
-    return ctx.bot.hp_pct() <= 60;
-}
-void DoRenewingBlaze(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(RENEWING_BLAZE); }
-
 bool ShouldObsidianScales(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
@@ -264,16 +280,6 @@ bool ShouldHover(ApPredicateContext const& ctx)
 }
 void DoHover(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(HOVER); }
 
-bool ShouldEmeraldCommunion(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(EMERALD_COMMUNION)) return false;
-    if (!ctx.bot.is_ready(EMERALD_COMMUNION)) return false;
-    if (ctx.bot.in_combat()) return false;
-    if (ctx.bot.max_power(0) <= 0) return false;
-    return ctx.bot.power_pct(0) <= 30 || ctx.bot.hp_pct() <= 50;
-}
-void DoEmeraldCommunion(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(EMERALD_COMMUNION); }
-
 // ---- Group utility ----
 bool ShouldSourceOfMagic(ApPredicateContext const& ctx)
 {
@@ -289,6 +295,18 @@ void DoSourceOfMagic(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     if (auto const* m = ctx.group.lowest_mana_caster())
         e.cast(SOURCE_OF_MAGIC, m->guid);
+}
+
+bool ShouldExpunge(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.knows_spell(EXPUNGE)) return false;
+    if (!ctx.bot.is_ready(EXPUNGE)) return false;
+    return PoisonDispelTarget(ctx) != nullptr;
+}
+void DoExpunge(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    if (auto const* t = PoisonDispelTarget(ctx))
+        e.cast(EXPUNGE, t->guid);
 }
 
 bool ShouldCauterizingFlame(ApPredicateContext const& ctx)
@@ -345,6 +363,8 @@ bool ShouldTipTheScales(ApPredicateContext const& ctx)
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(TIP_THE_SCALES)) return false;
     if (!ctx.bot.is_ready(TIP_THE_SCALES)) return false;
+    // Only worth it when an empower is actually ready to consume it.
+    if (!ctx.bot.is_ready(FIRE_BREATH) && !ctx.bot.is_ready(ETERNITY_SURGE)) return false;
     // Pair with Dragonrage burst (ready or active) or boss-tier targets.
     if (ctx.bot.has_aura(DRAGONRAGE)) return true;
     return BossLikeTargetEngaged(ctx);
@@ -356,7 +376,7 @@ bool ShouldTimeSpiral(ApPredicateContext const& ctx)
     if (!ctx.bot.in_combat()) return false;
     if (!ctx.bot.knows_spell(TIME_SPIRAL)) return false;
     if (!ctx.bot.is_ready(TIME_SPIRAL)) return false;
-    // Group blink CD reset — pop on hard wipes.
+    // Group blink CD reset - pop on hard wipes.
     return BossLikeTargetEngaged(ctx) && ctx.bot.hp_pct() <= 50;
 }
 void DoTimeSpiral(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(TIME_SPIRAL); }
@@ -377,19 +397,6 @@ void DoDeepBreath(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Empower windows ----
-bool ShouldShatteringStar(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SHATTERING_STAR)) return false;
-    if (!ctx.bot.is_ready(SHATTERING_STAR)) return false;
-    AuraEntry const* a = ctx.bot.find_aura(SHATTERING_STAR_DEBUFF, ctx.bot.victim());
-    return !a || a->remaining.count() <= 1500;
-}
-void DoShatteringStar(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(SHATTERING_STAR, ctx.bot.victim());
-}
-
 bool ShouldFireBreath(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -409,29 +416,15 @@ void DoEternitySurge(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(ETERNITY_SURGE, ctx.bot.victim());
 }
 
-bool ShouldFirestorm(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(FIRESTORM)) return false;
-    if (!ctx.bot.is_ready(FIRESTORM)) return false;
-    return ctx.bot.enemies_within(15.0f) >= 2;
-}
-void DoFirestorm(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (auto const* t = ctx.bot.victim_info())
-        e.cast_at(FIRESTORM, t->x, t->y, t->z);
-    else
-        e.cast(FIRESTORM, ctx.bot.victim());
-}
-
 // ---- Essence spending ----
 bool ShouldPyre(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(PYRE)) return false;
-    if (ctx.bot.power(POWER_ESSENCE) < 2) return false;
-    // aoe_preference still requires ≥2 enemies — stale `.aoe on` from
-    // prior pack shouldn't waste 2 Essence on a single-target Pyre.
+    // Pyre costs 3 Essence in 12.1 unless Essence Burst makes it free.
+    if (!ctx.bot.has_aura(ESSENCE_BURST_BUFF) && ctx.bot.power(POWER_ESSENCE) < 3) return false;
+    // aoe_preference still requires >=2 enemies - stale `.aoe on` from
+    // prior pack shouldn't waste 3 Essence on a single-target Pyre.
     const int near = ctx.bot.enemies_within(15.0f);
     return near >= 3 || (ctx.aoe_preference && near >= 2);
 }
@@ -445,13 +438,15 @@ bool ShouldDisintegrate(ApPredicateContext const& ctx)
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(DISINTEGRATE)) return false;
     if (!ctx.bot.is_ready(DISINTEGRATE)) return false;
-    // Disintegrate is a 3s+ channel that breaks on movement —
+    // Disintegrate is a 3s+ channel that breaks on movement -
     // starting it while the bot is moving wastes the cast immediately.
     // Hover (Evoker baseline movement ability) sets can_cast_while_moving
     // on most casts; honor that. Without this check, the rotation
     // queued Disintegrate during repositioning and lost ticks.
     if (ctx.bot.is_moving() && !ctx.bot.can_cast_while_moving(DISINTEGRATE))
         return false;
+    // Essence Burst (359618) makes the next Disintegrate free - spend it.
+    if (ctx.bot.has_aura(ESSENCE_BURST_BUFF)) return true;
     return ctx.bot.power(POWER_ESSENCE) >= 3;
 }
 void DoDisintegrate(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -486,57 +481,52 @@ void DoNothing(ApPredicateContext const&, BotIntentEmitter&) {}
 
 // ---- Rule table ----
 // Order: Hover -> Defensives -> Interrupt/CC -> Group utility -> Lust ->
-//        Major CDs -> AoE empowers -> ST burst (Shattering Star) ->
-//        Channel (Disintegrate) -> Filler (Azure Strike / Living Flame).
+//        Major CDs -> AoE empowers -> Channel (Disintegrate) ->
+//        Filler (Azure Strike / Living Flame).
 ApRule const kRules[] = {
-    // 1) Mobility — always first so we keep casting while repositioning.
+    // 1) Mobility - always first so we keep casting while repositioning.
     { ShouldHover,             DoHover,             "Hover (cast-while-moving)"    },
 
-    // 2) Defensives — fire as soon as HP/mana thresholds trigger.
+    // 2) Defensives - fire as soon as HP thresholds trigger. Renewing
+    //    Blaze is a passive rider on Obsidian Scales in 12.1.
     { ShouldObsidianScales,    DoObsidianScales,    "Obsidian Scales (<=50%)"      },
-    { ShouldRenewingBlaze,     DoRenewingBlaze,     "Renewing Blaze (<=60%)"       },
     { ShouldVerdantEmbraceSelf,DoVerdantEmbraceSelf,"Verdant Embrace (<=55%)"      },
     { ShouldEmeraldBlossomSelf,DoEmeraldBlossomSelf,"Emerald Blossom (self <=50%)" },
     { ShouldZephyr,            DoZephyr,            "Zephyr (caster <=55%)"        },
-    { ShouldEmeraldCommunion,  DoEmeraldCommunion,  "Emerald Communion (OOC heal)" },
 
-    // 3) Interrupt / CC — Quell first, then off-target Sleep Walk, then
-    //    panic knockbacks if we're getting swarmed.
+    // 3) Interrupt / CC - Quell first, then off-target Sleep Walk, then
+    //    panic knockback / root if we're getting swarmed.
     { ShouldQuell,             DoQuell,             "Quell (interrupt)"            },
     { ShouldSleepWalk,         DoSleepWalk,         "Sleep Walk (off-target CC)"   },
     { ShouldTailSwipe,         DoTailSwipe,         "Tail Swipe (3+ knockback)"    },
-    { ShouldWingBuffet,        DoWingBuffet,        "Wing Buffet (2+ knockback)"   },
+    { ShouldLandslide,         DoLandslide,         "Landslide (2+ root)"          },
 
     // 4) Group utility.
     { ShouldRescueLowestAlly,  DoRescueLowestAlly,  "Rescue (peel ally <=25%)"     },
+    { ShouldExpunge,           DoExpunge,           "Expunge (poison)"             },
     { ShouldCauterizingFlame,  DoCauterizingFlame,  "Cauterizing Flame (cleanse)"  },
     { ShouldSourceOfMagic,     DoSourceOfMagic,     "Source of Magic (caster)"     },
 
     // 5) Lust.
     { ShouldFuryOfTheAspects,  DoFuryOfTheAspects,  "Fury of the Aspects (boss)"   },
 
-    // 6) Major CDs — pop on boss-tier engagements.
+    // 6) Major CDs - pop on boss-tier engagements.
     { ShouldDragonrage,        DoDragonrage,        "Dragonrage (burst CD)"        },
     { ShouldTipTheScales,      DoTipTheScales,      "Tip the Scales (free max)"    },
     { ShouldTimeSpiral,        DoTimeSpiral,        "Time Spiral (group bail)"     },
 
-    // 7) AoE windows — Eternity Surge + Fire Breath are Empowers, Firestorm
-    //    + Deep Breath + Pyre are AoE spenders. Eternity Surge first since
-    //    it scales hardest at high empower ranks; Fire Breath cone next;
-    //    Firestorm / Deep Breath area; Pyre as Essence sink in 3+ packs.
+    // 7) Empowers + AoE - Eternity Surge first (fires Shattering Star via
+    //    the 12.1 passive and scales hardest at high ranks); Fire Breath
+    //    cone next; Deep Breath area; Pyre as Essence sink in 3+ packs.
     { ShouldEternitySurge,     DoEternitySurge,     "Eternity Surge (empower)"     },
     { ShouldFireBreath,        DoFireBreath,        "Fire Breath (empower)"        },
-    { ShouldFirestorm,         DoFirestorm,         "Firestorm (2+ AoE)"           },
     { ShouldDeepBreath,        DoDeepBreath,        "Deep Breath (3+ AoE)"         },
     { ShouldPyre,              DoPyre,              "Pyre (3+ AoE spend)"          },
 
-    // 8) ST burst.
-    { ShouldShatteringStar,    DoShatteringStar,    "Shattering Star"              },
-
-    // 9) Channel.
+    // 8) Channel.
     { ShouldDisintegrate,      DoDisintegrate,      "Disintegrate (3 essence)"     },
 
-    // 10) Filler.
+    // 9) Filler.
     { ShouldAzureStrike,       DoAzureStrike,       "Azure Strike"                 },
     { ShouldLivingFlame,       DoLivingFlame,       "Living Flame (filler)"        },
 

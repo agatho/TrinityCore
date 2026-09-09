@@ -1,6 +1,7 @@
 #include "QuestHubDatabase.h"
 
 #include "Bot/BotSnapshot.h"
+#include "Bot/ClassTables.h"   // MaxPlayerLevel()
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "DB2Structure.h"
@@ -86,7 +87,7 @@ void leveling_band_edges(uint8 level, uint8& lo, uint8& hi)
     if (level < 10)      { lo = 1;  hi = 9;  }
     else if (level < 60) { lo = 10; hi = 59; }
     else if (level < 70) { lo = 60; hi = 69; }
-    else                 { lo = 70; hi = 80; }
+    else                 { lo = 70; hi = MaxPlayerLevel(); }   // top band runs to the realm cap (90)
 }
 
 } // anonymous
@@ -801,14 +802,15 @@ void QuestHubDatabase::LoadQuestDataForHubs()
                 }
             }
             if (qmin <= 0) qmin = 1;
-            if (qmax <= 0 || qmax < qmin) qmax = std::min<int32>(80, qmin + 8);
+            if (qmax <= 0 || qmax < qmin) qmax = std::min<int32>(int32(MaxPlayerLevel()), qmin + 8);
             if (hubMin == 0 || qmin < hubMin) hubMin = qmin;
             if (qmax > hubMax) hubMax = qmax;
         }
+        const int32 max_level = int32(MaxPlayerLevel());
         if (hubMin <= 0) hubMin = 1;
-        if (hubMax <= 0) hubMax = 80;
-        hub.minLevel = uint8(std::clamp<int32>(hubMin, 1, 80));
-        hub.maxLevel = uint8(std::clamp<int32>(hubMax, hub.minLevel, 80));
+        if (hubMax <= 0) hubMax = max_level;
+        hub.minLevel = uint8(std::clamp<int32>(hubMin, 1, max_level));
+        hub.maxLevel = uint8(std::clamp<int32>(hubMax, hub.minLevel, max_level));
         if (hub.zoneId > 0)
             hub.name = "Quest Hub (Zone " + std::to_string(hub.zoneId) + ")";
     }

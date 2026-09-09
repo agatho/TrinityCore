@@ -1,9 +1,11 @@
 #include "BotGearGenerator.h"
 #include "BotItemScorer.h"
+#include "Bot/ClassTables.h"   // MaxPlayerLevel()
 #include "ObjectMgr.h"
 #include "ItemTemplate.h"
 #include "Player.h"
 #include "Log.h"
+#include <algorithm>
 #include <array>
 #include <limits>
 #include <unordered_map>
@@ -36,7 +38,7 @@ constexpr std::array<uint8, 16> kSlots = {
 
 // Per-class preferred armor type. Each class is restricted by Blizzard's
 // armor proficiency rules; this picks the highest tier the class can wear
-// at 80 (e.g. Druids wear leather even though they can technically wear
+// at max level (e.g. Druids wear leather even though they can technically wear
 // cloth in early levels). Hunters/Shamans switch from leather to mail at L40.
 ItemSubclassArmor PreferredArmorForClass(uint8 cls, uint8 level)
 {
@@ -131,13 +133,21 @@ uint64 fnv1a64(uint64 v)
 
 } // anonymous
 
-// Approximate ilvl target for a level. Linear from L1=1 to L80=600.
+// Approximate ilvl target for a level. Linear from L1=1 to L80=600 (TWW
+// cap), then L80=600 -> L90=700 for the Midnight band (12.x max-level
+// gear starts around ilvl 700). Clamped at the realm cap so a lower
+// configured MaxPlayerLevel never targets gear above what it can equip.
 // Exposed (declared in the header) for the hygiene under-gear detector.
 uint16 TargetIlvlForLevel(uint8 level)
 {
+    constexpr uint32 kTwwCap = 80, kTwwIlvl = 600;
+    constexpr uint32 kMidnightCap = 90, kMidnightIlvl = 700;
     if (level <= 1) return 1;
-    if (level >= 80) return 600;
-    return uint16((uint32(level) * 600u) / 80u);
+    level = std::min<uint8>(level, MaxPlayerLevel());
+    if (level >= kMidnightCap) return uint16(kMidnightIlvl);
+    if (level >= kTwwCap)
+        return uint16(kTwwIlvl + ((uint32(level) - kTwwCap) * (kMidnightIlvl - kTwwIlvl)) / (kMidnightCap - kTwwCap));
+    return uint16((uint32(level) * kTwwIlvl) / kTwwCap);
 }
 
 void Initialize()
@@ -160,7 +170,7 @@ void Initialize()
         // Skip items with quality > Epic (Legendary / Artifact require special unlock)
         if (tpl.GetQuality() > ITEM_QUALITY_EPIC) continue;
         // Skip items with too-high required level for our brackets
-        if (tpl.GetBaseRequiredLevel() > 80) continue;
+        if (tpl.GetBaseRequiredLevel() > MaxPlayerLevel()) continue;
         // Skip items with no required level set BUT high ilvl (raid drops typically)
         if (tpl.GetBaseRequiredLevel() == 0 && tpl.GetBaseItemLevel() > 50) continue;
 
@@ -250,7 +260,7 @@ void Initialize()
             // For armor slots, filter by class's preferred armor type.
             if (IsArmorSlot(target_slot) && tpl.GetClass() == ITEM_CLASS_ARMOR)
             {
-                ItemSubclassArmor preferred = PreferredArmorForClass(cls, /*level=*/80);
+                ItemSubclassArmor preferred = PreferredArmorForClass(cls, MaxPlayerLevel());
                 // Allow items at or below preferred (cloth-wearing under-leather is bad,
                 // but accept for low-level brackets where higher armor unavailable).
                 ItemSubclassArmor item_armor = ItemSubclassArmor(tpl.GetSubClass());

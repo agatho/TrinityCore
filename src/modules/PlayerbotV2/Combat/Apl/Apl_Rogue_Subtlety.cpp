@@ -1,44 +1,49 @@
-﻿// Subtlety Rogue - WoW 12.0 enterprise rotation. Stealth-driven melee with
-// Symbols of Death damage window, Shadow Dance multi-Shadowstrike burst,
-// Shadow Blades, Eviscerate at 5+ CP, Shuriken Storm + Shuriken Tornado
-// AoE, Black Powder AoE finisher, Rupture bleed finisher, Secret Technique
-// burst finisher, Sepsis utility CD. Stealth-opener cascade: Garrote
-// (silence + bleed) and Cheap Shot (stun) before Shadowstrike.
+﻿// Subtlety Rogue - WoW 12.1.0.69587 (Midnight) enterprise rotation.
+// Stealth-driven melee: Shadow Dance multi-Shadowstrike burst (2 charges
+// with Double Dance), Shadow Blades burst window, Vanish as an offensive
+// re-stealth inside Shadow Blades, Goremaw's Bite CP burst, Eviscerate at
+// 5+ CP, Secret Technique burst finisher, Black Powder AoE finisher,
+// Shuriken Storm AoE generator, Slice and Dice upkeep, Backstab /
+// Gloomblade filler, Shuriken Toss ranged filler. Instant + Atrophic
+// poison upkeep out of combat, Thistle Tea when Energy-starved.
 //
 // Survival: Crimson Vial, Evasion, Cloak of Shadows, Feint, Vanish.
-// Group utility: Tricks of the Trade, Shroud of Concealment, Smoke Bomb.
-// CC: Kick, Cheap Shot (stealth opener), Kidney Shot stun, Blind, Sap.
-// Major CDs: Symbols of Death, Shadow Dance, Shadow Blades, Sepsis,
-// Marked for Death, Shuriken Tornado (talent — auto Shuriken Storm).
+// Group utility: Tricks of the Trade. CC: Kick, Cheap Shot (stealth
+// opener vs casters / PvP), Kidney Shot stun, Blind, Sap (OOC).
+// Gap-close: Shadowstep (36554, learned through spec spell 394935).
 //
-// Validated spell IDs (SpellName.csv lookup, WoW 12.0):
-//   53      Backstab              — CP gen behind target
-//   185438  Shadowstrike          — Shadow Dance / Vanish CP opener
-//   196819  Eviscerate            — CP spender
-//   319175  Black Powder          — AoE finisher
-//   212283  Symbols of Death      — CD self-buff
-//   185313  Shadow Dance          — stealth CD
-//   197835  Shuriken Storm        — Sub AoE generator (legacy id)
-//   1279401 Shuriken Storm        — Sub AoE generator (modern variant)
-//   114014  Shuriken Toss         — ranged CP gen
-//   277925  Shuriken Tornado      — talent AoE CD
-//   280719  Secret Technique      — talent finisher
-//   1833    Cheap Shot            — stealth stun opener
-//   703     Garrote               — stealth opener silence + bleed
-//   1943    Rupture               — bleed finisher
-//   200758  Gloomblade            — talent (replaces Backstab)
-//   121471  Shadow Blades         — CD
-//   394935  Shadowstep (Sub)      — Sub talent gap-closer (was 36554)
-//   385408  Sepsis / 137619 Marked for Death / 385616 Echoing Reprimand
-//   1766/408/1833/2094/6770/57934/76577 Kick/Kidney/Cheap/Blind/Sap/Tricks/Smoke
-//   185311/5277/31224/1966/1856 Crimson Vial / Evasion / Cloak / Feint / Vanish
-//   1784/115191                  Stealth / Subterfuge aura
+// Validated spell IDs (SpellName.csv lookup, WoW 12.1.0.69587):
+//   53      Backstab              - CP gen (spec override of 1752)
+//   200758  Gloomblade            - talent (replaces Backstab; not in curated build)
+//   185438  Shadowstrike          - stealth / Shadow Dance CP gen (overrides Ambush)
+//   196819  Eviscerate            - CP spender
+//   319175  Black Powder          - AoE finisher
+//   280719  Secret Technique      - spec finisher (L25)
+//   185313  Shadow Dance          - stealth CD (charges)
+//   121471  Shadow Blades         - talent [R] burst CD
+//   426591  Goremaw's Bite        - talent [R] 45s CP burst + bleed
+//   197835  Shuriken Storm        - AoE generator
+//   114014  Shuriken Toss         - ranged CP gen
+//   315496  Slice and Dice        - attack-speed self-buff finisher
+//   1833    Cheap Shot            - stealth stun opener
+//   315584  Instant Poison        - baseline lethal poison
+//   381637  Atrophic Poison       - talent [R] non-lethal / 3408 Crippling Poison fallback
+//   381623  Thistle Tea           - taught by class passive 469779 / 1298826 active variant
+//   36554   Shadowstep            - cast id; 394935 is the Sub spec learn-spell
+//   1766/408/2094/6770/57934     Kick / Kidney Shot / Blind / Sap / Tricks
+//   185311/5277/31224/1966/1856  Crimson Vial / Evasion / Cloak / Feint / Vanish
+//   1784/115191/115192           Stealth / Subterfuge stealth / Subterfuge window
 //
 // Skipped (with reason):
-//   51667   Cut to the Chase      — passive (Eviscerate extends Slice and Dice).
-//   196912  Shadow Techniques     — passive (auto-grants CP every few attacks).
-//   245687  Dark Shadow           — talent passive (amplifies SoD).
-//   199736  Find Treasure         — Outlaw-only passive; not Sub.
+//   212283  Symbols of Death      - not learnable in 12.1 (removed from Sub).
+//   703     Garrote / 1943 Rupture - Assassination-only in 12.1; Sub cannot learn them.
+//   277925  Shuriken Tornado      - 12.1 version (1264764) is a passive (Shadow Clone proc).
+//   1279401 Shuriken Storm Rank 2 - passive damage modifier, not a cast.
+//   385408  Sepsis / 137619 Marked for Death / 76577 Smoke Bomb - not learnable in 12.1.
+//   385616  Echoing Reprimand     - 12.1 version (470669) is a passive.
+//   196912  Shadow Techniques / 91023 Find Weakness / 245687 Dark Shadow - passives.
+//   1776    Gouge                 - class talent not in the curated Sub build; needs facing.
+//   1229376 Single-Button Assistant - client convenience macro, not a rotation ability.
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -51,27 +56,27 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
+// ---- Spell IDs (WoW 12.1.0.69587, validated) ----
 constexpr uint32 BACKSTAB             = 53;
 constexpr uint32 SHADOWSTRIKE         = 185438;
 constexpr uint32 EVISCERATE           = 196819;
-constexpr uint32 SYMBOLS_OF_DEATH     = 212283;
-constexpr uint32 SHADOW_BLADES        = 121471;
-constexpr uint32 SHADOW_DANCE         = 185313;
-// Shuriken Storm: classic (197835) and modern (1279401) cast ids both
-// real at WoW 12.0; bot picks whichever is in the spellbook.
+constexpr uint32 SHADOW_BLADES        = 121471;       // talent [R] burst CD
+constexpr uint32 SHADOW_DANCE         = 185313;       // charges (Double Dance [R])
+constexpr uint32 GOREMAWS_BITE        = 426591;       // talent [R] CP burst + bleed
 constexpr uint32 SHURIKEN_STORM       = 197835;
-constexpr uint32 SHURIKEN_STORM_MOD   = 1279401;
-constexpr uint32 SHURIKEN_TORNADO     = 277925;       // talent
 constexpr uint32 BLACK_POWDER         = 319175;
-constexpr uint32 SECRET_TECHNIQUE     = 280719;       // talent — multi-attack finisher
+constexpr uint32 SECRET_TECHNIQUE     = 280719;       // spec finisher (L25)
 constexpr uint32 SHURIKEN_TOSS        = 114014;
-constexpr uint32 GLOOMBLADE           = 200758;       // talent — replaces Backstab
-constexpr uint32 GARROTE              = 703;          // stealth opener bleed + silence
-constexpr uint32 RUPTURE              = 1943;         // bleed finisher
-constexpr uint32 SEPSIS               = 385408;
-constexpr uint32 MARKED_FOR_DEATH     = 137619;
-constexpr uint32 ECHOING_REPRIMAND    = 385616;
+constexpr uint32 GLOOMBLADE           = 200758;       // talent - replaces Backstab
+constexpr uint32 SLICE_AND_DICE       = 315496;
+// Weapon poisons: the self-buff aura carries the cast spell's id.
+constexpr uint32 INSTANT_POISON       = 315584;       // baseline lethal
+constexpr uint32 ATROPHIC_POISON      = 381637;       // talent [R] non-lethal
+constexpr uint32 CRIPPLING_POISON     = 3408;         // baseline non-lethal fallback
+// Thistle Tea: class passive 469779 teaches 381623; the active talent
+// node variant is 1298826. Cast whichever is in the spellbook.
+constexpr uint32 THISTLE_TEA          = 381623;
+constexpr uint32 THISTLE_TEA_ALT      = 1298826;
 constexpr uint32 KICK                 = 1766;
 constexpr uint32 KIDNEY_SHOT          = 408;
 constexpr uint32 CHEAP_SHOT           = 1833;
@@ -81,8 +86,9 @@ constexpr uint32 STEALTH              = 1784;
 constexpr uint32 STEALTH_AURA         = 115191;       // Subterfuge improved version
 constexpr uint32 SUBTERFUGE_AURA      = 115192;       // post-stealth-break talent window
 constexpr uint32 TRICKS_OF_TRADE      = 57934;
-// Shadowstep: Subtlety talent variant (394935) replaces base 36554 when
-// talented. Bot probes both — same gap-close behavior either way.
+// Shadowstep: 36554 is the castable. 394935 is the Subtlety spec spell
+// that teaches it (SpellLearnSpell 394935 -> 36554); gate on either being
+// known, always cast 36554.
 constexpr uint32 SHADOWSTEP           = 36554;
 constexpr uint32 SHADOWSTEP_SUB       = 394935;
 constexpr uint32 CRIMSON_VIAL         = 185311;
@@ -90,8 +96,8 @@ constexpr uint32 EVASION              = 5277;
 constexpr uint32 CLOAK_OF_SHADOWS     = 31224;
 constexpr uint32 FEINT                = 1966;
 constexpr uint32 VANISH               = 1856;
-constexpr uint32 SMOKE_BOMB           = 76577;
 
+constexpr uint8 POWER_ENERGY_IDX       = 3;
 constexpr uint8 POWER_COMBO_POINTS_IDX = 4;
 
 bool HasLiveTarget(ApPredicateContext const& ctx)
@@ -114,12 +120,54 @@ uint8 ComboPoints(ApPredicateContext const& ctx)
     return static_cast<uint8>(ctx.bot.power(POWER_COMBO_POINTS_IDX));
 }
 
+int32 Energy(ApPredicateContext const& ctx)
+{
+    return ctx.bot.power(POWER_ENERGY_IDX);
+}
+
 bool InStealth(ApPredicateContext const& ctx)
 {
     return ctx.bot.has_aura(STEALTH)
         || ctx.bot.has_aura(STEALTH_AURA)
         || ctx.bot.has_aura(SUBTERFUGE_AURA)
         || ctx.bot.has_aura(SHADOW_DANCE);
+}
+
+// ---- Weapon poisons (OOC upkeep, 1.5s cast, 1h buff) ----
+bool PoisonCastWindow(ApPredicateContext const& ctx)
+{
+    if (ctx.bot.in_combat()) return false;
+    if (ctx.bot.is_moving()) return false;
+    if (ctx.bot.is_mounted()) return false;
+    return true;
+}
+bool ShouldInstantPoison(ApPredicateContext const& ctx)
+{
+    if (!PoisonCastWindow(ctx)) return false;
+    if (!ctx.bot.knows_spell(INSTANT_POISON)) return false;
+    if (!ctx.bot.is_ready(INSTANT_POISON)) return false;
+    return !ctx.bot.has_aura(INSTANT_POISON);
+}
+void DoInstantPoison(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(INSTANT_POISON); }
+
+uint32 PickNonLethalPoison(ApPredicateContext const& ctx)
+{
+    if (ctx.bot.knows_spell(ATROPHIC_POISON))
+        return ctx.bot.has_aura(ATROPHIC_POISON) ? 0 : ATROPHIC_POISON;
+    if (ctx.bot.knows_spell(CRIPPLING_POISON) && !ctx.bot.has_aura(CRIPPLING_POISON))
+        return CRIPPLING_POISON;
+    return 0;
+}
+bool ShouldNonLethalPoison(ApPredicateContext const& ctx)
+{
+    if (!PoisonCastWindow(ctx)) return false;
+    const uint32 sid = PickNonLethalPoison(ctx);
+    return sid != 0 && ctx.bot.is_ready(sid);
+}
+void DoNonLethalPoison(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    const uint32 sid = PickNonLethalPoison(ctx);
+    if (sid != 0) e.cast(sid);
 }
 
 // ---- Stealth ----
@@ -130,6 +178,30 @@ bool ShouldStealthOOC(ApPredicateContext const& ctx)
     return !InStealth(ctx);
 }
 void DoStealth(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(STEALTH); }
+
+// ---- Thistle Tea (Energy restore, charge-based, off-GCD) ----
+uint32 BestThistleTeaSpell(ApPredicateContext const& ctx)
+{
+    if (ctx.bot.knows_spell(THISTLE_TEA) && ctx.bot.is_ready(THISTLE_TEA))
+        return THISTLE_TEA;
+    if (ctx.bot.knows_spell(THISTLE_TEA_ALT) && ctx.bot.is_ready(THISTLE_TEA_ALT))
+        return THISTLE_TEA_ALT;
+    return 0;
+}
+bool ShouldThistleTea(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.in_combat()) return false;
+    if (BestThistleTeaSpell(ctx) == 0) return false;
+    if (Energy(ctx) > 40) return false;
+    // Starved inside a Shadow Dance / Shadow Blades window, or plainly empty.
+    return ctx.bot.has_aura(SHADOW_DANCE) || ctx.bot.has_aura(SHADOW_BLADES) || Energy(ctx) <= 20;
+}
+void DoThistleTea(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    const uint32 sid = BestThistleTeaSpell(ctx);
+    if (sid != 0) e.cast(sid);
+}
 
 // ---- Survival ----
 bool ShouldCrimsonVial(ApPredicateContext const& ctx)
@@ -175,11 +247,13 @@ bool ShouldVanish(ApPredicateContext const& ctx)
     if (!ctx.bot.in_combat()) return false;
     if (!ctx.bot.knows_spell(VANISH)) return false;
     if (!ctx.bot.is_ready(VANISH)) return false;
-    // Sub uses Vanish as a damage CD (re-stealth -> Shadowstrike) too —
-    // pop offensively when symbols is up, defensively when low. In PvP,
-    // bump the defensive threshold so the stealth catches the burst.
+    // Sub uses Vanish as a damage CD (re-stealth -> Shadowstrike) too -
+    // pop offensively inside Shadow Blades when not already stealthed /
+    // dancing, defensively when low. In PvP, bump the defensive threshold
+    // so the stealth catches the burst.
     const int32 panic = ctx.pvp.under_player_attack ? 40 : 25;
-    return ctx.bot.has_aura(SYMBOLS_OF_DEATH) || ctx.bot.hp_pct() <= panic;
+    const bool offensive = ctx.bot.has_aura(SHADOW_BLADES) && !InStealth(ctx) && ComboPoints(ctx) <= 3;
+    return offensive || ctx.bot.hp_pct() <= panic;
 }
 void DoVanish(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(VANISH); }
 
@@ -197,15 +271,6 @@ void DoTricks(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(TRICKS_OF_TRADE, tank->guid);
 }
 
-bool ShouldSmokeBomb(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SMOKE_BOMB)) return false;
-    if (!ctx.bot.is_ready(SMOKE_BOMB)) return false;
-    return ctx.bot.attackers_count() >= 3;
-}
-void DoSmokeBomb(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SMOKE_BOMB); }
-
 // ---- Interrupt / CC ----
 bool ShouldKick(ApPredicateContext const& ctx)
 {
@@ -221,12 +286,18 @@ void DoKick(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(KICK, c->guid);
 }
 
+// Cheap Shot from stealth: only worth the stealth break (and 40 Energy)
+// when it locks down a caster or a player - otherwise Shadowstrike is the
+// DPS opener and Kidney Shot covers stuns later.
 bool ShouldCheapShotOpener(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(CHEAP_SHOT)) return false;
     if (!ctx.bot.is_ready(CHEAP_SHOT)) return false;
-    return InStealth(ctx);
+    if (!InStealth(ctx)) return false;
+    if (ctx.pvp.in_battleground || ctx.pvp.in_arena) return true;
+    NearbyUnit const* v = ctx.bot.victim_info();
+    return v && v->is_casting;
 }
 void DoCheapShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
@@ -259,101 +330,76 @@ void DoBlind(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(BLIND, ctx.bot.victim());
 }
 
-// Shadowstep: prefer Sub talent variant (394935) when known, fall back to
-// base 36554. Same behavior — teleport behind victim + clear movement
-// impair — gating on no nearby enemy keeps it as a pure gap-close.
-uint32 BestShadowstepSpell(ApPredicateContext const& ctx)
+// Shadowstep: 36554 is the castable in 12.1; the Subtlety spec spell
+// 394935 only teaches it. Gate on either id being in the spellbook, cast
+// 36554. Gating on no nearby enemy keeps it as a pure gap-close.
+bool KnowsShadowstep(ApPredicateContext const& ctx)
 {
-    if (ctx.bot.knows_spell(SHADOWSTEP_SUB) && ctx.bot.is_ready(SHADOWSTEP_SUB))
-        return SHADOWSTEP_SUB;
-    if (ctx.bot.knows_spell(SHADOWSTEP) && ctx.bot.is_ready(SHADOWSTEP))
-        return SHADOWSTEP;
-    return 0;
+    return ctx.bot.knows_spell(SHADOWSTEP) || ctx.bot.knows_spell(SHADOWSTEP_SUB);
 }
 bool ShouldShadowstep(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (BestShadowstepSpell(ctx) == 0) return false;
+    if (!KnowsShadowstep(ctx)) return false;
+    if (!ctx.bot.is_ready(SHADOWSTEP)) return false;
     return ctx.bot.enemies_within(8.0f) == 0;
 }
 void DoShadowstep(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    const uint32 sid = BestShadowstepSpell(ctx);
-    if (sid != 0) e.cast(sid, ctx.bot.victim());
+    e.cast(SHADOWSTEP, ctx.bot.victim());
 }
 
 // ---- Major offensive cooldowns ----
-bool ShouldSymbolsOfDeath(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SYMBOLS_OF_DEATH)) return false;
-    if (!ctx.bot.is_ready(SYMBOLS_OF_DEATH)) return false;
-    return true;
-}
-void DoSymbolsOfDeath(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SYMBOLS_OF_DEATH); }
-
+// Shadow Blades (90s): burst window - double CP generation. Boss-tier or
+// a real pack; trash singles do not deserve the 90s CD.
 bool ShouldShadowBlades(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(SHADOW_BLADES)) return false;
     if (!ctx.bot.is_ready(SHADOW_BLADES)) return false;
-    return ctx.bot.has_aura(SYMBOLS_OF_DEATH) || BossLikeTargetEngaged(ctx);
+    return BossLikeTargetEngaged(ctx) || ctx.bot.enemies_within(10.0f) >= 3;
 }
 void DoShadowBlades(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SHADOW_BLADES); }
 
+// Shadow Dance (charges): enables Shadowstrike spam. Enter it with CP
+// headroom so the empowered generators are not wasted, never while a
+// stealth state is already active.
 bool ShouldShadowDance(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(SHADOW_DANCE)) return false;
     if (!ctx.bot.is_ready(SHADOW_DANCE)) return false;
-    return ctx.bot.has_aura(SYMBOLS_OF_DEATH);
+    if (InStealth(ctx)) return false;
+    if (Energy(ctx) < 50) return false;         // need at least one Shadowstrike
+    return ComboPoints(ctx) <= 3 || ctx.bot.has_aura(SHADOW_BLADES);
 }
 void DoShadowDance(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SHADOW_DANCE); }
 
-bool ShouldShurikenTornado(ApPredicateContext const& ctx)
+// Goremaw's Bite (45s): hits the target + 2 nearby, generates CP and a
+// bleed, and echoes finisher damage as Shadow. Use with CP headroom.
+bool ShouldGoremawsBite(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SHURIKEN_TORNADO)) return false;
-    if (!ctx.bot.is_ready(SHURIKEN_TORNADO)) return false;
-    return ctx.bot.enemies_within(15.0f) >= 2;
-}
-void DoShurikenTornado(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SHURIKEN_TORNADO); }
-
-bool ShouldSepsis(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SEPSIS)) return false;
-    if (!ctx.bot.is_ready(SEPSIS)) return false;
-    return BossLikeTargetEngaged(ctx);
-}
-void DoSepsis(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(SEPSIS, ctx.bot.victim());
-}
-
-bool ShouldMarkedForDeath(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(MARKED_FOR_DEATH)) return false;
-    if (!ctx.bot.is_ready(MARKED_FOR_DEATH)) return false;
-    return ComboPoints(ctx) <= 1;
-}
-void DoMarkedForDeath(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(MARKED_FOR_DEATH, ctx.bot.victim());
-}
-
-bool ShouldEchoingReprimand(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(ECHOING_REPRIMAND)) return false;
-    if (!ctx.bot.is_ready(ECHOING_REPRIMAND)) return false;
+    if (!ctx.bot.knows_spell(GOREMAWS_BITE)) return false;
+    if (!ctx.bot.is_ready(GOREMAWS_BITE)) return false;
     return ComboPoints(ctx) <= 2;
 }
-void DoEchoingReprimand(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoGoremawsBite(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    e.cast(ECHOING_REPRIMAND, ctx.bot.victim());
+    e.cast(GOREMAWS_BITE, ctx.bot.victim());
 }
+
+// ---- Maintenance ----
+bool ShouldSliceAndDice(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(SLICE_AND_DICE)) return false;
+    if (!ctx.bot.is_ready(SLICE_AND_DICE)) return false;
+    if (ComboPoints(ctx) < 4) return false;
+    AuraEntry const* a = ctx.bot.find_aura(SLICE_AND_DICE);
+    return !a || a->remaining.count() <= 5000;
+}
+void DoSliceAndDice(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SLICE_AND_DICE); }
 
 // ---- Spenders ----
 bool ShouldSecretTechnique(ApPredicateContext const& ctx)
@@ -390,28 +436,17 @@ void DoEviscerate(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Generators ----
-// Shuriken Storm: AoE CP generator. Bot might know either the classic
-// (197835) or modern variant (1279401). Pick the ready known one.
-uint32 BestShurikenStormSpell(ApPredicateContext const& ctx)
-{
-    if (ctx.bot.knows_spell(SHURIKEN_STORM_MOD) && ctx.bot.is_ready(SHURIKEN_STORM_MOD))
-        return SHURIKEN_STORM_MOD;
-    if (ctx.bot.knows_spell(SHURIKEN_STORM) && ctx.bot.is_ready(SHURIKEN_STORM))
-        return SHURIKEN_STORM;
-    return 0;
-}
+// Shuriken Storm: AoE CP generator (10y). 1279401 "Rank 2" is a passive
+// stealth damage modifier, not a second cast id.
 bool ShouldShurikenStorm(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (BestShurikenStormSpell(ctx) == 0) return false;
+    if (!ctx.bot.knows_spell(SHURIKEN_STORM)) return false;
+    if (!ctx.bot.is_ready(SHURIKEN_STORM)) return false;
     if (ComboPoints(ctx) >= 5) return false;
-    return ctx.aoe_preference || ctx.bot.enemies_within(15.0f) >= 2;
+    return ctx.aoe_preference || ctx.bot.enemies_within(10.0f) >= 2;
 }
-void DoShurikenStorm(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    const uint32 sid = BestShurikenStormSpell(ctx);
-    if (sid != 0) e.cast(sid);
-}
+void DoShurikenStorm(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SHURIKEN_STORM); }
 
 bool ShouldShadowstrike(ApPredicateContext const& ctx)
 {
@@ -463,39 +498,6 @@ void DoShurikenToss(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(SHURIKEN_TOSS, ctx.bot.victim());
 }
 
-// Stealth-opener Garrote: from stealth Garrote silences for 3s and applies
-// a full-duration bleed. Useful even for Sub (which doesn't normally
-// maintain bleeds) because the silence locks down a caster mob during
-// the opener. Skipped post-opener; refresh duty owned by Rupture.
-bool ShouldGarroteOpener(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(GARROTE)) return false;
-    if (!InStealth(ctx)) return false;
-    return true;
-}
-void DoGarroteOpener(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(GARROTE, ctx.bot.victim());
-}
-
-// Rupture: bleed finisher. Sub uses Rupture as a free Find Weakness
-// extender at 4+ CP when it's missing or about to fall off. Eviscerate
-// is still the top priority at 5 CP — Rupture only fires at 4 CP or
-// when no bleed is up.
-bool ShouldRupture(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(RUPTURE)) return false;
-    if (ComboPoints(ctx) < 4) return false;
-    AuraEntry const* a = ctx.bot.find_aura(RUPTURE, ctx.bot.victim());
-    return !a || a->remaining.count() <= 4500;
-}
-void DoRupture(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(RUPTURE, ctx.bot.victim());
-}
-
 // Sap: OOC CC. Stealthed, premium-target CC for pulls. Fires only when
 // OOC + stealthed + an enemy is within 10y AND isn't already our
 // engagement target (we don't want to Sap the mob we just opened on).
@@ -533,14 +535,14 @@ void DoAutoAttack(ApPredicateContext const& ctx, BotIntentEmitter& e)
     if (!t.IsEmpty()) e.start_attack(t);
 }
 
-// Rule order (per HANDOFF):
-//   Cloak (magic emerg) → Vanish (panic/offensive) → Evasion → Crimson Vial
-//   → Feint → Kick → Kidney Shot (kick fb) → Sap (OOC CC) → Blind
-//   → Stealth (OOC) → Stealth-opener Garrote → Cheap Shot (stealth open)
-//   → Shadowstrike (stealth) → Tricks → Smoke Bomb → Shadowstep (gap close)
-//   → major CDs (SoD, SD, SB, Tornado, Sepsis, MfD, ER) → Secret Tech
-//   → Black Powder (AoE finisher) → Eviscerate (5 CP) → Rupture (4 CP bleed)
-//   → Shuriken Storm (AoE gen) → Gloomblade / Backstab → Shuriken Toss → AA.
+// Rule order:
+//   Cloak (magic emerg) -> Vanish (panic/offensive) -> Evasion -> Crimson Vial
+//   -> Feint -> Kick -> Kidney Shot (kick fb) -> Sap (OOC CC) -> Blind
+//   -> poisons (OOC upkeep) -> Stealth (OOC) -> Cheap Shot (stealth open vs caster)
+//   -> Shadowstrike (stealth) -> Tricks -> Shadowstep (gap close) -> Thistle Tea
+//   -> major CDs (Shadow Blades, Shadow Dance, Goremaw's Bite) -> Slice and Dice
+//   -> Secret Tech -> Black Powder (AoE finisher) -> Eviscerate (5 CP)
+//   -> Shuriken Storm (AoE gen) -> Gloomblade / Backstab -> Shuriken Toss -> AA.
 ApRule const kRules[] = {
     { ShouldCloakOfShadows,     DoCloakOfShadows,   "Cloak of Shadows (magic emergency)"},
     { ShouldVanish,             DoVanish,           "Vanish (offensive/panic)"          },
@@ -551,24 +553,21 @@ ApRule const kRules[] = {
     { ShouldKidneyShot,         DoKidneyShot,       "Kidney Shot (interrupt fb)"        },
     { ShouldSap,                DoSap,              "Sap (OOC CC second target)"        },
     { ShouldBlind,              DoBlind,            "Blind (panic CC)"                  },
+    { ShouldInstantPoison,      DoInstantPoison,    "Instant Poison (OOC upkeep)"       },
+    { ShouldNonLethalPoison,    DoNonLethalPoison,  "Non-lethal poison (OOC upkeep)"    },
     { ShouldStealthOOC,         DoStealth,          "Stealth (OOC opener prep)"         },
-    { ShouldGarroteOpener,      DoGarroteOpener,    "Garrote (stealth silence opener)"  },
     { ShouldCheapShotOpener,    DoCheapShot,        "Cheap Shot (stealth stun opener)"  },
     { ShouldShadowstrike,       DoShadowstrike,     "Shadowstrike (stealth CP gen)"     },
     { ShouldTricks,             DoTricks,           "Tricks of the Trade"               },
-    { ShouldSmokeBomb,          DoSmokeBomb,        "Smoke Bomb (3+ AoE)"               },
     { ShouldShadowstep,         DoShadowstep,       "Shadowstep (gap close)"            },
-    { ShouldSymbolsOfDeath,     DoSymbolsOfDeath,   "Symbols of Death"                  },
+    { ShouldThistleTea,         DoThistleTea,       "Thistle Tea (energy restore)"      },
     { ShouldShadowBlades,       DoShadowBlades,     "Shadow Blades"                     },
     { ShouldShadowDance,        DoShadowDance,      "Shadow Dance"                      },
-    { ShouldShurikenTornado,    DoShurikenTornado,  "Shuriken Tornado (2+ AoE)"         },
-    { ShouldSepsis,             DoSepsis,           "Sepsis"                            },
-    { ShouldMarkedForDeath,     DoMarkedForDeath,   "Marked for Death"                  },
-    { ShouldEchoingReprimand,   DoEchoingReprimand, "Echoing Reprimand"                 },
+    { ShouldGoremawsBite,       DoGoremawsBite,     "Goremaw's Bite (CP burst)"         },
+    { ShouldSliceAndDice,       DoSliceAndDice,     "Slice and Dice (refresh)"          },
     { ShouldSecretTechnique,    DoSecretTechnique,  "Secret Technique (5 CP)"           },
     { ShouldBlackPowder,        DoBlackPowder,      "Black Powder (3+ AoE 5 CP)"        },
     { ShouldEviscerate,         DoEviscerate,       "Eviscerate (5 CP finisher)"        },
-    { ShouldRupture,            DoRupture,          "Rupture (4 CP bleed refresh)"      },
     { ShouldShurikenStorm,      DoShurikenStorm,    "Shuriken Storm (AoE gen)"          },
     { ShouldGloomblade,         DoGloomblade,       "Gloomblade (filler)"               },
     { ShouldBackstab,           DoBackstab,         "Backstab (filler)"                 },

@@ -1,31 +1,48 @@
-﻿// Survival Hunter - WoW 12.0 enterprise rotation. Melee Hunter with bleeds,
-// pet uptime, focus economy, and ground-target Wildfire Bomb. Multi-DoT
-// cycling spreads Serpent Sting to every nearby enemy via the
-// BotSnapshotBuilder enemy outbound scan that already covers spec 255.
+﻿// Survival Hunter - WoW 12.1.0.69587 (Midnight) enterprise rotation. Melee
+// Hunter built around Kill Command (focus generator, Tip of the Spear),
+// Raptor Strike (spender, Mongoose Fury stacks / Raptor Swipe cleave are
+// PASSIVE upgrades in 12.1), Wildfire Bomb (charges, cone + DoT) and two
+// new 12.1 buttons: Takedown (90s cd leap-and-strike burst, replaces
+// Coordinated Assault / Spearhead) and Boomstick (60s cd shotgun cone,
+// 50 focus, replaces Butchery / Carve as the AoE spender).
 //
 // Layered survival: Aspect of the Turtle (immunity) -> Exhilaration ->
 // Survival of the Fittest -> Feign Death threat dump. Group utility:
-// Misdirection (tank threat redirect), Aspect of the Cheetah (movement),
-// Aspect of the Wild (group buff). Pet maintenance: Mend Pet, Revive Pet,
-// Bestial Wrath. CC: Tar Trap (slow), Freezing Trap (sap), Intimidation
-// (talent stun), Binding Shot (talent root). Major CDs: Coordinated
-// Assault, Spearhead, Aspect of the Eagle (range extender), Death Chakram.
-// Engage: Harpoon (gap close, L14) / Hatchet Toss (ranged opener, L12).
-// Execute: Kill Shot.
+// Misdirection (tank threat redirect), Primal Rage (pet-cast Bloodlust,
+// Ferocity pets). Pet maintenance: Mend Pet, Revive Pet. CC: Muzzle
+// (melee interrupt), Intimidation (pet stun, interrupt fallback), Binding
+// Shot (root cluster), Tar Trap (slow). Engage: Harpoon (gap close, L14) /
+// Hatchet Toss (ranged opener, L12; overrides Arcane Shot). Aspect of the
+// Eagle extends Raptor Strike to 40y as a boss burst window.
 //
-// Validated against wago.tools SpellName.csv 2026-05-27. Every ID below
-// resolves to its expected name.
+// Validated spell IDs (WoW 12.1.0.69587, kit + SpellName.csv):
+//   186270 Raptor Strike    | 259489 Kill Command (SV) | 259495 Wildfire Bomb
+//   1250646 Takedown        | 1261193 Boomstick        | 193265 Hatchet Toss
+//   190925 Harpoon          | 186289 Aspect of the Eagle| 187707 Muzzle
+//   19577  Intimidation     | 109248 Binding Shot      | 187698 Tar Trap
+//   34477  Misdirection     | 264735 Survival o.t.Fit. | 186265 Aspect of the Turtle
+//   109304 Exhilaration     | 5384   Feign Death       | 136    Mend Pet
+//   982    Revive Pet       | 257284 Hunter's Mark
+//   264667 Primal Rage (PET ability, pet_cast)
 //
-// Skipped spec spells (not rotation-relevant — intentional omissions):
-//   * Track Pets         (1244920) — minimap-utility, never a damage cast.
-//   * Dual Wield         (1277760) — passive (allows dual-wield melee).
-//   * Eyes of the Beast  (  321297) — pet-vision toy, breaks bot AI control.
-//   * Poison Injection   (  378014) — passive that converts Serpent Sting
-//                                     into a Kill Command proc generator;
-//                                     casting it as a spell is a no-op
-//                                     (was previously mis-labeled
-//                                     "Flayed Shot" — Flayed Shot is the
-//                                     Shadow Priest Necrolord spell 324149).
+// Skipped (deliberate, 12.1):
+//   * Mongoose Bite    ( 259387) - gone; Mongoose Fury (1252708) is a passive
+//                                  Raptor Strike self-buff now.
+//   * Carve / Butchery (187708 / 212436) - gone; Boomstick + Raptor Swipe
+//                                  passive (1259003) cover melee AoE.
+//   * Serpent Sting    ( 259491) - removed from SV (no outbound DoT to cycle).
+//   * Coordinated Assault / Spearhead (360952 / 360966) - gone; Takedown is
+//                                  the 12.1 burst CD.
+//   * Kill Shot        (  53351) - Marksmanship-only talent in 12.1.
+//   * Counter Shot     ( 147362) - BM/MM only; SV interrupts with Muzzle.
+//   * Bestial Wrath    (  19574) - BM-only talent.
+//   * Aspect of the Wild (193530) / Death Chakram (375891) / Steel Trap
+//                      ( 162488) - removed from the game / no SV learn path.
+//   * Freezing Trap    ( 187650) / Aspect of the Cheetah (186257) / Wing
+//                      Clip (195645) - out-of-combat or positional utility.
+//   * Tranquilizing Shot (19801) / Camouflage (199483) - [M]-only class
+//                      talents, dispel / stealth logic lives outside the DPS ladder.
+//   * Eyes of the Beast ( 321297) - pet-vision toy, breaks bot AI control.
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -38,54 +55,43 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
-constexpr uint32 RAPTOR_STRIKE        = 186270;
-constexpr uint32 MONGOOSE_BITE        = 259387;
-constexpr uint32 KILL_COMMAND_SV      = 259489;
-constexpr uint32 KILL_SHOT_SV         = 53351;
-constexpr uint32 WILDFIRE_BOMB        = 259495;
-constexpr uint32 CARVE                = 187708;       // melee AoE
-constexpr uint32 BUTCHERY             = 212436;       // talent — replaces Carve
-constexpr uint32 SERPENT_STING        = 259491;
-constexpr uint32 COORDINATED_ASSAULT  = 360952;
-constexpr uint32 SPEARHEAD            = 360966;       // talent — bleed CD
-constexpr uint32 DEATH_CHAKRAM        = 375891;       // talent — focus gen + AoE
-constexpr uint32 HATCHET_TOSS         = 193265;       // L12 ranged opener (30y)
-constexpr uint32 HARPOON              = 190925;       // L14 gap closer (8-30y)
-constexpr uint32 ASPECT_EAGLE         = 186289;       // L24 burst CD — 40y range
-constexpr uint32 INTIMIDATION         = 19577;        // 5sec stun via pet
-constexpr uint32 BINDING_SHOT         = 109248;       // talent root cluster
-constexpr uint32 MUZZLE               = 187707;       // melee interrupt
-constexpr uint32 COUNTER_SHOT         = 147362;       // ranged interrupt
+// ---- Spell IDs (WoW 12.1.0.69587, validated against the 12.1 kit and
+// SpellName.csv; see the header table) ----
+constexpr uint32 RAPTOR_STRIKE        = 186270;       // spec talent [R][M] (L10), 30 focus, 5y
+constexpr uint32 KILL_COMMAND_SV      = 259489;       // spec talent [R][M] (L11), 50y, GENERATES focus
+constexpr uint32 WILDFIRE_BOMB        = 259495;       // spec talent [R][M] (L20), 10 focus, cone + DoT
+constexpr uint32 TAKEDOWN             = 1250646;      // spec talent [R][M] - 90s cd, 15y leap-and-strike burst
+constexpr uint32 BOOMSTICK            = 1261193;      // spec talent [R][M] - 60s cd, 50 focus, 20y shotgun cone
+constexpr uint32 HATCHET_TOSS         = 193265;       // spec spell L12 ranged opener (40y), 30 focus; overrides Arcane Shot
+constexpr uint32 HARPOON              = 190925;       // spec spell L14 gap closer (30y)
+constexpr uint32 ASPECT_EAGLE         = 186289;       // spec spell L24 burst CD - Raptor Strike at 40y for 15s
+constexpr uint32 INTIMIDATION         = 19577;        // class talent [R][M] - 5s stun via pet
+constexpr uint32 BINDING_SHOT         = 109248;       // class talent [R] root cluster
+constexpr uint32 MUZZLE               = 187707;       // class talent [R][M] melee interrupt
 constexpr uint32 MISDIRECTION         = 34477;
 constexpr uint32 ASPECT_TURTLE        = 186265;
 constexpr uint32 EXHILARATION         = 109304;
-constexpr uint32 SURVIVAL_FITTEST     = 264735;       // talent — 20% DR self
+constexpr uint32 SURVIVAL_FITTEST     = 264735;       // class talent [R][M] - DR self + pet
 constexpr uint32 FEIGN_DEATH          = 5384;
 constexpr uint32 MEND_PET             = 136;
 constexpr uint32 REVIVE_PET           = 982;          // OOC + combat rez of pet
-constexpr uint32 BESTIAL_WRATH        = 19574;        // SV uses too via talent
-constexpr uint32 ASPECT_CHEETAH       = 186257;
-constexpr uint32 ASPECT_WILD          = 193530;       // group crit buff
-constexpr uint32 TAR_TRAP             = 187698;
-constexpr uint32 FREEZING_TRAP        = 187650;
-constexpr uint32 STEEL_TRAP           = 162488;       // talent ground bleed
+constexpr uint32 TAR_TRAP             = 187698;       // class talent [R][M]
 constexpr uint32 HUNTERS_MARK         = 257284;
-constexpr uint32 PRIMAL_RAGE          = 264667;       // pet bloodlust
+constexpr uint32 PRIMAL_RAGE          = 264667;       // PET ability (Ferocity, via Command Pet 272651) - pet_cast only
 
 constexpr uint8 POWER_FOCUS_IDX = 2;
+
+constexpr int32 RAPTOR_STRIKE_COST = 30;
+constexpr int32 HATCHET_TOSS_COST  = 30;
+constexpr int32 WILDFIRE_BOMB_COST = 10;
+constexpr int32 BOOMSTICK_COST     = 50;
 
 bool HasLiveTarget(ApPredicateContext const& ctx)
 {
     return !ctx.bot.victim().IsEmpty();
 }
 
-bool TargetExecuteRange(ApPredicateContext const& ctx)
-{
-    NearbyUnit const* t = ctx.bot.victim_info();
-    if (!t || t->max_hp <= 0 || t->hp <= 0) return false;
-    return (t->hp * 100) / t->max_hp <= 20;
-}
+int32 FocusVal(ApPredicateContext const& ctx) { return ctx.bot.power(POWER_FOCUS_IDX); }
 
 bool BossLikeTargetEngaged(ApPredicateContext const& ctx)
 {
@@ -183,25 +189,20 @@ void DoMisdirection(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(MISDIRECTION, tank->guid);
 }
 
-bool ShouldAspectWild(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(ASPECT_WILD)) return false;
-    if (!ctx.bot.is_ready(ASPECT_WILD)) return false;
-    return BossLikeTargetEngaged(ctx);
-}
-void DoAspectWild(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(ASPECT_WILD); }
-
+// Primal Rage is a PET ability (Ferocity family, surfaced to the hunter via
+// Command Pet 272651), not a hunter spell - knows_spell()/is_ready() query
+// the BOT's spellbook and always fail, and e.cast() would bounce off
+// NOT_KNOWN. Route through pet_cast (API::pet_cast validates the pet knows
+// it and checks the pet's own SpellHistory). Same pattern as the BM file.
 bool ShouldPrimalRage(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.has_pet()) return false;
-    if (!ctx.bot.knows_spell(PRIMAL_RAGE)) return false;
-    if (!ctx.bot.is_ready(PRIMAL_RAGE)) return false;
+    if (!ctx.bot.pet_can_bloodlust()) return false;   // Ferocity pets only
     if (BotHasSatedDebuff(ctx)) return false;
     return BossLikeTargetEngaged(ctx);
 }
-void DoPrimalRage(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(PRIMAL_RAGE); }
+void DoPrimalRage(ApPredicateContext const&, BotIntentEmitter& e) { e.pet_cast(PRIMAL_RAGE); }
 
 // ---- Interrupt / CC ----
 bool ShouldMuzzle(ApPredicateContext const& ctx)
@@ -218,26 +219,16 @@ void DoMuzzle(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(MUZZLE, c->guid);
 }
 
-bool ShouldCounterShot(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(COUNTER_SHOT)) return false;
-    if (!ctx.bot.is_ready(COUNTER_SHOT)) return false;
-    if (ctx.bot.is_ready(MUZZLE)) return false;
-    const bool pvp = ctx.pvp.in_battleground || ctx.pvp.in_arena;
-    return ctx.bot.kick_target(pvp, 40.0f) != nullptr;
-}
-void DoCounterShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    const bool pvp = ctx.pvp.in_battleground || ctx.pvp.in_arena;
-    if (auto const* c = ctx.bot.kick_target(pvp, 40.0f))
-        e.cast(COUNTER_SHOT, c->guid);
-}
-
+// Intimidation (pet stun, 100y) doubles as the ranged interrupt fallback:
+// Muzzle is melee-only (5y), so a caster that is out of reach - or casting
+// while Muzzle is on cooldown - gets the pet stun instead.
 bool ShouldIntimidation(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.knows_spell(INTIMIDATION)) return false;
     if (!ctx.bot.is_ready(INTIMIDATION)) return false;
+    if (!ctx.bot.has_pet()) return false;
     const bool pvp = ctx.pvp.in_battleground || ctx.pvp.in_arena;
+    if (ctx.bot.is_ready(MUZZLE) && ctx.bot.kick_target(pvp, 5.0f) != nullptr) return false;
     return ctx.bot.kick_target(pvp, 40.0f) != nullptr;
 }
 void DoIntimidation(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -275,53 +266,45 @@ void DoTarTrap(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(TAR_TRAP);
 }
 
+// Compute squared-distance between bot and a NearbyUnit. NearbyUnit
+// itself doesn't carry a pre-computed distance - match the cheap inline
+// idiom used by enemies_within() in BotSnapshotView.cpp.
+inline float TargetDistSq(ApPredicateContext const& ctx, NearbyUnit const& t)
+{
+    float bx, by, bz; ctx.bot.position(bx, by, bz);
+    const float dx = t.x - bx, dy = t.y - by, dz = t.z - bz;
+    return dx*dx + dy*dy + dz*dz;
+}
+
 // ---- Major offensive CDs ----
-bool ShouldCoordinatedAssault(ApPredicateContext const& ctx)
+// Takedown (1250646, [R][M], 90s cd, 15y): "You and your pet leap to your
+// target and strike as one ... For the next 8s the damage dealt by you
+// [and your pet is increased]". It is SV's single burst CD in 12.1
+// (Coordinated Assault / Spearhead are gone). Same leveling-aware gate as
+// BM's Bestial Wrath: any fight that can absorb a 90s CD - boss-like,
+// multi-pull, or a target meatier than the bot - not raid bosses only.
+// The leap also closes a 15y gap, so it doubles as a mini gap-closer.
+bool ShouldTakedown(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(COORDINATED_ASSAULT)) return false;
-    if (!ctx.bot.is_ready(COORDINATED_ASSAULT)) return false;
-    return ctx.bot.has_pet();
+    if (!ctx.bot.knows_spell(TAKEDOWN)) return false;
+    if (!ctx.bot.is_ready(TAKEDOWN)) return false;
+    NearbyUnit const* t = ctx.bot.victim_info();
+    if (!t) return false;
+    if (TargetDistSq(ctx, *t) > 15.0f * 15.0f) return false;   // out of leap range
+    if (BossLikeTargetEngaged(ctx)) return true;
+    if (ctx.bot.attackers_count() >= 2 || ctx.bot.enemies_within(10.0f) >= 2) return true;
+    return t->max_hp >= ctx.bot.max_hp();
 }
-void DoCoordinatedAssault(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(COORDINATED_ASSAULT); }
-
-bool ShouldSpearhead(ApPredicateContext const& ctx)
+void DoTakedown(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SPEARHEAD)) return false;
-    if (!ctx.bot.is_ready(SPEARHEAD)) return false;
-    return ctx.bot.has_pet();
-}
-void DoSpearhead(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(SPEARHEAD, ctx.bot.victim());
+    e.cast(TAKEDOWN, ctx.bot.victim());
 }
 
-bool ShouldBestialWrath(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(BESTIAL_WRATH)) return false;
-    if (!ctx.bot.is_ready(BESTIAL_WRATH)) return false;
-    return ctx.bot.has_pet();
-}
-void DoBestialWrath(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BESTIAL_WRATH); }
-
-bool ShouldDeathChakram(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(DEATH_CHAKRAM)) return false;
-    if (!ctx.bot.is_ready(DEATH_CHAKRAM)) return false;
-    return true;
-}
-void DoDeathChakram(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(DEATH_CHAKRAM, ctx.bot.victim());
-}
-
-// Aspect of the Eagle (186289, L24, 1.5min CD). Extends auto-attack and
-// the SV ranged-tagged shots (Kill Shot, Hatchet Toss, Serpent Sting) to
-// 40y for 15s. Use as a burst window — fires on boss-like targets so the
-// CD isn't blown on a 3-second trash pull. Self-cast (no target).
+// Aspect of the Eagle (186289, L24, 90s CD). Extends Raptor Strike (and
+// Mastery: Spirit Bond) to 40y for 15s. Use as a burst window - fires on
+// boss-like targets so the CD isn't blown on a 3-second trash pull.
+// Self-cast (no target).
 bool ShouldAspectEagle(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -330,16 +313,6 @@ bool ShouldAspectEagle(ApPredicateContext const& ctx)
     return BossLikeTargetEngaged(ctx);
 }
 void DoAspectEagle(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(ASPECT_EAGLE); }
-
-// Compute squared-distance between bot and a NearbyUnit. NearbyUnit
-// itself doesn't carry a pre-computed distance — match the cheap inline
-// idiom used by enemies_within() in BotSnapshotView.cpp.
-inline float TargetDistSq(ApPredicateContext const& ctx, NearbyUnit const& t)
-{
-    float bx, by, bz; ctx.bot.position(bx, by, bz);
-    const float dx = t.x - bx, dy = t.y - by, dz = t.z - bz;
-    return dx*dx + dy*dy + dz*dz;
-}
 
 // Harpoon (190925, L14, 30s CD). 8-30y leap that roots the target for 3s.
 // SV is a melee spec, so Harpoon is the primary gap-closer when the bot
@@ -367,47 +340,38 @@ void DoHarpoon(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(HARPOON, ctx.bot.victim());
 }
 
-// Hatchet Toss (193265, L12, 6s CD). 30y ranged opener and the only
-// damage cast SV has at range outside Aspect of the Eagle. Use when the
-// bot is outside melee + Harpoon is on CD or the target is too close for
-// Harpoon (≤8y) but the bot has been pushed back. Also fires while
-// Aspect of the Eagle is active (ranged window). Cheap (no focus cost),
-// so it slots in any time the bot is too far to swing.
+// Hatchet Toss (193265, L12, 30 focus, 40y; overrides Arcane Shot on the
+// bar). The only damage cast SV has at range outside Aspect of the Eagle.
+// Use when the bot is outside melee + Harpoon is on CD, or the target is
+// too close for Harpoon (<=8y) but the bot has been pushed back. It costs
+// the same 30 focus as Raptor Strike, so it slots in any time the bot is
+// too far to swing and can afford a spender.
 bool ShouldHatchetToss(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(HATCHET_TOSS)) return false;
     if (!ctx.bot.is_ready(HATCHET_TOSS)) return false;
+    if (FocusVal(ctx) < HATCHET_TOSS_COST) return false;
     NearbyUnit const* t = ctx.bot.victim_info();
     if (!t) return false;
     const float d2 = TargetDistSq(ctx, *t);
-    return d2 > 8.0f * 8.0f && d2 <= 30.0f * 30.0f;
+    return d2 > 8.0f * 8.0f && d2 <= 40.0f * 40.0f;
 }
 void DoHatchetToss(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(HATCHET_TOSS, ctx.bot.victim());
 }
 
-// ---- Execute / kill ----
-bool ShouldKillShot(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(KILL_SHOT_SV)) return false;
-    if (!ctx.bot.is_ready(KILL_SHOT_SV)) return false;
-    return TargetExecuteRange(ctx);
-}
-void DoKillShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(KILL_SHOT_SV, ctx.bot.victim());
-}
-
-// ---- Bombs / DoT ----
+// ---- Bombs ----
+// Wildfire Bomb (259495, [R][M], 10 focus, charges via Quick Reload /
+// Guerrilla Tactics). Cone + DoT on everything at the impact point, 12.1's
+// top SV priority whenever a charge is up. is_ready() folds in charges.
 bool ShouldWildfireBomb(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(WILDFIRE_BOMB)) return false;
     if (!ctx.bot.is_ready(WILDFIRE_BOMB)) return false;
-    return true;
+    return FocusVal(ctx) >= WILDFIRE_BOMB_COST;
 }
 void DoWildfireBomb(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
@@ -417,46 +381,9 @@ void DoWildfireBomb(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(WILDFIRE_BOMB, ctx.bot.victim());
 }
 
-bool ShouldSteelTrap(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(STEEL_TRAP)) return false;
-    if (!ctx.bot.is_ready(STEEL_TRAP)) return false;
-    return true;
-}
-void DoSteelTrap(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (auto const* v = ctx.bot.victim_info())
-        e.cast_at(STEEL_TRAP, v->x, v->y, v->z);
-    else
-        e.cast(STEEL_TRAP);
-}
-
-bool ShouldSerpentStingPrimary(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SERPENT_STING)) return false;
-    AuraEntry const* a = ctx.bot.find_aura(SERPENT_STING, ctx.bot.victim());
-    return !a || a->remaining.count() <= 4500;
-}
-void DoSerpentStingPrimary(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(SERPENT_STING, ctx.bot.victim());
-}
-
-bool ShouldSerpentStingExpand(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(SERPENT_STING)) return false;
-    return ctx.bot.enemy_without_my_aura(SERPENT_STING, 30.0f) != nullptr;
-}
-void DoSerpentStingExpand(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (auto const* off = ctx.bot.enemy_without_my_aura(SERPENT_STING, 30.0f))
-        e.cast(SERPENT_STING, off->guid);
-}
-
 // ---- Generators / spenders / AoE ----
+// Kill Command (259489): SV's version GENERATES focus and drives Tip of the
+// Spear, so it is pressed on cooldown ahead of every focus spender.
 bool ShouldKillCommand(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -469,49 +396,44 @@ void DoKillCommand(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(KILL_COMMAND_SV, ctx.bot.victim());
 }
 
-bool ShouldButchery(ApPredicateContext const& ctx)
+// Boomstick (1261193, [R][M], 60s cd, 50 focus, 20y cone): "Unload a
+// series of shotgun blasts in front of you ... reduced damage beyond N
+// targets". The AoE spender that replaced Butchery / Carve; a cone, so it
+// needs the target roughly in front (the bot faces its victim while
+// attacking) and inside 20y. Fires on 2+ attackers or owner /aoe pin, and
+// on boss-like targets as a plain big hit so the CD is not wasted in ST.
+bool ShouldBoomstick(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(BUTCHERY)) return false;
-    if (!ctx.bot.is_ready(BUTCHERY)) return false;
-    return ctx.aoe_preference || ctx.bot.enemies_within(8.0f) >= 2;
+    if (!ctx.bot.knows_spell(BOOMSTICK)) return false;
+    if (!ctx.bot.is_ready(BOOMSTICK)) return false;
+    if (FocusVal(ctx) < BOOMSTICK_COST) return false;
+    NearbyUnit const* t = ctx.bot.victim_info();
+    if (!t || TargetDistSq(ctx, *t) > 20.0f * 20.0f) return false;
+    return ctx.aoe_preference || ctx.bot.attackers_count() >= 2 || BossLikeTargetEngaged(ctx);
 }
-void DoButchery(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BUTCHERY); }
-
-bool ShouldCarve(ApPredicateContext const& ctx)
+void DoBoomstick(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(CARVE)) return false;
-    if (ctx.bot.knows_spell(BUTCHERY)) return false;       // Butchery replaces Carve
-    return ctx.aoe_preference || ctx.bot.enemies_within(8.0f) >= 2;
-}
-void DoCarve(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(CARVE); }
-
-bool ShouldMongooseBite(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(MONGOOSE_BITE)) return false;
-    if (!ctx.bot.is_ready(MONGOOSE_BITE)) return false;
-    return ctx.bot.power(POWER_FOCUS_IDX) >= 30;
-}
-void DoMongooseBite(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(MONGOOSE_BITE, ctx.bot.victim());
+    e.cast(BOOMSTICK, ctx.bot.victim());
 }
 
+// Raptor Strike (186270, 30 focus, 5y): the focus spender / filler. In
+// 12.1 Mongoose Bite is gone - Mongoose Fury (1252708) and Raptor Swipe
+// (1259003) are passive upgrades to Raptor Strike itself, so this is the
+// only melee spender and needs no talent branch.
 bool ShouldRaptorStrike(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(RAPTOR_STRIKE)) return false;
-    if (ctx.bot.knows_spell(MONGOOSE_BITE)) return false; // Mongoose replaces Raptor
-    return ctx.bot.power(POWER_FOCUS_IDX) >= 30;
+    if (!ctx.bot.is_ready(RAPTOR_STRIKE)) return false;
+    return FocusVal(ctx) >= RAPTOR_STRIKE_COST;
 }
 void DoRaptorStrike(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(RAPTOR_STRIKE, ctx.bot.victim());
 }
 
-// Hunter's Mark — baseline ranged-damage-taken debuff (5%). Granted
+// Hunter's Mark - baseline ranged-damage-taken debuff (5%). Granted
 // around L7 and persists across all three specs. One cast per target.
 bool ShouldHuntersMark(ApPredicateContext const& ctx)
 {
@@ -553,36 +475,24 @@ ApRule const kRules[] = {
     { ShouldFeignDeath,        DoFeignDeath,        "Feign Death (drop aggro)"    },
     { ShouldMisdirection,      DoMisdirection,      "Misdirection (tank threat)"  },
     { ShouldMuzzle,            DoMuzzle,            "Muzzle (interrupt)"          },
-    { ShouldCounterShot,       DoCounterShot,       "Counter Shot (interrupt fb)" },
-    { ShouldIntimidation,      DoIntimidation,      "Intimidation (pet stun)"     },
+    { ShouldIntimidation,      DoIntimidation,      "Intimidation (interrupt fb)" },
     { ShouldBindingShot,       DoBindingShot,       "Binding Shot (3+ AoE)"       },
     { ShouldTarTrap,           DoTarTrap,           "Tar Trap (slow)"             },
-    { ShouldAspectWild,        DoAspectWild,        "Aspect of the Wild (boss)"   },
     { ShouldPrimalRage,        DoPrimalRage,        "Primal Rage (Bloodlust)"     },
-    { ShouldCoordinatedAssault,DoCoordinatedAssault,"Coordinated Assault"         },
-    { ShouldSpearhead,         DoSpearhead,         "Spearhead"                   },
-    { ShouldBestialWrath,      DoBestialWrath,      "Bestial Wrath"               },
+    { ShouldTakedown,          DoTakedown,          "Takedown (burst)"            },
     { ShouldAspectEagle,       DoAspectEagle,       "Aspect of the Eagle (range)" },
-    { ShouldDeathChakram,      DoDeathChakram,      "Death Chakram"               },
     { ShouldHuntersMark,       DoHuntersMark,       "Hunter's Mark (debuff)"      },
-    // Harpoon BEFORE Kill Shot: if the bot is too far away to melee, we
-    // need to close the gap before any GCD spender (including Kill Shot,
-    // which is melee-tagged in SV outside Aspect of the Eagle).
+    // Harpoon BEFORE the spenders: if the bot is too far away to melee, we
+    // need to close the gap before any GCD spender.
     { ShouldHarpoon,           DoHarpoon,           "Harpoon (gap close 8-30y)"   },
-    { ShouldKillShot,          DoKillShot,          "Kill Shot (<=20%)"           },
     { ShouldWildfireBomb,      DoWildfireBomb,      "Wildfire Bomb"               },
-    { ShouldSteelTrap,         DoSteelTrap,         "Steel Trap"                  },
-    { ShouldSerpentStingPrimary, DoSerpentStingPrimary, "Serpent Sting (primary)" },
-    { ShouldSerpentStingExpand, DoSerpentStingExpand,  "Serpent Sting (expand)"   },
-    { ShouldKillCommand,       DoKillCommand,       "Kill Command"                },
-    { ShouldButchery,          DoButchery,          "Butchery (2+ AoE)"           },
-    { ShouldCarve,             DoCarve,             "Carve (2+ AoE)"              },
-    // Hatchet Toss sits just above the melee fillers so an out-of-range
+    { ShouldKillCommand,       DoKillCommand,       "Kill Command (focus gen)"    },
+    { ShouldBoomstick,         DoBoomstick,         "Boomstick (cone AoE)"        },
+    // Hatchet Toss sits just above the melee filler so an out-of-range
     // bot keeps damaging while Harpoon is on CD instead of falling all
     // the way to AutoAttack (which won't reach).
-    { ShouldHatchetToss,       DoHatchetToss,       "Hatchet Toss (ranged 8-30y)" },
-    { ShouldMongooseBite,      DoMongooseBite,      "Mongoose Bite"               },
-    { ShouldRaptorStrike,      DoRaptorStrike,      "Raptor Strike (filler)"      },
+    { ShouldHatchetToss,       DoHatchetToss,       "Hatchet Toss (ranged 8-40y)" },
+    { ShouldRaptorStrike,      DoRaptorStrike,      "Raptor Strike (spender)"     },
     { AlwaysInCombat,          DoAutoAttack,        "Engage auto attack"          },
 };
 

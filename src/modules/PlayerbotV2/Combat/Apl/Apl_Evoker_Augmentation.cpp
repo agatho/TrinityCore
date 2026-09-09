@@ -1,68 +1,83 @@
-﻿// Augmentation Evoker - WoW 12.0 enterprise rotation. Support spec that
-// buffs allies via Ebon Might (group buff applied to nearby DPS) and
-// Prescience (single-target Mastery buff). Damage is secondary — its purpose
-// is to feed Essence Burst procs that fuel Eruption (the buff-extender).
+﻿// Augmentation Evoker - WoW 12.1.0.69587 (Midnight) rotation. Support spec
+// that buffs allies via Ebon Might (group buff applied to nearby DPS) and
+// Prescience (single-target crit buff). Damage is secondary - Fire Breath,
+// Upheaval and Eruption all extend the active Ebon Might, and Essence Burst
+// procs make Eruption free.
 //
 // Rule ORDER:
 //   1) Mobility:              Hover (cast-while-moving)
-//   2) Survival:              Renewing Blaze, Obsidian Scales, Verdant
-//                             Embrace self, Emerald Blossom self-heal
-//                             (<=50%), Zephyr, Emerald Communion (OOC)
-//   3) Interrupt / CC:        Quell, Sleep Walk off-target
-//   4) Group utility:         Rescue peel, Cauterizing Flame cleanse, Time
-//                             Dilation (tank DR), Source of Magic (caster),
-//                             Blessing of the Bronze
+//   2) Survival:              Obsidian Scales (Renewing Blaze rides on it
+//                             passively), Verdant Embrace self, Emerald
+//                             Blossom self-heal (<=50%), Zephyr
+//   3) Interrupt / CC:        Quell, Sleep Walk off-target, Landslide panic
+//                             root
+//   4) Group utility:         Rescue peel, Expunge / Cauterizing Flame
+//                             cleanse, Source of Magic (caster), Blessing
+//                             of the Bronze
 //   5) Lust:                  Fury of the Aspects (Sated guarded)
 //   6) Ally maintenance       Ebon Might (refresh), Prescience on best DPS,
 //      (Augmentation's        Blistering Scales on tank
 //      whole purpose):
-//   7) Major CDs:             Breath of Eons (extends Ebon Might per hit),
-//                             Time Skip (talent — accelerates CDs)
-//   8) Damage rotor:          Upheaval (3+ AoE), Eruption (Essence spender —
-//                             extends Ebon Might/Prescience), Disintegrate
-//                             channel (big essence sink), Living Flame
-//                             filler (Essence Burst proc), Azure Strike
+//   7) Major CDs:             Breath of Eons (Ebon Might + Temporal Wound),
+//                             Time Skip, Tip the Scales (free max empower),
+//                             Time Spiral (group bail)
+//   8) Damage rotor:          Fire Breath (Empower, extends EM), Upheaval
+//                             (Empower, extends EM), Eruption (Essence
+//                             spender / EM extender), Disintegrate (only
+//                             without the Eruption override), Living Flame,
+//                             Azure Strike
 //
-// Validated IDs (cross-referenced against SpellName.csv +
-// SpecializationSpells.csv on 2026-05-27):
-//   361469 Living Flame           — class baseline
-//   362969 Azure Strike           — class baseline
-//   395160 Eruption               — Aug Essence spender / Ebon Might extender
-//   395152 Ebon Might             — group ally buff (Augmentation's job)
-//   410089 Prescience             — single-target Mastery buff
-//   403631 Breath of Eons         — Aug burst CD; extends EM per hit
-//   360827 Blistering Scales      — tank buff
-//   396286 Upheaval               — Empower AoE damage
-//   356995 Disintegrate           — channel Essence sink
-//   392268 Essence Burst (aura)   — proc aura, makes Eruption cheap/free
-//   404977 Time Skip              — talent CD accelerator
-//   351338 Quell, 360806 Sleep Walk
-//   363916 Obsidian Scales        — CORRECTED from 235450 (Prismatic Barrier)
-//   374348 Renewing Blaze
-//   374227 Zephyr                 — talent group magic DR
-//   360995 Verdant Embrace        — heal
-//   365261 Emerald Blossom        — self-heal at <=50% HP (Initial Evoker)
-//   358267 Hover, 370665 Rescue
-//   369459 Source of Magic
-//   374251 Cauterizing Flame
-//   370960 Emerald Communion
-//   357170 Time Dilation
-//   364342 Blessing of the Bronze
-//   390386 Fury of the Aspects
+// Validated IDs (WoW 12.1.0.69587, cross-referenced against the 12.1 kit:
+// SkillLineAbility + SpecializationSpells + simc trait data, 2026-09-09):
+//   361469 Living Flame           - class baseline
+//   362969 Azure Strike           - class baseline
+//   357208 Fire Breath            - class baseline Empower cone (extends EM)
+//   395160 Eruption               - spec talent Essence spender [R]
+//                                   (overrides 356995 Disintegrate)
+//   395152 Ebon Might             - spec talent group buff [R]
+//   409311 Prescience             - spec talent crit buff castable [R]
+//   410089 Prescience             - aura on the ally (duration tracker)
+//   403631 Breath of Eons         - spec talent burst CD [R]
+//   360827 Blistering Scales      - spec talent tank buff (not in the
+//                                   curated builds; knows_spell-gated)
+//   396286 Upheaval               - spec talent Empower AoE [R]
+//   356995 Disintegrate           - class baseline, only for bots without
+//                                   Eruption
+//   392268 Essence Burst          - aura only: next Eruption costs no Essence
+//   404977 Time Skip              - spec talent CD accelerator [R]
+//   370553 Tip the Scales         - class talent free max empower [R]
+//   374968 Time Spiral            - class talent [R]
+//   351338 Quell                  - spec talent interrupt [R]
+//   360806 Sleep Walk             - class talent off-target CC [M]
+//   358385 Landslide              - class talent ground root [R]
+//   363916 Obsidian Scales        - class talent 30% DR [R]
+//   374227 Zephyr                 - class talent AoE DR [R]
+//   360995 Verdant Embrace        - class talent heal [R]
+//   355913 Emerald Blossom        - class baseline castable (365261 is the
+//                                   passive rank marker)
+//   358267 Hover                  - class baseline mobility
+//   370665 Rescue                 - class talent peel [R]
+//   369459 Source of Magic        - class talent [R]
+//   365585 Expunge                - class talent Poison dispel [R]
+//   374251 Cauterizing Flame      - class talent cleanse [R]
+//   364342 Blessing of the Bronze - class baseline (L30)
+//   390386 Fury of the Aspects    - class baseline lust (L48)
 //
-// Skipped spells (and why — Augmentation has an unusually high passive
+// Skipped spells (and why - Augmentation has an unusually high passive
 // surface area; most of the spec's "abilities" are auras, not casts):
-//   361021 Sense Power            — PASSIVE (reveals strongest enemy near
-//                                   ally; no cast button)
-//   395153 Sands of Time          — PASSIVE (extends Ebon Might / Prescience
-//                                   via Eruption — already exposed via the
-//                                   Eruption + EM/Prescience refresh rules)
-//   396043 Close as Clutchmates   — PASSIVE (Versatility scaling on EM
-//                                   targets)
-//   406041 Nourishing Sands       — PASSIVE (extends EM heals)
-//   406380 Mastery: Timewalker    — PASSIVE (Mastery aura)
-//   396186 Augmentation Evoker    — PASSIVE (specialization-defining aura)
-//   365262 Improved Emerald Blossom — Preservation passive, irrelevant here
+//   374348 Renewing Blaze         - passive in 12.1: rides on Obsidian
+//                                   Scales, no cast
+//   357170 Time Dilation          - Preservation-only spec talent in 12.1
+//   370960 Emerald Communion      - removed from the class tree
+//   361021 Sense Power            - spec spell, UI-only reveal, no combat
+//                                   value
+//   408233 Bestow Weyrnstone      - not in the curated builds; needs a
+//                                   bearer-activated teleport
+//   412710 Timelessness           - not in the curated builds; threat drop
+//   412713 Interwoven Threads     - passive that replaces Time Skip when
+//                                   taken (not in the curated builds)
+//   372048 Oppressing Roar / 406732 Spatial Paradox - not in either build
+//   1229376 Single-Button Assistant - client rotation helper
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -76,33 +91,36 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
+// ---- Spell IDs (WoW 12.1.0.69587, validated) ----
 constexpr uint32 LIVING_FLAME_AUG       = 361469;
 constexpr uint32 AZURE_STRIKE_AUG       = 362969;
-constexpr uint32 ERUPTION               = 395160;
+constexpr uint32 FIRE_BREATH            = 357208;       // empower cone - extends Ebon Might
+constexpr uint32 ERUPTION               = 395160;       // 3 Essence - overrides Disintegrate
 constexpr uint32 EBON_MIGHT             = 395152;
-constexpr uint32 PRESCIENCE             = 410089;
+constexpr uint32 PRESCIENCE             = 409311;       // castable
+constexpr uint32 PRESCIENCE_BUFF        = 410089;       // aura on the ally
 constexpr uint32 BREATH_OF_EONS         = 403631;
 constexpr uint32 BLISTERING_SCALES      = 360827;
-constexpr uint32 UPHEAVAL               = 396286;
-constexpr uint32 DISINTEGRATE           = 356995;
-constexpr uint32 ESSENCE_BURST_AUG      = 392268;       // proc aura — also reduces Eruption cost
-constexpr uint32 TIME_SKIP              = 404977;       // talent — accelerates CDs
+constexpr uint32 UPHEAVAL               = 396286;       // empower - extends Ebon Might
+constexpr uint32 DISINTEGRATE           = 356995;       // only without the Eruption override
+constexpr uint32 ESSENCE_BURST_AUG      = 392268;       // proc aura - next Eruption costs no Essence
+constexpr uint32 TIME_SKIP              = 404977;       // talent - accelerates CDs
+constexpr uint32 TIP_THE_SCALES         = 370553;       // talent - free max-rank empower
+constexpr uint32 TIME_SPIRAL            = 374968;       // talent - group blink CD
 
 // Utility / CC
 constexpr uint32 QUELL                  = 351338;
 constexpr uint32 SLEEP_WALK             = 360806;
-constexpr uint32 OBSIDIAN_SCALES        = 363916;       // CORRECTED — 235450 is Mage Prismatic Barrier
-constexpr uint32 RENEWING_BLAZE         = 374348;
+constexpr uint32 LANDSLIDE              = 358385;       // talent - ground root at target location
+constexpr uint32 OBSIDIAN_SCALES        = 363916;       // 30% DR; Renewing Blaze rides on it passively
 constexpr uint32 ZEPHYR                 = 374227;
 constexpr uint32 VERDANT_EMBRACE        = 360995;
 constexpr uint32 HOVER                  = 358267;
 constexpr uint32 RESCUE                 = 370665;
 constexpr uint32 SOURCE_OF_MAGIC        = 369459;
-constexpr uint32 CAUTERIZING_FLAME      = 374251;
-constexpr uint32 EMERALD_COMMUNION      = 370960;
-constexpr uint32 EMERALD_BLOSSOM        = 365261;       // Initial Evoker — self-heal at <=50% HP
-constexpr uint32 TIME_DILATION          = 357170;
+constexpr uint32 EXPUNGE                = 365585;       // talent - Poison dispel
+constexpr uint32 CAUTERIZING_FLAME      = 374251;       // talent - Bleed/Poison/Curse/Disease
+constexpr uint32 EMERALD_BLOSSOM        = 355913;       // class baseline castable - self-heal at <=50% HP
 constexpr uint32 BLESSING_OF_THE_BRONZE = 364342;
 
 // Lust
@@ -136,6 +154,7 @@ bool BossLikeTargetEngaged(ApPredicateContext const& ctx)
     return false;
 }
 
+// Cauterizing Flame covers Bleed, Poison, Curse and Disease in 12.1.
 GroupMemberSummary const* DispelTarget(ApPredicateContext const& ctx)
 {
     return DispelTargetWithPriority(ctx, [](GroupSnapshotView const& g)
@@ -143,11 +162,23 @@ GroupMemberSummary const* DispelTarget(ApPredicateContext const& ctx)
     {
         if (auto const* m = g.dispel_candidate(DispelType::Disease)) return m;
         if (auto const* m = g.dispel_candidate(DispelType::Poison))  return m;
+        if (auto const* m = g.dispel_candidate(DispelType::Curse))   return m;
+        if (auto const* m = g.dispel_candidate(DispelType::Bleed))   return m;
         return nullptr;
     });
 }
 
-// Pick the best Prescience recipient — first non-self DPS in the group,
+// Expunge only clears Poison.
+GroupMemberSummary const* PoisonDispelTarget(ApPredicateContext const& ctx)
+{
+    return DispelTargetWithPriority(ctx, [](GroupSnapshotView const& g)
+        -> GroupMemberSummary const*
+    {
+        return g.dispel_candidate(DispelType::Poison);
+    });
+}
+
+// Pick the best Prescience recipient - first non-self DPS in the group,
 // fallback to tank, fallback to self.
 GroupMemberSummary const* PrescienceTarget(ApPredicateContext const& ctx)
 {
@@ -195,16 +226,25 @@ void DoSleepWalk(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(SLEEP_WALK, c->guid);
 }
 
-// ---- Survival ----
-bool ShouldRenewingBlaze(ApPredicateContext const& ctx)
+// Landslide - ground root in a line towards the target. Panic peel when
+// we're being swarmed.
+bool ShouldLandslide(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(RENEWING_BLAZE)) return false;
-    if (!ctx.bot.is_ready(RENEWING_BLAZE)) return false;
-    return ctx.bot.hp_pct() <= 60;
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(LANDSLIDE)) return false;
+    if (!ctx.bot.is_ready(LANDSLIDE)) return false;
+    return ctx.bot.attackers_count() >= 2 && ctx.bot.hp_pct() <= 60;
 }
-void DoRenewingBlaze(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(RENEWING_BLAZE); }
+void DoLandslide(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    if (auto const* t = ctx.bot.victim_info())
+        e.cast_at(LANDSLIDE, t->x, t->y, t->z);
+    else
+        e.cast(LANDSLIDE, ctx.bot.victim());
+}
 
+// ---- Survival ----
 bool ShouldObsidianScales(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
@@ -259,16 +299,6 @@ bool ShouldHover(ApPredicateContext const& ctx)
 }
 void DoHover(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(HOVER); }
 
-bool ShouldEmeraldCommunion(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(EMERALD_COMMUNION)) return false;
-    if (!ctx.bot.is_ready(EMERALD_COMMUNION)) return false;
-    if (ctx.bot.in_combat()) return false;
-    if (ctx.bot.max_power(0) <= 0) return false;
-    return ctx.bot.power_pct(0) <= 35 || ctx.bot.hp_pct() <= 50;
-}
-void DoEmeraldCommunion(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(EMERALD_COMMUNION); }
-
 // ---- Group utility ----
 bool ShouldSourceOfMagic(ApPredicateContext const& ctx)
 {
@@ -283,6 +313,18 @@ void DoSourceOfMagic(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     if (auto const* m = ctx.group.lowest_mana_caster())
         e.cast(SOURCE_OF_MAGIC, m->guid);
+}
+
+bool ShouldExpunge(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.knows_spell(EXPUNGE)) return false;
+    if (!ctx.bot.is_ready(EXPUNGE)) return false;
+    return PoisonDispelTarget(ctx) != nullptr;
+}
+void DoExpunge(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    if (auto const* t = PoisonDispelTarget(ctx))
+        e.cast(EXPUNGE, t->guid);
 }
 
 bool ShouldCauterizingFlame(ApPredicateContext const& ctx)
@@ -311,21 +353,6 @@ void DoRescueLowestAlly(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     if (auto const* low = ctx.group.lowest_hp_on_map(ctx.bot.map_id(), Role::Unknown, ctx.bot.raw().position.x, ctx.bot.raw().position.y, ctx.bot.raw().position.z, 45.0f))
         e.cast(RESCUE, low->guid);
-}
-
-bool ShouldTimeDilation(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(TIME_DILATION)) return false;
-    if (!ctx.bot.is_ready(TIME_DILATION)) return false;
-    GroupMemberSummary const* tank = ctx.group.tank();
-    if (!tank || !tank->online || tank->hp <= 0) return false;
-    if (tank->max_hp <= 0) return false;
-    return (tank->hp * 100) / tank->max_hp <= 45;
-}
-void DoTimeDilation(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (auto const* tank = ctx.group.tank())
-        e.cast(TIME_DILATION, tank->guid);
 }
 
 bool ShouldBlessingOfTheBronze(ApPredicateContext const& ctx)
@@ -362,7 +389,7 @@ bool ShouldPrescience(ApPredicateContext const& ctx)
     if (!ctx.bot.is_ready(PRESCIENCE)) return false;
     auto const* target = PrescienceTarget(ctx);
     if (!target) return false;
-    AuraEntry const* a = ctx.bot.find_aura(PRESCIENCE, target->guid);
+    AuraEntry const* a = ctx.bot.find_aura(PRESCIENCE_BUFF, target->guid);
     return !a || a->remaining.count() <= 4000;
 }
 void DoPrescience(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -408,12 +435,48 @@ bool ShouldTimeSkip(ApPredicateContext const& ctx)
 }
 void DoTimeSkip(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(TIME_SKIP); }
 
+bool ShouldTipTheScales(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(TIP_THE_SCALES)) return false;
+    if (!ctx.bot.is_ready(TIP_THE_SCALES)) return false;
+    // Only worth it when an empower is ready to consume it, and while Ebon
+    // Might is up (the max-rank empower extends it the most) or on bosses.
+    if (!ctx.bot.is_ready(FIRE_BREATH) && !ctx.bot.is_ready(UPHEAVAL)) return false;
+    if (ctx.bot.has_aura(EBON_MIGHT)) return true;
+    return BossLikeTargetEngaged(ctx);
+}
+void DoTipTheScales(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(TIP_THE_SCALES); }
+
+bool ShouldTimeSpiral(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.in_combat()) return false;
+    if (!ctx.bot.knows_spell(TIME_SPIRAL)) return false;
+    if (!ctx.bot.is_ready(TIME_SPIRAL)) return false;
+    // Group movement-CD reset - pop on hard wipes.
+    return BossLikeTargetEngaged(ctx) && ctx.bot.hp_pct() <= 50;
+}
+void DoTimeSpiral(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(TIME_SPIRAL); }
+
 // ---- Damage rotor ----
+// Fire Breath - Empower cone; every cast extends the active Ebon Might, so
+// it is used on cooldown regardless of target count.
+bool ShouldFireBreath(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(FIRE_BREATH)) return false;
+    return ctx.bot.is_ready(FIRE_BREATH);
+}
+void DoFireBreath(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(FIRE_BREATH); }
+
 bool ShouldUpheaval(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(UPHEAVAL)) return false;
     if (!ctx.bot.is_ready(UPHEAVAL)) return false;
+    // Upheaval also extends Ebon Might - use it whenever the buff is up,
+    // otherwise save it for packs / bosses.
+    if (ctx.bot.has_aura(EBON_MIGHT)) return true;
     return ctx.bot.enemies_within(10.0f) >= 3 || BossLikeTargetEngaged(ctx);
 }
 void DoUpheaval(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -436,12 +499,17 @@ void DoEruption(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(ERUPTION, ctx.bot.victim());
 }
 
+// Disintegrate is overridden by Eruption once the talent is taken - this
+// branch only serves bots without Eruption (two-branch override pattern).
 bool ShouldDisintegrate(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
+    if (ctx.bot.knows_spell(ERUPTION)) return false;
     if (!ctx.bot.knows_spell(DISINTEGRATE)) return false;
     if (!ctx.bot.is_ready(DISINTEGRATE)) return false;
-    return ctx.bot.power(POWER_ESSENCE) >= 4;
+    if (ctx.bot.is_moving() && !ctx.bot.can_cast_while_moving(DISINTEGRATE))
+        return false;
+    return ctx.bot.power(POWER_ESSENCE) >= 3;
 }
 void DoDisintegrate(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
@@ -475,35 +543,36 @@ void DoNothing(ApPredicateContext const&, BotIntentEmitter&) {}
 // ---- Rule table ----
 // Order: Mobility -> Defensives -> Interrupt/CC -> Group utility -> Lust ->
 //        Ally maintenance (Ebon Might / Prescience / Blistering Scales) ->
-//        Major CDs -> Damage rotor (Upheaval AoE -> Eruption ES spender ->
-//        Disintegrate channel -> Living Flame / Azure Strike fillers).
+//        Major CDs -> Damage rotor (Fire Breath / Upheaval empowers ->
+//        Eruption ES spender -> Disintegrate (no Eruption) -> Living Flame
+//        / Azure Strike fillers).
 ApRule const kRules[] = {
     // 1) Mobility.
     { ShouldHover,                DoHover,                "Hover (cast-while-moving)"    },
 
-    // 2) Defensives.
-    { ShouldRenewingBlaze,        DoRenewingBlaze,        "Renewing Blaze (<=60%)"       },
+    // 2) Defensives. Renewing Blaze is a passive rider on Obsidian Scales
+    //    in 12.1.
     { ShouldObsidianScales,       DoObsidianScales,       "Obsidian Scales (<=50%)"      },
     { ShouldVerdantEmbraceSelf,   DoVerdantEmbraceSelf,   "Verdant Embrace (<=55%)"      },
     { ShouldEmeraldBlossomSelf,   DoEmeraldBlossomSelf,   "Emerald Blossom (self <=50%)" },
     { ShouldZephyr,               DoZephyr,               "Zephyr (caster <=55%)"        },
-    { ShouldEmeraldCommunion,     DoEmeraldCommunion,     "Emerald Communion (OOC)"      },
 
     // 3) Interrupt / CC.
     { ShouldQuell,                DoQuell,                "Quell (interrupt)"            },
     { ShouldSleepWalk,            DoSleepWalk,            "Sleep Walk (off-target)"      },
+    { ShouldLandslide,            DoLandslide,            "Landslide (2+ root)"          },
 
     // 4) Group utility.
     { ShouldRescueLowestAlly,     DoRescueLowestAlly,     "Rescue (peel ally <=25%)"     },
+    { ShouldExpunge,              DoExpunge,              "Expunge (poison)"             },
     { ShouldCauterizingFlame,     DoCauterizingFlame,     "Cauterizing Flame (cleanse)"  },
-    { ShouldTimeDilation,         DoTimeDilation,         "Time Dilation (tank <=45%)"   },
     { ShouldSourceOfMagic,        DoSourceOfMagic,        "Source of Magic (caster)"     },
     { ShouldBlessingOfTheBronze,  DoBlessingOfTheBronze,  "Blessing of the Bronze"       },
 
     // 5) Lust.
     { ShouldFuryOfTheAspects,     DoFuryOfTheAspects,     "Fury of the Aspects (boss)"   },
 
-    // 6) Ally maintenance — this is Augmentation's whole job. Refresh
+    // 6) Ally maintenance - this is Augmentation's whole job. Refresh
     //    Ebon Might and Prescience before doing anything else damaging,
     //    since the DPS-aspect of the spec is just a fuel pump for these
     //    two buffs.
@@ -514,11 +583,15 @@ ApRule const kRules[] = {
     // 7) Major CDs.
     { ShouldBreathOfEons,         DoBreathOfEons,         "Breath of Eons (boss/3+)"     },
     { ShouldTimeSkip,             DoTimeSkip,             "Time Skip (boss CD reset)"    },
+    { ShouldTipTheScales,         DoTipTheScales,         "Tip the Scales (free max)"    },
+    { ShouldTimeSpiral,           DoTimeSpiral,           "Time Spiral (group bail)"     },
 
-    // 8) Damage rotor.
-    { ShouldUpheaval,             DoUpheaval,             "Upheaval (3+ AoE)"            },
+    // 8) Damage rotor - empowers first (both extend Ebon Might), then the
+    //    Essence spender, then fillers.
+    { ShouldFireBreath,           DoFireBreath,           "Fire Breath (empower)"        },
+    { ShouldUpheaval,             DoUpheaval,             "Upheaval (empower)"           },
     { ShouldEruption,             DoEruption,             "Eruption (Essence spend)"     },
-    { ShouldDisintegrate,         DoDisintegrate,         "Disintegrate (Essence sink)"  },
+    { ShouldDisintegrate,         DoDisintegrate,         "Disintegrate (no Eruption)"   },
     { ShouldLivingFlame,          DoLivingFlame,          "Living Flame (filler)"        },
     { ShouldAzureStrike,          DoAzureStrike,          "Azure Strike (filler)"        },
 

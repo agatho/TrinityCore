@@ -1,4 +1,4 @@
-// Apl_Baseline_Paladin.cpp — baseline rotation for class CLASS_PALADIN (spec=0). Extracted from the monolithic Apl_Baseline.cpp on the split refactor; future edits go
+// Apl_Baseline_Paladin.cpp - baseline rotation for class CLASS_PALADIN (spec=0). Extracted from the monolithic Apl_Baseline.cpp on the split refactor; future edits go
 // here exclusively. See Apl_Baseline_Common.h for the
 // shared helpers + rule macros.
 //
@@ -15,31 +15,31 @@ using ::Playerbot::Combat::baseline_common::HasLiveTarget;
 using ::Playerbot::Combat::baseline_common::AlwaysInCombat;
 using ::Playerbot::Combat::baseline_common::DoAutoAttack;
 
-constexpr uint32 CRUSADER_STRIKE     = 35395;
-// Judgment baseline ID 20271 retained — matches Retribution + Holy
-// spec rotations. Wago's L8 327977 is a Mastery-rank visual / spec
-// override (Prot uses 275779 instead); both inherit the cooldown from
-// 20271. Baseline keeps 20271 so unspecced + L1-9 bots fire the
-// canonical instance.
+// ---- Spell IDs (WoW 12.1.0.69587 class baseline, kit Apl_Baseline_Paladin.md) ----
+// Every id below is a Paladin SkillLineAbility spell in 12.1; the spec
+// rotations take over at L10, so the ladder prefers the L1-9 kit.
+constexpr uint32 CRUSADER_STRIKE     = 35395;   // L1 - Holy Power generator
+// Judgment baseline 20271 (L3). The spec spells 275773 (Holy) / 275779
+// (Prot) override it once a spec is chosen; baseline keeps 20271 so
+// unspecced + L1-9 bots fire the canonical instance.
 constexpr uint32 JUDGMENT            = 20271;
-// Word of Glory has two retail IDs in active use depending on
-// patch/spec (85673 ret-flavoured, 115675 prot-flavoured). Multi-ID
-// candidate list — first known wins.
-constexpr uint32 WORD_OF_GLORY_IDS[] = { 115675, 85673 };
-constexpr uint32 FLASH_OF_LIGHT      = 19750;
-constexpr uint32 HAMMER_OF_JUSTICE   = 853;     // 60s CD, 6s stun
-constexpr uint32 SHIELD_OF_RIGHTEOUS = 53600;
-constexpr uint32 HAND_OF_RECKONING   = 62124;   // L9 — single-target taunt
-constexpr uint32 CONSECRATION        = 26573;   // L6 — AoE ground tick (signature)
-constexpr uint32 DIVINE_SHIELD       = 642;     // L1 — 10s full immunity, halves dmg done
-constexpr uint32 LAY_ON_HANDS        = 633;     // L34 — full HP heal
+// Word of Glory 85673 (L7). The old second candidate 115675 is
+// "Boundless Conviction" (a passive) in 12.1 and would hijack the pick.
+constexpr uint32 WORD_OF_GLORY       = 85673;
+constexpr uint32 FLASH_OF_LIGHT      = 19750;   // L4 - 1.5s cast heal
+constexpr uint32 HAMMER_OF_JUSTICE   = 853;     // L5 - 45s CD, 6s stun
+constexpr uint32 SHIELD_OF_RIGHTEOUS = 53600;   // L2 - 3 HP armor spender
+constexpr uint32 HAND_OF_RECKONING   = 62124;   // L9 - single-target taunt
+constexpr uint32 CONSECRATION        = 26573;   // L6 - AoE ground tick (signature)
+constexpr uint32 DIVINE_SHIELD       = 642;     // L10 - 8s full immunity (Forbearance)
+constexpr uint32 LAY_ON_HANDS        = 633;     // L14 - full HP heal, 10 min CD
 
 BASELINE_SPELL_RULE(CrusaderStrike,    CRUSADER_STRIKE)
 BASELINE_SPELL_RULE(Judgment,           JUDGMENT)
 BASELINE_SPELL_RULE(ShieldOfRighteous,  SHIELD_OF_RIGHTEOUS)
 
 // Hand of Reckoning (L9): single-target taunt. Fire when there is an
-// untaunted enemy threatening the bot or an ally — tanks pull aggro,
+// untaunted enemy threatening the bot or an ally - tanks pull aggro,
 // DPS/healers no-op when no taunt target exists. Knows_spell gate keeps
 // L1-8 bots silent.
 bool ShouldHandOfReckoning(ApPredicateContext const& ctx)
@@ -55,8 +55,8 @@ void DoHandOfReckoning(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(HAND_OF_RECKONING, c->guid);
 }
 
-// Hammer of Justice (L1): 60s CD stun. Spend it on actual casters
-// (interrupt via stun) or when the bot is taking a beating (≤50% HP)
+// Hammer of Justice (L5): 45s CD stun. Spend it on actual casters
+// (interrupt via stun) or when the bot is taking a beating (<=50% HP)
 // to peel pressure. Never burn it as a generic filler.
 bool ShouldHammerOfJustice(ApPredicateContext const& ctx)
 {
@@ -65,9 +65,9 @@ bool ShouldHammerOfJustice(ApPredicateContext const& ctx)
     if (!ctx.bot.is_ready(HAMMER_OF_JUSTICE)) return false;
     NearbyUnit const* v = ctx.bot.victim_info();
     if (!v) return false;
-    // Victim is mid-cast on an interruptible spell — top-priority use.
+    // Victim is mid-cast on an interruptible spell - top-priority use.
     if (v->is_casting && v->is_interruptible) return true;
-    // Defensive peel — bot is under pressure.
+    // Defensive peel - bot is under pressure.
     if (ctx.bot.hp_pct() <= 50 && ctx.bot.in_combat()) return true;
     return false;
 }
@@ -77,7 +77,7 @@ void DoHammerOfJustice(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // Consecration (L6): AoE ground tick, paladin signature. Fire on any
-// in-combat tick when 2+ enemies are in range — lower threshold than
+// in-combat tick when 2+ enemies are in range - lower threshold than
 // the typical 3-target AoE rule because it's also a single-target
 // threat tool for Prot and a passive damage source for Ret. Knows_spell
 // gate keeps L1-5 bots silent.
@@ -91,22 +91,20 @@ bool ShouldConsecration(ApPredicateContext const& ctx)
 }
 void DoConsecration(ApPredicateContext const&, BotIntentEmitter& e)
 {
-    // Ground-targeted at the bot's feet — empty guid lets the cast
+    // Ground-targeted at the bot's feet - empty guid lets the cast
     // resolver place the AoE under the caster.
     e.cast(CONSECRATION, ObjectGuid::Empty);
 }
 
+// Word of Glory (L7): 3 Holy Power instant self heal.
 bool ShouldWordOfGlory(ApPredicateContext const& ctx)
 {
     if (ctx.bot.hp_pct() >= 60) return false;
-    for (uint32 sid : WORD_OF_GLORY_IDS)
-        if (ctx.bot.is_ready(sid)) return true;
-    return false;
+    return ctx.bot.knows_spell(WORD_OF_GLORY) && ctx.bot.is_ready(WORD_OF_GLORY);
 }
-void DoWordOfGlory(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoWordOfGlory(ApPredicateContext const&, BotIntentEmitter& e)
 {
-    for (uint32 sid : WORD_OF_GLORY_IDS)
-        if (ctx.bot.is_ready(sid)) { e.cast(sid, ObjectGuid::Empty); return; }
+    e.cast(WORD_OF_GLORY, ObjectGuid::Empty);
 }
 
 // Flash of Light: 1.5s cast self-heal; baseline panic when WoG is
@@ -123,20 +121,17 @@ void DoFlashOfLight(ApPredicateContext const&, BotIntentEmitter& e)
     e.cast(FLASH_OF_LIGHT, ObjectGuid::Empty);
 }
 
-// Divine Shield: 8-10s full immunity, drops aggro, halves damage done.
-// L1 baseline so available immediately. Reserved for true emergencies
-// (<25% HP) — burns Forbearance debuff which locks Lay on Hands. To
-// avoid blowing two CDs simultaneously, skip when WoG is ready AND
-// HP > 40% (let the cheap heal handle moderate dips).
+// Divine Shield (L10): 8s full immunity, drops aggro. Reserved for true
+// emergencies (<25% HP) - applies Forbearance which locks Lay on Hands.
+// To avoid blowing two CDs simultaneously, skip when WoG is ready AND
+// HP > 15% (let the cheap heal handle moderate dips).
 bool ShouldDivineShield(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
     if (ctx.bot.hp_pct() >= 25) return false;
     if (ctx.bot.enemies_within(40.0f) == 0) return false;
     // Alternation: if WoG is still up and HP isn't critical, defer to it.
-    if (ctx.bot.hp_pct() > 15)
-        for (uint32 sid : WORD_OF_GLORY_IDS)
-            if (ctx.bot.is_ready(sid)) return false;
+    if (ctx.bot.hp_pct() > 15 && ctx.bot.is_ready(WORD_OF_GLORY)) return false;
     return ctx.bot.knows_spell(DIVINE_SHIELD) && ctx.bot.is_ready(DIVINE_SHIELD);
 }
 void DoDivineShield(ApPredicateContext const&, BotIntentEmitter& e)
@@ -144,8 +139,8 @@ void DoDivineShield(ApPredicateContext const&, BotIntentEmitter& e)
     e.cast(DIVINE_SHIELD, ObjectGuid::Empty);
 }
 
-// Lay on Hands: full-HP heal, 8-12 min CD. Last-resort below 15% HP
-// when Divine Shield is also unavailable. L34 — knows_spell skips for
+// Lay on Hands (L14): full-HP heal, 10 min CD. Last-resort below 15% HP
+// when Divine Shield is also unavailable. knows_spell skips it for
 // lower levels.
 bool ShouldLayOnHands(ApPredicateContext const& ctx)
 {
@@ -158,17 +153,17 @@ void DoLayOnHands(ApPredicateContext const&, BotIntentEmitter& e)
 }
 
 // Rule order (defensive ladder first, then utility, then damage):
-//   1. Lay on Hands     — full HP heal, ≤15% emergency
-//   2. Divine Shield    — 8s immunity, ≤25% bail
-//   3. Flash of Light   — instant-when-stationary panic heal, ≤50% self
-//   4. Hammer of Justice— interrupt-via-stun OR peel when bot ≤50% HP
-//   5. Hand of Reckoning— single-target taunt (tanks; DPS no-op when no untaunted enemy)
-//   6. Judgment         — ranged opener / debuff
-//   7. Crusader Strike  — melee filler
-//   8. Consecration     — AoE ground tick (2+ enemies)
-//   9. Shield of the Righteous — Prot active mitigation (knows_spell gate)
-//  10. Word of Glory    — Holy Power heal (≤60% self)
-//  11. Auto attack      — always-on melee swing
+//   1. Lay on Hands     - full HP heal, <=15% emergency
+//   2. Divine Shield    - 8s immunity, <=25% bail
+//   3. Flash of Light   - instant-when-stationary panic heal, <=50% self
+//   4. Hammer of Justice- interrupt-via-stun OR peel when bot <=50% HP
+//   5. Hand of Reckoning- single-target taunt (tanks; DPS no-op when no untaunted enemy)
+//   6. Judgment         - ranged opener / debuff
+//   7. Crusader Strike  - melee filler
+//   8. Consecration     - AoE ground tick (2+ enemies)
+//   9. Shield of the Righteous - Prot active mitigation (knows_spell gate)
+//  10. Word of Glory    - Holy Power heal (<=60% self)
+//  11. Auto attack      - always-on melee swing
 ApRule const baseline_paladin_kRules[] = {
     { ShouldLayOnHands,       DoLayOnHands,       "Lay on Hands (<15% emergency)"   },
     { ShouldDivineShield,     DoDivineShield,     "Divine Shield (<25% immunity)"   },

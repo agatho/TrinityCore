@@ -1,19 +1,28 @@
 // Apl_Baseline_Dk.cpp — baseline rotation for class CLASS_DEATH_KNIGHT (spec=0).
-// DKs start at L8 in Midnight, so this baseline only really covers L8-9
-// starter + corrupt-spec fallback. Most defensives/utility (AMS L14,
-// Icebound Fortitude L38, Lichborne) are knows_spell-gated so the same
-// rule list works for any DK that ends up on spec=0.
+// WoW 12.1.0.69587 (Midnight). DKs start at L8, so this baseline only really
+// covers the L8-9 starter + corrupt-spec fallback. Most defensives/utility
+// (AMS L14, Lichborne L9) are knows_spell-gated so the same rule list works
+// for any DK that ends up on spec=0.
 //
 // See Apl_Baseline_Common.h for the shared rule macros.
 //
 // To audit coverage:
 //   python src/modules/PlayerbotV2/tools/baseline_coverage_audit.py
 //
-// Festering Wound (197147) is intentionally OMITTED — it's a passive
-// proc-driven debuff layered by Unholy spec abilities, not a baseline
-// cast. Runeforging (53428) and the Rune of Razorice / Fallen Crusader /
-// Stoneskin Gargoyle weapon enchant spells are also OMITTED — they're
-// out-of-combat weapon-enchant casts, not combat rotation choices.
+// ---- Validated spell IDs (12.1 SkillLineAbility class baseline unless noted) ----
+//   316239 Rune Strike (L1), 47541 Death Coil (L2), 43265 Death and Decay (L3),
+//   49576 Death Grip (L5), 49039 Lichborne (L9), 56222 Dark Command (L9),
+//   48265 Death's Advance (L9), 48707 Anti-Magic Shell (L14).
+//   Class-tree talents kept for the spec=0 fallback (dormant below L10, all
+//   knows_spell-gated): 49998 Death Strike, 47528 Mind Freeze, 48792 Icebound
+//   Fortitude.
+//
+// ---- Skipped ----
+//   Festering Wound (197147) - mechanic removed in Midnight. Runeforging (53428)
+//   and the Rune of Razorice / Fallen Crusader / Stoneskin Gargoyle enchants -
+//   out-of-combat casts. Sindragosa's Fury (190778), Consumption (205223),
+//   Apocalypse (220143) - Legion artifact remnant rows, not a real 12.1 kit.
+//   Chains of Ice (45524, L13) - slow only, no baseline kiting logic.
 
 #include "Apl_Baseline_Common.h"
 
@@ -27,17 +36,17 @@ using ::Playerbot::Combat::baseline_common::HasLiveTarget;
 using ::Playerbot::Combat::baseline_common::AlwaysInCombat;
 using ::Playerbot::Combat::baseline_common::DoAutoAttack;
 
-constexpr uint32 DEATH_COIL          = 47541;    // L2  — Unholy spender, ranged ST damage
-constexpr uint32 DEATH_STRIKE        = 49998;    // L4  — DK signature heal+strike
-constexpr uint32 DEATH_GRIP          = 49576;    // L5  — taunt/pull
-constexpr uint32 MIND_FREEZE         = 47528;    // L7  — interrupt
+constexpr uint32 DEATH_COIL          = 47541;    // L2  — baseline spender, ranged ST damage (30 RP)
+constexpr uint32 DEATH_STRIKE        = 49998;    // class talent (L4 row) — DK signature heal+strike
+constexpr uint32 DEATH_GRIP          = 49576;    // L5  — pull
+constexpr uint32 MIND_FREEZE         = 47528;    // class talent (L7 row) — interrupt
 constexpr uint32 ANTI_MAGIC_SHELL    = 48707;    // L14 — magic damage soak
-constexpr uint32 RUNE_STRIKE         = 316239;   // L1 Frost — basic ST attack
-constexpr uint32 DARK_COMMAND        = 56222;    // L? — single-target taunt
+constexpr uint32 RUNE_STRIKE         = 316239;   // L1  — basic ST rune attack (overridden by spec strikes)
+constexpr uint32 DARK_COMMAND        = 56222;    // L9  — single-target taunt
 constexpr uint32 DEATH_AND_DECAY     = 43265;    // L3  — AoE ground effect
 constexpr uint32 LICHBORNE           = 49039;    // L9  — panic CD (charm/fear/sleep immune + heals on Death Coil self-cast)
 constexpr uint32 DEATHS_ADVANCE      = 48265;    // L9  — sprint + snare removal
-constexpr uint32 ICEBOUND_FORTITUDE  = 48792;    // L38 — 30% dmg reduction, stun break
+constexpr uint32 ICEBOUND_FORTITUDE  = 48792;    // class talent (L38 row) — 30% dmg reduction, stun immune
 
 BASELINE_SPELL_RULE(DeathCoil,    DEATH_COIL)
 BASELINE_SPELL_RULE(DeathStrike,  DEATH_STRIKE)

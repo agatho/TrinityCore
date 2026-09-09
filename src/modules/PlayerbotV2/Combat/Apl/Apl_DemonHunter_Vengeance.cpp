@@ -1,93 +1,76 @@
-// Vengeance Demon Hunter - WoW 12.0 enterprise tank rotation. Pain
-// resource, Soul Fragment management, Demon Spikes / Metamorphosis active
-// mitigation, Fiery Brand damage-reduction debuff, Soul Cleave Pain
-// spender that consumes fragments for self-heal. Spirit Bomb (talent)
-// detonates fragments for AoE + Frailty (DR debuff). Group utility:
-// Sigil of Silence (caster lockdown), Sigil of Misery (fear), Darkness
-// (group dodge).
+// Vengeance Demon Hunter - WoW 12.1.0.69587 (Midnight) tank rotation. Fury
+// resource, Soul Fragment management (TC tracks fragments as stacks of the
+// 203981 counter aura), Demon Spikes / Metamorphosis active mitigation,
+// Fiery Brand damage-reduction debuff, Soul Cleave Fury spender that
+// consumes fragments for self-heal. Spirit Bomb detonates fragments for
+// AoE + Frailty. Group utility: Sigil of Silence (M+ build), Sigil of
+// Misery (fear), Darkness (group dodge).
 //
-// ---- Validated IDs (cross-checked against wago.tools SpellName.csv +
-//      SpellLevels.csv on 2026-05-27) ----
+// ---- Validated IDs (WoW 12.1.0.69587 kit: SkillLineAbility +
+//      SpecializationSpells 581 + simc trait data, Annihilator raid build) ----
 //
 //   Core builders / spenders:
-//     203783 Shear                     - Pain generator (SpellLevel=1).
-//                                        REPLACES Demon's Bite for the
-//                                        Vengeance spec from L1.
-//     263642 Fracture (talent)         - Replaces Shear when talented;
-//                                        cheaper, charge-based, spawns
-//                                        extra fragments.
-//     228477 Soul Cleave               - Pain spender + self-heal +
+//     263642 Fracture                  - Spec generator (overrides Demon's
+//                                        Bite). Shear 203783 is a PASSIVE
+//                                        in 12.1 - never cast it.
+//     228477 Soul Cleave               - 35 Fury spender + self-heal +
 //                                        consumes up to 2 fragments.
-//     247454 Spirit Bomb (talent)      - Fragment detonator AoE +
-//                                        Frailty DR debuff.
+//     247454 Spirit Bomb (talent [R])  - Fragment detonator AoE + Frailty.
+//     232893 Felblade (talent [R])     - 15y charge + Fury.
+//     203981 Soul Fragments            - counter aura (stacks = fragments);
+//                                        read-only, never cast.
 //
 //   Active mitigation / defensive:
-//     321028 Demon Spikes              - Modern Vengeance variant
-//                                        (SpellLevel=33). Older 203720
-//                                        ID still works for legacy
-//                                        characters; we probe both.
-//     203720 Demon Spikes (legacy)     - SpellLevel=1 variant. Either
-//                                        ID may resolve depending on
-//                                        client state; rotation picks
-//                                        whichever knows_spell hits.
-//     320962 Fiery Brand               - Modern Vengeance variant
-//                                        (SpellLevel=38). Single-target
-//                                        damage-reduction debuff.
-//     204021 Fiery Brand (legacy)      - BaseLevel=0; pre-spec/legacy.
-//     321067 Metamorphosis (Vengeance) - Tank defensive CD at L20.
-//                                        Different from Havoc's 191427.
-//     321068 Metamorphosis (Vengeance) - Upgrade at L48 (same name,
-//                                        different SpellLevels entry).
-//                                        Probed alongside 321067.
-//     187827 Metamorphosis (legacy)    - Older Vengeance variant.
-//     320639 Fel Devastation           - L23 channel: AoE damage + self
-//                                        heal. Active mitigation layer.
-//     212084 Fel Devastation (legacy)  - L11 variant; same effect.
-//     263648 Soul Barrier (talent)     - Absorb shield based on fragments.
-//     320341 Bulk Extraction (talent)  - Shatters nearby souls into
-//                                        fragments + heal.
-//     196718 Darkness                  - Group 20% dodge AoE.
+//     203720 Demon Spikes              - cast id; 203819 is the armour/parry
+//                                        buff we test for. 321028 is the
+//                                        "Rank 2" parry passive.
+//     204021 Fiery Brand (talent [R])  - DR debuff; 320962 is the rank-2
+//                                        DoT passive.
+//     187827 Metamorphosis             - Vengeance spec spell (overrides
+//                                        191427); 321067/321068 are rank
+//                                        passives.
+//     212084 Fel Devastation (talent)  - 2s channel: AoE damage + heal
+//                                        (320639 = rank-2 heal passive).
+//     196718 Darkness (talent [R])     - Group dodge AoE.
 //
 //   AoE / threat:
-//     320794 Sigil of Flame            - L10 Vengeance variant. Ground
-//                                        AoE tick + Pain generation.
-//     204596 Sigil of Flame (legacy)   - Same name, same level (L10);
-//                                        probed for older clients.
-//     258920 Immolation Aura           - Self-buff AoE + Pain proc.
-//     247454 Spirit Bomb               - (see above)
-//     189110 Infernal Strike           - L? gap close + AoE damage.
-//     306830 Elysian Decree (talent)   - AoE sigil burst.
-//     370965 The Hunt                  - Hero talent.
-//     207407 Soul Carver (talent)      - 1min CD - armour strip + 3
-//                                        soul fragments.
+//     204596 Sigil of Flame            - Ground AoE tick + Fury (320794 =
+//                                        rank-2 DoT passive).
+//     390163 Sigil of Spite (talent)   - Chaos burst + shatters fragments.
+//     258920 Immolation Aura           - Self-buff AoE + Fury.
+//     189110 Infernal Strike           - Spec leap + AoE damage.
+//     207407 Soul Carver (talent)      - 1min CD - damage + fragments.
 //
 //   Range / pull:
-//     204157 Throw Glaive (Vengeance)  - Vengeance variant of Throw
-//                                        Glaive (185123). Ranged pull /
-//                                        threat tag. Probed alongside
-//                                        185123 for compatibility.
-//     185123 Throw Glaive (baseline)   - Generic ID kept as fallback.
+//     204157 Throw Glaive (Vengeance)  - Spec override of 185123 (high
+//                                        threat). Both probed.
+//     185123 Throw Glaive (baseline)   - Generic id kept as fallback.
 //
 //   CC / utility:
 //     183752 Disrupt                   - Interrupt.
-//     202137 Sigil of Silence          - AoE caster silence (interrupt fb).
-//     207684 Sigil of Misery           - AoE fear.
+//     202137 Sigil of Silence (M+)     - AoE caster silence (interrupt fb).
+//     207684 Sigil of Misery (talent)  - AoE fear.
 //     202138 Sigil of Chains           - AoE pull/clump.
-//     185245 Torment                   - Taunt (Vengeance core).
-//     217832 Imprison                  - Single-target incap (out-of-combat).
+//     185245 Torment                   - Taunt.
+//     217832 Imprison (M+)             - Single-target incap (no rule yet).
 //
 // ---- Skipped spells (and why) ----
 //
-//   178940 Shattered Souls    - Passive that drops a soul fragment on
-//                               enemy death. No active cast; mechanics
-//                               are read by Soul Cleave / Spirit Bomb.
-//   203513 Demonic Wards      - Passive armour buff. No active.
-//   206478 Demonic Appetite   - Havoc-side passive; not on Vengeance.
-//   221351 Critical Strikes   - Passive. No active.
-//   162243 Demon's Bite       - Havoc Fury generator. Vengeance uses
-//                               Shear (203783) / Fracture (263642)
-//                               instead. Demon's Bite would not even be
-//                               on the spellbook for Vengeance bots.
+//   203783 Shear              - Passive in 12.1 (fragment-on-hit helper);
+//                               Fracture is the spec generator.
+//   263648/1265924 Soul Barrier - 1265924 is a PASSIVE (Spirit Bomb
+//                               shields you) and not in the raid build.
+//   320341 Bulk Extraction    - Not learnable by Vengeance in 12.1.
+//   306830 Elysian Decree     - Not learnable in 12.1 (Sigil of Spite is
+//                               the successor).
+//   370965 The Hunt           - Havoc-only talent in 12.1.
+//   198793 Vengeful Retreat   - Selected class talent, but the tank
+//                               vaulting away from its pack is a threat
+//                               loss; the simc Annihilator list never
+//                               casts it. No rule.
+//   179057 Chaos Nova         - M+ build only; left out to keep the
+//                               ladder readable.
+//   278326 Consume Magic      - Purge; no purgeable-buff predicate.
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -100,48 +83,41 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
-constexpr uint32 SHEAR                = 203783;       // L1 Vengeance generator
-constexpr uint32 FRACTURE             = 263642;       // talent generator
-constexpr uint32 SOUL_CLEAVE          = 228477;
+// ---- Spell IDs (WoW 12.1.0.69587, validated) ----
+constexpr uint32 FRACTURE             = 263642;       // spec generator
+constexpr uint32 SOUL_CLEAVE          = 228477;       // spec spender (35 Fury)
 constexpr uint32 IMMOLATION_AURA      = 258920;
-constexpr uint32 SIGIL_OF_FLAME       = 204596;       // legacy
-constexpr uint32 SIGIL_OF_FLAME_V     = 320794;       // L10 Vengeance variant
-constexpr uint32 SIGIL_OF_SILENCE     = 202137;
-constexpr uint32 SIGIL_OF_MISERY      = 207684;
-constexpr uint32 SIGIL_OF_CHAINS      = 202138;
-constexpr uint32 INFERNAL_STRIKE      = 189110;
-constexpr uint32 DEMON_SPIKES         = 203720;       // legacy
-constexpr uint32 DEMON_SPIKES_V       = 321028;       // L33 Vengeance variant
-constexpr uint32 METAMORPHOSIS_TANK   = 187827;       // legacy Vengeance Meta
-constexpr uint32 METAMORPHOSIS_V1     = 321067;       // L20 Vengeance variant
-constexpr uint32 METAMORPHOSIS_V2     = 321068;       // L48 Vengeance variant
-constexpr uint32 FIERY_BRAND          = 204021;       // legacy
-constexpr uint32 FIERY_BRAND_V        = 320962;       // L38 Vengeance variant
-constexpr uint32 SPIRIT_BOMB          = 247454;
-constexpr uint32 SOUL_BARRIER         = 263648;       // talent - absorb shield
-constexpr uint32 BULK_EXTRACTION      = 320341;       // talent - gather souls
-constexpr uint32 ELYSIAN_DECREE       = 306830;       // talent - sigil burst
-constexpr uint32 THE_HUNT             = 370965;
+constexpr uint32 SIGIL_OF_FLAME       = 204596;       // (320794 = rank-2 passive)
+constexpr uint32 SIGIL_OF_SILENCE     = 202137;       // talent [M]
+constexpr uint32 SIGIL_OF_MISERY      = 207684;       // talent [R]
+constexpr uint32 SIGIL_OF_CHAINS      = 202138;       // spec spell
+constexpr uint32 SIGIL_OF_SPITE       = 390163;       // talent [R]
+constexpr uint32 INFERNAL_STRIKE      = 189110;       // spec spell
+constexpr uint32 FELBLADE             = 232893;       // talent [R]
+constexpr uint32 DEMON_SPIKES         = 203720;       // cast id (321028 = rank-2 passive)
+constexpr uint32 DEMON_SPIKES_BUFF    = 203819;       // armour/parry buff
+constexpr uint32 METAMORPHOSIS_TANK   = 187827;       // spec spell (321067/8 = passives)
+constexpr uint32 FIERY_BRAND          = 204021;       // talent [R] (320962 = rank-2 passive)
+constexpr uint32 SPIRIT_BOMB          = 247454;       // talent [R]
+constexpr uint32 SOUL_FRAGMENTS       = 203981;       // counter aura (stacks)
 constexpr uint32 DISRUPT              = 183752;
 constexpr uint32 TORMENT              = 185245;
-constexpr uint32 DARKNESS             = 196718;
-constexpr uint32 IMPRISON             = 217832;
-constexpr uint32 FEL_DEVASTATION      = 212084;       // legacy
-constexpr uint32 FEL_DEVASTATION_V    = 320639;       // L23 Vengeance variant
+constexpr uint32 DARKNESS             = 196718;       // talent [R]
+constexpr uint32 IMPRISON             = 217832;       // talent [M] (no rule yet)
+constexpr uint32 FEL_DEVASTATION      = 212084;       // talent [R] (320639 = rank-2 passive)
 constexpr uint32 SOUL_CARVER          = 207407;       // talent - 1min CD
 constexpr uint32 THROW_GLAIVE         = 185123;       // baseline
-constexpr uint32 THROW_GLAIVE_V       = 204157;       // Vengeance variant
+constexpr uint32 THROW_GLAIVE_V       = 204157;       // Vengeance override
 
-// 12.0 Vengeance runs on FURY (index 17), not the Legion-era Pain (18):
+// 12.x Vengeance runs on FURY (index 17), not the Legion-era Pain (18):
 // no TC code grants POWER_PAIN to players anymore, so power[18] was
 // permanently 0 and every Pain-gated rule below returned false forever —
 // Vengeance tanks never cast Demon Spikes / Soul Cleave / Spirit Bomb
 // (audit B12). Thresholds below are display-unit Fury costs.
 constexpr uint8 POWER_PAIN_IDX = 17;     // POWER_FURY (see above)
 
-// Returns the spell ID the bot actually knows, preferring the modern
-// Vengeance variant over the legacy generic ID. Returns 0 if neither.
+// Returns the spell ID the bot actually knows, preferring the spec
+// override over the generic baseline ID. Returns 0 if neither.
 uint32 PickKnown(ApPredicateContext const& ctx, uint32 modern, uint32 legacy)
 {
     if (ctx.bot.knows_spell(modern)) return modern;
@@ -165,6 +141,11 @@ bool BossLikeTargetEngaged(ApPredicateContext const& ctx)
 }
 
 int32 Pain(ApPredicateContext const& ctx) { return ctx.bot.power(POWER_PAIN_IDX); }
+// Soul Fragments currently orbiting the bot. TC keeps the count as stacks
+// of the 203981 counter aura (SPELL_DH_SOUL_FRAGMENT_COUNTER); 0 when the
+// aura is absent, which makes every fragment-gated rule fall back to the
+// no-fragment branch.
+int32 Fragments(ApPredicateContext const& ctx) { return ctx.bot.aura_stacks(SOUL_FRAGMENTS); }
 
 // ---- Tank utility ----
 bool ShouldTorment(ApPredicateContext const& ctx)
@@ -195,114 +176,73 @@ void DoSigilOfChains(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Active mitigation ----
-// Demon Spikes - core physical mitigation. 6s armour/parry buff, 2
-// charges. Refresh window: cast when not active OR remaining <= 1s.
-// Previous logic required the aura to fully expire before re-casting,
-// dropping ~1s of mitigation every refresh - significant uptime loss at
-// boss damage rates. Probes both modern (321028) and legacy (203720)
-// variants because the character may have learned either.
+// Demon Spikes - core physical mitigation. Armour/parry buff (203819), 2
+// charges, no resource cost. Refresh window: cast when not active OR
+// remaining <= 1s so mitigation never gaps at boss damage rates.
 bool ShouldDemonSpikes(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
-    // No resource gate: Demon Spikes is cost-free and charge-based in 12.0
-    // (the old Pain>=20 gate could never pass and double-blocked it).
-    uint32 spell = PickKnown(ctx, DEMON_SPIKES_V, DEMON_SPIKES);
-    if (!spell) return false;
-    if (!ctx.bot.is_ready(spell)) return false;
-    if (AuraEntry const* a = ctx.bot.find_aura(spell))
+    if (!ctx.bot.knows_spell(DEMON_SPIKES)) return false;
+    if (!ctx.bot.is_ready(DEMON_SPIKES)) return false;
+    if (AuraEntry const* a = ctx.bot.find_aura(DEMON_SPIKES_BUFF))
         return a->remaining.count() <= 1000;
-    // Aura might be tracked under the variant we did not probe; check both.
-    if (spell == DEMON_SPIKES_V) {
-        if (AuraEntry const* a2 = ctx.bot.find_aura(DEMON_SPIKES))
-            return a2->remaining.count() <= 1000;
-    } else {
-        if (AuraEntry const* a2 = ctx.bot.find_aura(DEMON_SPIKES_V))
-            return a2->remaining.count() <= 1000;
-    }
     return true;
 }
-void DoDemonSpikes(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (uint32 spell = PickKnown(ctx, DEMON_SPIKES_V, DEMON_SPIKES))
-        e.cast(spell);
-}
+void DoDemonSpikes(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DEMON_SPIKES); }
 
 // Fiery Brand - boss/elite damage-reduction debuff. Prefer big targets;
-// also fire defensively when HP dips. Probes both variants.
+// also fire defensively when HP dips.
 bool ShouldFieryBrand(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    uint32 spell = PickKnown(ctx, FIERY_BRAND_V, FIERY_BRAND);
-    if (!spell) return false;
-    if (!ctx.bot.is_ready(spell)) return false;
+    if (!ctx.bot.knows_spell(FIERY_BRAND)) return false;
+    if (!ctx.bot.is_ready(FIERY_BRAND)) return false;
     return ctx.bot.hp_pct() <= 70 || BossLikeTargetEngaged(ctx);
 }
 void DoFieryBrand(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    if (uint32 spell = PickKnown(ctx, FIERY_BRAND_V, FIERY_BRAND))
-        e.cast(spell, ctx.bot.victim());
+    e.cast(FIERY_BRAND, ctx.bot.victim());
 }
 
-// Fel Devastation - 2s channel: AoE damage + self heal. Active
-// mitigation layer when HP dips, or cleave on packs. Probes both
-// variants.
+// Fel Devastation - 2s channel: AoE damage + self heal (50 Fury). Active
+// mitigation layer when HP dips, cleave on packs, or a Fury dump when
+// capped (simc: fel_devastation,if=fury>85).
 bool ShouldFelDevastation(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    uint32 spell = PickKnown(ctx, FEL_DEVASTATION_V, FEL_DEVASTATION);
-    if (!spell) return false;
-    if (!ctx.bot.is_ready(spell)) return false;
+    if (!ctx.bot.knows_spell(FEL_DEVASTATION)) return false;
+    if (!ctx.bot.is_ready(FEL_DEVASTATION)) return false;
+    if (ctx.bot.is_moving() && !ctx.bot.can_cast_while_moving(FEL_DEVASTATION)) return false;
     if (Pain(ctx) < 50) return false;
     if (ctx.bot.hp_pct() <= 60) return true;
-    return ctx.bot.attackers_count() >= 3;
+    return ctx.bot.attackers_count() >= 3 || Pain(ctx) >= 85;
 }
-void DoFelDevastation(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (uint32 spell = PickKnown(ctx, FEL_DEVASTATION_V, FEL_DEVASTATION))
-        e.cast(spell);
-}
+void DoFelDevastation(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(FEL_DEVASTATION); }
 
-// Metamorphosis (tank) - big defensive CD; HP + huge armour. Probes
-// all three Vengeance variants (L20, L48, legacy).
+// Metamorphosis (tank, 187827) - big defensive CD; HP + huge armour.
 bool ShouldMetamorphosis(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
-    uint32 spell = 0;
-    if (ctx.bot.knows_spell(METAMORPHOSIS_V2)) spell = METAMORPHOSIS_V2;
-    else if (ctx.bot.knows_spell(METAMORPHOSIS_V1)) spell = METAMORPHOSIS_V1;
-    else if (ctx.bot.knows_spell(METAMORPHOSIS_TANK)) spell = METAMORPHOSIS_TANK;
-    if (!spell) return false;
-    if (!ctx.bot.is_ready(spell)) return false;
+    if (!ctx.bot.knows_spell(METAMORPHOSIS_TANK)) return false;
+    if (!ctx.bot.is_ready(METAMORPHOSIS_TANK)) return false;
     return ctx.bot.hp_pct() <= 35;
 }
-void DoMetamorphosis(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (ctx.bot.knows_spell(METAMORPHOSIS_V2)) e.cast(METAMORPHOSIS_V2);
-    else if (ctx.bot.knows_spell(METAMORPHOSIS_V1)) e.cast(METAMORPHOSIS_V1);
-    else if (ctx.bot.knows_spell(METAMORPHOSIS_TANK)) e.cast(METAMORPHOSIS_TANK);
-}
+void DoMetamorphosis(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(METAMORPHOSIS_TANK); }
 
-// Soul Carver - strips armour + 3 soul fragments. Long CD; boss fights.
+// Soul Carver - damage + fragments over 3s. Long CD; bosses and packs,
+// only when the fragment bank has room (simc: soul_fragments<=3).
 bool ShouldSoulCarver(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(SOUL_CARVER)) return false;
     if (!ctx.bot.is_ready(SOUL_CARVER)) return false;
-    return BossLikeTargetEngaged(ctx);
+    if (Fragments(ctx) > 3) return false;
+    return BossLikeTargetEngaged(ctx) || ctx.bot.enemies_within(8.0f) >= 3;
 }
 void DoSoulCarver(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(SOUL_CARVER, ctx.bot.victim());
 }
-
-bool ShouldSoulBarrier(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(SOUL_BARRIER)) return false;
-    if (!ctx.bot.is_ready(SOUL_BARRIER)) return false;
-    return ctx.bot.hp_pct() <= 60;
-}
-void DoSoulBarrier(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SOUL_BARRIER); }
 
 bool ShouldDarkness(ApPredicateContext const& ctx)
 {
@@ -311,15 +251,6 @@ bool ShouldDarkness(ApPredicateContext const& ctx)
     return ctx.bot.hp_pct() <= 50;
 }
 void DoDarkness(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DARKNESS); }
-
-bool ShouldBulkExtraction(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(BULK_EXTRACTION)) return false;
-    if (!ctx.bot.is_ready(BULK_EXTRACTION)) return false;
-    return ctx.bot.hp_pct() <= 60;
-}
-void DoBulkExtraction(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BULK_EXTRACTION); }
 
 // ---- Interrupt / CC ----
 bool ShouldDisrupt(ApPredicateContext const& ctx)
@@ -365,31 +296,21 @@ void DoSigilOfMisery(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Major offensive cooldowns ----
-bool ShouldElysianDecree(ApPredicateContext const& ctx)
+// Sigil of Spite - ground sigil: Chaos burst + shatters fragments from
+// everything inside. simc fires it whenever the fragment bank has room.
+bool ShouldSigilOfSpite(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(ELYSIAN_DECREE)) return false;
-    if (!ctx.bot.is_ready(ELYSIAN_DECREE)) return false;
-    return ctx.bot.enemies_within(10.0f) >= 2;
+    if (!ctx.bot.knows_spell(SIGIL_OF_SPITE)) return false;
+    if (!ctx.bot.is_ready(SIGIL_OF_SPITE)) return false;
+    return Fragments(ctx) <= 3;
 }
-void DoElysianDecree(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoSigilOfSpite(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     if (auto const* v = ctx.bot.victim_info())
-        e.cast_at(ELYSIAN_DECREE, v->x, v->y, v->z);
+        e.cast_at(SIGIL_OF_SPITE, v->x, v->y, v->z);
     else
-        e.cast(ELYSIAN_DECREE);
-}
-
-bool ShouldTheHunt(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(THE_HUNT)) return false;
-    if (!ctx.bot.is_ready(THE_HUNT)) return false;
-    return BossLikeTargetEngaged(ctx);
-}
-void DoTheHunt(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(THE_HUNT, ctx.bot.victim());
+        e.cast(SIGIL_OF_SPITE);
 }
 
 // ---- Damage / threat ----
@@ -401,24 +322,21 @@ bool ShouldImmolationAura(ApPredicateContext const& ctx)
 }
 void DoImmolationAura(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(IMMOLATION_AURA); }
 
-// Sigil of Flame - AoE ground tick + Pain generation. Core Vengeance
+// Sigil of Flame - AoE ground tick + Fury generation. Core Vengeance
 // threat tool. Fire whenever ready (Vengeance never has filler issues
-// because of fragment economy). Probes the L10 Vengeance variant first.
+// because of fragment economy).
 bool ShouldSigilOfFlame(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    uint32 spell = PickKnown(ctx, SIGIL_OF_FLAME_V, SIGIL_OF_FLAME);
-    if (!spell) return false;
-    return ctx.bot.is_ready(spell);
+    if (!ctx.bot.knows_spell(SIGIL_OF_FLAME)) return false;
+    return ctx.bot.is_ready(SIGIL_OF_FLAME);
 }
 void DoSigilOfFlame(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    uint32 spell = PickKnown(ctx, SIGIL_OF_FLAME_V, SIGIL_OF_FLAME);
-    if (!spell) return;
     if (auto const* v = ctx.bot.victim_info())
-        e.cast_at(spell, v->x, v->y, v->z);
+        e.cast_at(SIGIL_OF_FLAME, v->x, v->y, v->z);
     else
-        e.cast(spell);
+        e.cast(SIGIL_OF_FLAME);
 }
 
 // Throw Glaive - ranged tag for pulls + threat ping on enemies the tank
@@ -444,34 +362,41 @@ void DoThrowGlaive(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(spell, ctx.bot.victim());
 }
 
-// Spirit Bomb - detonate fragments for AoE + Frailty DR debuff.
-// Vengeance only - drops Pain spender priority below Spirit Bomb when
-// fragments are stockpiled. We don't have a fragment counter in the
-// snapshot view yet, so we proxy via Pain >= 40 + 2+ enemies; the spell
-// will fizzle if no fragments are held but won't cost Pain.
+// Spirit Bomb - detonate fragments for AoE + Frailty DR debuff. 40 Fury.
+// simc: spirit_bomb,if=soul_fragments>=fragment_target (5 single target,
+// 4 on packs / in Meta). Uses the 203981 fragment counter; when the aura
+// is absent (0 stacks) the rule stays off and Soul Cleave takes over.
 bool ShouldSpiritBomb(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(SPIRIT_BOMB)) return false;
     if (!ctx.bot.is_ready(SPIRIT_BOMB)) return false;
     if (Pain(ctx) < 40) return false;
-    return ctx.aoe_preference || ctx.bot.enemies_within(8.0f) >= 2;
+    const bool pack = ctx.aoe_preference || ctx.bot.enemies_within(8.0f) >= 2;
+    return Fragments(ctx) >= (pack ? 4 : 5);
 }
 void DoSpiritBomb(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SPIRIT_BOMB); }
 
+// Soul Cleave - 35 Fury spender + heal, eats up to 2 fragments. When
+// Spirit Bomb is talented let the fragments pool for it: only cleave on
+// an empty bank or when Fury is about to cap (simc: soul_fragments<=1 |
+// fury.deficit<=15).
 bool ShouldSoulCleave(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(SOUL_CLEAVE)) return false;
     if (!ctx.bot.is_ready(SOUL_CLEAVE)) return false;
-    if (Pain(ctx) < 30) return false;
-    return true;
+    if (Pain(ctx) < 35) return false;
+    if (!ctx.bot.knows_spell(SPIRIT_BOMB)) return true;
+    return Fragments(ctx) <= 1 || Pain(ctx) >= 85;
 }
 void DoSoulCleave(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(SOUL_CLEAVE, ctx.bot.victim());
 }
 
+// Fracture - the Vengeance generator (spec spell, 2 charges, shatters
+// fragments). Fire whenever a charge is up.
 bool ShouldFracture(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -483,18 +408,18 @@ void DoFracture(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(FRACTURE, ctx.bot.victim());
 }
 
-// Shear - the L1 Vengeance Pain generator. Replaces Demon's Bite from
-// L1 onwards for Vengeance bots. Yields to Fracture (talent) when both
-// are known.
-bool ShouldShear(ApPredicateContext const& ctx)
+// Felblade (talent [R]) - 15y charge + Fury. simc filler after Fracture;
+// also the gap close when nothing is in melee.
+bool ShouldFelblade(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (ctx.bot.knows_spell(FRACTURE)) return false;
-    return ctx.bot.knows_spell(SHEAR);
+    if (!ctx.bot.knows_spell(FELBLADE)) return false;
+    if (!ctx.bot.is_ready(FELBLADE)) return false;
+    return Pain(ctx) <= 60 || ctx.bot.enemies_within(8.0f) == 0;
 }
-void DoShear(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoFelblade(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    e.cast(SHEAR, ctx.bot.victim());
+    e.cast(FELBLADE, ctx.bot.victim());
 }
 
 bool ShouldInfernalStrike(ApPredicateContext const& ctx)
@@ -531,20 +456,19 @@ void DoAutoAttack(ApPredicateContext const& ctx, BotIntentEmitter& e)
     if (!t.IsEmpty()) e.start_attack(t);
 }
 
-// Rule order (audit, 2026-05-27 - tank priority):
+// Rule order (12.1 Annihilator simc priority, 2026-09-09 - tank priority):
 //   1. Threat tools      - Torment taunt, Sigil of Chains pack pull
 //   2. Active mitigation - Demon Spikes (physical) > Fiery Brand
 //                          (boss DR) > Fel Devastation (heal+AoE)
-//   3. Big defensives    - Metamorphosis (35%) > Darkness > Soul
-//                          Barrier > Bulk Extraction
+//   3. Big defensives    - Metamorphosis (35%) > Darkness
 //   4. Interrupts / CC   - Disrupt > Sigil of Silence > Sigil of
 //                          Misery (panic fear)
-//   5. Major CDs         - Elysian Decree, The Hunt, Soul Carver
+//   5. Major CDs         - Sigil of Spite, Soul Carver (fragment bank)
 //   6. Damage / threat   - Sigil of Flame > Throw Glaive (ranged
-//                          tag) > Spirit Bomb (AoE+frailty) > Soul
-//                          Cleave (Pain spender + heal) >
+//                          tag) > Spirit Bomb (fragments) > Soul
+//                          Cleave (Fury spender + heal) >
 //                          Immolation Aura > Infernal Strike
-//   7. Generator         - Fracture (talented) > Shear (baseline)
+//   7. Generator         - Fracture > Felblade
 //   8. Engage            - start_attack to keep swings going
 ApRule const kRules[] = {
     { ShouldTorment,         DoTorment,         "Torment (taunt)"             },
@@ -554,22 +478,19 @@ ApRule const kRules[] = {
     { ShouldFelDevastation,  DoFelDevastation,  "Fel Devastation (heal/AoE)"  },
     { ShouldMetamorphosis,   DoMetamorphosis,   "Metamorphosis (<=35%)"       },
     { ShouldDarkness,        DoDarkness,        "Darkness (<=50%)"            },
-    { ShouldSoulBarrier,     DoSoulBarrier,     "Soul Barrier (<=60%)"        },
-    { ShouldBulkExtraction,  DoBulkExtraction,  "Bulk Extraction (<=60%)"     },
     { ShouldDisrupt,         DoDisrupt,         "Disrupt (interrupt)"         },
     { ShouldSigilOfSilence,  DoSigilOfSilence,  "Sigil of Silence (interrupt fb)" },
     { ShouldSigilOfMisery,   DoSigilOfMisery,   "Sigil of Misery (panic)"     },
-    { ShouldElysianDecree,   DoElysianDecree,   "Elysian Decree (2+ AoE)"     },
-    { ShouldTheHunt,         DoTheHunt,         "The Hunt"                    },
-    { ShouldSoulCarver,      DoSoulCarver,      "Soul Carver (boss)"          },
+    { ShouldSigilOfSpite,    DoSigilOfSpite,    "Sigil of Spite"              },
+    { ShouldSoulCarver,      DoSoulCarver,      "Soul Carver (boss/pack)"     },
     { ShouldSigilOfFlame,    DoSigilOfFlame,    "Sigil of Flame"              },
     { ShouldThrowGlaive,     DoThrowGlaive,     "Throw Glaive (ranged tag)"   },
-    { ShouldSpiritBomb,      DoSpiritBomb,      "Spirit Bomb (2+ AoE)"        },
-    { ShouldSoulCleave,      DoSoulCleave,      "Soul Cleave (Pain>=30)"      },
+    { ShouldSpiritBomb,      DoSpiritBomb,      "Spirit Bomb (fragments)"     },
+    { ShouldSoulCleave,      DoSoulCleave,      "Soul Cleave (Fury>=35)"      },
     { ShouldImmolationAura,  DoImmolationAura,  "Immolation Aura"             },
     { ShouldInfernalStrike,  DoInfernalStrike,  "Infernal Strike"             },
-    { ShouldFracture,        DoFracture,        "Fracture (talent generator)" },
-    { ShouldShear,           DoShear,           "Shear (generator)"           },
+    { ShouldFracture,        DoFracture,        "Fracture (generator)"        },
+    { ShouldFelblade,        DoFelblade,        "Felblade (builder)"          },
     { AlwaysInCombat,        DoAutoAttack,      "Engage auto attack"          },
 };
 

@@ -44,7 +44,8 @@ void Initialize();
 // or no candidates exist.
 std::vector<GearItem> GenerateGearFor(GearGenerationContext const& ctx);
 
-// Approximate ilvl target for a character level (linear L1=1 -> L80=600).
+// Approximate ilvl target for a character level (linear L1=1 -> L80=600,
+// then L80=600 -> L90=700; clamped at the realm MaxPlayerLevel).
 // Exposed so the hygiene re-gear pass can detect under-geared bots (avg
 // equipped effective ilvl well below this target).
 uint16 TargetIlvlForLevel(uint8 level);

@@ -1,41 +1,37 @@
-﻿// Fire Mage - WoW 12.0 baseline rotation. Hot Streak proc-driven Pyroblast
-// + Fire Blast / Phoenix Flames proc generation, Combustion burst window.
+﻿// Fire Mage - WoW 12.1.0.69587 (Midnight) rotation. Hot Streak proc-driven
+// Pyroblast / Flamestrike, Fire Blast converts Heating Up into Hot Streak,
+// Combustion burst window, Meteor on cooldown for bosses / clusters, Scorch
+// as the moving + execute filler (instant under Heat Shimmer).
 //
-// ---- Validated IDs (verified against wago.tools SpellName.csv 12.0) ----
-//   133    Fireball               48108  Hot Streak! (proc aura)
-//   11366  Pyroblast              48107  Heating Up (half-proc aura)
-//   108853 Fire Blast (Fire spec) 190319 Combustion
-//   257541 Phoenix Flames         44457  Living Bomb (talent)
-//   2948   Scorch                 153561 Meteor (talent)
-//   2120   Flamestrike            157981 Blast Wave (talent)
-//   31661  Dragon's Breath        45438  Ice Block
-//   122    Frost Nova             55342  Mirror Image
-//   342245 Alter Time             2139   Counterspell
-//   108839 Ice Floes (talent)     80353  Time Warp
-//   118    Polymorph
+// ---- Validated spell IDs (WoW 12.1.0.69587) ----
+//   133    Fireball               431044 Frostfire Bolt (hero, overrides Fireball)
+//   11366  Pyroblast (talent)     431177 Frostfire Empowerment (proc aura)
+//   108853 Fire Blast (talent)    48108  Hot Streak! (proc aura)
+//   2948   Scorch (talent)        48107  Heating Up (half-proc aura)
+//   190319 Combustion (talent)    458964 Heat Shimmer (instant Scorch aura)
+//   2120   Flamestrike (talent)   153561 Meteor (talent)
+//   31661  Dragon's Breath        235313 Blazing Barrier
+//   45438  Ice Block              110959 Greater Invisibility
+//   122    Frost Nova             110960 Greater Invisibility (aura)
+//   55342  Mirror Image           342245 Alter Time
+//   2139   Counterspell           475    Remove Curse
+//   1953   Blink                  212653 Shimmer (talent, overrides Blink)
+//   118    Polymorph              80353  Time Warp
 //
 // ---- Skipped spells (and why) ----
-//   195283 Hot Streak (passive)   — talent/passive that grants the proc
-//                                   mechanic. The runtime proc aura is
-//                                   48108 ("Hot Streak!" — exclamation
-//                                   in name); we check the proc, not
-//                                   the underlying passive.
-//   44448  Pyroblast Clearcasting — internal proc driver, not a player
-//          Driver                   facing aura. Never read.
-//   333313 Sun King's Blessing    — talent that buffs Pyroblast via a
-//                                   stacking driver. The runtime proc
-//                                   aura ID is currently unstable
-//                                   between client builds; integrating
-//                                   would require build-specific
-//                                   probing. Pyroblast (gated on Hot
-//                                   Streak) already fires the empowered
-//                                   variant automatically when the buff
-//                                   is up. Skipped at rule level —
-//                                   spell engine handles the upgrade.
-//   319836 Fire Blast (baseline)  — baseline Mage instant; Fire spec
-//                                   uses the spec-specific charge
-//                                   variant (108853) which generates
-//                                   Heating Up / Hot Streak.
+//   257541 Phoenix Flames         - removed from the Fire tree in Midnight.
+//   44457  Living Bomb            - removed from the Fire tree in Midnight.
+//   157981 Blast Wave             - removed from the Mage class tree.
+//   108839 Ice Floes              - removed from the Mage class tree.
+//   194466 Phoenix's Flames       - Legion artifact spell (no learn level);
+//                                   never granted to a Midnight character.
+//   1254851 Flamestrike (target)  - alt Flamestrike variant that lands on
+//                                   the target; not in the curated build,
+//                                   we cast_at the victim with 2120.
+//   195283 Hot Streak (passive)   - proc driver; the runtime aura is 48108.
+//   319836 Fire Blast (baseline)  - Fire uses the spec talent id 108853.
+//   157980 Supernova / 383121 Mass Polymorph / 157997 Ice Nova - not in
+//                                   the curated raid build.
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -49,24 +45,29 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
+// ---- Spell IDs (WoW 12.1.0.69587, validated) ----
 constexpr uint32 FIREBALL          = 133;
+constexpr uint32 FROSTFIRE_BOLT    = 431044;     // hero talent - replaces Fireball
+constexpr uint32 FROSTFIRE_EMPOWER = 431177;     // proc aura - next Frostfire Bolt instant
 constexpr uint32 PYROBLAST         = 11366;
-constexpr uint32 FIRE_BLAST        = 108853;     // charge-based, generates Hot Streak procs
-constexpr uint32 PHOENIX_FLAMES    = 257541;     // charge-based, AoE flavor
-constexpr uint32 SCORCH            = 2948;       // cast-while-moving filler, exec scaling sub-30
-constexpr uint32 COMBUSTION        = 190319;     // burst window — every Fire Blast crits
-constexpr uint32 LIVING_BOMB       = 44457;      // talent — DoT that explodes for AoE
-constexpr uint32 METEOR            = 153561;     // talent — delayed AoE, big single-hit
-constexpr uint32 BLAST_WAVE        = 157981;     // talent — short-CD knock + AoE damage
-constexpr uint32 HOT_STREAK        = 48108;      // proc — instant Pyroblast
-constexpr uint32 HEATING_UP        = 48107;      // half-proc — next crit becomes Hot Streak
+constexpr uint32 FIRE_BLAST        = 108853;     // charge-based, castable while casting
+constexpr uint32 SCORCH            = 2948;       // cast-while-moving filler, guaranteed crit sub-30
+constexpr uint32 HEAT_SHIMMER      = 458964;     // proc aura - next Scorch instant + execute
+constexpr uint32 COMBUSTION        = 190319;     // burst window - crit chance + damage
+constexpr uint32 METEOR            = 153561;     // talent - delayed AoE, big single-hit
+constexpr uint32 HOT_STREAK        = 48108;      // proc - instant Pyroblast / Flamestrike
+constexpr uint32 HEATING_UP        = 48107;      // half-proc - next crit becomes Hot Streak
 constexpr uint32 COUNTERSPELL      = 2139;
-constexpr uint32 ICE_FLOES         = 108839;     // talent — 3-charge cast-while-moving enabler
 constexpr uint32 FLAMESTRIKE       = 2120;       // ground AoE
-constexpr uint32 DRAGONS_BREATH    = 31661;      // melee AoE stun
+constexpr uint32 DRAGONS_BREATH    = 31661;      // frontal cone disorient
 constexpr uint32 ICE_BLOCK         = 45438;      // 10s immunity, 4min CD
-constexpr uint32 FROST_NOVA        = 122;        // 8yd root, 30s CD
+constexpr uint32 FROST_NOVA        = 122;        // 8yd root
+constexpr uint32 BLINK             = 1953;       // 20yd reposition
+constexpr uint32 SHIMMER           = 212653;     // talent - replaces Blink, off-GCD
+constexpr uint32 BLAZING_BARRIER   = 235313;     // absorb shield, burns melee attackers
+constexpr uint32 GREATER_INVIS     = 110959;     // threat wipe, 2min CD
+constexpr uint32 GREATER_INVIS_AURA= 110960;     // active invisibility aura
+constexpr uint32 REMOVE_CURSE      = 475;        // friendly curse dispel, 8s CD
 constexpr uint32 MIRROR_IMAGE      = 55342;      // threat dump + DPS
 constexpr uint32 ALTER_TIME        = 342245;
 constexpr uint32 POLYMORPH         = 118;        // CC
@@ -137,6 +138,30 @@ bool ShouldIceBlock(ApPredicateContext const& ctx)
 }
 void DoIceBlock(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(ICE_BLOCK); }
 
+// Greater Invisibility - instant threat wipe. The invisibility breaks on our
+// next action, but the threat reset already happened on cast, so it is the
+// "get the pack off me" button once Ice Block is gone.
+bool ShouldGreaterInvis(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.in_combat()) return false;
+    if (!ctx.bot.knows_spell(GREATER_INVIS)) return false;
+    if (!ctx.bot.is_ready(GREATER_INVIS)) return false;
+    if (ctx.bot.has_aura(GREATER_INVIS_AURA)) return false;
+    if (ctx.bot.attackers_count() < 1) return false;
+    return ctx.bot.hp_pct() <= 35;
+}
+void DoGreaterInvis(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(GREATER_INVIS); }
+
+bool ShouldBlazingBarrier(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.in_combat()) return false;
+    if (!ctx.bot.knows_spell(BLAZING_BARRIER)) return false;
+    if (!ctx.bot.is_ready(BLAZING_BARRIER)) return false;
+    if (ctx.bot.has_aura(BLAZING_BARRIER)) return false;   // already up
+    return ctx.bot.hp_pct() <= 90;
+}
+void DoBlazingBarrier(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BLAZING_BARRIER); }
+
 bool ShouldAlterTime(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
@@ -154,6 +179,25 @@ bool ShouldMirrorImage(ApPredicateContext const& ctx)
     return ctx.bot.hp_pct() <= 70 || BossLikeTargetEngaged(ctx);
 }
 void DoMirrorImage(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(MIRROR_IMAGE); }
+
+// Emergency reposition when low HP and a melee is on us. Shimmer (talent)
+// replaces Blink; two-branch so both talented and untalented bots escape.
+bool ShouldShimmerAway(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.knows_spell(SHIMMER)) return false;
+    if (!ctx.bot.is_ready(SHIMMER)) return false;
+    return ctx.bot.hp_pct() <= 35 && ctx.bot.enemies_within(8.0f) >= 1;
+}
+void DoShimmer(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SHIMMER); }
+
+bool ShouldBlinkAway(ApPredicateContext const& ctx)
+{
+    if (ctx.bot.knows_spell(SHIMMER)) return false;
+    if (!ctx.bot.knows_spell(BLINK)) return false;
+    if (!ctx.bot.is_ready(BLINK)) return false;
+    return ctx.bot.hp_pct() <= 35 && ctx.bot.enemies_within(8.0f) >= 1;
+}
+void DoBlink(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BLINK); }
 
 bool ShouldFrostNova(ApPredicateContext const& ctx)
 {
@@ -188,14 +232,19 @@ bool ShouldDragonsBreath(ApPredicateContext const& ctx)
 }
 void DoDragonsBreath(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DRAGONS_BREATH); }
 
-bool ShouldBlastWave(ApPredicateContext const& ctx)
+// Remove Curse - group utility. Prefer a cursed group member, else self.
+bool ShouldRemoveCurse(ApPredicateContext const& ctx)
 {
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(BLAST_WAVE)) return false;
-    if (!ctx.bot.is_ready(BLAST_WAVE)) return false;
-    return ctx.bot.enemies_within(8.0f) >= 2;
+    if (!ctx.bot.knows_spell(REMOVE_CURSE)) return false;
+    if (!ctx.bot.is_ready(REMOVE_CURSE)) return false;
+    if (ctx.group.dispel_candidate(DispelType::Curse) != nullptr) return true;
+    return ctx.bot.self_dispellable(DispelType::Curse);
 }
-void DoBlastWave(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BLAST_WAVE); }
+void DoRemoveCurse(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    if (auto const* m = ctx.group.dispel_candidate(DispelType::Curse)) { e.cast(REMOVE_CURSE, m->guid); return; }
+    e.cast(REMOVE_CURSE, ctx.bot.raw().guid);
+}
 
 // ---- Major offensive cooldowns ----
 bool ShouldTimeWarp(ApPredicateContext const& ctx)
@@ -259,17 +308,6 @@ void DoFlamestrike(ApPredicateContext const& ctx, BotIntentEmitter& e)
     else                                       e.cast(FLAMESTRIKE);
 }
 
-// ---- DoT ----
-bool ShouldLivingBomb(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(LIVING_BOMB)) return false;
-    if (!ctx.bot.is_ready(LIVING_BOMB)) return false;
-    AuraEntry const* a = ctx.bot.find_aura(LIVING_BOMB, ctx.bot.victim());
-    return !a || a->remaining.count() <= 3000;
-}
-void DoLivingBomb(ApPredicateContext const& ctx, BotIntentEmitter& e) { e.cast(LIVING_BOMB, ctx.bot.victim()); }
-
 // ---- Proc spending ----
 bool ShouldPyroblastHotStreak(ApPredicateContext const& ctx)
 {
@@ -305,34 +343,38 @@ bool ShouldFireBlast(ApPredicateContext const& ctx)
 }
 void DoFireBlast(ApPredicateContext const& ctx, BotIntentEmitter& e) { e.cast(FIRE_BLAST, ctx.bot.victim()); }
 
-bool ShouldPhoenixFlames(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(PHOENIX_FLAMES)) return false;
-    if (!ctx.bot.is_ready(PHOENIX_FLAMES)) return false;
-    // Generates Heating Up on hit — fire when we don't have it yet, so we
-    // build a Hot Streak. Skip when we already have Hot Streak.
-    if (ctx.bot.has_aura(HOT_STREAK)) return false;
-    return true;
-}
-void DoPhoenixFlames(ApPredicateContext const& ctx, BotIntentEmitter& e) { e.cast(PHOENIX_FLAMES, ctx.bot.victim()); }
-
 // ---- Filler ----
 bool ShouldScorch(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(SCORCH)) return false;
-    // Scorch is the cast-while-moving filler + execute scaling. Use it when
-    // moving (no cast-time penalty) OR in the execute window (sub-30%).
+    // Heat Shimmer proc: next Scorch is instant and counts as execute -
+    // always worth the GCD.
+    if (ctx.bot.has_aura(HEAT_SHIMMER)) return true;
+    // Scorch is the cast-while-moving filler + guaranteed crit sub-30%. Use
+    // it when moving (no cast-time penalty) OR in the execute window.
     return TargetExecuteRange(ctx) || ctx.bot.is_moving();
 }
 void DoScorch(ApPredicateContext const& ctx, BotIntentEmitter& e) { e.cast(SCORCH, ctx.bot.victim()); }
 
+// Frostfire Bolt (hero talent) replaces Fireball. Frostfire Empowerment makes
+// the next one instant, so fire it even while moving under the proc.
+bool ShouldFrostfireBolt(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(FROSTFIRE_BOLT)) return false;
+    if (ctx.bot.has_aura(FROSTFIRE_EMPOWER)) return true;
+    if (ctx.bot.is_moving() && !ctx.bot.can_cast_while_moving(FROSTFIRE_BOLT)) return false;
+    return true;
+}
+void DoFrostfireBolt(ApPredicateContext const& ctx, BotIntentEmitter& e) { e.cast(FROSTFIRE_BOLT, ctx.bot.victim()); }
+
 bool ShouldFireball(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
+    if (ctx.bot.knows_spell(FROSTFIRE_BOLT)) return false;   // overridden
     if (!ctx.bot.knows_spell(FIREBALL)) return false;
-    // Hard-cast — defer to Scorch when moving so we don't silently fail.
+    // Hard-cast - defer to Scorch when moving so we don't silently fail.
     if (ctx.bot.is_moving() && !ctx.bot.can_cast_while_moving(FIREBALL)) return false;
     return true;
 }
@@ -357,69 +399,56 @@ void DoAutoAttack(ApPredicateContext const& ctx, BotIntentEmitter& e)
     if (!t.IsEmpty()) e.start_attack(t);
 }
 
-// Ice Floes — preemptive cast-while-moving enabler. Off-GCD instant.
-bool ShouldIceFloes(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(ICE_FLOES)) return false;
-    if (!ctx.bot.is_ready(ICE_FLOES)) return false;
-    if (!ctx.bot.is_moving()) return false;
-    if (ctx.bot.has_aura(ICE_FLOES)) return false;
-    return !ctx.bot.victim().IsEmpty();
-}
-void DoIceFloes(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(ICE_FLOES); }
-
 // ---- Rule table ----
 //
 // Ordering matches the documented Mage spec ordering (most-urgent first):
-//   1. Survival panic (Ice Block)
-//   2. Defensives (Mirror Image / Alter Time)
-//   3. Interrupt (Counterspell)
-//   4. Kite (Frost Nova / Dragon's Breath / Blast Wave)
+//   1. Survival panic (Ice Block / Greater Invisibility)
+//   2. Defensives (Blazing Barrier / Mirror Image / Alter Time /
+//      Shimmer or Blink)
+//   3. Interrupt (Counterspell) + group dispel (Remove Curse)
+//   4. Kite (Frost Nova / Dragon's Breath)
 //   5. CC (Polymorph)
-//   6. Cast-while-moving prep (Ice Floes)
-//   7. Major offensive CDs (Time Warp / Combustion / Meteor)
-//   8. Procs (Hot Streak: Flamestrike-AoE > Pyroblast-ST; then
-//      Fire Blast / Phoenix Flames to build the next Hot Streak)
-//   9. DoT (Living Bomb)
-//  10. Filler (Scorch / Fireball)
-//  11. Auto-attack fallback
+//   6. Major offensive CDs (Time Warp / Combustion / Meteor)
+//   7. Procs (Hot Streak: Flamestrike-AoE > Pyroblast-ST; then
+//      Fire Blast to convert Heating Up into the next Hot Streak)
+//   8. Filler (Scorch / Frostfire Bolt or Fireball)
+//   9. Auto-attack fallback
 //
 // Critical Fire mechanic: Pyroblast MUST be gated on the Hot Streak
-// proc aura (48108). Without the proc it is a 4.5s hardcast that gets
+// proc aura (48108). Without the proc it is a 4s hardcast that gets
 // interrupted; with it, instant + huge crit. ShouldPyroblastHotStreak
-// enforces this — no unconditional Pyroblast rule exists.
+// enforces this - no unconditional Pyroblast rule exists.
 ApRule const kRules[] = {
     // 1. Survival panic
     { ShouldIceBlock,            DoIceBlock,            "Ice Block (panic <=20% / <=40% PvP)" },
+    { ShouldGreaterInvis,        DoGreaterInvis,        "Greater Invis (threat wipe)" },
     // 2. Defensives
+    { ShouldBlazingBarrier,      DoBlazingBarrier,      "Blazing Barrier (shield)"   },
     { ShouldMirrorImage,         DoMirrorImage,         "Mirror Image (threat / boss)" },
     { ShouldAlterTime,           DoAlterTime,           "Alter Time (snapshot HP)"   },
-    // 3. Interrupt
+    { ShouldShimmerAway,         DoShimmer,             "Shimmer (escape melee)"     },
+    { ShouldBlinkAway,           DoBlink,               "Blink (escape melee)"       },
+    // 3. Interrupt / dispel
     { ShouldCounterspell,        DoCounterspell,        "Counterspell (interrupt)"   },
+    { ShouldRemoveCurse,         DoRemoveCurse,         "Remove Curse (group)"       },
     // 4. Kite
     { ShouldFrostNova,           DoFrostNova,           "Frost Nova (kite melee)"    },
     { ShouldDragonsBreath,       DoDragonsBreath,       "Dragon's Breath (2+ AoE)"   },
-    { ShouldBlastWave,           DoBlastWave,           "Blast Wave (2+ AoE)"        },
     // 5. CC
     { ShouldPolymorph,           DoPolymorph,           "Polymorph (off-target CC)"  },
-    // 6. Movement prep
-    { ShouldIceFloes,            DoIceFloes,            "Ice Floes (moving prep)"    },
-    // 7. Major offensive CDs
+    // 6. Major offensive CDs
     { ShouldTimeWarp,            DoTimeWarp,            "Time Warp (boss)"           },
     { ShouldCombustion,          DoCombustion,          "Combustion (burst window)"  },
     { ShouldMeteor,              DoMeteor,              "Meteor (boss / 2+ AoE)"     },
-    // 8. Procs (Hot Streak consumption — AoE first, then ST)
+    // 7. Procs (Hot Streak consumption - AoE first, then ST)
     { ShouldFlamestrikeHotStreak,DoFlamestrike,         "Flamestrike (HS + 3 AoE)"   },
     { ShouldPyroblastHotStreak,  DoPyroblast,           "Pyroblast (Hot Streak)"     },
     { ShouldFireBlast,           DoFireBlast,           "Fire Blast (HU -> HS)"      },
-    { ShouldPhoenixFlames,       DoPhoenixFlames,       "Phoenix Flames (build HU)"  },
-    // 9. DoT refresh
-    { ShouldLivingBomb,          DoLivingBomb,          "Living Bomb (DoT refresh)"  },
-    // 10. Filler
+    // 8. Filler (Frostfire Bolt overrides Fireball when talented)
     { ShouldScorch,              DoScorch,              "Scorch (execute / moving)"  },
+    { ShouldFrostfireBolt,       DoFrostfireBolt,       "Frostfire Bolt (filler)"    },
     { ShouldFireball,            DoFireball,            "Fireball (filler)"          },
-    // 11. Auto attack fallback
+    // 9. Auto attack fallback
     { AlwaysInCombat,            DoAutoAttack,          "Engage auto attack"         },
 };
 

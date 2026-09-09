@@ -15,34 +15,42 @@ using ::Playerbot::Combat::baseline_common::HasLiveTarget;
 using ::Playerbot::Combat::baseline_common::AlwaysInCombat;
 using ::Playerbot::Combat::baseline_common::DoAutoAttack;
 
-// Target version: WoW 12.0.5+ (Midnight). Classic-era fallback IDs
+// Target version: WoW 12.1.0.69587 (Midnight). Classic-era fallback IDs
 // were removed 2026-05-21 per user directive ("we do not develop
 // any legacy versions"). If a Midnight bot is observed without the
 // retail ID in its spellbook, that's a data-layer issue (db2 /
 // SkillLineAbility) to fix in the data, not by reintroducing
 // classic fallbacks here.
+//
+// Validated spell IDs (WoW 12.1.0.69587, Hunter class baseline
+// SkillLineAbility list - every id here is class-wide, learn level <= 9):
+//   56641  Steady Shot (L1)   | 185358 Arcane Shot (L2)   | 195645 Wing Clip (L3)
+//   781    Disengage (L4)     | 136    Mend Pet (L5)      | 883    Call Pet 1 (L5)
+//   982    Revive Pet (L5)    | 5384   Feign Death (L6)   | 257284 Hunter's Mark (L7)
+//   186265 Aspect of Turtle(L8)| 109304 Exhilaration (L9)
+//
+// Skipped (deliberate, 12.1): Aimed Shot (19434) is a Marksmanship spec
+// talent, Kill Command (34026) a Beast Mastery spec talent, Serpent Sting
+// (271788) no longer exists for any Hunter spec, Concussive Shot (5116)
+// and Binding Shot (109248; the old 117526 was its stun aura) are class
+// TALENTS - none of them is class baseline, so they live in the spec
+// rotations only. Freezing Trap (187650) / Aspect of the Cheetah (186257)
+// are L10 / movement utility outside the combat ladder.
 constexpr uint32 ARCANE_SHOT_IDS[]     = { 185358 };
 constexpr uint32 STEADY_SHOT_IDS[]     = { 56641 };
-constexpr uint32 AIMED_SHOT_IDS[]      = { 19434 };
-constexpr uint32 KILL_COMMAND_IDS[]    = { 34026 };
-constexpr uint32 SERPENT_STING_IDS[]   = { 271788 };
 constexpr uint32 HUNTERS_MARK_IDS[]    = { 257284 };
-constexpr uint32 CONCUSSIVE_SHOT_IDS[] = { 5116 };
 constexpr uint32 WING_CLIP_IDS[]       = { 195645 };
 constexpr uint32 DISENGAGE_IDS[]       = { 781 };
 constexpr uint32 FEIGN_DEATH_IDS[]     = { 5384 };
 constexpr uint32 MEND_PET_IDS[]        = { 136 };
 constexpr uint32 CALL_PET_1_IDS[]      = { 883 };
 constexpr uint32 REVIVE_PET_IDS[]      = { 982 };
-// Wago.tools gap-fill 2026-05-27: pre-L10 baseline coverage.
+// Pre-L10 baseline coverage.
 // Aspect of the Turtle (L8, 186265): 8s damage/CC immunity, panic-tier
-// CD — the strongest defensive a baseline hunter owns before specs
+// CD - the strongest defensive a baseline hunter owns before specs
 // unlock. Exhilaration (L9, 109304): self+pet heal CD (~30% HP/2min).
-// Binding Shot (L1, 117526): talent root AoE — fires only when ≥3
-// enemies cluster within 15y, so it doesn't burn its CD on solo trash.
 constexpr uint32 ASPECT_TURTLE_ID      = 186265;
 constexpr uint32 EXHILARATION_ID       = 109304;
-constexpr uint32 BINDING_SHOT_ID       = 117526;
 
 // First candidate the bot knows + is ready to cast. 0 = none.
 inline uint32 FirstReady(ApPredicateContext const& ctx, std::span<const uint32> ids)
@@ -51,8 +59,8 @@ inline uint32 FirstReady(ApPredicateContext const& ctx, std::span<const uint32> 
     return 0;
 }
 // First candidate the bot has in its spellbook (ignores cooldown / GCD).
-// Used for predicates that need to check aura presence (Hunter's Mark,
-// Serpent Sting) to decide whether to refresh before we care if it's ready.
+// Used for predicates that need to check aura presence (Hunter's Mark)
+// to decide whether to refresh before we care if it's ready.
 inline uint32 FirstKnown(ApPredicateContext const& ctx, std::span<const uint32> ids)
 {
     for (uint32 sid : ids) if (ctx.bot.knows_spell(sid)) return sid;
@@ -87,7 +95,7 @@ bool ShouldCallPet(ApPredicateContext const& ctx)
 {
     if (ctx.bot.in_combat()) return false;
     if (!ctx.bot.pet_guid().IsEmpty()) return false;
-    if (!ctx.bot.knows_spell(883)) return false;
+    if (!ctx.bot.knows_spell(CALL_PET_1_IDS[0])) return false;
     // Require a stable_pets entry that *can* be summoned — slot_kind 0
     // (active slot) with a real creature entry. Anything else is a
     // dead record from a prior pet that got dismissed/abandoned.
@@ -98,11 +106,11 @@ bool ShouldCallPet(ApPredicateContext const& ctx)
         { has_summonable = true; break; }
     }
     if (!has_summonable) return false;
-    return ctx.bot.is_ready(883);
+    return ctx.bot.is_ready(CALL_PET_1_IDS[0]);
 }
 void DoCallPet(ApPredicateContext const&, BotIntentEmitter& e)
 {
-    e.cast(883, ObjectGuid::Empty);
+    e.cast(CALL_PET_1_IDS[0], ObjectGuid::Empty);
 }
 bool ShouldMendPet(ApPredicateContext const& ctx)
 {
@@ -189,38 +197,26 @@ void DoFeignDeath(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Slow / utility ----
-// Wing Clip: classic-era melee slow. Modern retail (BfA+) removes this
-// from base spellbook, but the server's data layer may re-grant the
-// classic 2974 via SkillLineAbility overlays. Fires when an enemy is
-// sitting on top of the bot (≤5y) so the slow lets us back off.
+// Wing Clip (195645, L3, 20 focus, 5y): melee slow, still class baseline
+// in 12.1. Fires when an enemy is sitting on top of the bot (<=5y) and
+// the slow isn't already running, so the bot can back off to shot range.
 bool ShouldWingClip(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (ctx.bot.enemies_within(5.0f) == 0) return false;
+    uint32 known = FirstKnown(ctx, WING_CLIP_IDS);
+    if (!known) return false;
+    if (ctx.bot.find_aura(known, ctx.bot.victim())) return false;   // still slowed
+    constexpr uint8 POWER_FOCUS_IDX = 2;
+    if (ctx.bot.power(POWER_FOCUS_IDX) < 20) return false;
     return FirstReady(ctx, WING_CLIP_IDS) != 0;
 }
 void DoWingClip(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     if (uint32 sid = FirstReady(ctx, WING_CLIP_IDS)) e.cast(sid, ctx.bot.victim());
 }
-// Concussive Shot: ranged 50% slow. Open with this when a target is
-// closing the gap and we're below 80% HP (proxy for "actively being
-// chased" — at full HP we don't bother).
-bool ShouldConcussiveShot(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    uint32 sid = FirstReady(ctx, CONCUSSIVE_SHOT_IDS);
-    if (!sid) return false;
-    // Refresh-aware: don't re-apply while still slowing.
-    if (ctx.bot.find_aura(sid, ctx.bot.victim())) return false;
-    return ctx.bot.enemies_within(15.0f) > 0;
-}
-void DoConcussiveShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (uint32 sid = FirstReady(ctx, CONCUSSIVE_SHOT_IDS)) e.cast(sid, ctx.bot.victim());
-}
 
-// ---- Debuff / DoT openers ----
+// ---- Debuff opener ----
 bool ShouldHuntersMark(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -233,80 +229,22 @@ void DoHuntersMark(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     if (uint32 sid = FirstReady(ctx, HUNTERS_MARK_IDS)) e.cast(sid, ctx.bot.victim());
 }
-bool ShouldSerpentSting(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    uint32 known = FirstKnown(ctx, SERPENT_STING_IDS);
-    if (!known) return false;
-    AuraEntry const* a = ctx.bot.find_aura(known, ctx.bot.victim());
-    if (a && a->remaining.count() > 3000) return false;   // still ticking
-    return FirstReady(ctx, SERPENT_STING_IDS) != 0;
-}
-void DoSerpentSting(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (uint32 sid = FirstReady(ctx, SERPENT_STING_IDS)) e.cast(sid, ctx.bot.victim());
-}
-
-// ---- AoE control ----
-// Binding Shot: talent-gated ground-targeted AoE root. Only fires when
-// ≥3 enemies cluster within 15y so the CD isn't wasted on a single
-// add. Cast at the victim's location (matches the spec idiom in
-// Apl_Hunter_*: cast_at(x,y,z) when victim_info() resolves, else
-// self-cast at the bot's feet as a last resort). Talent (not class
-// baseline), so knows_spell() naturally gates non-talented bots out.
-bool ShouldBindingShot(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(BINDING_SHOT_ID)) return false;
-    if (!ctx.bot.is_ready(BINDING_SHOT_ID)) return false;
-    return ctx.bot.enemies_within(15.0f) >= 3;
-}
-void DoBindingShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (auto const* v = ctx.bot.victim_info())
-        e.cast_at(BINDING_SHOT_ID, v->x, v->y, v->z);
-    else
-        e.cast(BINDING_SHOT_ID, ObjectGuid::Empty);
-}
 
 // ---- Damage rotation ----
 // Each one is "have-target + ready + (resource check)". Falls through
 // to the next on cooldown so the turn is never wasted on a queued spell.
-bool ShouldKillCommand(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.has_pet()) return false;   // KC needs the pet to deliver it
-    return FirstReady(ctx, KILL_COMMAND_IDS) != 0;
-}
-void DoKillCommand(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (uint32 sid = FirstReady(ctx, KILL_COMMAND_IDS)) e.cast(sid, ctx.bot.victim());
-}
-bool ShouldAimedShot(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (ctx.bot.is_moving()) return false;   // 2.5s cast — interrupts on move
-    return FirstReady(ctx, AIMED_SHOT_IDS) != 0;
-}
-void DoAimedShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (uint32 sid = FirstReady(ctx, AIMED_SHOT_IDS)) e.cast(sid, ctx.bot.victim());
-}
 // Arcane Shot costs 40 focus. The bare is_ready check let this rule
-// claim the tick at ANY focus level — the cast then bounced off
+// claim the tick at ANY focus level - the cast then bounced off
 // SPELL_FAILED_NO_POWER server-side and (pre-B02) starved Steady Shot,
-// the generator sitting one slot below. Gate on affordability, and keep
-// a Kill Command reserve banked once KC is known so the pet's best
-// button is never delayed by a filler shot.
+// the generator sitting one slot below. Gate on affordability. (Spec
+// spenders such as Kill Command are spec talents, not class baseline,
+// so the pre-L10 ladder has no reserve to keep.)
 bool ShouldArcaneShot(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     constexpr uint8 POWER_FOCUS_IDX = 2;
     constexpr int32 ARCANE_COST = 40;
-    constexpr int32 KC_RESERVE  = 30;
-    int32 const need = ARCANE_COST +
-        (ctx.bot.knows_spell(KILL_COMMAND_IDS[0]) && ctx.bot.has_pet() ? KC_RESERVE : 0);
-    if (ctx.bot.power(POWER_FOCUS_IDX) < need) return false;
+    if (ctx.bot.power(POWER_FOCUS_IDX) < ARCANE_COST) return false;
     return FirstReady(ctx, ARCANE_SHOT_IDS) != 0;
 }
 void DoArcaneShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -336,14 +274,7 @@ ApRule const baseline_hunter_kRules[] = {
     { ShouldExhilaration,   DoExhilaration,   "Exhilaration (<=50%)"        },
     { ShouldFeignDeath,     DoFeignDeath,     "Feign Death (emergency)"     },
     { ShouldWingClip,       DoWingClip,       "Wing Clip (melee slow)"      },
-    { ShouldConcussiveShot, DoConcussiveShot, "Concussive Shot (ranged slow)"},
     { ShouldHuntersMark,    DoHuntersMark,    "Hunter's Mark (debuff)"      },
-    { ShouldSerpentSting,   DoSerpentSting,   "Serpent Sting (DoT)"         },
-    // Binding Shot before single-target damage so a 3+ pack gets rooted
-    // before we commit to a ST shot rotation.
-    { ShouldBindingShot,    DoBindingShot,    "Binding Shot (3+ AoE root)"  },
-    { ShouldKillCommand,    DoKillCommand,    "Kill Command"                },
-    { ShouldAimedShot,      DoAimedShot,      "Aimed Shot"                  },
     { ShouldArcaneShot,     DoArcaneShot,     "Arcane Shot"                 },
     { ShouldSteadyShot,     DoSteadyShot,     "Steady Shot (filler)"        },
     { AlwaysInCombat,       DoAutoAttack,     "Auto attack"                 },

@@ -1,4 +1,4 @@
-// Restoration Druid — WoW 12.0 spec rotation (specId 105).
+// Restoration Druid - WoW 12.1.0.69587 (Midnight) spec rotation (specId 105).
 //
 // Stance / form
 // -------------
@@ -9,64 +9,68 @@
 // Life) is the one optional form burst — talented + temporary. Outside
 // of that we stay in our human/elf form casting heals.
 //
-// Decision tree
-// -------------
-//   1) Cast-swap shim       — cancel current heal if a more urgent target appeared
-//   2) Emergency layer      — Rebirth, MotW, Barkskin, Renewal, Ironbark, Innervate
-//   3) Dispel               — Nature's Cure (Magic+Curse+Poison) + Remove
+// Decision tree (12.1)
+// --------------------
+//   1) Cast-swap shim       - cancel current heal if a more urgent target appeared
+//   2) Emergency layer      - Rebirth, MotW, Symbiotic Relationship (OOC bond
+//                             with the tank), Barkskin, Ironbark, Innervate
+//   3) Dispel               - Nature's Cure (Magic+Curse+Poison) + Remove
 //                             Corruption fallback (Curse+Poison; pre-spec
 //                             cleanse) + Soothe (enrage)
-//   4) Tranquility          — raid CD when 3+ at <=50%
-//   5) Big CDs              — Flourish (extend all HoTs), Convoke,
-//                             Incarnation: Tree of Life, Grove Guardians
-//   6) Pre-shield           — Cenarion Ward on tank, Adaptive Swarm
-//   7) AoE heal             — Wild Growth threshold, Efflorescence placement
-//   8) Spike heal           — Swiftmend, Regrowth
-//   9) HoT maintenance      — Lifebloom on tank, Rejuvenation on lowest
-//   10) Offensive filler    — Sunfire / Moonfire / Wrath when group is full
+//   4) Tranquility          - raid CD when 3+ at <=50% (Flourish is now a
+//                             passive rider on it)
+//   5) Big CDs              - Heart of the Wild (empowered Wild Growth),
+//                             Convoke, Incarnation: Tree of Life
+//   6) AoE heal             - Wild Growth threshold, Efflorescence placement
+//                             (skipped with Lifetreading: it follows Lifebloom)
+//   7) Spike heal           - Swiftmend (needs a HoT), Nature's Swiftness ->
+//                             instant Regrowth, Regrowth
+//   8) HoT maintenance      - Lifebloom on tank, Rejuvenation on lowest
+//   9) Offensive filler     - Sunfire / Moonfire / Wrath when group is full
 //
-// Validated spell IDs (SpellName.csv, WoW 12.0)
-// ---------------------------------------------
-//      774  Rejuvenation
+// Validated spell IDs (SpellName.csv, WoW 12.1.0.69587)
+// ----------------------------------------------------
+//      774  Rejuvenation           (class talent [R])
 //     8936  Regrowth
-//    33763  Lifebloom
-//    18562  Swiftmend
-//    48438  Wild Growth
-//      740  Tranquility
-//   145205  Efflorescence
-//   102351  Cenarion Ward          (talent — tank pre-shield)
-//   197721  Flourish               (talent — extends all HoTs)
-//   391528  Convoke the Spirits    (burst CD)
-//   391888  Adaptive Swarm         (talent — buff/debuff hybrid)
-//    88423  Nature's Cure          (Magic + Curse + Poison dispel — Resto)
-//   440015  Remove Corruption      (Curse + Poison fallback — pre-Resto / shared)
-//     2908  Soothe                 (enrage dispel)
-//    29166  Innervate              (mana CD)
-//    20484  Rebirth                (battle rez)
-//    22812  Barkskin               (off-GCD 20% DR)
-//   102342  Ironbark               (ally 20% DR + heal amp)
-//   108238  Renewal                (talent instant 30% self-heal)
-//     1126  Mark of the Wild       (group buff)
-//    93402  Sunfire                (filler DoT)
-//     8921  Moonfire               (filler DoT)
-//     5176  Wrath                  (filler nuke — Resto's baseline Wrath
-//                                   id; Balance learns 190984 instead)
-//   102693  Grove Guardians        (talent — 3-charge healing treants)
-//    33891  Incarnation: Tree of Life (talent — 30s burst form)
+//    33763  Lifebloom              (spec talent [R]; aura id == cast id)
+//    18562  Swiftmend              (spec talent [R])
+//    48438  Wild Growth            (class talent [R])
+//      740  Tranquility            (spec talent [R]; 197721 Flourish is a
+//                                   passive that extends HoTs during it)
+//   145205  Efflorescence          (spec talent [R]; 1217941 Lifetreading
+//                                   passive [R] makes it auto-follow Lifebloom)
+//   132158  Nature's Swiftness     (spec talent [R]; next Regrowth instant)
+//  1261867  Heart of the Wild      (class talent [R]; caster = empowered Wild Growth)
+//   391528  Convoke the Spirits    (spec talent [R])
+//    88423  Nature's Cure          (spec spell; Magic + Curse + Poison)
+//   440015  Remove Corruption      (spec spell; Curse + Poison fallback)
+//     2908  Soothe                 (class talent [R])
+//    29166  Innervate              (class talent [R])
+//    20484  Rebirth
+//    22812  Barkskin
+//   102342  Ironbark               (spec talent [R])
+//   474750  Symbiotic Relationship (class talent [R]; 474754 is the bond aura
+//                                   on the ally)
+//     1126  Mark of the Wild
+//    93402  Sunfire                (class talent, not in Resto build; DoT 164815)
+//     8921  Moonfire               (filler DoT; DoT aura 164812)
+//     5176  Wrath                  (baseline Wrath; Balance learns 190984)
+//    33891  Incarnation: Tree of Life (spec talent, not in build)
 //
 // Skipped spells (and why)
-// ---------------------------
-//   * 212040  Revitalize            — passive mana regen talent, not a
-//     cast. Implicit benefit on every spell.
-//   * 468146  Reactive Resin        — buff aura (proc / item / encounter
-//     interaction in modern content). Not a player ability we cast on a
-//     priority — applied externally or via talent procs. No predicate.
-//   * 197490  Feral Affinity        — passive talent that grants Rake/
-//     Shred/Rip to non-Feral specs. Resto has no use for the cat-form
-//     spells from a healing rotation; baseline druid handles them if the
-//     bot ever drops into cat. No spec-rotation predicate.
-//   * 270100  Bear Form variant     — Guardian-specific aura, not a
-//     Resto ability.
+// ------------------------
+//   * 102351 Cenarion Ward - the talent is gone from the 12.1 class tree
+//     (102352 that remains is the ward's HoT sub-spell, not a cast).
+//   * 391888 Adaptive Swarm, 108238 Renewal - not learnable in 12.1.
+//   * 1226140 Grove Guardians - a passive in 12.1 (Swiftmend / Wild Growth
+//     summon the treant automatically); no cast rule.
+//   * 197721 Flourish - passive in 12.1 (rides on Tranquility).
+//   * 212040 Revitalize - out-of-combat mass resurrection; not a rotation
+//     ability.
+//   * 22842 Frenzied Regeneration, 106898 Stampeding Roar, 102401 Wild
+//     Charge, 102793 Ursol's Vortex, 132469 Typhoon - [R] class talents that
+//     need Bear Form or positioning the healer rotation does not do.
+//   * 1229376 Single-Button Assistant - client convenience macro.
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -81,32 +85,34 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated against SpellName.csv) ----
-constexpr uint32 REJUVENATION      = 774;
+// ---- Spell IDs (WoW 12.1.0.69587, validated against SpellName.csv) ----
+constexpr uint32 REJUVENATION      = 774;          // class talent [R]
 constexpr uint32 REGROWTH          = 8936;
-constexpr uint32 LIFEBLOOM         = 33763;
-constexpr uint32 SWIFTMEND         = 18562;
-constexpr uint32 WILD_GROWTH       = 48438;
-constexpr uint32 TRANQUILITY       = 740;
-constexpr uint32 EFFLORESCENCE     = 145205;
-constexpr uint32 CENARION_WARD     = 102351;       // talent — tank pre-shield
-constexpr uint32 FLOURISH          = 197721;       // talent — extends all HoTs
-constexpr uint32 CONVOKE_SPIRITS   = 391528;       // burst CD
-constexpr uint32 ADAPTIVE_SWARM    = 391888;       // talent — buff/debuff hybrid
-constexpr uint32 NATURES_CURE      = 88423;        // Resto: Magic+Curse+Poison
-constexpr uint32 REMOVE_CORRUPTION = 440015;       // Curse+Poison fallback
-constexpr uint32 SOOTHE            = 2908;
-constexpr uint32 INNERVATE         = 29166;
+constexpr uint32 LIFEBLOOM         = 33763;        // spec talent [R]
+constexpr uint32 SWIFTMEND         = 18562;        // spec talent [R]
+constexpr uint32 WILD_GROWTH       = 48438;        // class talent [R]
+constexpr uint32 TRANQUILITY       = 740;          // spec talent [R]
+constexpr uint32 EFFLORESCENCE     = 145205;       // spec talent [R]
+constexpr uint32 LIFETREADING      = 1217941;      // spec passive [R] - Efflorescence follows Lifebloom target
+constexpr uint32 NATURES_SWIFTNESS = 132158;       // spec talent [R] - next Regrowth instant + free
+constexpr uint32 HEART_OF_THE_WILD = 1261867;      // class talent [R] - caster: empowered Wild Growth
+constexpr uint32 CONVOKE_SPIRITS   = 391528;       // spec talent [R] burst
+constexpr uint32 NATURES_CURE      = 88423;        // spec spell: Magic+Curse+Poison (overrides 440015)
+constexpr uint32 REMOVE_CORRUPTION = 440015;       // spec spell: Curse+Poison fallback
+constexpr uint32 SOOTHE            = 2908;         // class talent [R]
+constexpr uint32 INNERVATE         = 29166;        // class talent [R]
 constexpr uint32 REBIRTH           = 20484;
 constexpr uint32 BARKSKIN          = 22812;
-constexpr uint32 IRONBARK          = 102342;
-constexpr uint32 RENEWAL           = 108238;      // talent — instant 30% max-HP self-heal
+constexpr uint32 IRONBARK          = 102342;       // spec talent [R]
+constexpr uint32 SYMBIOTIC_RELATIONSHIP = 474750;  // class talent [R] - OOC bond with the tank
+constexpr uint32 SYMBIOTIC_BOND_AURA    = 474754;  // aura on the bonded ally
 constexpr uint32 MARK_OF_THE_WILD  = 1126;
-constexpr uint32 SUNFIRE           = 93402;
-constexpr uint32 MOONFIRE          = 8921;
-constexpr uint32 WRATH             = 5176;          // Resto's baseline Wrath learn
-constexpr uint32 GROVE_GUARDIANS   = 102693;        // talent — 3-charge healing treants
-constexpr uint32 INCARN_TREE       = 33891;         // talent — Incarnation: Tree of Life
+constexpr uint32 SUNFIRE           = 93402;        // class talent (not in Resto build) - filler DoT
+constexpr uint32 SUNFIRE_DOT       = 164815;       // Sunfire periodic aura
+constexpr uint32 MOONFIRE          = 8921;         // filler DoT (cast id)
+constexpr uint32 MOONFIRE_DOT      = 164812;       // Moonfire periodic aura
+constexpr uint32 WRATH             = 5176;         // Resto's baseline Wrath learn
+constexpr uint32 INCARN_TREE       = 33891;        // spec talent (not in build) - Incarnation: Tree of Life
 
 // ---- Helpers ----
 struct HealTarget
@@ -206,21 +212,24 @@ bool ShouldBarkskin(ApPredicateContext const& ctx)
 }
 void DoBarkskin(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BARKSKIN); }
 
-// Renewal: instant 30% max-HP self-heal, 90s CD. Resto's true panic
-// instant — Regrowth is a hard-cast that breaks on damage. Fires at
-// <=35%. Alternation: skip if Barkskin is ready (Barkskin first = 12s of
-// 20% DR stacks with Renewal). Skip if Renewal is already up.
-bool ShouldRenewal(ApPredicateContext const& ctx)
+// Symbiotic Relationship: hour-long bond with the tank - our heals on the
+// tank heal us and our self-heals heal the tank. OOC maintenance only
+// (1.5s cast); the bond aura 474754 sits on the ally.
+bool ShouldSymbioticRelationship(ApPredicateContext const& ctx)
 {
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(RENEWAL)) return false;
-    if (!ctx.bot.is_ready(RENEWAL)) return false;
-    if (ctx.bot.hp_pct() > 35) return false;
-    if (ctx.bot.knows_spell(BARKSKIN) && ctx.bot.is_ready(BARKSKIN)
-        && ctx.bot.hp_pct() > 20) return false;
-    return true;
+    if (!ctx.bot.knows_spell(SYMBIOTIC_RELATIONSHIP)) return false;
+    if (!ctx.bot.is_ready(SYMBIOTIC_RELATIONSHIP)) return false;
+    if (ctx.bot.in_combat()) return false;
+    GroupMemberSummary const* tank = ctx.group.tank();
+    if (!tank || !tank->online || tank->hp <= 0) return false;
+    if (tank->guid == ctx.bot.raw().guid) return false;
+    return !ctx.bot.has_aura(SYMBIOTIC_BOND_AURA, tank->guid);
 }
-void DoRenewal(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(RENEWAL); }
+void DoSymbioticRelationship(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    if (auto const* tank = ctx.group.tank())
+        e.cast(SYMBIOTIC_RELATIONSHIP, tank->guid);
+}
 
 bool ShouldIronbark(ApPredicateContext const& ctx)
 {
@@ -340,15 +349,18 @@ bool ShouldTranquility(ApPredicateContext const& ctx)
 }
 void DoTranquility(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(TRANQUILITY); }
 
-bool ShouldFlourish(ApPredicateContext const& ctx)
+// Heart of the Wild in caster form = an empowered Wild Growth (more
+// targets, bigger heal) on a 2min CD. Fire it on real group-wide damage.
+bool ShouldHeartOfTheWild(ApPredicateContext const& ctx)
 {
-    if (!ctx.bot.knows_spell(FLOURISH)) return false;
-    if (!ctx.bot.is_ready(FLOURISH)) return false;
-    // Best when a lot of HoTs are out — gate on 3+ wounded so we know our
-    // blanket is broad. Also benefits from raid burst windows.
-    return WoundedFriendCount(ctx, 70) >= 3;
+    if (!ctx.bot.knows_spell(HEART_OF_THE_WILD)) return false;
+    if (!ctx.bot.is_ready(HEART_OF_THE_WILD)) return false;
+    return WoundedFriendCount(ctx, 75) >= 3;
 }
-void DoFlourish(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(FLOURISH); }
+void DoHeartOfTheWild(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(HEART_OF_THE_WILD, LowestFriendOrSelf(ctx).guid);
+}
 
 bool ShouldConvoke(ApPredicateContext const& ctx)
 {
@@ -372,48 +384,19 @@ bool ShouldIncarnTree(ApPredicateContext const& ctx)
 }
 void DoIncarnTree(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(INCARN_TREE); }
 
-// Grove Guardians — 3-charge healing-treant summon. Off-GCD; can fire
-// during channels. Spend on heavy raid damage windows or when the lowest
-// friendly drops below 75%.
-bool ShouldGroveGuardians(ApPredicateContext const& ctx)
+// ---- Instant-Regrowth setup ----
+// Nature's Swiftness makes the next Regrowth instant + free. Arm it when
+// the lowest ally is in spike range so the Regrowth rule below lands
+// instantly instead of as a 1.5s hard cast.
+bool ShouldNaturesSwiftness(ApPredicateContext const& ctx)
 {
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(GROVE_GUARDIANS)) return false;
-    if (!ctx.bot.is_ready(GROVE_GUARDIANS)) return false;
-    return LowestFriendOrSelf(ctx).hp_pct <= 75 || WoundedFriendCount(ctx, 80) >= 2;
+    if (!ctx.bot.knows_spell(NATURES_SWIFTNESS)) return false;
+    if (!ctx.bot.is_ready(NATURES_SWIFTNESS)) return false;
+    if (ctx.bot.has_aura(NATURES_SWIFTNESS)) return false;
+    if (!ctx.bot.knows_spell(REGROWTH)) return false;
+    return LowestFriendOrSelf(ctx).hp_pct <= 40;
 }
-void DoGroveGuardians(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(GROVE_GUARDIANS, LowestFriendOrSelf(ctx).guid);
-}
-
-// ---- Pre-shield / pre-emptive ----
-bool ShouldCenarionWard(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(CENARION_WARD)) return false;
-    if (!ctx.bot.is_ready(CENARION_WARD)) return false;
-    GroupMemberSummary const* tank = ctx.group.tank();
-    if (!tank || !tank->online || tank->hp <= 0) return false;
-    if (ctx.bot.has_aura(CENARION_WARD, tank->guid)) return false;
-    return true;
-}
-void DoCenarionWard(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (auto const* tank = ctx.group.tank())
-        e.cast(CENARION_WARD, tank->guid);
-}
-
-bool ShouldAdaptiveSwarm(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(ADAPTIVE_SWARM)) return false;
-    if (!ctx.bot.is_ready(ADAPTIVE_SWARM)) return false;
-    HealTarget t = LowestFriendOrSelf(ctx);
-    return t.hp_pct <= 80;
-}
-void DoAdaptiveSwarm(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(ADAPTIVE_SWARM, LowestFriendOrSelf(ctx).guid);
-}
+void DoNaturesSwiftness(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(NATURES_SWIFTNESS); }
 
 // ---- AoE heal ----
 bool ShouldWildGrowth(ApPredicateContext const& ctx)
@@ -427,9 +410,12 @@ void DoWildGrowth(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(WILD_GROWTH, LowestFriendOrSelf(ctx).guid);
 }
 
+// Efflorescence: with the Lifetreading passive [R] the blossom grows under
+// the Lifebloom target automatically, so only place it by hand without it.
 bool ShouldEfflorescence(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.knows_spell(EFFLORESCENCE)) return false;
+    if (ctx.bot.knows_spell(LIFETREADING)) return false;
     if (!ctx.bot.is_ready(EFFLORESCENCE)) return false;
     return !ctx.bot.has_aura(EFFLORESCENCE);
 }
@@ -441,11 +427,18 @@ void DoEfflorescence(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Spike heal ----
+// Swiftmend consumes (or, with Verdant Infusion, utilizes) one of our
+// Rejuvenation / Regrowth / Wild Growth effects - it cannot be cast on a
+// target without one, so require a HoT before spending the GCD.
 bool ShouldSwiftmend(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.knows_spell(SWIFTMEND)) return false;
     if (!ctx.bot.is_ready(SWIFTMEND)) return false;
-    return LowestFriendOrSelf(ctx).hp_pct <= 50;
+    HealTarget t = LowestFriendOrSelf(ctx);
+    if (t.hp_pct > 50) return false;
+    return ctx.bot.has_aura(REJUVENATION, t.guid)
+        || ctx.bot.has_aura(REGROWTH, t.guid)
+        || ctx.bot.has_aura(WILD_GROWTH, t.guid);
 }
 void DoSwiftmend(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
@@ -498,7 +491,7 @@ bool ShouldSunfire(ApPredicateContext const& ctx)
     if (!GroupTopped(ctx)) return false;
     if (!ctx.bot.knows_spell(SUNFIRE)) return false;
     if (ctx.bot.victim().IsEmpty()) return false;
-    AuraEntry const* a = ctx.bot.find_aura(SUNFIRE, ctx.bot.victim());
+    AuraEntry const* a = ctx.bot.find_aura(SUNFIRE_DOT, ctx.bot.victim());
     return !a || a->remaining.count() <= 4000;
 }
 void DoSunfire(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -512,7 +505,7 @@ bool ShouldMoonfire(ApPredicateContext const& ctx)
     if (!GroupTopped(ctx)) return false;
     if (!ctx.bot.knows_spell(MOONFIRE)) return false;
     if (ctx.bot.victim().IsEmpty()) return false;
-    AuraEntry const* a = ctx.bot.find_aura(MOONFIRE, ctx.bot.victim());
+    AuraEntry const* a = ctx.bot.find_aura(MOONFIRE_DOT, ctx.bot.victim());
     return !a || a->remaining.count() <= 4000;
 }
 void DoMoonfire(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -545,53 +538,49 @@ bool ShouldCancelHealForSwap(ApPredicateContext const& ctx)
 
 // ---- Rule table (priority order top-down) ----
 // Order rationale:
-//   1.  Cancel heal swap      — drop slow cast when a more urgent target appears.
-//   2.  Rebirth               — battle rez has highest party impact.
-//   3.  Mark of the Wild      — OOC group buff maintenance.
-//   4.  Barkskin              — off-GCD survival.
-//   5.  Renewal               — instant 30% self-heal panic.
-//   6.  Ironbark              — tank DR + heal amp at <=50%.
-//   7.  Nature's Cure         — full dispel (Magic + Curse + Poison).
-//   8.  Remove Corruption     — Curse+Poison fallback when NC unknown.
-//   9.  Soothe                — enrage dispel on target.
-//   10. Innervate             — own / ally caster mana.
-//   11. Tranquility           — raid CD at 3+ heavily wounded.
-//   12. Flourish              — extend all HoTs at 3+ wounded.
-//   13. Convoke               — burst heal/damage on 2+ wounded.
-//   14. Incarnation: Tree of Life — 30s heal-burst window.
-//   15. Grove Guardians       — off-GCD treant summons.
-//   16. Cenarion Ward         — tank pre-shield refresh.
-//   17. Wild Growth           — group AoE HoT (3+ at <=80%).
-//   18. Efflorescence         — ground AoE HoT placement.
-//   19. Swiftmend             — instant spike heal (<=50%).
-//   20. Regrowth              — direct heal + HoT (<=65%).
-//   21. Adaptive Swarm        — talent buff/debuff (<=80%).
-//   22. Lifebloom             — tank HoT maintenance.
-//   23. Rejuvenation          — lowest-friend HoT refresh.
-//   24. Sunfire / Moonfire / Wrath — offensive filler ONLY when group is topped.
-//   25. Idle                  — alive fallthrough.
+//   1.  Cancel heal swap      - drop slow cast when a more urgent target appears.
+//   2.  Rebirth               - battle rez has highest party impact.
+//   3.  Mark of the Wild      - OOC group buff maintenance.
+//   4.  Symbiotic Relationship - OOC bond with the tank (hour-long).
+//   5.  Barkskin              - off-GCD survival.
+//   6.  Ironbark              - tank DR + heal amp at <=50%.
+//   7.  Nature's Cure         - full dispel (Magic + Curse + Poison).
+//   8.  Remove Corruption     - Curse+Poison fallback when NC unknown.
+//   9.  Soothe                - enrage dispel on target.
+//   10. Innervate             - own / ally caster mana.
+//   11. Tranquility           - raid CD at 3+ heavily wounded.
+//   12. Heart of the Wild     - empowered Wild Growth at 3+ wounded.
+//   13. Convoke               - burst heal/damage on 2+ wounded.
+//   14. Incarnation: Tree of Life - 30s heal-burst window (talent).
+//   15. Wild Growth           - group AoE HoT (3+ at <=80%).
+//   16. Efflorescence         - ground AoE HoT placement (no Lifetreading).
+//   17. Swiftmend             - instant spike heal (<=50%, needs a HoT).
+//   18. Nature's Swiftness    - arm instant Regrowth (<=40%).
+//   19. Regrowth              - direct heal + HoT (<=65%).
+//   20. Lifebloom             - tank HoT maintenance.
+//   21. Rejuvenation          - lowest-friend HoT refresh.
+//   22. Sunfire / Moonfire / Wrath - offensive filler ONLY when group is topped.
+//   23. Idle                  - alive fallthrough.
 ApRule const kRules[] = {
     { ShouldCancelHealForSwap, DoCancelHealForSwap, "Cancel heal — swap to lower target" },
     { ShouldRebirth,        DoRebirth,        "Rebirth (battle rez)"         },
     { ShouldMarkOfTheWild,  DoMarkOfTheWild,  "Mark of the Wild"             },
+    { ShouldSymbioticRelationship, DoSymbioticRelationship, "Symbiotic Relationship" },
     { ShouldBarkskin,       DoBarkskin,       "Barkskin (<=50% self)"        },
-    { ShouldRenewal,        DoRenewal,        "Renewal (<=35% emergency)"    },
     { ShouldIronbark,       DoIronbark,       "Ironbark (tank <=50%)"        },
     { ShouldNaturesCure,    DoNaturesCure,    "Nature's Cure (dispel)"       },
     { ShouldRemoveCorruption, DoRemoveCorruption, "Remove Corruption (fb)"   },
     { ShouldSoothe,         DoSoothe,         "Soothe (enrage)"              },
     { ShouldInnervate,      DoInnervate,      "Innervate"                    },
     { ShouldTranquility,    DoTranquility,    "Tranquility (3+ at <=50%)"    },
-    { ShouldFlourish,       DoFlourish,       "Flourish (extend HoTs)"       },
+    { ShouldHeartOfTheWild, DoHeartOfTheWild, "Heart of the Wild (WG)"       },
     { ShouldConvoke,        DoConvoke,        "Convoke the Spirits"          },
     { ShouldIncarnTree,     DoIncarnTree,     "Incarnation: Tree of Life"    },
-    { ShouldGroveGuardians, DoGroveGuardians, "Grove Guardians (off-GCD)"    },
-    { ShouldCenarionWard,   DoCenarionWard,   "Cenarion Ward (tank)"         },
     { ShouldWildGrowth,     DoWildGrowth,     "Wild Growth (3+ at <=80%)"    },
     { ShouldEfflorescence,  DoEfflorescence,  "Efflorescence (maintain)"     },
     { ShouldSwiftmend,      DoSwiftmend,      "Swiftmend (<=50%)"            },
+    { ShouldNaturesSwiftness, DoNaturesSwiftness, "Nature's Swiftness (<=40%)" },
     { ShouldRegrowth,       DoRegrowth,       "Regrowth (<=65%)"             },
-    { ShouldAdaptiveSwarm,  DoAdaptiveSwarm,  "Adaptive Swarm (<=80%)"       },
     { ShouldLifebloom,      DoLifebloom,      "Lifebloom on tank"            },
     { ShouldRejuvenation,   DoRejuvenation,   "Rejuvenation (refresh)"       },
     { ShouldSunfire,        DoSunfire,        "Sunfire (filler, group full)" },

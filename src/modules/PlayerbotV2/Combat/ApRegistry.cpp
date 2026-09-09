@@ -99,6 +99,7 @@ extern void RegisterApl_Warlock_Demonology();
 extern void RegisterApl_Warlock_Destruction();
 extern void RegisterApl_DemonHunter_Havoc();
 extern void RegisterApl_DemonHunter_Vengeance();
+extern void RegisterApl_DemonHunter_Devourer();
 extern void RegisterApl_Rogue_Subtlety();
 extern void RegisterApl_Rogue_Outlaw();
 extern void RegisterApl_Rogue_Assassination();
@@ -147,6 +148,7 @@ void RegisterAllRotations()
     RegisterApl_Warlock_Destruction();
     RegisterApl_DemonHunter_Havoc();
     RegisterApl_DemonHunter_Vengeance();
+    RegisterApl_DemonHunter_Devourer();
     RegisterApl_Rogue_Subtlety();
     RegisterApl_Rogue_Outlaw();
     RegisterApl_Rogue_Assassination();

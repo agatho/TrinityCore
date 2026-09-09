@@ -1,81 +1,74 @@
-// Havoc Demon Hunter - WoW 12.0 enterprise rotation. Fury melee with Eye
-// Beam burst, Blade Dance dodge window, Chaos Strike main spender,
-// Immolation Aura ground tick, Fel Rush mobility + damage, Metamorphosis
-// burst form. Talent layer: Glaive Tempest (AoE), Fel Barrage (channel
-// AoE), Essence Break (debuff window), Sigil of Flame (AoE bleed), The
-// Hunt (talent - gap close + DoT), Vengeful Retreat (mobility + Momentum).
+// Havoc Demon Hunter - WoW 12.1.0.69587 (Midnight) rotation. Fury melee
+// with Eye Beam burst (Demonic -> free Metamorphosis), Blade Dance (First
+// Blood makes it a single-target spender too), Chaos Strike main spender,
+// Immolation Aura ground tick, Fel Rush / Felblade mobility, Metamorphosis
+// burst form (Chaos Strike / Blade Dance become Annihilation / Death Sweep
+// while the 162264 demon-form aura is up). Talent layer: Essence Break
+// (debuff window), Sigil of Flame (baseline AoE bleed + Fury), The Hunt
+// (gap close + DoT), Felblade (Fury builder + charge), Vengeful Retreat.
 //
-// Survival: Netherwalk (immune), Blur (DR + dodge), Darkness (group dodge).
-// CC: Disrupt interrupt, Chaos Nova (PBAoE stun), Imprison (incap), Sigil
-// of Misery (fear), Fel Eruption (talent - single-target stun).
+// Survival: Blur (DR + dodge), Darkness (group dodge). CC: Disrupt
+// interrupt, Chaos Nova (PBAoE stun), Sigil of Misery (fear).
 //
-// ---- Validated IDs (cross-checked against wago.tools SpellName.csv +
-//      SpellLevels.csv on 2026-05-27) ----
+// ---- Validated IDs (WoW 12.1.0.69587 kit: SkillLineAbility +
+//      SpecializationSpells + simc trait data, Fel-Scarred raid build) ----
 //
 //   Core builders / spenders:
-//     162243 Demon's Bite              - Fury generator (no SpellLevels row;
-//                                        granted via class kit, not Levels DBC)
-//     197125 Chaos Strike              - Fury spender, SpellLevel=1 in
-//                                        SpellLevels DBC. This is the modern
-//                                        Havoc variant; the older 162794
-//                                        ID has no SpellLevels row and is
-//                                        retained ONLY in Apl_Baseline_DH
-//                                        for pre-spec L8-9 bots.
-//     201427 Annihilation              - Metamorphosis-form Chaos Strike
-//     188499 Blade Dance               - AoE spender, unlocks at L14
-//     320402 Blade Dance (Havoc)       - Modern Havoc spec variant at L22.
-//                                        Same name; either may be live on a
-//                                        given character. We probe BOTH via
-//                                        knows_spell so the rotation works
-//                                        from unlock through max level.
-//     210152 Death Sweep               - Meta-form Blade Dance
+//     162243 Demon's Bite              - Fury generator (spec spell)
+//     162794 Chaos Strike              - Fury spender (spec spell). 197125
+//                                        is the Chaos Strike PASSIVE (refund
+//                                        chance) - never cast it.
+//     201427 Annihilation              - Meta-form Chaos Strike. Override
+//                                        spell granted by aura 162264, not
+//                                        in the spellbook: gate on the aura
+//                                        + knows_spell(Chaos Strike).
+//     188499 Blade Dance               - Spender, L14. 320402 is the
+//                                        "Rank 2" cooldown passive.
+//     210152 Death Sweep               - Meta-form Blade Dance (override,
+//                                        same gating as Annihilation)
+//     232893 Felblade (talent [R])     - 15y charge + Fury
 //
 //   Movement / range:
 //     185123 Throw Glaive              - Ranged opener / kiting
 //     195072 Fel Rush                  - Forward dash + damage
-//     198793 Vengeful Retreat          - Backward dash + AoE damage
+//     198793 Vengeful Retreat (talent) - Backward dash + AoE damage
 //
 //   Cooldowns:
-//     258920 Immolation Aura           - Self-buff AoE + Fury proc
-//     198013 Eye Beam                  - Channelled AoE / Demonic burst
-//     191427 Metamorphosis             - Burst form (DPS variant)
-//     258860 Essence Break (talent)    - 4s vulnerability debuff window
-//     342817 Glaive Tempest (talent)   - AoE storm
-//     258925 Fel Barrage (talent)      - Channelled AoE
-//     204596 Sigil of Flame            - Ground AoE bleed
-//     370965 The Hunt                  - Hero talent - leap + DoT
+//     258920 Immolation Aura           - Self-buff AoE + Fury (Burning Hatred)
+//     198013 Eye Beam (talent [R])     - Channelled AoE / Demonic trigger
+//     191427 Metamorphosis             - Burst form (cast id); 162264 is the
+//                                        demon-form aura we test for
+//     258860 Essence Break (talent)    - vulnerability debuff window
+//     204596 Sigil of Flame            - Ground AoE bleed + Fury
+//     370965 The Hunt (talent [R])     - leap + DoT (Havoc-only in 12.1)
 //
 //   CC / utility:
 //     183752 Disrupt                   - Interrupt
-//     179057 Chaos Nova                - PBAoE stun
-//     217832 Imprison                  - Single-target incap (out-of-combat)
-//     207684 Sigil of Misery           - AoE fear
-//     211881 Fel Eruption (talent)     - Single-target stun (interrupt fb)
+//     179057 Chaos Nova (talent)       - PBAoE stun
+//     217832 Imprison (talent)         - Single-target incap (no rule yet)
+//     207684 Sigil of Misery (talent)  - AoE fear
 //
 //   Defensive:
-//     198589 Blur                      - 50% damage reduction + dodge
-//     196555 Netherwalk                - Immunity (talent)
-//     196718 Darkness                  - Group 20% dodge
+//     198589 Blur                      - damage reduction + dodge
+//     196718 Darkness (talent)         - Group dodge
 //
 // ---- Skipped spells (and why) ----
 //
-//   178940 Shattered Souls    - Passive that drops a soul fragment on enemy
-//                               death. No active cast; consumed by other
-//                               abilities (Demonic Appetite). Tracking would
-//                               belong on the snapshot, not the rotation.
-//   203555 Demon Blades       - Passive talent that replaces Demon's Bite
-//                               with an auto-attack Fury proc. No active
-//                               button to fire; the live spec already
-//                               cycles Demon's Bite as filler and the
-//                               passive transparently changes its mechanic.
-//   221351 Critical Strikes   - Passive crit bonus. No active.
-//   278386 Demonic Wards      - Passive armour. No active.
-//   206478 Demonic Appetite   - Passive talent that makes Chaos Strike
-//                               spawn soul fragments. No active cast.
-//   162794 Chaos Strike (old) - Legacy generic ID, no SpellLevels row.
-//                               Replaced by 197125 for the Havoc rotation
-//                               and only retained inside Apl_Baseline_DH
-//                               for the L8-9 pre-spec window.
+//   342817/1244557 Glaive Tempest - In 12.1 Glaive Tempest is a PASSIVE
+//                               (1244557: the final Blade Dance slash
+//                               launches the glaives on 2+ targets). No
+//                               active cast; not in the raid build anyway.
+//   258925 Fel Barrage        - Not learnable by Havoc in 12.1 (removed).
+//   211881 Fel Eruption       - Not learnable by Havoc in 12.1 (removed).
+//   196555 Netherwalk         - Not learnable by Havoc in 12.1 (removed).
+//   278326 Consume Magic      - Purge; the snapshot has no purgeable-buff
+//                               predicate, so no rule.
+//   203555 Demon Blades       - Passive replacing Demon's Bite; the
+//                               generator rule is knows_spell-gated so it
+//                               transparently drops out.
+//   213410 Demonic / 206416 First Blood / 388112 Chaotic Transformation
+//                             - Passives that shape Eye Beam / Blade Dance
+//                               priority; reflected in the ladder order.
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -88,34 +81,31 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
-constexpr uint32 DEMONS_BITE          = 162243;
-constexpr uint32 CHAOS_STRIKE         = 197125;       // Havoc spec, SpellLevel=1
-constexpr uint32 ANNIHILATION         = 201427;       // Meta-form Chaos Strike
-constexpr uint32 BLADE_DANCE          = 188499;       // L14 unlock
-constexpr uint32 BLADE_DANCE_HAVOC    = 320402;       // L22 Havoc variant
-constexpr uint32 DEATH_SWEEP          = 210152;       // Meta-form Blade Dance
+// ---- Spell IDs (WoW 12.1.0.69587, validated) ----
+constexpr uint32 DEMONS_BITE          = 162243;       // spec spell
+constexpr uint32 CHAOS_STRIKE         = 162794;       // spec spell (197125 = passive)
+constexpr uint32 ANNIHILATION         = 201427;       // Meta override of Chaos Strike
+constexpr uint32 BLADE_DANCE          = 188499;       // L14 (320402 = rank-2 passive)
+constexpr uint32 DEATH_SWEEP          = 210152;       // Meta override of Blade Dance
 constexpr uint32 IMMOLATION_AURA      = 258920;
-constexpr uint32 EYE_BEAM             = 198013;
+constexpr uint32 EYE_BEAM             = 198013;       // talent [R]
 constexpr uint32 FEL_RUSH             = 195072;
-constexpr uint32 VENGEFUL_RETREAT     = 198793;
-constexpr uint32 METAMORPHOSIS        = 191427;
-constexpr uint32 ESSENCE_BREAK        = 258860;       // talent
-constexpr uint32 GLAIVE_TEMPEST       = 342817;       // talent - AoE
-constexpr uint32 FEL_BARRAGE          = 258925;       // talent - AoE channel
+constexpr uint32 FELBLADE             = 232893;       // talent [R] - charge + Fury
+constexpr uint32 VENGEFUL_RETREAT     = 198793;       // talent [R]
+constexpr uint32 METAMORPHOSIS        = 191427;       // cast id
+constexpr uint32 METAMORPHOSIS_BUFF   = 162264;       // Havoc demon-form aura
+constexpr uint32 ESSENCE_BREAK        = 258860;       // talent [R]
 constexpr uint32 SIGIL_OF_FLAME       = 204596;
-constexpr uint32 THE_HUNT             = 370965;       // talent
-constexpr uint32 FEL_ERUPTION         = 211881;       // talent stun
+constexpr uint32 THE_HUNT             = 370965;       // talent [R]
 constexpr uint32 THROW_GLAIVE         = 185123;
 constexpr uint32 DISRUPT              = 183752;
-constexpr uint32 CHAOS_NOVA           = 179057;
-constexpr uint32 IMPRISON             = 217832;
-constexpr uint32 SIGIL_OF_MISERY      = 207684;
+constexpr uint32 CHAOS_NOVA           = 179057;       // talent [R]
+constexpr uint32 IMPRISON             = 217832;       // talent [R] (no rule yet)
+constexpr uint32 SIGIL_OF_MISERY      = 207684;       // talent [R]
 constexpr uint32 BLUR                 = 198589;
-constexpr uint32 NETHERWALK           = 196555;
-constexpr uint32 DARKNESS             = 196718;
+constexpr uint32 DARKNESS             = 196718;       // talent [R]
 
-constexpr uint8 POWER_FURY_IDX = 17;       // POWER_FURY in WoW 12.0 enum
+constexpr uint8 POWER_FURY_IDX = 17;       // POWER_FURY in WoW 12.x enum
 
 bool HasLiveTarget(ApPredicateContext const& ctx)
 {
@@ -133,26 +123,19 @@ bool BossLikeTargetEngaged(ApPredicateContext const& ctx)
 }
 
 int32 Fury(ApPredicateContext const& ctx) { return ctx.bot.power(POWER_FURY_IDX); }
-bool InMeta(ApPredicateContext const& ctx) { return ctx.bot.has_aura(METAMORPHOSIS); }
+// Demon form: the cast (191427) applies the 162264 transform aura, which is
+// what grants the Annihilation / Death Sweep overrides.
+bool InMeta(ApPredicateContext const& ctx) { return ctx.bot.has_aura(METAMORPHOSIS_BUFF); }
 
 // ---- Survival ----
-bool ShouldNetherwalk(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(NETHERWALK)) return false;
-    if (!ctx.bot.is_ready(NETHERWALK)) return false;
-    // PvP: bump the panic threshold so the immunity catches the burst.
-    const int32 threshold = ctx.pvp.under_player_attack ? 40 : 20;
-    return ctx.bot.hp_pct() <= threshold;
-}
-void DoNetherwalk(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(NETHERWALK); }
-
 bool ShouldBlur(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
     if (!ctx.bot.knows_spell(BLUR)) return false;
     if (!ctx.bot.is_ready(BLUR)) return false;
-    return ctx.bot.hp_pct() <= 50;
+    // PvP: bump the threshold so the DR catches the burst.
+    const int32 threshold = ctx.pvp.under_player_attack ? 60 : 50;
+    return ctx.bot.hp_pct() <= threshold;
 }
 void DoBlur(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BLUR); }
 
@@ -182,20 +165,6 @@ void DoDisrupt(ApPredicateContext const& ctx, BotIntentEmitter& e)
     const bool pvp = ctx.pvp.in_battleground || ctx.pvp.in_arena;
     if (auto const* c = ctx.bot.kick_target(pvp, 10.0f))
         e.cast(DISRUPT, c->guid);
-}
-
-bool ShouldFelEruption(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(FEL_ERUPTION)) return false;
-    if (!ctx.bot.is_ready(FEL_ERUPTION)) return false;
-    if (ctx.bot.is_ready(DISRUPT)) return false;
-    return ctx.bot.interruptible_caster() != nullptr;
-}
-void DoFelEruption(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (auto const* c = ctx.bot.interruptible_caster())
-        e.cast(FEL_ERUPTION, c->guid);
 }
 
 bool ShouldChaosNova(ApPredicateContext const& ctx)
@@ -246,53 +215,29 @@ bool ShouldEssenceBreak(ApPredicateContext const& ctx)
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(ESSENCE_BREAK)) return false;
     if (!ctx.bot.is_ready(ESSENCE_BREAK)) return false;
-    return Fury(ctx) >= 80;
+    // Needs a spender to follow inside the window (Chaos Strike 40 Fury).
+    return Fury(ctx) >= 40;
 }
 void DoEssenceBreak(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(ESSENCE_BREAK, ctx.bot.victim());
 }
 
-// Eye Beam - audit order requires this AoE-3+ gated to keep it from being
-// spent on solo trash. Single-target damage is acceptable in burst windows
-// but the audit explicitly anchors Eye Beam as the AoE primary. We honour
-// that gate here (>=3) and let Glaive Tempest / Fel Barrage cover 2-target
-// cleave below.
+// Eye Beam - 12.1 raid build takes Demonic (213410: Eye Beam grants a short
+// Metamorphosis) and Cycle of Hatred, so the simc priority casts it on
+// cooldown in every target count. Only the 30-Fury cost gates it.
 bool ShouldEyeBeam(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(EYE_BEAM)) return false;
     if (!ctx.bot.is_ready(EYE_BEAM)) return false;
-    if (Fury(ctx) < 30) return false;
-    if (ctx.bot.enemies_within(10.0f) >= 3) return true;
-    // Single-target boss usage still allowed - Eye Beam is also the Demonic
-    // (talent) trigger for free Metamorphosis. Use on bosses regardless of
-    // enemy count.
-    return BossLikeTargetEngaged(ctx);
+    if (ctx.bot.is_moving() && !ctx.bot.can_cast_while_moving(EYE_BEAM)) return false;
+    return Fury(ctx) >= 30;
 }
 void DoEyeBeam(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(EYE_BEAM, ctx.bot.victim());
 }
-
-bool ShouldFelBarrage(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(FEL_BARRAGE)) return false;
-    if (!ctx.bot.is_ready(FEL_BARRAGE)) return false;
-    return ctx.bot.enemies_within(15.0f) >= 2;
-}
-void DoFelBarrage(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(FEL_BARRAGE); }
-
-bool ShouldGlaiveTempest(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(GLAIVE_TEMPEST)) return false;
-    if (!ctx.bot.is_ready(GLAIVE_TEMPEST)) return false;
-    if (Fury(ctx) < 30) return false;
-    return ctx.bot.enemies_within(8.0f) >= 2;
-}
-void DoGlaiveTempest(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(GLAIVE_TEMPEST); }
 
 bool ShouldSigilOfFlame(ApPredicateContext const& ctx)
 {
@@ -352,42 +297,39 @@ void DoThrowGlaive(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Spenders ----
+// Death Sweep / Annihilation are Metamorphosis OVERRIDE spells: they are
+// never in the spellbook (knows_spell / is_ready on their ids is always
+// false), the 162264 aura grants them. Gate on the aura + the base spell
+// (shared cooldown category) and cast the override id.
 bool ShouldDeathSweep(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!InMeta(ctx)) return false;
-    if (!ctx.bot.knows_spell(DEATH_SWEEP)) return false;
-    if (!ctx.bot.is_ready(DEATH_SWEEP)) return false;
+    if (!ctx.bot.knows_spell(BLADE_DANCE)) return false;
+    if (!ctx.bot.is_ready(BLADE_DANCE)) return false;
     return Fury(ctx) >= 35;
 }
 void DoDeathSweep(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DEATH_SWEEP); }
 
-// Blade Dance - audit calls for AoE 2+ gating. We probe BOTH 320402 (L22
-// Havoc variant) and 188499 (L14 baseline unlock); whichever the
-// character has trained is fired. Outside Meta only.
+// Blade Dance - with First Blood [R] it is the best Fury spender in every
+// target count (simc casts it on cooldown), so no AoE gate. Outside Meta
+// only (Death Sweep covers demon form).
 bool ShouldBladeDance(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (InMeta(ctx)) return false;
-    if (Fury(ctx) < 35) return false;
-    if (ctx.bot.enemies_within(8.0f) < 2) return false;
-    if (ctx.bot.knows_spell(BLADE_DANCE_HAVOC) && ctx.bot.is_ready(BLADE_DANCE_HAVOC))
-        return true;
-    return ctx.bot.knows_spell(BLADE_DANCE) && ctx.bot.is_ready(BLADE_DANCE);
+    if (!ctx.bot.knows_spell(BLADE_DANCE)) return false;
+    if (!ctx.bot.is_ready(BLADE_DANCE)) return false;
+    return Fury(ctx) >= 35;
 }
-void DoBladeDance(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (ctx.bot.knows_spell(BLADE_DANCE_HAVOC) && ctx.bot.is_ready(BLADE_DANCE_HAVOC))
-        e.cast(BLADE_DANCE_HAVOC);
-    else
-        e.cast(BLADE_DANCE);
-}
+void DoBladeDance(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BLADE_DANCE); }
 
 bool ShouldAnnihilation(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!InMeta(ctx)) return false;
-    if (!ctx.bot.knows_spell(ANNIHILATION)) return false;
+    if (!ctx.bot.knows_spell(CHAOS_STRIKE)) return false;
+    if (!ctx.bot.is_ready(CHAOS_STRIKE)) return false;
     return Fury(ctx) >= 40;
 }
 void DoAnnihilation(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -406,6 +348,20 @@ bool ShouldChaosStrike(ApPredicateContext const& ctx)
 void DoChaosStrike(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(CHAOS_STRIKE, ctx.bot.victim());
+}
+
+// Felblade (talent [R]) - 15y charge that generates Fury. simc: after the
+// spenders, before the generator; also doubles as a gap close.
+bool ShouldFelblade(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(FELBLADE)) return false;
+    if (!ctx.bot.is_ready(FELBLADE)) return false;
+    return Fury(ctx) <= 70 || ctx.bot.enemies_within(8.0f) == 0;
+}
+void DoFelblade(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(FELBLADE, ctx.bot.victim());
 }
 
 bool ShouldDemonsBite(ApPredicateContext const& ctx)
@@ -437,42 +393,40 @@ void DoAutoAttack(ApPredicateContext const& ctx, BotIntentEmitter& e)
     if (!t.IsEmpty()) e.start_attack(t);
 }
 
-// Rule order (audit, 2026-05-27):
-//   1. Panic survival   - Netherwalk (immune) then Blur (DR)
+// Rule order (12.1 Fel-Scarred simc priority, 2026-09-09):
+//   1. Panic survival   - Blur (DR)
 //   2. Group defensive  - Darkness on multi-wounded
-//   3. Interrupts / CC  - Disrupt > Fel Eruption fallback > Chaos Nova
-//                         (3+ stun) > Sigil of Misery (panic fear)
+//   3. Interrupts / CC  - Disrupt > Chaos Nova (3+ stun) > Sigil of
+//                         Misery (panic fear)
 //   4. Mobility peel    - Vengeful Retreat (low HP + cluster)
 //   5. Major CDs        - Metamorphosis, The Hunt, Essence Break
-//   6. AoE channels     - Eye Beam (3+) before Fel Barrage / Glaive
-//                         Tempest before Sigil of Flame (2+)
-//   7. Immolation Aura  - On CD; Painbringer / Fury proc
-//   8. AoE spenders     - Death Sweep (Meta) > Blade Dance (2+)
-//   9. ST spenders      - Annihilation (Meta) > Chaos Strike (40+ Fury)
-//  10. Mobility filler  - Fel Rush / Throw Glaive when nothing in melee
-//  11. Generator        - Demon's Bite
-//  12. Engage           - start_attack to keep swings going
+//   6. Eye Beam         - on CD (Demonic trigger)
+//   7. AoE bleed        - Sigil of Flame (2+)
+//   8. Immolation Aura  - On CD; Fury proc
+//   9. Spenders         - Death Sweep (Meta) > Blade Dance > Annihilation
+//                         (Meta) > Chaos Strike (40+ Fury)
+//  10. Builder          - Felblade (Fury <= 70 or gap close)
+//  11. Mobility filler  - Fel Rush / Throw Glaive when nothing in melee
+//  12. Generator        - Demon's Bite
+//  13. Engage           - start_attack to keep swings going
 ApRule const kRules[] = {
-    { ShouldNetherwalk,      DoNetherwalk,      "Netherwalk (<=20%)"         },
     { ShouldBlur,            DoBlur,            "Blur (<=50%)"               },
     { ShouldDarkness,        DoDarkness,        "Darkness (3+ wounded)"      },
     { ShouldDisrupt,         DoDisrupt,         "Disrupt (interrupt)"        },
-    { ShouldFelEruption,     DoFelEruption,     "Fel Eruption (interrupt fb)"},
     { ShouldChaosNova,       DoChaosNova,       "Chaos Nova (3+ AoE stun)"   },
     { ShouldSigilOfMisery,   DoSigilOfMisery,   "Sigil of Misery (panic)"    },
     { ShouldVengefulRetreat, DoVengefulRetreat, "Vengeful Retreat (peel)"    },
     { ShouldMetamorphosis,   DoMetamorphosis,   "Metamorphosis"              },
     { ShouldTheHunt,         DoTheHunt,         "The Hunt"                   },
     { ShouldEssenceBreak,    DoEssenceBreak,    "Essence Break"              },
-    { ShouldEyeBeam,         DoEyeBeam,         "Eye Beam (3+ AoE / boss)"   },
-    { ShouldFelBarrage,      DoFelBarrage,      "Fel Barrage"                },
-    { ShouldGlaiveTempest,   DoGlaiveTempest,   "Glaive Tempest (2+ AoE)"    },
+    { ShouldEyeBeam,         DoEyeBeam,         "Eye Beam (on CD)"           },
     { ShouldSigilOfFlame,    DoSigilOfFlame,    "Sigil of Flame (2+ AoE)"    },
     { ShouldImmolationAura,  DoImmolationAura,  "Immolation Aura"            },
     { ShouldDeathSweep,      DoDeathSweep,      "Death Sweep (Meta)"         },
-    { ShouldBladeDance,      DoBladeDance,      "Blade Dance (2+ AoE)"       },
+    { ShouldBladeDance,      DoBladeDance,      "Blade Dance"                },
     { ShouldAnnihilation,    DoAnnihilation,    "Annihilation (Meta)"        },
     { ShouldChaosStrike,     DoChaosStrike,     "Chaos Strike (Fury>=40)"    },
+    { ShouldFelblade,        DoFelblade,        "Felblade (builder)"         },
     { ShouldFelRush,         DoFelRush,         "Fel Rush (gap close)"       },
     { ShouldThrowGlaive,     DoThrowGlaive,     "Throw Glaive (range)"       },
     { ShouldDemonsBite,      DoDemonsBite,      "Demon's Bite (generator)"   },

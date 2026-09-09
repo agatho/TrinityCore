@@ -21,6 +21,7 @@
 #include "Fleet/CraftOrderBoard.h"
 #include "Fleet/BotQueueFiller.h"
 #include "Fleet/JunkQuestResolver.h"
+#include "Bot/ClassTables.h"   // MaxPlayerLevel()
 #include "Bot/Battleground/BgTeamCoordinator.h"
 #include "Bot/Dungeon/PveGroupCoordinator.h"
 #include "DB2Stores.h"
@@ -2464,7 +2465,7 @@ void Module::OnPlayerJoinedBgQueue(Player* player, uint32 bg_type_id, uint8 brac
     // midpoint with Â±15 window only matched L0-30 bots, when the user
     // (and the bracket's actual range) was L60+. Same issue as LFG â€”
     // same fix.
-    req.target_level_override = uint8(std::clamp(int(player->GetLevel()), 1, 80));
+    req.target_level_override = uint8(std::clamp(int(player->GetLevel()), 1, int(MaxPlayerLevel())));
     // Cap initial queue fill at max_per_team for the BG so we never
     // overpopulate. The BattlegroundTemplate exposes the cap; for a
     // 10v10 BG (WSG/TP/AB/etc.) this is 10. Without the cap, the
@@ -2489,8 +2490,8 @@ void Module::OnPlayerJoinedBgQueue(Player* player, uint32 bg_type_id, uint8 brac
                     DB2Manager::GetBattlegroundBracketById(tmpl->MapIDs.front(),
                                                             BattlegroundBracketId(bracket)))
             {
-                req.bracket_min_level = uint8(std::clamp<int32>(diff->MinLevel, 1, 80));
-                req.bracket_max_level = uint8(std::clamp<int32>(diff->MaxLevel, 1, 80));
+                req.bracket_min_level = uint8(std::clamp<int32>(diff->MinLevel, 1, int32(MaxPlayerLevel())));
+                req.bracket_max_level = uint8(std::clamp<int32>(diff->MaxLevel, 1, int32(MaxPlayerLevel())));
             }
         }
     }
@@ -2539,7 +2540,7 @@ void Module::OnPlayerJoinedLfg(Player* player, uint32 dungeon_id, uint8 /*role_m
     // Use the player's exact level as a robust fallback â€” level-scaling
     // and Â±15 LFG window will absorb minor under/over-match.
     req.bracket = uint8(player->GetLevel() / 10);
-    req.target_level_override = uint8(std::clamp(int(player->GetLevel()), 1, 80));
+    req.target_level_override = uint8(std::clamp(int(player->GetLevel()), 1, int(MaxPlayerLevel())));
     if (LFGDungeonsEntry const* d = sLFGDungeonsStore.LookupEntry(dungeon_id))
     {
         const uint32 size = uint32(d->CountTank) + uint32(d->CountHealer) +
@@ -2557,7 +2558,7 @@ void Module::OnPlayerJoinedLfg(Player* player, uint32 dungeon_id, uint8 /*role_m
                     ? int16((lv->TargetLevelMin + lv->TargetLevelMax) / 2)
                     : int16((lv->MinLevel + lv->MaxLevel) / 2);
                 if (mid > 0)
-                    req.target_level_override = uint8(std::clamp(int(mid), 1, 80));
+                    req.target_level_override = uint8(std::clamp(int(mid), 1, int(MaxPlayerLevel())));
             }
         }
     }
@@ -2595,7 +2596,7 @@ void Module::OnPlayerJoinedLfg(Player* player, uint32 dungeon_id, uint8 /*role_m
         ev.origin_low   = player->GetGUID().GetCounter();
         ev.content_id   = dungeon_id;
         ev.level_min    = uint8(std::max(1, int(player->GetLevel()) - 5));
-        ev.level_max    = uint8(std::min(80, int(player->GetLevel()) + 5));
+        ev.level_max    = uint8(std::min(int(MaxPlayerLevel()), int(player->GetLevel()) + 5));
         ev.faction_mask = (player->GetTeam() == ALLIANCE) ? 0x1u : 0x2u;
         // Publish all three role signals so subscribers can pick what
         // they handle. Subscriber filtering happens at the handler

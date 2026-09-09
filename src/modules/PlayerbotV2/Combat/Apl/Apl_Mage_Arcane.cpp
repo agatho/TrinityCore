@@ -1,39 +1,46 @@
-﻿// Arcane Mage - WoW 12.0 enterprise rotation. Charge-driven mana caster:
-// build Arcane Charges with Arcane Blast / Arcane Missiles / Arcane Orb, dump
-// with Arcane Barrage at 4 stacks. Touch of the Magi window centers burst,
-// Arcane Power / Presence of Mind layer on top, Evocation refills mana when
-// Clearcasting goes long. Nether Tempest provides multi-dot pressure, Slow
-// kites dangerous melee, Spellsteal pulls offensive enemy buffs, Polymorph
-// keeps an off-target sapped while we focus the kill target.
+﻿// Arcane Mage - WoW 12.1.0.69587 (Midnight) enterprise rotation. Charge-driven
+// mana caster: build Arcane Charges with Arcane Blast / Arcane Missiles /
+// Arcane Orb, dump with Arcane Barrage at 4 stacks. Touch of the Magi window
+// centers burst, Arcane Surge (spends all mana for one nuke + regen buff) and
+// Presence of Mind layer on top, Evocation refills mana when Clearcasting goes
+// long. Spellsteal pulls offensive enemy buffs, Polymorph keeps an off-target
+// sapped while we focus the kill target.
 //
 // Charge state lives on the bot as the ARCANE_CHARGE aura with stack count.
 // We use BotSnapshotView::aura_stacks() so the spender ticks at 4 charges
-// every tick — no relying on next-tick heuristics.
+// every tick - no relying on next-tick heuristics.
 //
-// ---- Validated IDs (verified against wago.tools SpellName.csv 12.0) ----
-//   30451  Arcane Blast            321507 Touch of the Magi
-//   44425  Arcane Barrage          114923 Nether Tempest
-//   5143   Arcane Missiles         1449   Arcane Explosion
-//   153626 Arcane Orb (talent)     31589  Slow
-//   12042  Arcane Power            30449  Spellsteal
-//   12051  Evocation               55342  Mirror Image
-//   205025 Presence of Mind        342245 Alter Time
-//   263725 Clearcasting (proc)     2139   Counterspell
-//   36032  Arcane Charge (stack)   108839 Ice Floes (talent)
-//   314791 Shifting Power (talent) 118    Polymorph
-//   45438  Ice Block               122    Frost Nova
-//   1953   Blink                   80353  Time Warp
+// ---- Validated spell IDs (WoW 12.1.0.69587) ----
+//   30451  Arcane Blast            321507 Touch of the Magi (talent)
+//   44425  Arcane Barrage          365350 Arcane Surge (talent, 90s)
+//   5143   Arcane Missiles         365362 Arcane Surge buff (aura)
+//   153626 Arcane Orb (talent)     1449   Arcane Explosion
+//   12051  Evocation (talent)      1241462 Arcane Pulse (talent, overrides AE)
+//   205025 Presence of Mind        30449  Spellsteal (talent)
+//   263725 Clearcasting (proc)     55342  Mirror Image (talent)
+//   36032  Arcane Charge (stack)   342245 Alter Time (talent)
+//   235450 Prismatic Barrier       2139   Counterspell
+//   110959 Greater Invisibility    110960 Greater Invisibility (aura)
+//   45438  Ice Block (talent)      122    Frost Nova
+//   1953   Blink                   212653 Shimmer (talent, overrides Blink)
+//   118    Polymorph               80353  Time Warp
 //
 // ---- Skipped spells (and why) ----
-//   79684  Clearcasting passive    — procc-driver. We consume the active
-//                                    aura (263725 — same name, distinct
-//                                    ID) via has_aura(); the passive
-//                                    driver itself is never read.
-//   30625  Arcane Surge (legacy)   — old Mage-spec talent; modern
-//                                    spec uses Arcane Power (12042)
-//                                    until Dragonflight+ trees.
-//   307443 Radiant Spark           — niche covenant ability; not
-//                                    granted in classic-style data.
+//   12042  Arcane Power            - removed in Midnight; Arcane Surge
+//                                    (365350) is the burst cooldown.
+//   114923 Nether Tempest          - no longer in the Arcane tree.
+//   31589  Slow                    - no longer in the Mage class tree.
+//   108839 Ice Floes               - no longer in the Mage class tree.
+//   314791 Shifting Power          - no longer in the Mage class tree.
+//   79684  Clearcasting passive    - proc driver; we read the active
+//                                    aura (263725) via has_aura().
+//   190427 Arcane Charge (alt id)  - empty helper; 36032 is the stacked
+//                                    aura the client shows.
+//   157980 Supernova / 383121 Mass Polymorph / 157997 Ice Nova - not in
+//                                    the curated raid build; Supernova is
+//                                    [M]-only and a knockback we cannot
+//                                    aim safely in a group.
+//   475    Remove Curse            - not selected in the Arcane builds.
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -46,33 +53,32 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
+// ---- Spell IDs (WoW 12.1.0.69587, validated) ----
 constexpr uint32 ARCANE_BLAST       = 30451;
 constexpr uint32 ARCANE_BARRAGE     = 44425;
 constexpr uint32 ARCANE_MISSILES    = 5143;
-constexpr uint32 ARCANE_ORB         = 153626;     // talent — single target builder + AoE
-constexpr uint32 ARCANE_POWER       = 12042;      // 90s CD burst window
-constexpr uint32 EVOCATION          = 12051;      // mana refill channel
+constexpr uint32 ARCANE_ORB         = 153626;     // talent - single target builder + AoE
+constexpr uint32 ARCANE_SURGE       = 365350;     // talent - 90s CD, spends all mana
+constexpr uint32 ARCANE_SURGE_BUFF  = 365362;     // aura - damage + mana regen window
+constexpr uint32 EVOCATION          = 12051;      // talent - 3s mana regen burst
 constexpr uint32 PRESENCE_OF_MIND   = 205025;     // next 2 Arcane Blasts instant
-constexpr uint32 CLEARCASTING       = 263725;     // proc — free Arcane Missiles
+constexpr uint32 CLEARCASTING       = 263725;     // proc - free Arcane Missiles
 constexpr uint32 ARCANE_CHARGE      = 36032;      // tracked aura with stacks
-constexpr uint32 TOUCH_OF_THE_MAGI  = 321507;     // 45s CD damage absorb / explode
-constexpr uint32 NETHER_TEMPEST     = 114923;     // 12s DoT, 1 target at a time
+constexpr uint32 TOUCH_OF_THE_MAGI  = 321507;     // damage accumulate / explode
 constexpr uint32 ARCANE_EXPLOSION   = 1449;       // PBAoE charge builder
-constexpr uint32 SLOW               = 31589;      // 60% movement debuff
+constexpr uint32 ARCANE_PULSE       = 1241462;    // talent - targeted AoE, overrides AE
 constexpr uint32 SPELLSTEAL         = 30449;      // grab a buff off enemy
 constexpr uint32 MIRROR_IMAGE       = 55342;      // threat dump + DPS cooldown
 constexpr uint32 ALTER_TIME         = 342245;     // HP/position snapshot + return
+constexpr uint32 PRISMATIC_BARRIER  = 235450;     // absorb + magic DR shield
+constexpr uint32 GREATER_INVIS      = 110959;     // threat wipe, 2min CD
+constexpr uint32 GREATER_INVIS_AURA = 110960;     // active invisibility aura
 constexpr uint32 COUNTERSPELL       = 2139;
-constexpr uint32 ICE_FLOES          = 108839;     // talent — 3-charge cast-while-moving enabler
-constexpr uint32 POLYMORPH          = 118;        // CC — sheep
-constexpr uint32 ICE_BLOCK          = 45438;     // 10s immunity, 4min CD
-constexpr uint32 FROST_NOVA         = 122;       // 8yd PBAoE root
+constexpr uint32 POLYMORPH          = 118;        // CC - sheep
+constexpr uint32 ICE_BLOCK          = 45438;      // 10s immunity, 4min CD
+constexpr uint32 FROST_NOVA         = 122;        // 8yd PBAoE root
 constexpr uint32 BLINK              = 1953;       // 20yd reposition
-constexpr uint32 SHIFTING_POWER     = 314791;     // talent — channel that
-                                                  // reduces all Arcane CDs
-                                                  // (Arcane Power, Touch of
-                                                  // the Magi, Evocation).
+constexpr uint32 SHIMMER            = 212653;     // talent - replaces Blink, off-GCD
 constexpr uint32 TIME_WARP              = 80353;
 constexpr uint32 SATED_DEBUFF           = 57724;
 constexpr uint32 TEMPORAL_DISPL_DEBUFF  = 80354;
@@ -122,6 +128,30 @@ bool ShouldIceBlock(ApPredicateContext const& ctx)
 }
 void DoIceBlock(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(ICE_BLOCK); }
 
+// Greater Invisibility - instant threat wipe. The invisibility itself breaks
+// on our next action, but the threat reset already happened on cast, so it
+// is a usable "get the pack off me" button when Ice Block is gone.
+bool ShouldGreaterInvis(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.in_combat()) return false;
+    if (!ctx.bot.knows_spell(GREATER_INVIS)) return false;
+    if (!ctx.bot.is_ready(GREATER_INVIS)) return false;
+    if (ctx.bot.has_aura(GREATER_INVIS_AURA)) return false;
+    if (ctx.bot.attackers_count() < 1) return false;
+    return ctx.bot.hp_pct() <= 35;
+}
+void DoGreaterInvis(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(GREATER_INVIS); }
+
+bool ShouldPrismaticBarrier(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.in_combat()) return false;
+    if (!ctx.bot.knows_spell(PRISMATIC_BARRIER)) return false;
+    if (!ctx.bot.is_ready(PRISMATIC_BARRIER)) return false;
+    if (ctx.bot.has_aura(PRISMATIC_BARRIER)) return false;   // already up
+    return ctx.bot.hp_pct() <= 90;
+}
+void DoPrismaticBarrier(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(PRISMATIC_BARRIER); }
+
 bool ShouldAlterTime(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
@@ -153,13 +183,23 @@ bool ShouldFrostNova(ApPredicateContext const& ctx)
 }
 void DoFrostNova(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(FROST_NOVA); }
 
+// Emergency reposition when low HP and a melee is on us - Blink / Shimmer
+// gets us 20yd of breathing room before the Frost Nova / Ice Block decision
+// tree fires next tick. Shimmer (talent) replaces Blink; two-branch so both
+// talented and untalented bots keep the escape.
+bool ShouldShimmerAway(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.knows_spell(SHIMMER)) return false;
+    if (!ctx.bot.is_ready(SHIMMER)) return false;
+    return ctx.bot.hp_pct() <= 35 && ctx.bot.enemies_within(8.0f) >= 1;
+}
+void DoShimmer(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SHIMMER); }
+
 bool ShouldBlinkAway(ApPredicateContext const& ctx)
 {
+    if (ctx.bot.knows_spell(SHIMMER)) return false;
     if (!ctx.bot.knows_spell(BLINK)) return false;
     if (!ctx.bot.is_ready(BLINK)) return false;
-    // Emergency reposition when low HP and a melee is on us — Blink breaks
-    // most roots and gets us 20yd of breathing room before Frost Nova / Ice
-    // Block decision tree fires next tick.
     return ctx.bot.hp_pct() <= 35 && ctx.bot.enemies_within(8.0f) >= 1;
 }
 void DoBlink(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BLINK); }
@@ -213,22 +253,6 @@ void DoSpellsteal(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(SPELLSTEAL, ctx.bot.victim());
 }
 
-bool ShouldSlow(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SLOW)) return false;
-    if (!ctx.bot.is_ready(SLOW)) return false;
-    // Only apply when victim is melee-class threat (<= 12yd) and lacks Slow.
-    NearbyUnit const* v = ctx.bot.victim_info();
-    if (!v) return false;
-    if (ctx.bot.has_aura(SLOW, v->guid)) return false;
-    return ctx.bot.enemies_within(12.0f) >= 1;
-}
-void DoSlow(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(SLOW, ctx.bot.victim());
-}
-
 // ---- Major offensive cooldowns ----
 bool ShouldTimeWarp(ApPredicateContext const& ctx)
 {
@@ -240,8 +264,8 @@ bool ShouldTimeWarp(ApPredicateContext const& ctx)
 }
 void DoTimeWarp(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(TIME_WARP); }
 
-// Touch of the Magi — applied to the victim, absorbs damage, then explodes
-// for stored damage. We want to land it ASAP (window centers Arcane Power)
+// Touch of the Magi - applied to the victim, accumulates damage, then explodes
+// for the stored amount. We want to land it ASAP (window centers Arcane Surge)
 // and only re-apply when the previous instance has expired.
 bool ShouldTouchOfTheMagi(ApPredicateContext const& ctx)
 {
@@ -259,63 +283,47 @@ void DoTouchOfTheMagi(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(TOUCH_OF_THE_MAGI, ctx.bot.victim());
 }
 
-bool ShouldArcanePower(ApPredicateContext const& ctx)
+// Arcane Surge - 2.5s hard cast that spends ALL current mana for one big
+// nuke (damage scales with mana spent) and then grants a damage + mana regen
+// window (365362). Cast it with a full tank and only while standing still;
+// the follow-up rotation runs on the regen buff plus Barrage refunds.
+bool ShouldArcaneSurge(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(ARCANE_POWER)) return false;
-    if (!ctx.bot.is_ready(ARCANE_POWER)) return false;
-    // Want at least 3 charges so the burst window has spenders queued up,
-    // and enough mana to actually channel hard during the buff.
-    return ArcaneCharges(ctx) >= 3 && ctx.bot.power_pct(0) >= 40;
+    if (!ctx.bot.knows_spell(ARCANE_SURGE)) return false;
+    if (!ctx.bot.is_ready(ARCANE_SURGE)) return false;
+    if (ctx.bot.is_moving() && !ctx.bot.can_cast_while_moving(ARCANE_SURGE)) return false;
+    // Damage is proportional to mana spent - never fire it half empty.
+    return ctx.bot.power_pct(0) >= 60;
 }
-void DoArcanePower(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(ARCANE_POWER); }
+void DoArcaneSurge(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(ARCANE_SURGE, ctx.bot.victim());
+}
 
 bool ShouldPresenceOfMind(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(PRESENCE_OF_MIND)) return false;
     if (!ctx.bot.is_ready(PRESENCE_OF_MIND)) return false;
-    // Stack with Arcane Power, or use to clip movement. Either condition
-    // fires it — the buff lingers until 2 Arcane Blasts are used.
-    return ctx.bot.has_aura(ARCANE_POWER) || ctx.bot.is_moving();
+    // Stack with the Arcane Surge window, or use to clip movement. Either
+    // condition fires it - the buff lingers until 2 Arcane Blasts are used.
+    return ctx.bot.has_aura(ARCANE_SURGE_BUFF) || ctx.bot.is_moving();
 }
 void DoPresenceOfMind(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(PRESENCE_OF_MIND); }
 
+// Evocation (12.1) is an instant 3s mana-regen burst, not a channel. Fire
+// it when the tank is low - including right after Arcane Surge emptied it.
 bool ShouldEvocation(ApPredicateContext const& ctx)
 {
+    if (!ctx.bot.in_combat()) return false;
     if (!ctx.bot.knows_spell(EVOCATION)) return false;
     if (!ctx.bot.is_ready(EVOCATION)) return false;
-    // Don't break a burst window to channel Evocation.
-    if (ctx.bot.has_aura(ARCANE_POWER)) return false;
     return ctx.bot.power_pct(0) <= 30;
 }
 void DoEvocation(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(EVOCATION); }
 
-// Shifting Power — short channel that AoEs around the mage AND shaves
-// the cooldown off our major CDs (Arcane Power / Touch of the Magi /
-// Evocation). Only valuable in combat with a real target and when at
-// least one of those CDs is actually on cooldown to compress — otherwise
-// it's just a weak AoE that interrupts the rotation.
-bool ShouldShiftingPower(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SHIFTING_POWER)) return false;
-    if (!ctx.bot.is_ready(SHIFTING_POWER)) return false;
-    // Don't channel while Arcane Power is up — burst window should not be
-    // wasted on a slow channel that reduces a CD already active.
-    if (ctx.bot.has_aura(ARCANE_POWER)) return false;
-    // Pause when moving (channeled spell drops on first step).
-    if (ctx.bot.is_moving()) return false;
-    // Compress at least one big CD — otherwise the GCD spend isn't worth
-    // the lost Blast / Barrage time.
-    const bool ap_on_cd  = ctx.bot.knows_spell(ARCANE_POWER)      && !ctx.bot.is_ready(ARCANE_POWER);
-    const bool tom_on_cd = ctx.bot.knows_spell(TOUCH_OF_THE_MAGI) && !ctx.bot.is_ready(TOUCH_OF_THE_MAGI);
-    const bool ev_on_cd  = ctx.bot.knows_spell(EVOCATION)         && !ctx.bot.is_ready(EVOCATION);
-    return ap_on_cd || tom_on_cd || ev_on_cd;
-}
-void DoShiftingPower(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SHIFTING_POWER); }
-
-// ---- AoE / DoT ----
+// ---- AoE ----
 bool ShouldArcaneOrb(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -330,31 +338,39 @@ void DoArcaneOrb(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(ARCANE_ORB, ctx.bot.victim());
 }
 
-bool ShouldNetherTempest(ApPredicateContext const& ctx)
+// AoE cluster gate shared by Arcane Pulse / Arcane Explosion. aoe_preference
+// is a soft owner hint; still require >= 2 enemies so a stale `.aoe on`
+// doesn't fire on a single boss pull.
+bool AoeClusterNear(ApPredicateContext const& ctx, float range)
+{
+    const int near = static_cast<int>(ctx.bot.enemies_within(range));
+    return near >= 3 || (ctx.aoe_preference && near >= 2);
+}
+
+// Arcane Pulse (talent) replaces Arcane Explosion: 2s cast, 15s CD, AoE
+// around the TARGET that generates a charge per enemy hit. Two-branch with
+// Arcane Explosion below so untalented bots keep their PBAoE builder.
+bool ShouldArcanePulse(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(NETHER_TEMPEST)) return false;
-    NearbyUnit const* v = ctx.bot.victim_info();
-    if (!v || v->hp <= 0) return false;
-    // Refresh in pandemic window (~3s before expiry); also apply when absent.
-    AuraEntry const* a = ctx.bot.find_aura(NETHER_TEMPEST, v->guid);
-    return !a || a->remaining.count() <= 3000;
+    if (!ctx.bot.knows_spell(ARCANE_PULSE)) return false;
+    if (!ctx.bot.is_ready(ARCANE_PULSE)) return false;
+    if (ctx.bot.is_moving() && !ctx.bot.can_cast_while_moving(ARCANE_PULSE)) return false;
+    return AoeClusterNear(ctx, 10.0f);
 }
-void DoNetherTempest(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoArcanePulse(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    e.cast(NETHER_TEMPEST, ctx.bot.victim());
+    e.cast(ARCANE_PULSE, ctx.bot.victim());
 }
 
 bool ShouldArcaneExplosion(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
+    if (ctx.bot.knows_spell(ARCANE_PULSE)) return false;   // overridden by Pulse
     if (!ctx.bot.knows_spell(ARCANE_EXPLOSION)) return false;
-    // PBAoE charge builder — only when 3+ enemies are in its 10yd hit box,
-    // so we don't waste mana on single-target. aoe_preference is a soft
-    // owner hint; still require ≥2 enemies so stale `.aoe on` doesn't
-    // fire on a single boss pull.
-    const int near = ctx.bot.enemies_within(10.0f);
-    return near >= 3 || (ctx.aoe_preference && near >= 2);
+    // PBAoE charge builder - only when 3+ enemies are in its 10yd hit box,
+    // so we don't waste mana on single-target.
+    return AoeClusterNear(ctx, 10.0f);
 }
 void DoArcaneExplosion(ApPredicateContext const&, BotIntentEmitter& e)
 {
@@ -428,41 +444,31 @@ void DoAutoAttack(ApPredicateContext const& ctx, BotIntentEmitter& e)
     if (!t.IsEmpty()) e.start_attack(t);
 }
 
-// Ice Floes — preemptive cast-while-moving enabler. Off-GCD instant.
-bool ShouldIceFloes(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(ICE_FLOES)) return false;
-    if (!ctx.bot.is_ready(ICE_FLOES)) return false;
-    if (!ctx.bot.is_moving()) return false;
-    if (ctx.bot.has_aura(ICE_FLOES)) return false;
-    return !ctx.bot.victim().IsEmpty();
-}
-void DoIceFloes(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(ICE_FLOES); }
-
 // ---- Rule table ----
 //
 // Ordering matches the documented Mage spec ordering (most-urgent first):
-//   1. Survival panic (Ice Block)
-//   2. Defensives (Mirror Image / Alter Time / Blink)
+//   1. Survival panic (Ice Block / Greater Invisibility)
+//   2. Defensives (Prismatic Barrier / Mirror Image / Alter Time /
+//      Shimmer or Blink)
 //   3. Interrupt (Counterspell)
 //   4. Kite (Frost Nova)
-//   5. CC (Polymorph) / utility (Spellsteal, Slow)
-//   6. Cast-while-moving prep (Ice Floes)
-//   7. Major offensive CDs (Time Warp / Touch of the Magi / Arcane Power
-//      / Presence of Mind / Shifting Power / Evocation)
-//   8. Procs (Arcane Missiles via Clearcasting)
-//   9. AoE (Arcane Explosion)
-//  10. Charge spender (Arcane Barrage)
-//  11. DoT (Nether Tempest)
-//  12. ST builder (Arcane Orb / Arcane Blast)
-//  13. Filler (Auto Attack)
+//   5. CC (Polymorph) / utility (Spellsteal)
+//   6. Major offensive CDs (Time Warp / Touch of the Magi / Arcane Surge
+//      / Presence of Mind / Evocation)
+//   7. Procs (Arcane Missiles via Clearcasting)
+//   8. AoE (Arcane Pulse or Arcane Explosion)
+//   9. Charge spender (Arcane Barrage)
+//  10. ST builder (Arcane Orb / Arcane Blast)
+//  11. Filler (Auto Attack)
 ApRule const kRules[] = {
     // 1. Survival panic
     { ShouldIceBlock,        DoIceBlock,        "Ice Block (panic <=20% / <=40% PvP)" },
+    { ShouldGreaterInvis,    DoGreaterInvis,    "Greater Invis (threat wipe)"   },
     // 2. Defensives
+    { ShouldPrismaticBarrier,DoPrismaticBarrier,"Prismatic Barrier (shield)"    },
     { ShouldMirrorImage,     DoMirrorImage,     "Mirror Image (threat / boss)"  },
     { ShouldAlterTime,       DoAlterTime,       "Alter Time (snapshot HP)"      },
+    { ShouldShimmerAway,     DoShimmer,         "Shimmer (escape melee)"        },
     { ShouldBlinkAway,       DoBlink,           "Blink (escape melee)"          },
     // 3. Interrupt
     { ShouldCounterspell,    DoCounterspell,    "Counterspell (interrupt)"      },
@@ -471,28 +477,23 @@ ApRule const kRules[] = {
     // 5. CC / utility
     { ShouldPolymorph,       DoPolymorph,       "Polymorph (off-target CC)"     },
     { ShouldSpellsteal,      DoSpellsteal,      "Spellsteal (Magic buff)"       },
-    { ShouldSlow,            DoSlow,            "Slow (melee debuff)"           },
-    // 6. Movement prep
-    { ShouldIceFloes,        DoIceFloes,        "Ice Floes (moving prep)"       },
-    // 7. Major offensive CDs
+    // 6. Major offensive CDs
     { ShouldTimeWarp,        DoTimeWarp,        "Time Warp (boss)"              },
     { ShouldTouchOfTheMagi,  DoTouchOfTheMagi,  "Touch of the Magi (window)"    },
-    { ShouldArcanePower,     DoArcanePower,     "Arcane Power (burst)"          },
+    { ShouldArcaneSurge,     DoArcaneSurge,     "Arcane Surge (burst)"          },
     { ShouldPresenceOfMind,  DoPresenceOfMind,  "Presence of Mind (instant)"    },
-    { ShouldShiftingPower,   DoShiftingPower,   "Shifting Power (CD compress)"  },
     { ShouldEvocation,       DoEvocation,       "Evocation (<=30% mana)"        },
-    // 8. Procs (free spender — fire ASAP before it expires)
+    // 7. Procs (free spender - fire ASAP before it expires)
     { ShouldArcaneMissiles,  DoArcaneMissiles,  "Arcane Missiles (Clearcast)"   },
-    // 9. AoE
+    // 8. AoE (Arcane Pulse overrides Arcane Explosion when talented)
+    { ShouldArcanePulse,     DoArcanePulse,     "Arcane Pulse (3+ AoE)"         },
     { ShouldArcaneExplosion, DoArcaneExplosion, "Arcane Explosion (3+ AoE)"     },
-    // 10. Charge spender (4-stack dump / mana-low refund)
+    // 9. Charge spender (4-stack dump / mana-low refund)
     { ShouldArcaneBarrage,   DoArcaneBarrage,   "Arcane Barrage (spend 4)"      },
-    // 11. DoT refresh
-    { ShouldNetherTempest,   DoNetherTempest,   "Nether Tempest (DoT refresh)"  },
-    // 12. ST builders / filler
+    // 10. ST builders / filler
     { ShouldArcaneOrb,       DoArcaneOrb,       "Arcane Orb (charge gen)"       },
     { ShouldArcaneBlast,     DoArcaneBlast,     "Arcane Blast (build)"          },
-    // 13. Auto attack fallback
+    // 11. Auto attack fallback
     { AlwaysInCombat,        DoAutoAttack,      "Engage auto attack"            },
 };
 

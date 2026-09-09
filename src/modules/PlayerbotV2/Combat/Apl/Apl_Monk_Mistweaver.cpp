@@ -1,23 +1,22 @@
-// Mistweaver Monk - WoW 12.0 enterprise rotation. Hybrid mist healer that
-// stays in caster style (no fistweaving here — the action queue would need a
-// melee/caster mode pivot we don't yet have). Decision tree:
+// Mistweaver Monk - WoW 12.1.0.69587 (Midnight) enterprise rotation. Hybrid
+// mist healer that stays in caster style (no fistweaving here - the action
+// queue would need a melee/caster mode pivot we don't yet have). Decision tree:
 //
-//   1) Battle rez / OOC rez:  Resuscitate
-//   2) Emergency layer:       Life Cocoon, Fortifying Brew, Dampen Harm,
-//                             Diffuse Magic, Zen Meditation, Tiger's Lust
-//   3) Dispel:                Detox (Magic+Disease+Poison)
-//   4) Interrupt / CC:        Spear Hand Strike, Paralysis off-target,
-//                             Leg Sweep, Ring of Peace
+//   1) Battle rez / OOC rez:  Reawaken (combat) / Resuscitate (OOC)
+//   2) Emergency layer:       Life Cocoon, Fortifying Brew, Tiger's Lust
+//                             (Dampen Harm / Diffuse Magic / Zen Meditation
+//                             are gone from the 12.1 kit)
+//   3) Dispel:                Detox (Magic + Poison/Disease with Improved Detox)
+//   4) CC:                    Paralysis off-target caster, Leg Sweep, Ring
+//                             of Peace (Spear Hand Strike is WW/BrM-only now)
 //   5) Battle CDs:            Mana Tea, Thunder Focus Tea, Invoke Yu'lon
-//                             / Invoke Chi-Ji, Restoral, Revival
-//   6) AoE blanket:           Essence Font, Sheilun's Gift, Refreshing
-//                             Jade Wind, Faeline Stomp
-//   7) HoT maintenance:       Renewing Mist (auto-jumps via talent)
-//   8) Spike heal:            Enveloping Mist (<=60%), Vivify (<=85%)
-//   9) Filler / mana floor:   Soothing Mist channel
-//  10) Offensive (group full): Tiger Palm, Blackout Kick, Rising Sun Kick
-//                              (light DPS that returns mana via Spinning
-//                              Crane Kick replacement on some talents)
+//                             / Invoke Chi-Ji, Celestial Conduit, Restoral,
+//                             Revival
+//   6) Spike heal:            Enveloping Mist (<=60%), Renewing Mist spread,
+//                             Vivify or Sheilun's Gift (override pair, <=80%)
+//   7) Filler / mana floor:   Soothing Mist channel
+//   8) Offensive (group full): Rushing Wind Kick or Rising Sun Kick (override
+//                              pair), Blackout Kick, Tiger Palm
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -32,62 +31,60 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated against SpellName.csv) ----
-// Validated IDs:
+// ---- Spell IDs (WoW 12.1.0.69587, validated against SpellName.csv) ----
+// Validated spell IDs (WoW 12.1.0.69587):
 //   115175 Soothing Mist            124682 Enveloping Mist        115151 Renewing Mist
-//   116670 Vivify                   116849 Life Cocoon            115310 Revival
-//   388615 Restoral (talent)        191837 Essence Font           399491 Sheilun's Gift
-//   196725 Refreshing Jade Wind     388193 Jadefire Stomp         322118 Invoke Yu'lon
-//   325197 Invoke Chi-Ji            123904 Invoke Xuen            197908 Mana Tea
-//   116680 Thunder Focus Tea        123986 Chi Burst              115098 Chi Wave
-//   115203 Fortifying Brew          122278 Dampen Harm            122783 Diffuse Magic
-//   115176 Zen Meditation           115450 Detox (MW)             116705 Spear Hand Strike
-//   115078 Paralysis                119381 Leg Sweep              116844 Ring of Peace
-//   116841 Tiger's Lust             115178 Resuscitate (OOC rez)  212051 Reawaken (combat rez)
-//   100780 Tiger Palm               100784 Blackout Kick (generic)107428 Rising Sun Kick
-//   119611 Renewing Mist aura
+//   116670 Vivify                   399491 Sheilun's Gift         116849 Life Cocoon
+//   115310 Revival                  388615 Restoral               322118 Invoke Yu'lon
+//   325197 Invoke Chi-Ji            443028 Celestial Conduit      115294 Mana Tea (cast)
+//   115869 Mana Tea (talent)        116680 Thunder Focus Tea      115203 Fortifying Brew (cast)
+//   388917 Fortifying Brew (talent) 115450 Detox (MW)             115078 Paralysis
+//   119381 Leg Sweep                116844 Ring of Peace          116841 Tiger's Lust
+//   115178 Resuscitate (OOC rez)    212051 Reawaken (combat rez)  100780 Tiger Palm
+//   100784 Blackout Kick            107428 Rising Sun Kick        467307 Rushing Wind Kick
+//   Aura-only: 119611 Renewing Mist HoT | 115867 Mana Tea stacks
 //
 // Skipped (with reason):
-//   116645 Teachings of the Monastery passive — buffs Tiger Palm / Blackout
-//                                      Kick / Rising Sun Kick / SCK with
-//                                      healing splash; not castable.
-//   388023 Ancient Teachings          passive talent — Tiger Palm/RSK heal
-//                                      based on damage dealt; not castable.
-//   202577 Dome of Mist               passive — Renewing Mist refresh on
-//                                      cast; not castable.
-//   274909 Rising Mist                talent passive that refreshes ReM/EnvM
-//                                      when RSK is cast — not castable.
-//   231602 Improved Vivify            passive cast-while-moving talent.
+//   388917 Fortifying Brew / 115869 Mana Tea (talents)
+//                                      passive trait spells; TC learns them but
+//                                      never their taught casts (115203 / 115294),
+//                                      so the rules gate on EITHER id and cast
+//                                      the active one.
+//   1243287 Diffuse Magic             12.1 passive rider on Fortifying Brew.
+//   122278 Dampen Harm / 115176 Zen Meditation / 196725 Refreshing Jade Wind /
+//   388193 Jadefire Stomp / 191837 Essence Font
+//                                      removed from the 12.1 Monk kit (Essence
+//                                      Font no longer exists in SpellName).
+//   116705 Spear Hand Strike          Windwalker/Brewmaster-only in 12.1.
+//   123986 Chi Burst / 123904 Invoke Xuen
+//                                      Brewmaster-only / Windwalker-only in 12.1.
+//   450391 Chi Wave / 446326 Zen Pulse passives in 12.1 (ride on RSK / Vivify).
+//   116645 Teachings of the Monastery / 274909 Rising Mist / 388812 Vivacious
+//   Vivification                      passives; not castable.
+//   115313 Summon Jade Serpent Statue not in the curated builds; placement.
+//   1229376 Single-Button Assistant   client convenience macro.
 constexpr uint32 SOOTHING_MIST          = 115175;
 constexpr uint32 ENVELOPING_MIST        = 124682;
 constexpr uint32 RENEWING_MIST          = 115151;
 constexpr uint32 VIVIFY                 = 116670;
+constexpr uint32 SHEILUNS_GIFT          = 399491;       // [M] talent - OVERRIDES Vivify (no CD in 12.1)
 constexpr uint32 LIFE_COCOON            = 116849;
-constexpr uint32 REVIVAL                = 115310;
-constexpr uint32 RESTORAL               = 388615;       // talent — replaces Revival on some trees
-constexpr uint32 ESSENCE_FONT           = 191837;
-constexpr uint32 SHEILUNS_GIFT          = 399491;
-constexpr uint32 REFRESHING_JADE_WIND   = 196725;       // talent — channeled AoE HoT
-constexpr uint32 FAELINE_STOMP          = 388193;       // talent
-constexpr uint32 JADEFIRE_STOMP         = 388193;       // current label / same id
-constexpr uint32 INVOKE_YULON           = 322118;       // jade serpent statue burst
-constexpr uint32 INVOKE_CHI_JI          = 325197;       // crane spirit (talent variant)
-constexpr uint32 INVOKE_XUEN            = 123904;       // optional offensive talent
-constexpr uint32 MANA_TEA               = 197908;
-constexpr uint32 MANA_TEA_AURA          = 197908;       // self-aura: -50% mana cost
+constexpr uint32 REVIVAL                = 115310;       // [M] pick of the Revival/Restoral choice node
+constexpr uint32 RESTORAL               = 388615;       // [R] pick - Revival without the Magic cleanse
+constexpr uint32 INVOKE_YULON           = 322118;       // [R] jade serpent burst
+constexpr uint32 INVOKE_CHI_JI          = 325197;       // [M] crane spirit
+constexpr uint32 CELESTIAL_CONDUIT      = 443028;       // [R][M] hero active - 4s AoE heal/dmg channel
+constexpr uint32 MANA_TEA               = 115294;       // cast id (channel that drinks stacks)
+constexpr uint32 MANA_TEA_TALENT        = 115869;       // learned trait spell - knows_spell gate
+constexpr uint32 MANA_TEA_STACKS        = 115867;       // stack aura built by spending mana
 constexpr uint32 THUNDER_FOCUS_TEA      = 116680;
-constexpr uint32 CHI_BURST              = 123986;       // talent — AoE heal+dmg
-constexpr uint32 CHI_WAVE               = 115098;       // talent — bounces 7 times
 
 // Survival
-constexpr uint32 FORTIFYING_BREW        = 115203;
-constexpr uint32 DAMPEN_HARM            = 122278;
-constexpr uint32 DIFFUSE_MAGIC          = 122783;
-constexpr uint32 ZEN_MEDITATION         = 115176;
+constexpr uint32 FORTIFYING_BREW        = 115203;       // cast id (VisibleSpellID of the talent)
+constexpr uint32 FORTIFYING_BREW_TALENT = 388917;       // learned trait spell - knows_spell gate
 
 // Utility / CC
 constexpr uint32 DETOX                  = 115450;
-constexpr uint32 SPEAR_HAND_STRIKE      = 116705;
 constexpr uint32 PARALYSIS              = 115078;
 constexpr uint32 LEG_SWEEP              = 119381;
 constexpr uint32 RING_OF_PEACE          = 116844;
@@ -99,6 +96,7 @@ constexpr uint32 REAWAKEN               = 212051;       // Mistweaver in-combat 
 constexpr uint32 TIGER_PALM             = 100780;
 constexpr uint32 BLACKOUT_KICK          = 100784;       // Mistweaver / generic id
 constexpr uint32 RISING_SUN_KICK        = 107428;
+constexpr uint32 RUSHING_WIND_KICK      = 467307;       // [R] talent - OVERRIDES Rising Sun Kick, heals HoT targets
 
 // Aura trackers
 constexpr uint32 RENEWING_MIST_AURA     = 119611;
@@ -131,7 +129,7 @@ int WoundedFriendCount(ApPredicateContext const& ctx, int below_pct)
     int n = 0;
     auto const* members = ctx.group.members();
     // SOLO (audit B22): ungrouped, "wounded friend" used to collapse to
-    // "my own HP <= below_pct" — the 92% GroupTopped gates then froze ALL
+    // "my own HP <= below_pct" -the 92% GroupTopped gates then froze ALL
     // damage the moment a questing healer took two melee hits, degenerating
     // solo healer-spec leveling into heal-regen-nuke loops (3-10x kill
     // time). Cap the solo threshold at a 45% survival floor: topped-style
@@ -201,31 +199,16 @@ void DoResuscitate(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(RESUSCITATE, m->guid);
 }
 
-// ---- Interrupt / CC ----
-bool ShouldSpearHandStrike(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(SPEAR_HAND_STRIKE)) return false;
-    if (!ctx.bot.is_ready(SPEAR_HAND_STRIKE)) return false;
-    const bool pvp = ctx.pvp.in_battleground || ctx.pvp.in_arena;
-    if (pvp) return ctx.bot.kick_target(true, 5.0f) != nullptr;
-    auto const* c = ctx.bot.interruptible_caster();
-    return c && c->guid == ctx.bot.victim();
-}
-void DoSpearHandStrike(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    const bool pvp = ctx.pvp.in_battleground || ctx.pvp.in_arena;
-    if (auto const* c = ctx.bot.kick_target(pvp, 5.0f))
-        e.cast(SPEAR_HAND_STRIKE, c->guid);
-}
-
+// ---- CC ----
+// Mistweaver has no interrupt in 12.1 (Spear Hand Strike is WW/BrM-only);
+// Paralysis on an off-target caster is the closest substitute.
 bool ShouldParalysisOffTarget(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
     if (!ctx.bot.knows_spell(PARALYSIS)) return false;
     if (!ctx.bot.is_ready(PARALYSIS)) return false;
     auto const* c = ctx.bot.interruptible_caster();
-    if (!c || c->guid == ctx.bot.victim()) return false;
-    return !ctx.bot.is_ready(SPEAR_HAND_STRIKE);
+    return c && c->guid != ctx.bot.victim();
 }
 void DoParalysisOffTarget(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
@@ -257,43 +240,30 @@ void DoRingOfPeace(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Survival ladder ----
+// Fortifying Brew: TC learns the trait spell 388917, never its VisibleSpellID
+// 115203 (the actual cast). Accept either id as proof the talent is known.
 bool ShouldFortifyingBrew(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(FORTIFYING_BREW)) return false;
+    if (!ctx.bot.knows_spell(FORTIFYING_BREW_TALENT) && !ctx.bot.knows_spell(FORTIFYING_BREW)) return false;
     if (!ctx.bot.is_ready(FORTIFYING_BREW)) return false;
-    return ctx.bot.hp_pct() <= 35;
+    // Only big self CD left in 12.1 - fire a little earlier than before.
+    return ctx.bot.hp_pct() <= 40;
 }
 void DoFortifyingBrew(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(FORTIFYING_BREW); }
 
-bool ShouldDampenHarm(ApPredicateContext const& ctx)
+bool ShouldTigersLust(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(DAMPEN_HARM)) return false;
-    if (!ctx.bot.is_ready(DAMPEN_HARM)) return false;
-    return ctx.bot.hp_pct() <= 60;
+    if (!ctx.bot.knows_spell(TIGERS_LUST)) return false;
+    if (!ctx.bot.is_ready(TIGERS_LUST)) return false;
+    // Self root/snare break so the healer can reposition.
+    return ctx.bot.has_mechanic(MECHANIC_ROOT) || ctx.bot.has_mechanic(MECHANIC_SNARE);
 }
-void DoDampenHarm(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DAMPEN_HARM); }
-
-bool ShouldDiffuseMagic(ApPredicateContext const& ctx)
+void DoTigersLust(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(DIFFUSE_MAGIC)) return false;
-    if (!ctx.bot.is_ready(DIFFUSE_MAGIC)) return false;
-    if (ctx.bot.hp_pct() > 60) return false;
-    return ctx.bot.interruptible_caster() != nullptr;
+    e.cast(TIGERS_LUST, ctx.bot.raw().guid);
 }
-void DoDiffuseMagic(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DIFFUSE_MAGIC); }
-
-bool ShouldZenMeditation(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(ZEN_MEDITATION)) return false;
-    if (!ctx.bot.is_ready(ZEN_MEDITATION)) return false;
-    if (ctx.bot.hp_pct() > 50) return false;
-    return ctx.bot.interruptible_caster() != nullptr;
-}
-void DoZenMeditation(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(ZEN_MEDITATION); }
 
 // ---- Dispel ----
 bool ShouldDetox(ApPredicateContext const& ctx)
@@ -309,14 +279,18 @@ void DoDetox(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Battle CDs (mana economy + raid burst) ----
+// Mana Tea (12.1): the talent 115869 is a passive that banks a stack per
+// mana spent; the cast 115294 channels those stacks back into mana. TC
+// learns only the talent, so gate on either id and cast the channel.
 bool ShouldManaTea(ApPredicateContext const& ctx)
 {
-    if (!ctx.bot.knows_spell(MANA_TEA)) return false;
+    if (!ctx.bot.knows_spell(MANA_TEA_TALENT) && !ctx.bot.knows_spell(MANA_TEA)) return false;
     if (!ctx.bot.is_ready(MANA_TEA)) return false;
-    if (ctx.bot.has_aura(MANA_TEA_AURA)) return false;
-    // Pop when our mana is hurting OR a wave of raid damage is incoming.
-    if (ctx.bot.max_power(0) > 0 && ctx.bot.power_pct(0) <= 70) return true;
-    return WoundedFriendCount(ctx, 70) >= 3;
+    // Channeling with no stacks restores nothing - need a real bank first.
+    if (ctx.bot.aura_stacks(MANA_TEA_STACKS) < 5) return false;
+    // Drink when mana is hurting and nobody is about to die (it is a channel).
+    if (ctx.bot.max_power(0) <= 0 || ctx.bot.power_pct(0) > 60) return false;
+    return WoundedFriendCount(ctx, 50) == 0;
 }
 void DoManaTea(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(MANA_TEA); }
 
@@ -324,7 +298,7 @@ bool ShouldThunderFocusTea(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.knows_spell(THUNDER_FOCUS_TEA)) return false;
     if (!ctx.bot.is_ready(THUNDER_FOCUS_TEA)) return false;
-    // Empower the next big spell — pair with Renewing Mist (free spread) or
+    // Empower the next big spell -pair with Renewing Mist (free spread) or
     // Vivify (instant). Gate on a real heal target.
     return LowestFriendOrSelf(ctx).hp_pct <= 80;
 }
@@ -346,16 +320,14 @@ bool ShouldInvokeChiJi(ApPredicateContext const& ctx)
 }
 void DoInvokeChiJi(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(INVOKE_CHI_JI); }
 
-bool ShouldInvokeXuen(ApPredicateContext const& ctx)
+bool ShouldCelestialConduit(ApPredicateContext const& ctx)
 {
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(INVOKE_XUEN)) return false;
-    if (!ctx.bot.is_ready(INVOKE_XUEN)) return false;
-    if (ctx.bot.victim().IsEmpty()) return false;
-    // Offensive talent — only when group is mostly healthy.
-    return GroupTopped(ctx);
+    if (!ctx.bot.knows_spell(CELESTIAL_CONDUIT)) return false;
+    if (!ctx.bot.is_ready(CELESTIAL_CONDUIT)) return false;
+    // 4s channel radiating heals onto injured allies - a raid-damage answer.
+    return WoundedFriendCount(ctx, 70) >= 3;
 }
-void DoInvokeXuen(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(INVOKE_XUEN); }
+void DoCelestialConduit(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(CELESTIAL_CONDUIT); }
 
 // ---- Emergency layer ----
 bool ShouldLifeCocoon(ApPredicateContext const& ctx)
@@ -387,64 +359,6 @@ bool ShouldRestoral(ApPredicateContext const& ctx)
 }
 void DoRestoral(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(RESTORAL); }
 
-// ---- AoE blanket ----
-bool ShouldEssenceFont(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(ESSENCE_FONT)) return false;
-    if (!ctx.bot.is_ready(ESSENCE_FONT)) return false;
-    return WoundedFriendCount(ctx, 80) >= 3;
-}
-void DoEssenceFont(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(ESSENCE_FONT, LowestFriendOrSelf(ctx).guid);
-}
-
-bool ShouldSheilunsGift(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(SHEILUNS_GIFT)) return false;
-    if (!ctx.bot.is_ready(SHEILUNS_GIFT)) return false;
-    return WoundedFriendCount(ctx, 75) >= 3;
-}
-void DoSheilunsGift(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(SHEILUNS_GIFT, LowestFriendOrSelf(ctx).guid);
-}
-
-bool ShouldRefreshingJadeWind(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(REFRESHING_JADE_WIND)) return false;
-    if (!ctx.bot.is_ready(REFRESHING_JADE_WIND)) return false;
-    return WoundedFriendCount(ctx, 85) >= 3;
-}
-void DoRefreshingJadeWind(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(REFRESHING_JADE_WIND); }
-
-bool ShouldFaelineStomp(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(FAELINE_STOMP)) return false;
-    if (!ctx.bot.is_ready(FAELINE_STOMP)) return false;
-    return WoundedFriendCount(ctx, 85) >= 2;
-}
-void DoFaelineStomp(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(FAELINE_STOMP); }
-
-bool ShouldChiBurst(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(CHI_BURST)) return false;
-    if (!ctx.bot.is_ready(CHI_BURST)) return false;
-    return WoundedFriendCount(ctx, 80) >= 2;
-}
-void DoChiBurst(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(CHI_BURST); }
-
-bool ShouldChiWave(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(CHI_WAVE)) return false;
-    if (!ctx.bot.is_ready(CHI_WAVE)) return false;
-    return LowestFriendOrSelf(ctx).hp_pct <= 85;
-}
-void DoChiWave(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(CHI_WAVE, LowestFriendOrSelf(ctx).guid);
-}
-
 // ---- HoT maintenance ----
 bool ShouldRenewingMist(ApPredicateContext const& ctx)
 {
@@ -474,8 +388,23 @@ void DoEnvelopingMist(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(ENVELOPING_MIST, LowestFriendOrSelf(ctx).guid);
 }
 
+// Sheilun's Gift (talent) OVERRIDES Vivify in 12.1: same slot, no cooldown,
+// heals the target plus nearby allies scaled by banked mist clouds. Cast it
+// wherever Vivify would have gone; Vivify stays for non-talented bots.
+bool ShouldSheilunsGift(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.knows_spell(SHEILUNS_GIFT)) return false;
+    if (!ctx.bot.is_ready(SHEILUNS_GIFT)) return false;
+    return LowestFriendOrSelf(ctx).hp_pct <= 80;
+}
+void DoSheilunsGift(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(SHEILUNS_GIFT, LowestFriendOrSelf(ctx).guid);
+}
+
 bool ShouldVivify(ApPredicateContext const& ctx)
 {
+    if (ctx.bot.knows_spell(SHEILUNS_GIFT)) return false;
     if (!ctx.bot.knows_spell(VIVIFY)) return false;
     return LowestFriendOrSelf(ctx).hp_pct <= 80;
 }
@@ -503,10 +432,26 @@ void DoSoothingMist(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Offensive filler (group topped) ----
+// Rushing Wind Kick (talent) OVERRIDES Rising Sun Kick: frontal cone that
+// also heals allies carrying our HoTs. Prefer it when known, else RSK.
+bool ShouldRushingWindKickFiller(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.in_combat()) return false;
+    if (!GroupTopped(ctx)) return false;
+    if (!ctx.bot.knows_spell(RUSHING_WIND_KICK)) return false;
+    if (!ctx.bot.is_ready(RUSHING_WIND_KICK)) return false;
+    return !ctx.bot.victim().IsEmpty();
+}
+void DoRushingWindKickFiller(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(RUSHING_WIND_KICK, ctx.bot.victim());
+}
+
 bool ShouldRisingSunKickFiller(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
     if (!GroupTopped(ctx)) return false;
+    if (ctx.bot.knows_spell(RUSHING_WIND_KICK)) return false;
     if (!ctx.bot.knows_spell(RISING_SUN_KICK)) return false;
     if (!ctx.bot.is_ready(RISING_SUN_KICK)) return false;
     return !ctx.bot.victim().IsEmpty();
@@ -544,59 +489,51 @@ void DoTigerPalmFiller(ApPredicateContext const& ctx, BotIntentEmitter& e)
 bool AlwaysAlive(ApPredicateContext const& ctx) { return ctx.bot.is_alive(); }
 void DoNothing(ApPredicateContext const&, BotIntentEmitter&) {}
 
-// Cast-swap shim — Mistweaver slow heals. Soothing Mist channeled,
-// Enveloping Mist 2s cast, Vivify 1.5s. See ApHealHelpers.h.
+// Cast-swap shim - Mistweaver slow heals. Soothing Mist channeled,
+// Enveloping Mist 2s cast, Vivify 1.5s / Sheilun's Gift 2s. See ApHealHelpers.h.
 bool ShouldCancelHealForSwap(ApPredicateContext const& ctx)
 {
     return ShouldCancelHealForSwapImpl(ctx,
-        { SOOTHING_MIST, ENVELOPING_MIST, VIVIFY });
+        { SOOTHING_MIST, ENVELOPING_MIST, VIVIFY, SHEILUNS_GIFT });
 }
 
-// ---- Rule table (canonical Mistweaver priority order) ----
+// ---- Rule table (canonical Mistweaver priority order, 12.1) ----
 //   Cancel-heal swap (drop current cast if a better heal target appeared) ->
 //   Battle rez (Reawaken in combat / Resuscitate OOC) ->
 //   Raid emergency (Revival / Restoral) ->
 //   Ally panic (Life Cocoon) ->
-//   Self survival (Fortifying Brew / Diffuse Magic / Zen Meditation / Dampen Harm) ->
-//   Interrupts + CC (Spear Hand / Paralysis / Ring of Peace / Leg Sweep) ->
+//   Self survival (Fortifying Brew / Tiger's Lust root break) ->
+//   CC (Paralysis / Ring of Peace / Leg Sweep) ->
 //   Dispel (Detox) ->
 //   Mana / setup (Mana Tea / Thunder Focus Tea) ->
-//   Major CDs (Invoke Yu'lon / Chi-Ji) ->
+//   Major CDs (Invoke Yu'lon / Chi-Ji / Celestial Conduit) ->
 //   Big spike (Enveloping Mist) -> HoT spread (Renewing Mist) ->
-//   Spam single-target (Vivify) ->
-//   Raid heal (Essence Font / Sheilun's Gift / RJW / Jadefire Stomp / Chi Burst / Chi Wave) ->
-//   Offensive filler when group is topped (Xuen / RSK / BoK / TP) ->
+//   Spam single-target (Sheilun's Gift or Vivify - override pair) ->
+//   Offensive filler when group is topped (RWK or RSK / BoK / TP) ->
 //   Soothing Mist channel filler -> idle.
 ApRule const kRules[] = {
-    { ShouldCancelHealForSwap,   DoCancelHealForSwap,   "Cancel heal — swap to lower target" },
+    { ShouldCancelHealForSwap,   DoCancelHealForSwap,   "Cancel heal - swap to lower target" },
     { ShouldReawaken,            DoReawaken,            "Reawaken (in-combat battle rez)" },
     { ShouldResuscitate,         DoResuscitate,         "Resuscitate (OOC rez)"          },
     { ShouldRevival,             DoRevival,             "Revival (3+ at <=50%)"          },
     { ShouldRestoral,            DoRestoral,            "Restoral (3+ at <=55%)"         },
     { ShouldLifeCocoon,          DoLifeCocoon,          "Life Cocoon (<=30%)"            },
-    { ShouldFortifyingBrew,      DoFortifyingBrew,      "Fortifying Brew (<=35%)"        },
-    { ShouldDiffuseMagic,        DoDiffuseMagic,        "Diffuse Magic (<=60% caster)"   },
-    { ShouldZenMeditation,       DoZenMeditation,       "Zen Meditation (<=50% caster)"  },
-    { ShouldDampenHarm,          DoDampenHarm,          "Dampen Harm (<=60%)"            },
-    { ShouldSpearHandStrike,     DoSpearHandStrike,     "Spear Hand Strike (interrupt)"  },
+    { ShouldFortifyingBrew,      DoFortifyingBrew,      "Fortifying Brew (<=40%)"        },
+    { ShouldTigersLust,          DoTigersLust,          "Tiger's Lust (root break)"      },
     { ShouldParalysisOffTarget,  DoParalysisOffTarget,  "Paralysis (off-target caster)"  },
     { ShouldRingOfPeace,         DoRingOfPeace,         "Ring of Peace (panic peel)"     },
     { ShouldLegSweep,            DoLegSweep,            "Leg Sweep (3+ AoE stun)"        },
     { ShouldDetox,               DoDetox,               "Detox (dispel)"                 },
-    { ShouldManaTea,             DoManaTea,             "Mana Tea (mana economy)"        },
+    { ShouldManaTea,             DoManaTea,             "Mana Tea (drink stacks)"        },
     { ShouldThunderFocusTea,     DoThunderFocusTea,     "Thunder Focus Tea (empower)"    },
     { ShouldInvokeYulon,         DoInvokeYulon,         "Invoke Yu'lon (3+ at 70%)"      },
     { ShouldInvokeChiJi,         DoInvokeChiJi,         "Invoke Chi-Ji (3+ at 75%)"      },
+    { ShouldCelestialConduit,    DoCelestialConduit,    "Celestial Conduit (3+ at 70%)"  },
     { ShouldEnvelopingMist,      DoEnvelopingMist,      "Enveloping Mist (<=60%)"        },
     { ShouldRenewingMist,        DoRenewingMist,        "Renewing Mist (HoT refresh)"    },
+    { ShouldSheilunsGift,        DoSheilunsGift,        "Sheilun's Gift (<=80%)"         },
     { ShouldVivify,              DoVivify,              "Vivify (<=80%)"                 },
-    { ShouldEssenceFont,         DoEssenceFont,         "Essence Font (3+ at 80%)"       },
-    { ShouldSheilunsGift,        DoSheilunsGift,        "Sheilun's Gift (3+ at 75%)"     },
-    { ShouldRefreshingJadeWind,  DoRefreshingJadeWind,  "Refreshing Jade Wind (3+ 85%)"  },
-    { ShouldFaelineStomp,        DoFaelineStomp,        "Jadefire Stomp (2+ at 85%)"     },
-    { ShouldChiBurst,            DoChiBurst,            "Chi Burst (2+ at 80%)"          },
-    { ShouldChiWave,             DoChiWave,             "Chi Wave (<=85%)"               },
-    { ShouldInvokeXuen,          DoInvokeXuen,          "Invoke Xuen (DPS, group full)"  },
+    { ShouldRushingWindKickFiller,DoRushingWindKickFiller,"Rushing Wind Kick (filler)"   },
     { ShouldRisingSunKickFiller, DoRisingSunKickFiller, "Rising Sun Kick (filler)"       },
     { ShouldBlackoutKickFiller,  DoBlackoutKickFiller,  "Blackout Kick (filler)"         },
     { ShouldTigerPalmFiller,     DoTigerPalmFiller,     "Tiger Palm (filler)"            },

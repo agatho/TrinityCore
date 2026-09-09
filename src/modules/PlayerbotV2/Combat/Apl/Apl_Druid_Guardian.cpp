@@ -1,4 +1,4 @@
-// Guardian Druid — WoW 12.0 spec rotation (specId 104).
+// Guardian Druid - WoW 12.1.0.69587 (Midnight) spec rotation (specId 104).
 //
 // Stance / form
 // -------------
@@ -20,15 +20,17 @@
 //   Bash is a fallback that targets an interruptible caster.
 // * Stampeding Roar — group sprint, fired as a panic reposition tool.
 //
-// Mitigation triad
-// -----------------
-// * Ironfur — physical DR active mitigation. Burn rage continuously; the
+// Mitigation ladder (12.1)
+// ------------------------
+// * Ironfur - physical DR active mitigation. Burn rage continuously; the
 //   buff stacks so we re-cast every time the cooldown allows and rage
-//   permits. The original predicate suppressed Ironfur once any Ironfur
-//   aura was up — that's wrong for the stack model in WoW 12.0. Updated
-//   to allow re-stacking up to 4s of remaining duration (pandemic).
-// * Frenzied Regeneration — 2-charge self-heal HoT. Fires <=70%.
-// * Survival Instincts — 50% DR panic; <=35%.
+//   permits, re-stacking up to 4s of remaining duration (pandemic).
+// * Frenzied Regeneration - self-heal HoT. Fires <=70%.
+// * Survival Instincts - 50% DR panic; <=35%.
+// * Heart of the Wild [R] - Bear Form: +max health for a while; <=50%.
+// * Lunar Beam [R] - ground beam that also heals us and raises mastery;
+//   used on cooldown in real fights.
+// Pulverize, Rage of the Sleeper and Renewal no longer exist in 12.1.
 //
 // Bear Form variant (270100)
 // --------------------------
@@ -39,46 +41,51 @@
 // by the spec passive. We cast 5487 and let the spec passive layer on
 // 270100. Don't add a separate cast rule for 270100.
 //
-// Validated spell IDs (SpellName.csv, WoW 12.0)
-// ---------------------------------------------
-//     5487  Bear Form              (cast id — produces both 5487 + 270100
+// Validated spell IDs (SpellName.csv, WoW 12.1.0.69587)
+// ----------------------------------------------------
+//     5487  Bear Form              (cast id - produces both 5487 + 270100
 //                                   aura on Guardian via spec passive)
 //    33917  Mangle
-//    77758  Thrash (Bear)
-//   213771  Swipe (Bear)
-//     8921  Moonfire
-//     6807  Maul
-//   192081  Ironfur                (cast & aura same id)
-//    22842  Frenzied Regeneration
-//    80313  Pulverize              (talent — 3-stack DR consume)
-//   102558  Incarnation: Guardian of Ursoc
-//    50334  Berserk (Guardian)     (talent)
-//   200851  Rage of the Sleeper    (talent — 25% DR + leech)
+//    77758  Thrash (Bear)          (cast id; bleed aura 192090)
+//   213764  Swipe                  (class talent [R]; single id for cat + bear)
+//     8921  Moonfire               (cast id; DoT aura 164812)
+//  1252871  Red Moon               (spec talent [R]; replaces Moonfire; 8s
+//                                   DoT on the target, Mangle extends it)
+//   213708  Galactic Guardian      (proc buff: next Moonfire free + Rage)
+//     6807  Maul                   (spec talent [R])
+//   400254  Raze                   (spec talent, not in build; replaces Maul)
+//   192081  Ironfur                (class talent [R]; cast & aura same id)
+//    22842  Frenzied Regeneration  (class talent [R])
+//   102558  Incarnation: Guardian of Ursoc (spec talent [R])
+//    50334  Berserk (Guardian)     (spec talent [R]; replaced by Incarnation)
+//   204066  Lunar Beam             (spec talent [R])
+//  1261867  Heart of the Wild      (class talent [R]; Bear = +max health)
 //    22812  Barkskin
-//    61336  Survival Instincts
-//   108238  Renewal
-//     8936  Regrowth
-//   106898  Stampeding Roar        (Bear-form cast; cat-form variant is
-//                                   77761 but bear casts 106898)
-//   106839  Skull Bash
-//     5211  Mighty Bash
+//    61336  Survival Instincts     (spec talent [R])
+//   106898  Stampeding Roar        (class talent [R]; Bear-form cast)
+//   106839  Skull Bash             (class talent [R])
+//     5211  Mighty Bash            (class talent, not in build)
 //     6795  Growl
 //    20484  Rebirth
-//     2908  Soothe
+//     2908  Soothe                 (class talent [R])
 //     1126  Mark of the Wild
-//   192090  Thrash (Bear) — bleed debuff for Pulverize stack check
-//    29166  Innervate
+//    29166  Innervate              (class talent [R])
 //
 // Skipped spells (and why)
-// ---------------------------
-//   * 270100  Bear Form variant   — passive aura, not a separate cast.
-//     The 5487 cast covers shapeshift; the variant aura is layered on by
-//     the spec passive automatically.
-//   * 300346  Ursine Adept        — passive talent (form bonuses); no
-//     predicate needed.
-//   * 405834  Improved Prowl      — Feral-tree talent; Guardian doesn't
-//     run cat-form openers, no value here.
-//   * Cat Form cast               — would break the bear-form rotation.
+// ------------------------
+//   * 80313 Pulverize, 200851 Rage of the Sleeper, 108238 Renewal - not
+//     learnable in 12.1; rules and the 192090 Thrash-stack check deleted.
+//   * 1253799 Sundering Roar, 155835 Bristling Fur, 391528 Convoke the
+//     Spirits - spec talents the curated Guardian builds do not take.
+//   * 2782 Remove Corruption - [R] class talent but not castable in Bear
+//     Form; leaving the stance mid-pull is worse than the dispel.
+//   * 99 Incapacitating Roar, 132469 Typhoon - [M]-only class talents.
+//   * 102401 Wild Charge, 102793 Ursol's Vortex - [R] but need ally /
+//     ground positioning the tank rotation does not do.
+//   * 8936 Regrowth - hard cast that leaves Bear Form; the healer covers it.
+//   * 270100  Bear Form variant   - passive aura, not a separate cast.
+//   * 1229376 Single-Button Assistant - client convenience macro.
+//   * Cat Form cast               - would break the bear-form rotation.
 //     Spec rotation overrides the baseline cat-form re-entry by running
 //     first and casting Bear Form ASAP.
 
@@ -93,33 +100,34 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated against SpellName.csv) ----
+// ---- Spell IDs (WoW 12.1.0.69587, validated against SpellName.csv) ----
 constexpr uint32 BEAR_FORM             = 5487;
 constexpr uint32 CAT_FORM              = 768;        // for "drop cat into bear" guard
 constexpr uint32 MANGLE                = 33917;
 constexpr uint32 THRASH_BEAR           = 77758;
-constexpr uint32 SWIPE_BEAR            = 213771;
-constexpr uint32 MOONFIRE              = 8921;
-constexpr uint32 MAUL                  = 6807;
-constexpr uint32 IRONFUR               = 192081;
-constexpr uint32 FRENZIED_REGEN        = 22842;
-constexpr uint32 PULVERIZE             = 80313;       // talent — DR consumes Thrash stacks
-constexpr uint32 INCARNATION_GUARDIAN  = 102558;
-constexpr uint32 BERSERK_GUARDIAN      = 50334;       // historically Berserk; talent
-constexpr uint32 RAGE_OF_THE_SLEEPER   = 200851;      // talent — 25% DR + leech
+constexpr uint32 SWIPE                 = 213764;     // class talent [R] - single Swipe id in 12.1
+constexpr uint32 MOONFIRE              = 8921;       // cast id
+constexpr uint32 MOONFIRE_DOT          = 164812;     // Moonfire periodic aura
+constexpr uint32 RED_MOON              = 1252871;    // spec talent [R] - replaces Moonfire; aura id == cast id
+constexpr uint32 GALACTIC_GUARDIAN_BUFF = 213708;    // proc: next Moonfire free + extra Rage
+constexpr uint32 MAUL                  = 6807;       // spec talent [R]
+constexpr uint32 RAZE                  = 400254;     // spec talent (not in build) - replaces Maul, cleaves
+constexpr uint32 IRONFUR               = 192081;     // class talent [R]
+constexpr uint32 FRENZIED_REGEN        = 22842;      // class talent [R]
+constexpr uint32 INCARNATION_GUARDIAN  = 102558;     // spec talent [R] - replaces Berserk
+constexpr uint32 BERSERK_GUARDIAN      = 50334;      // spec talent [R]
+constexpr uint32 LUNAR_BEAM            = 204066;     // spec talent [R] - AoE beam + self heal + mastery
+constexpr uint32 HEART_OF_THE_WILD     = 1261867;    // class talent [R] - Bear: +max health
 constexpr uint32 BARKSKIN              = 22812;
-constexpr uint32 SURVIVAL_INSTINCTS    = 61336;
-constexpr uint32 RENEWAL               = 108238;
-constexpr uint32 REGROWTH              = 8936;
-constexpr uint32 STAMPEDING_ROAR_BEAR  = 106898;
-constexpr uint32 SKULL_BASH            = 106839;
-constexpr uint32 MIGHTY_BASH           = 5211;
+constexpr uint32 SURVIVAL_INSTINCTS    = 61336;      // spec talent [R]
+constexpr uint32 STAMPEDING_ROAR_BEAR  = 106898;     // class talent [R]
+constexpr uint32 SKULL_BASH            = 106839;     // class talent [R]
+constexpr uint32 MIGHTY_BASH           = 5211;       // class talent (not in build)
 constexpr uint32 GROWL                 = 6795;
 constexpr uint32 REBIRTH               = 20484;
-constexpr uint32 SOOTHE                = 2908;
+constexpr uint32 SOOTHE                = 2908;       // class talent [R]
 constexpr uint32 MARK_OF_THE_WILD      = 1126;
-constexpr uint32 THRASH_DEBUFF         = 192090;     // matches the bleed for Pulverize check
-constexpr uint32 INNERVATE             = 29166;
+constexpr uint32 INNERVATE             = 29166;      // class talent [R]
 
 constexpr uint8 POWER_RAGE_IDX = 1;
 
@@ -240,22 +248,39 @@ bool ShouldBarkskin(ApPredicateContext const& ctx)
 }
 void DoBarkskin(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BARKSKIN); }
 
-bool ShouldRageOfTheSleeper(ApPredicateContext const& ctx)
+// Heart of the Wild in Bear Form raises maximum health for its duration
+// (2min CD) - a defensive in the Guardian kit, so it lives on the HP ladder.
+bool ShouldHeartOfTheWild(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(RAGE_OF_THE_SLEEPER)) return false;
-    if (!ctx.bot.is_ready(RAGE_OF_THE_SLEEPER)) return false;
-    return ctx.bot.hp_pct() <= 70 || BossLikeTargetEngaged(ctx);
+    if (!ctx.bot.knows_spell(HEART_OF_THE_WILD)) return false;
+    if (!ctx.bot.is_ready(HEART_OF_THE_WILD)) return false;
+    if (!ctx.bot.has_aura(BEAR_FORM)) return false;
+    return ctx.bot.hp_pct() <= 50;
 }
-void DoRageOfTheSleeper(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(RAGE_OF_THE_SLEEPER); }
-
-bool ShouldRenewal(ApPredicateContext const& ctx)
+void DoHeartOfTheWild(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    if (!ctx.bot.knows_spell(RENEWAL)) return false;
-    if (!ctx.bot.is_ready(RENEWAL)) return false;
-    return ctx.bot.hp_pct() <= 40;
+    e.cast(HEART_OF_THE_WILD, ctx.bot.raw().guid);
 }
-void DoRenewal(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(RENEWAL); }
+
+// Lunar Beam: ground beam at the target's feet that damages nearby
+// enemies, heals us and raises mastery for its duration (1min CD). Used on
+// cooldown whenever the fight is real (pressure, boss or a pack).
+bool ShouldLunarBeam(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(LUNAR_BEAM)) return false;
+    if (!ctx.bot.is_ready(LUNAR_BEAM)) return false;
+    return ctx.bot.hp_pct() <= 80 || BossLikeTargetEngaged(ctx)
+        || ctx.bot.enemies_within(8.0f) >= 2;
+}
+void DoLunarBeam(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    if (auto const* v = ctx.bot.victim_info())
+        e.cast_at(LUNAR_BEAM, v->x, v->y, v->z);
+    else
+        e.cast(LUNAR_BEAM, ctx.bot.victim());
+}
 
 bool ShouldFrenziedRegen(ApPredicateContext const& ctx)
 {
@@ -336,6 +361,8 @@ void DoIncarnation(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(INCA
 bool ShouldBerserkGuardian(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
+    // Incarnation replaces Berserk when talented (choice node).
+    if (ctx.bot.knows_spell(INCARNATION_GUARDIAN)) return false;
     if (!ctx.bot.knows_spell(BERSERK_GUARDIAN)) return false;
     if (!ctx.bot.is_ready(BERSERK_GUARDIAN)) return false;
     return BossLikeTargetEngaged(ctx);
@@ -343,18 +370,36 @@ bool ShouldBerserkGuardian(ApPredicateContext const& ctx)
 void DoBerserkGuardian(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BERSERK_GUARDIAN); }
 
 // ---- Damage / threat ----
-// Pulverize: consumes 3 Thrash bleed stacks for a +9% damage reduction
-// buff. The DR uptime is a major Guardian mitigation pillar.
-bool ShouldPulverize(ApPredicateContext const& ctx)
+// Red Moon replaces Moonfire when talented [R]: an 8s DoT on the target
+// that Mangle extends and that generates Rage. Keep it on the victim.
+bool ShouldRedMoon(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(PULVERIZE)) return false;
-    if (!ctx.bot.is_ready(PULVERIZE)) return false;
-    return ctx.bot.aura_stacks(THRASH_DEBUFF, ctx.bot.victim()) >= 3;
+    if (!ctx.bot.knows_spell(RED_MOON)) return false;
+    if (!ctx.bot.is_ready(RED_MOON)) return false;
+    AuraEntry const* a = ctx.bot.find_aura(RED_MOON, ctx.bot.victim());
+    return !a || a->remaining.count() <= 1500;
 }
-void DoPulverize(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoRedMoon(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    e.cast(PULVERIZE, ctx.bot.victim());
+    e.cast(RED_MOON, ctx.bot.victim());
+}
+
+// Moonfire: refresh the 164812 DoT on the victim, or spend a Galactic
+// Guardian proc (free instant + Rage) immediately. Skipped when Red Moon
+// has replaced Moonfire.
+bool ShouldMoonfire(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(MOONFIRE)) return false;
+    if (ctx.bot.knows_spell(RED_MOON)) return false;
+    if (ctx.bot.has_aura(GALACTIC_GUARDIAN_BUFF)) return true;
+    AuraEntry const* a = ctx.bot.find_aura(MOONFIRE_DOT, ctx.bot.victim());
+    return !a || a->remaining.count() <= 4000;
+}
+void DoMoonfire(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(MOONFIRE, ctx.bot.victim());
 }
 
 bool ShouldThrash(ApPredicateContext const& ctx)
@@ -376,41 +421,48 @@ void DoMangle(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(MANGLE, ctx.bot.victim());
 }
 
-bool ShouldMoonfire(ApPredicateContext const& ctx)
+// Maul / Raze: rage spenders (Raze is the cleaving talent override of
+// Maul). Only spend when Ironfur and Frenzied Regen are satisfied - never
+// starve those of resources.
+bool RageSpendAllowed(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(MOONFIRE)) return false;
-    AuraEntry const* a = ctx.bot.find_aura(MOONFIRE, ctx.bot.victim());
-    return !a || a->remaining.count() <= 4000;
-}
-void DoMoonfire(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(MOONFIRE, ctx.bot.victim());
-}
-
-// Maul: rage spender. Only spend when Ironfur and Frenzied Regen are
-// satisfied — never starve those of resources.
-bool ShouldMaul(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(MAUL)) return false;
-    if (!ctx.bot.is_ready(MAUL)) return false;
     if (ctx.bot.power(POWER_RAGE_IDX) < 60) return false;
     if (ctx.bot.hp_pct() <= 60) return false;
     return true;
+}
+
+bool ShouldRaze(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.knows_spell(RAZE)) return false;
+    if (!ctx.bot.is_ready(RAZE)) return false;
+    return RageSpendAllowed(ctx);
+}
+void DoRaze(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(RAZE, ctx.bot.victim());
+}
+
+bool ShouldMaul(ApPredicateContext const& ctx)
+{
+    if (ctx.bot.knows_spell(RAZE)) return false;          // Raze replaces Maul
+    if (!ctx.bot.knows_spell(MAUL)) return false;
+    if (!ctx.bot.is_ready(MAUL)) return false;
+    return RageSpendAllowed(ctx);
 }
 void DoMaul(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(MAUL, ctx.bot.victim());
 }
 
+// Swipe is a single spell id in 12.1 (213764, damage varies by form).
 bool ShouldSwipe(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SWIPE_BEAR)) return false;
+    if (!ctx.bot.knows_spell(SWIPE)) return false;
     return true;
 }
-void DoSwipe(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SWIPE_BEAR); }
+void DoSwipe(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SWIPE); }
 
 bool AlwaysInCombat(ApPredicateContext const& ctx) { return ctx.bot.in_combat(); }
 void DoAutoAttack(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -433,32 +485,32 @@ void DoAutoAttack(ApPredicateContext const& ctx, BotIntentEmitter& e)
 
 // ---- Rule table (priority order top-down) ----
 // Order rationale (tank lens):
-//   1.  Rebirth                — battle-rez in group.
-//   2.  Bear Form              — spec stance, MUST be active before
+//   1.  Rebirth                - battle-rez in group.
+//   2.  Bear Form              - spec stance, MUST be active before
 //                                anything else fires. Sits above survival
 //                                CDs because most of them are bear-only.
-//   3.  Mark of the Wild       — OOC group buff (rare maintenance).
-//   4.  Growl                  — taunt off-target enemies.
-//   5.  Skull Bash             — primary interrupt.
-//   6.  Mighty Bash            — interrupt fallback.
-//   7.  Soothe                 — enrage dispel.
-//   8.  Stampeding Roar        — group sprint panic.
-//   9.  Survival Instincts     — 50% DR panic.
-//   10. Renewal                — instant 30% self-heal.
-//   11. Barkskin               — 20% DR.
-//   12. Rage of the Sleeper    — 25% DR + leech on boss.
-//   13. Frenzied Regen         — self-heal HoT (<=70%).
-//   14. Ironfur                — physical DR mit stack maintenance.
-//   15. Innervate              — ally caster mana.
-//   16. Incarnation: Guardian  — burst CD on boss.
-//   17. Berserk (Guardian)     — burst CD on boss.
-//   18. Moonfire               — DoT refresh.
-//   19. Thrash                 — rage gen + AoE bleed stacks.
-//   20. Pulverize              — consume 3 Thrash stacks for DR.
-//   21. Mangle                 — rage generator + filler.
-//   22. Maul                   — rage spender at >60%.
-//   23. Swipe                  — AoE filler.
-//   24. Auto attack            — engage fallthrough.
+//   3.  Mark of the Wild       - OOC group buff (rare maintenance).
+//   4.  Growl                  - taunt off-target enemies.
+//   5.  Skull Bash             - primary interrupt.
+//   6.  Mighty Bash            - interrupt fallback.
+//   7.  Soothe                 - enrage dispel.
+//   8.  Stampeding Roar        - group sprint panic.
+//   9.  Survival Instincts     - 50% DR panic.
+//   10. Heart of the Wild      - +max health (<=50%).
+//   11. Barkskin               - 20% DR.
+//   12. Frenzied Regen         - self-heal HoT (<=70%).
+//   13. Ironfur                - physical DR mit stack maintenance.
+//   14. Innervate              - ally caster mana.
+//   15. Incarnation: Guardian  - burst CD on boss.
+//   16. Berserk (Guardian)     - burst CD on boss (when not talented away).
+//   17. Lunar Beam             - AoE beam + self heal + mastery.
+//   18. Red Moon               - Moonfire replacement DoT (talent).
+//   19. Moonfire               - DoT refresh / Galactic Guardian proc.
+//   20. Thrash                 - rage gen + AoE bleed stacks.
+//   21. Mangle                 - rage generator + filler.
+//   22. Raze / Maul            - rage spender at >60% (Raze overrides Maul).
+//   23. Swipe                  - AoE filler.
+//   24. Auto attack            - engage fallthrough.
 ApRule const kRules[] = {
     { ShouldRebirth,           DoRebirth,           "Rebirth (battle rez)"           },
     { ShouldBearForm,          DoBearForm,          "Bear Form"                      },
@@ -469,18 +521,19 @@ ApRule const kRules[] = {
     { ShouldSoothe,            DoSoothe,            "Soothe (enrage)"                },
     { ShouldStampedingRoar,    DoStampedingRoar,    "Stampeding Roar (panic)"        },
     { ShouldSurvivalInstincts, DoSurvivalInstincts, "Survival Instincts (<=35%)"     },
-    { ShouldRenewal,           DoRenewal,           "Renewal (<=40%)"                },
+    { ShouldHeartOfTheWild,    DoHeartOfTheWild,    "Heart of the Wild (<=50%)"      },
     { ShouldBarkskin,          DoBarkskin,          "Barkskin (<=60%)"               },
-    { ShouldRageOfTheSleeper,  DoRageOfTheSleeper,  "Rage of the Sleeper"            },
     { ShouldFrenziedRegen,     DoFrenziedRegen,     "Frenzied Regen (<=70%)"         },
     { ShouldIronfur,           DoIronfur,           "Ironfur (active mit)"           },
     { ShouldInnervate,         DoInnervate,         "Innervate (healer mana)"        },
     { ShouldIncarnation,       DoIncarnation,       "Incarnation: Guardian (boss)"   },
     { ShouldBerserkGuardian,   DoBerserkGuardian,   "Berserk (boss)"                 },
+    { ShouldLunarBeam,         DoLunarBeam,         "Lunar Beam"                     },
+    { ShouldRedMoon,           DoRedMoon,           "Red Moon (refresh)"             },
     { ShouldMoonfire,          DoMoonfire,          "Moonfire (refresh)"             },
     { ShouldThrash,            DoThrash,            "Thrash (rage gen + AoE bleed)"  },
-    { ShouldPulverize,         DoPulverize,         "Pulverize (3-stack DR)"         },
     { ShouldMangle,            DoMangle,            "Mangle"                         },
+    { ShouldRaze,              DoRaze,              "Raze (rage spend, cleave)"      },
     { ShouldMaul,              DoMaul,              "Maul (rage spend)"              },
     { ShouldSwipe,             DoSwipe,             "Swipe (filler)"                 },
     { AlwaysInCombat,          DoAutoAttack,        "Engage auto attack"             },

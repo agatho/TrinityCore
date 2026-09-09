@@ -4,6 +4,22 @@
 //
 // To audit coverage:
 //   python src/modules/PlayerbotV2/tools/baseline_coverage_audit.py
+//
+// ---- Validated spell IDs (WoW 12.1.0.69587, Mage class baseline) ----
+//   116    Frostbolt (L1)         319836 Fire Blast (L2)
+//   122    Frost Nova (L3)        1953   Blink (L4)
+//   1449   Arcane Explosion (L6)  2139   Counterspell (L7)
+//   1459   Arcane Intellect (L8)  120    Cone of Cold (L18)
+//   61025 / 61780 / 126819 / 161353 / 161354 / 161355 Polymorph (L1)
+//   118    Polymorph (L10)
+//
+// ---- Skipped spells (and why) ----
+//   133    Fireball      - Fire SPEC spell (overrides Frostbolt at L10);
+//                          not in the class baseline list.
+//   45438  Ice Block     - class-tree talent, not baseline.
+//   55342  Mirror Image  - class-tree talent, not baseline.
+//   80353  Time Warp     - L49 baseline; boss-gated group CD lives in the
+//                          spec rotations, baseline stays lean.
 
 #include "Apl_Baseline_Common.h"
 #include "ApCrowdControl.h"          // PickOffTargetCC / CanBeCCd / ApInPvp
@@ -18,23 +34,22 @@ using ::Playerbot::Combat::baseline_common::HasLiveTarget;
 using ::Playerbot::Combat::baseline_common::AlwaysInCombat;
 using ::Playerbot::Combat::baseline_common::DoAutoAttack;
 
-constexpr uint32 FROSTBOLT         = 116;
-constexpr uint32 FIREBALL          = 133;
-constexpr uint32 ARCANE_EXPLOSION  = 1449;
-constexpr uint32 FROST_NOVA        = 122;
-constexpr uint32 COUNTERSPELL      = 2139;
-constexpr uint32 BLINK             = 1953;
-constexpr uint32 ICE_BLOCK         = 45438;       // L1 — 10s full immunity, drops aggro
-constexpr uint32 MIRROR_IMAGE      = 55342;       // L44 — 3 decoys, damage reduce
-constexpr uint32 FIRE_BLAST        = 319836;      // L2 — core instant, ~12s CD (baseline ID)
-constexpr uint32 ARCANE_INTELLECT  = 1459;        // L8 — group/self intellect buff
+constexpr uint32 FROSTBOLT         = 116;         // L1
+constexpr uint32 ARCANE_EXPLOSION  = 1449;        // L6 - PBAoE
+constexpr uint32 FROST_NOVA        = 122;         // L3 - 8y root
+constexpr uint32 COUNTERSPELL      = 2139;        // L7
+constexpr uint32 BLINK             = 1953;        // L4
+constexpr uint32 FIRE_BLAST        = 319836;      // L2 - core instant (baseline ID)
+constexpr uint32 ARCANE_INTELLECT  = 1459;        // L8 - group/self intellect buff
+constexpr uint32 CONE_OF_COLD      = 120;         // L18 - frontal cone + slow
 
-// Polymorph variants (wago.tools 12.0). Different spell IDs encode
-// different visuals (sheep / pig / turtle / penguin / etc.) — all share
-// the L1 unlock + functionally identical CC. Pick the first ID the bot
-// has trained; that's what their data layer (SkillLineAbility) granted.
-// Pattern lifted from the hunter baseline *_IDS arrays.
-constexpr uint32 POLYMORPH_IDS[] = { 61025, 61780, 126819, 161353, 161354, 161355 };
+// Polymorph variants (12.1.0.69587 class baseline). Different spell IDs
+// encode different visuals (serpent / turkey / porcupine / etc.) - all
+// share the L1 unlock + functionally identical CC; 118 (sheep) is the L10
+// form. Pick the first ID the bot has trained; that's what their data
+// layer (SkillLineAbility) granted. Pattern lifted from the hunter
+// baseline *_IDS arrays.
+constexpr uint32 POLYMORPH_IDS[] = { 118, 61025, 61780, 126819, 161353, 161354, 161355 };
 
 // First candidate the bot knows + is ready to cast. 0 = none.
 // Same helper shape as Apl_Baseline_Hunter.cpp's FirstReady.
@@ -47,13 +62,12 @@ inline uint32 FirstReadyPoly(ApPredicateContext const& ctx, std::span<const uint
 }
 
 BASELINE_SPELL_RULE(Frostbolt,    FROSTBOLT)
-BASELINE_SPELL_RULE(Fireball,     FIREBALL)
 BASELINE_INTERRUPT_RULE(Counterspell, COUNTERSPELL)
 
 BASELINE_SELF_RULE(FrostNova, FROST_NOVA)
 BASELINE_SELF_RULE(Blink,     BLINK)
 BASELINE_SELF_RULE(ArcaneExplosion, ARCANE_EXPLOSION)
-BASELINE_SELF_RULE(MirrorImage, MIRROR_IMAGE)
+BASELINE_SELF_RULE(ConeOfCold, CONE_OF_COLD)
 
 // L8 group/self buff. Retail 1459 is a self-aura that auto-shares to
 // party members via Magic-school intellect aura — casting on self
@@ -65,39 +79,6 @@ bool ShouldBlinkLow(ApPredicateContext const& ctx)
 {
     if (ctx.bot.hp_pct() >= 30) return false;
     return ctx.bot.knows_spell(BLINK) && ctx.bot.is_ready(BLINK);
-}
-
-// Ice Block: 10s full immunity, drops aggro. L1 mage panic. Reserved
-// for true emergencies — locks the mage out of all action so we don't
-// want to fire it while Blink could still gap-create. Skip when Blink
-// is ready AND any enemy is inside 8y (Blink-then-kite is more useful
-// than freezing in place); fire when Blink on CD, cornered, or HP
-// critical.
-//
-// Threshold raised from 25% to 30% to align with the wago-driven
-// BASELINE_DEFENSIVE_RULE convention (panic CDs trigger ≤30%) — the
-// pre-existing Blink-skip + 12% override safety net are preserved.
-bool ShouldIceBlock(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (ctx.bot.hp_pct() >= 30) return false;
-    if (ctx.bot.enemies_within(40.0f) == 0) return false;
-    if (ctx.bot.hp_pct() > 12
-        && ctx.bot.is_ready(BLINK) && ctx.bot.knows_spell(BLINK)
-        && ctx.bot.enemies_within(8.0f) >= 1)
-        return false;
-    return ctx.bot.knows_spell(ICE_BLOCK) && ctx.bot.is_ready(ICE_BLOCK);
-}
-void DoIceBlock(ApPredicateContext const&, BotIntentEmitter& e)
-{
-    e.cast(ICE_BLOCK, ObjectGuid::Empty);
-}
-
-bool ShouldMirrorImageLow(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (ctx.bot.hp_pct() >= 50) return false;
-    return ctx.bot.knows_spell(MIRROR_IMAGE) && ctx.bot.is_ready(MIRROR_IMAGE);
 }
 
 // Frost Nova: defensive root. Original baseline rule fires on any
@@ -119,6 +100,16 @@ bool ShouldArcaneExplosionAoE(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.knows_spell(ARCANE_EXPLOSION)) return false;
     if (!ctx.bot.is_ready(ARCANE_EXPLOSION)) return false;
+    return ctx.bot.enemies_within(8.0f) >= 2;
+}
+
+// Cone of Cold (L18): frontal cone damage + slow, 25s CD. Fire on a 2+
+// melee cluster so the slow buys kiting room; Frost Nova's root already
+// fired above when only one attacker is on us.
+bool ShouldConeOfColdMelee(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.knows_spell(CONE_OF_COLD)) return false;
+    if (!ctx.bot.is_ready(CONE_OF_COLD)) return false;
     return ctx.bot.enemies_within(8.0f) >= 2;
 }
 
@@ -185,15 +176,14 @@ void DoPolymorph(ApPredicateContext const& ctx, BotIntentEmitter& e)
 
 ApRule const baseline_mage_kRules[] = {
     // Survival first.
-    { ShouldIceBlock,           DoIceBlock,        "Ice Block (<30% immunity)"     },
     { ShouldBlinkLow,           DoBlink,           "Blink (<30% escape)"           },
-    { ShouldMirrorImageLow,     DoMirrorImage,     "Mirror Image (<50% threat split)"},
     // Self-buff (refresh).
     { ShouldArcaneIntellect,    DoArcaneIntellect, "Arcane Intellect (self-buff)"  },
     // Interrupt (caster-victim gated by macro).
     { ShouldCounterspell,       DoCounterspell,    "Counterspell (interrupt)"      },
-    // Melee root.
+    // Melee root / slow.
     { ShouldFrostNovaMelee,     DoFrostNova,       "Frost Nova (root melee)"       },
+    { ShouldConeOfColdMelee,    DoConeOfCold,      "Cone of Cold (2+ melee)"       },
     // Emergency CC.
     { ShouldPolymorph,          DoPolymorph,       "Polymorph (CC off-target / panic)"},
     // AoE.
@@ -201,7 +191,6 @@ ApRule const baseline_mage_kRules[] = {
     // Damage.
     { ShouldFireBlast,          DoFireBlast,       "Fire Blast (instant)"          },
     { ShouldFrostbolt,          DoFrostbolt,       "Frostbolt"                     },
-    { ShouldFireball,           DoFireball,        "Fireball"                      },
     // Fallback.
     { AlwaysInCombat,           DoAutoAttack,      "Auto attack"                   },
 };

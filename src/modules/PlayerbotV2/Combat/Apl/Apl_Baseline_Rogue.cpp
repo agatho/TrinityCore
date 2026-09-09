@@ -15,24 +15,74 @@ using ::Playerbot::Combat::baseline_common::HasLiveTarget;
 using ::Playerbot::Combat::baseline_common::AlwaysInCombat;
 using ::Playerbot::Combat::baseline_common::DoAutoAttack;
 
-constexpr uint32 SINISTER_STRIKE_IDS[] = { 193315, 1752 };
-constexpr uint32 EVISCERATE            = 196819;
-constexpr uint32 KIDNEY_SHOT           = 408;
-constexpr uint32 GOUGE                 = 1776;
-constexpr uint32 EVASION               = 5277;    // L21 — 100% dodge vs physical, 10s
-constexpr uint32 VANISH                = 1856;    // L17 — drop combat, restealth
-constexpr uint32 CLOAK_OF_SHADOWS      = 31224;   // L47 — magic immunity
-constexpr uint32 STEALTH               = 1784;    // L3 — OOC stealth; aura id == spell id
-constexpr uint32 CHEAP_SHOT            = 1833;    // L3 — stealth-only 4s stun opener (2 CP)
-constexpr uint32 AMBUSH                = 8676;    // L7 — stealth-only opener (2 CP)
-constexpr uint32 KICK                  = 1766;   // L6 — interrupt
-constexpr uint32 CRIMSON_VIAL          = 185311;  // L8 — self HoT
+// Class baseline ids, WoW 12.1.0.69587 (SkillLineAbility, all specs).
+constexpr uint32 SINISTER_STRIKE       = 1752;    // L1 - builder (spec overrides keep it castable)
+constexpr uint32 EVISCERATE            = 196819;  // L2 - CP finisher
+constexpr uint32 SLICE_AND_DICE        = 315496;  // L9 - attack-speed finisher
+constexpr uint32 KIDNEY_SHOT           = 408;     // L13 - CP stun
+constexpr uint32 EVASION               = 5277;    // L21 - 100% dodge vs physical, 10s
+constexpr uint32 VANISH                = 1856;    // L17 - drop combat, restealth
+constexpr uint32 CLOAK_OF_SHADOWS      = 31224;   // L47 - magic immunity
+constexpr uint32 STEALTH               = 1784;    // L3 - OOC stealth; aura id == spell id
+constexpr uint32 CHEAP_SHOT            = 1833;    // L3 - stealth-only 4s stun opener (2 CP)
+constexpr uint32 AMBUSH                = 8676;    // L7 - stealth-only opener (2 CP)
+constexpr uint32 KICK                  = 1766;    // L6 - interrupt
+constexpr uint32 CRIMSON_VIAL          = 185311;  // L8 - self HoT
 
-BASELINE_SPELL_RULE(Eviscerate,     EVISCERATE)
-BASELINE_SPELL_RULE(KidneyShot,     KIDNEY_SHOT)
-BASELINE_SPELL_RULE(Gouge,          GOUGE)
+constexpr uint8 POWER_COMBO_POINTS_IDX = 4;
+
+uint8 ComboPoints(ApPredicateContext const& ctx)
+{
+    return static_cast<uint8>(ctx.bot.power(POWER_COMBO_POINTS_IDX));
+}
+
 BASELINE_INTERRUPT_RULE(Kick,       KICK)
 BASELINE_DEFENSIVE_RULE(CrimsonVial, CRIMSON_VIAL, 60)
+
+// Finishers need combo points: firing Eviscerate / Kidney Shot / Slice
+// and Dice on 0 CP fails the cast and wastes the tick, so every finisher
+// below is CP-gated instead of using the plain BASELINE_SPELL_RULE.
+bool ShouldEviscerate(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.is_ready(EVISCERATE)) return false;
+    return ComboPoints(ctx) >= 3;
+}
+void DoEviscerate(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(EVISCERATE, ctx.bot.victim());
+}
+
+// Kidney Shot (L13): CP stun. Spend it on a casting mob (interrupt
+// fallback when Kick is down) or when the bot is getting low.
+bool ShouldKidneyShot(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(KIDNEY_SHOT) || !ctx.bot.is_ready(KIDNEY_SHOT)) return false;
+    if (ComboPoints(ctx) < 3) return false;
+    NearbyUnit const* v = ctx.bot.victim_info();
+    const bool caster = v && v->is_casting && !ctx.bot.is_ready(KICK);
+    return caster || ctx.bot.hp_pct() <= 50;
+}
+void DoKidneyShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(KIDNEY_SHOT, ctx.bot.victim());
+}
+
+// Slice and Dice (L9): attack-speed buff. Put it up at 2+ CP when missing
+// or about to fall off; Eviscerate takes the CP otherwise.
+bool ShouldSliceAndDice(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(SLICE_AND_DICE) || !ctx.bot.is_ready(SLICE_AND_DICE)) return false;
+    if (ComboPoints(ctx) < 2) return false;
+    AuraEntry const* a = ctx.bot.find_aura(SLICE_AND_DICE, ObjectGuid::Empty);
+    return !a || a->remaining.count() <= 3000;
+}
+void DoSliceAndDice(ApPredicateContext const&, BotIntentEmitter& e)
+{
+    e.cast(SLICE_AND_DICE, ObjectGuid::Empty);
+}
 
 // Evasion: 100% dodge vs physical, 10s. Panic for melee-range trouble.
 // Useless vs caster damage so gated on a nearby melee threat.
@@ -129,29 +179,28 @@ void DoAmbush(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(AMBUSH, ctx.bot.victim());
 }
 
+// Sinister Strike (L1): the only baseline builder. Spec overrides
+// (193315 Outlaw / 1329 Mutilate / 53 Backstab) replace it on the action
+// bar but the base id stays in the spellbook and castable.
 bool ShouldSinisterStrike(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    for (uint32 sid : SINISTER_STRIKE_IDS)
-        if (ctx.bot.is_ready(sid)) return true;
-    return false;
+    if (ComboPoints(ctx) >= 5) return false;
+    return ctx.bot.knows_spell(SINISTER_STRIKE) && ctx.bot.is_ready(SINISTER_STRIKE);
 }
 void DoSinisterStrike(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    for (uint32 sid : SINISTER_STRIKE_IDS)
-        if (ctx.bot.is_ready(sid)) { e.cast(sid, ctx.bot.victim()); return; }
+    e.cast(SINISTER_STRIKE, ctx.bot.victim());
 }
 
-// NOTE on omitted baseline spells:
-//   315496 Slice and Dice (L9) — finisher; requires combo points to
-//     cast. Without a CP-aware finisher rule the baseline can't gate
-//     this safely (firing on 0 CP wastes a GCD and produces no buff),
-//     so it's left to spec rotations which all track CPs explicitly.
-//   2983 Sprint (L5) — pure movement CD; idle-rule territory, not a
+// NOTE on omitted baseline spells (WoW 12.1.0.69587):
+//   1776 Gouge - no longer a class baseline spell (class talent in 12.1);
+//     removed from the baseline ladder.
+//   2983 Sprint (L5) - pure movement CD; idle-rule territory, not a
 //     combat rotation rule.
-//   31209 Fleet Footed (L4) — passive.
-//   22482 Blade Flurry / 86392 Main Gauche / 157442 Critical Strikes —
-//     Outlaw-spec resource-model passives, not baseline.
+//   1966 Feint (L12) / 3408 Crippling Poison / 315584 Instant Poison (L10)
+//     - above the L<10 window this rotation targets; spec rotations own them.
+//   6770 Sap (L11) / 1725 Distract - hidden OOC utility, not a combat rule.
 
 ApRule const baseline_rogue_kRules[] = {
     { ShouldCloakOfShadows, DoCloakOfShadows,"Cloak of Shadows (magic emergency <=40%)"},
@@ -162,10 +211,10 @@ ApRule const baseline_rogue_kRules[] = {
     { ShouldStealth,        DoStealth,       "Stealth (OOC opener prep)"      },
     { ShouldCheapShot,      DoCheapShot,     "Cheap Shot (stealth melee 4s stun)"},
     { ShouldAmbush,         DoAmbush,        "Ambush (stealth opener)"        },
-    { ShouldKidneyShot,     DoKidneyShot,    "Kidney Shot (stun)"             },
-    { ShouldEviscerate,     DoEviscerate,    "Eviscerate (CP finisher)"       },
+    { ShouldKidneyShot,     DoKidneyShot,    "Kidney Shot (CP stun)"          },
+    { ShouldSliceAndDice,   DoSliceAndDice,  "Slice and Dice (2+ CP)"         },
+    { ShouldEviscerate,     DoEviscerate,    "Eviscerate (3+ CP finisher)"    },
     { ShouldSinisterStrike, DoSinisterStrike,"Sinister Strike (builder)"      },
-    { ShouldGouge,          DoGouge,         "Gouge (incap)"                  },
     { AlwaysInCombat,       DoAutoAttack,    "Auto attack"                    },
 };
 

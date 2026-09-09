@@ -1,4 +1,4 @@
-// Balance Druid (Boomkin) — WoW 12.0 spec rotation (specId 102).
+// Balance Druid (Boomkin) - WoW 12.1.0.69587 (Midnight) spec rotation (specId 102).
 //
 // Stance / form
 // -------------
@@ -9,88 +9,87 @@
 // Form. We do NOT cast Cat Form / Bear Form here — those are emergency
 // drops the user can trigger manually or via other rules elsewhere.
 //
-// Astral Power loop
-// -----------------
-// Wrath (filler) builds AP toward the Solar Eclipse entry; Starfire
-// (heavier filler) builds AP toward the Lunar Eclipse entry. Two
-// consecutive casts of the same nuke triggers the opposing Eclipse buff
-// (Lunar after 2 Wraths, Solar after 2 Starfires). Starsurge is the
-// hard-cast 30-AP single-target spender; Starfall is the 50-AP ground
-// AoE spender. Moonfire + Sunfire are instant DoTs that should be
-// blanketed across every reachable enemy via the BotSnapshotBuilder
-// outbound enemy scan.
+// Astral Power loop (12.1)
+// ------------------------
+// Eclipse is an ACTIVE button in Midnight (talent 1239669 teaches
+// 1233346): pressing it enters Solar Eclipse (Wrath empowered) or Lunar
+// Eclipse (Starfire empowered); the mode follows the last filler cast and
+// both modes share the button + cooldown. Wrath / Starfire are the AP
+// builders (Wrath single-target, Starfire cleave / Lunar). Starsurge is
+// the instant 40-AP single-target spender; Starfall is the 50-AP ground
+// AoE spender. Moonfire + Sunfire are instant DoTs blanketed across every
+// reachable enemy via the BotSnapshotBuilder outbound enemy scan.
 //
 // Cooldowns
 // ---------
-// Celestial Alignment (3min) and Incarnation: Chosen of Elune (3min,
-// talent override) are the burst windows — fire on boss-like targets
-// or 3+ enemy AoE. Warrior of Elune grants 3 instant Starfires.
-// Force of Nature + Fury of Elune are talent-only AoE pressure. Nature's
-// Vigil is a heal+damage smear used on boss-like engagements.
+// Celestial Alignment (talent 395022 -> castable 194223) and Incarnation:
+// Chosen of Elune (talent 394013 -> castable 102560, replaces CA) are the
+// burst windows - fire on boss-like targets or 3+ enemy AoE. Fury of
+// Elune [R] is the 1min AoE beam; Heart of the Wild [R] in Moonkin Form
+// is a burst of empowered falling stars; Force of Nature is a talent the
+// curated build does not take (rule kept, knows_spell-gated).
 //
 // Survival ladder
 // ---------------
-// Barkskin (off-GCD 20% DR), Renewal (instant 30% self-heal talent),
-// Regrowth (hard-cast, mana cost), Typhoon (knockback peel). No bear-
-// form bail in Balance — we trust the survival CDs + raid healer.
+// Barkskin (off-GCD 20% DR), Regrowth (hard-cast, drops Moonkin Form,
+// deep panic only), Typhoon (knockback peel). Renewal no longer exists in
+// 12.1. No bear-form bail in Balance - we trust the CDs + raid healer.
 //
 // Group utility
 // -------------
 // Rebirth (battle rez), Innervate (ally mana), Mark of the Wild (group
-// buff, OOC only), Soothe (enrage dispel). CC: Solar Beam (interrupt +
-// 8s silence) is the primary kick; Mighty Bash + Typhoon are talented
-// emergency tools; Hibernate / Cyclone / Entangling Roots are situational
-// CC options we leave for the baseline / non-rotational logic.
+// buff, OOC only), Soothe (enrage dispel), Remove Corruption (Curse +
+// Poison dispel, class talent [R]). CC: Solar Beam (interrupt + silence)
+// is the primary kick; Mighty Bash + Typhoon are emergency tools;
+// Hibernate / Cyclone / Entangling Roots are situational CC options we
+// leave for the baseline / non-rotational logic.
 //
-// Validated spell IDs (SpellName.csv, WoW 12.0 client 11.x+ data)
-// ---------------------------------------------------------------
-//    24858  Moonkin Form
-//   194153  Starfire
-//   190984  Wrath                  (Balance learns the buffed 190984; baseline druid uses 5176)
-//    78674  Starsurge
-//   191034  Starfall
-//     8921  Moonfire               (DoT cast / aura — Balance's modern damage spell variant is
-//                                   326646, but the LEARNED spell is still 8921 in this build;
-//                                   326646 is the periodic-damage SpellEffect handle and not
-//                                   used directly by predicates)
-//    93402  Sunfire
-//   274281/274282/274283  New / Half / Full Moon (talent chain)
-//   205636  Force of Nature        (talent)
-//   202770  Fury of Elune          (talent)
-//   202347  Stellar Flare          (talent)
-//   202425  Warrior of Elune       (talent)
-//    48518  Eclipse (Lunar)        (buff after 2 Wraths)
-//    48517  Eclipse (Solar)        (buff after 2 Starfires)
-//   194223  Celestial Alignment    (3min burst)
-//   102560  Incarnation: Chosen of Elune
-//    78675  Solar Beam             (interrupt+silence)
-//     5211  Mighty Bash            (talent stun)
-//   132469  Typhoon                (talent knockback)
-//      339  Entangling Roots       (root CC)
-//     2637  Hibernate              (beast/dragonkin CC)
-//    33786  Cyclone                (banish-style CC)
-//    20484  Rebirth                (battle rez)
+// Validated spell IDs (SpellName.csv, WoW 12.1.0.69587)
+// ----------------------------------------------------
+//    24858  Moonkin Form            (class talent [R])
+//   194153  Starfire                (class talent [R])
+//   190984  Wrath                   (Balance spec override of baseline 5176)
+//    78674  Starsurge               (class talent [R], 40 AP)
+//   191034  Starfall                (spec spell L15, 50 AP)
+//     8921  Moonfire                (cast id; DoT aura is 164812)
+//    93402  Sunfire                 (class talent [R]; DoT aura is 164815)
+//   274281  New Moon                (spec talent, not in build; the button
+//                                    morphs into Half / Full Moon - 274282 /
+//                                    274283 are no longer learnable ids)
+//   205636  Force of Nature         (spec talent, not in build)
+//   202770  Fury of Elune           (spec talent [R])
+//  1233346  Solar Eclipse           (Eclipse button, taught by talent 1239669;
+//                                    1233272 Lunar Eclipse is the flipped face)
+//    48517  Eclipse (Solar)         (aura while Wrath is empowered)
+//    48518  Eclipse (Lunar)         (aura while Starfire is empowered)
+//   194223  Celestial Alignment     (castable; talent id 395022 teaches it)
+//   102560  Incarnation: Chosen of Elune (castable; talent id 394013 teaches it)
+//  1261867  Heart of the Wild       (class talent [R]; Moonkin = empowered Starfall)
+//    78675  Solar Beam              (spec talent [R]; interrupt + silence)
+//     5211  Mighty Bash             (class talent, not in build)
+//   132469  Typhoon                 (class talent [R])
+//    20484  Rebirth                 (battle rez)
 //    22812  Barkskin                (off-GCD 20% DR)
-//   108238  Renewal                (talent instant self-heal)
-//    29166  Innervate              (ally mana cooldown)
-//     2908  Soothe                 (enrage dispel)
-//     8936  Regrowth               (hard-cast self-heal)
-//     1126  Mark of the Wild       (group buff)
-//   124974  Nature's Vigil         (talent heal+dmg smear)
+//    29166  Innervate               (class talent [R])
+//     2908  Soothe                  (class talent [R])
+//     2782  Remove Corruption       (class talent [R]; Curse + Poison)
+//     8936  Regrowth                (hard-cast self-heal)
+//     1126  Mark of the Wild        (group buff)
 //
 // Skipped spells (and why)
 // ------------------------
-//   * 157228 / 231042  Owlkin Frenzy  — passive proc aura (gives Starfire
-//     instant + damage), not directly cast. The Eclipse / Starfire rules
-//     benefit from it implicitly when Starfire becomes instant.
-//   * 197911  Astral Power  — power resource, not a cast. We read it via
-//     ctx.bot.power(POWER_LUNAR_POWER_IDX).
-//   * 197490  Feral Affinity  — passive talent that grants Rake/Shred/
-//     Rip; Balance spec doesn't run a cat-form sub-rotation, so we skip
-//     these spells. If the user wants cat damage they should re-spec.
-//   * 405834  Improved Prowl  — Feral talent, not available to Balance.
-//   * 326646  Moonfire (variant damage spell)  — applied automatically by
-//     SpellMgr off the 8921 cast; not a separate predicate.
+//   * 202347  Stellar Flare, 202425 Warrior of Elune, 124974 Nature's
+//     Vigil, 108238 Renewal - not learnable by any druid in 12.1 (removed
+//     or reworked into passives); rules deleted.
+//   * 274282 / 274283  Half Moon / Full Moon - no longer separate learnable
+//     spells; New Moon's button morphs. Only 274281 is cast.
+//   * 391528  Convoke the Spirits, 88747 Wild Mushroom - spec talents the
+//     curated Balance builds do not take.
+//   * 22842 Frenzied Regeneration, 106898 Stampeding Roar, 102401 Wild
+//     Charge, 102793 Ursol's Vortex - [R] class talents that need Bear Form
+//     or ground/ally positioning the caster rotation does not do.
+//   * 1229376 Single-Button Assistant - client convenience macro.
+//   * 197911  Astral Power - power resource, read via power(POWER_LUNAR_POWER_IDX).
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -103,36 +102,38 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated against SpellName.csv) ----
-constexpr uint32 MOONKIN_FORM      = 24858;
-constexpr uint32 STARFIRE          = 194153;
-constexpr uint32 WRATH             = 190984;
-constexpr uint32 STARSURGE         = 78674;
-constexpr uint32 STARFALL          = 191034;
-constexpr uint32 MOONFIRE          = 8921;
-constexpr uint32 SUNFIRE           = 93402;
-constexpr uint32 NEW_MOON          = 274281;     // talent
-constexpr uint32 HALF_MOON         = 274282;     // chained off New Moon
-constexpr uint32 FULL_MOON         = 274283;     // chained off Half Moon
-constexpr uint32 FORCE_OF_NATURE   = 205636;     // talent — treant adds
-constexpr uint32 FURY_OF_ELUNE     = 202770;     // talent — ground AoE channel
-constexpr uint32 STELLAR_FLARE     = 202347;     // talent — DoT
-constexpr uint32 WARRIOR_OF_ELUNE  = 202425;     // talent — 3 instant Starfires
-constexpr uint32 ECLIPSE_LUNAR     = 48518;      // buff after 2 Wraths
-constexpr uint32 ECLIPSE_SOLAR     = 48517;      // buff after 2 Starfires
-constexpr uint32 CELESTIAL_ALIGN   = 194223;     // 3min CD burst
-constexpr uint32 INCARNATION_CHOSEN_OF_ELUNE = 102560; // talent replacement
-constexpr uint32 SOLAR_BEAM        = 78675;      // interrupt + silence
-constexpr uint32 MIGHTY_BASH       = 5211;       // talent stun
-constexpr uint32 TYPHOON           = 132469;     // talent knockback
+// ---- Spell IDs (WoW 12.1.0.69587, validated against SpellName.csv) ----
+constexpr uint32 MOONKIN_FORM      = 24858;      // class talent [R]
+constexpr uint32 STARFIRE          = 194153;     // class talent [R]
+constexpr uint32 WRATH             = 190984;     // Balance spec override of 5176
+constexpr uint32 STARSURGE         = 78674;      // class talent [R] - 40 AP spender
+constexpr uint32 STARFALL          = 191034;     // spec spell L15 - 50 AP AoE spender
+constexpr uint32 MOONFIRE          = 8921;       // cast id
+constexpr uint32 MOONFIRE_DOT      = 164812;     // periodic aura applied by 8921
+constexpr uint32 SUNFIRE           = 93402;      // class talent [R]; cast id
+constexpr uint32 SUNFIRE_DOT       = 164815;     // periodic aura applied by 93402
+constexpr uint32 NEW_MOON          = 274281;     // spec talent (not in build); button morphs to Half/Full Moon
+constexpr uint32 FORCE_OF_NATURE   = 205636;     // spec talent (not in build) - treant adds
+constexpr uint32 FURY_OF_ELUNE     = 202770;     // spec talent [R] - ground AoE beam
+constexpr uint32 ECLIPSE           = 1233346;    // Solar Eclipse button (taught by talent 1239669)
+constexpr uint32 ECLIPSE_TALENT    = 1239669;    // Eclipse talent [R] (teaches 1233346)
+constexpr uint32 ECLIPSE_LUNAR     = 48518;      // Lunar Eclipse aura (Starfire empowered)
+constexpr uint32 ECLIPSE_SOLAR     = 48517;      // Solar Eclipse aura (Wrath empowered)
+constexpr uint32 CELESTIAL_ALIGN   = 194223;     // castable CA (taught by talent 395022)
+constexpr uint32 CELESTIAL_ALIGN_TALENT = 395022; // Celestial Alignment talent [R]
+constexpr uint32 INCARNATION_CHOSEN_OF_ELUNE = 102560; // castable (taught by talent 394013)
+constexpr uint32 INCARNATION_TALENT = 394013;    // Incarnation: Chosen of Elune talent [R]
+constexpr uint32 HEART_OF_THE_WILD = 1261867;    // class talent [R] - Moonkin: empowered Starfall
+constexpr uint32 SOLAR_BEAM        = 78675;      // spec talent [R] - interrupt + silence
+constexpr uint32 MIGHTY_BASH       = 5211;       // class talent (not in build) - stun
+constexpr uint32 TYPHOON           = 132469;     // class talent [R] - knockback
 constexpr uint32 REBIRTH           = 20484;      // battle resurrection
 constexpr uint32 BARKSKIN          = 22812;      // 20% DR, 8s, 1min CD
-constexpr uint32 RENEWAL           = 108238;     // talent — instant 30% heal
-constexpr uint32 INNERVATE         = 29166;      // mana cooldown for ally
-constexpr uint32 SOOTHE            = 2908;       // enrage dispel
-constexpr uint32 REGROWTH          = 8936;       // self heal
+constexpr uint32 INNERVATE         = 29166;      // class talent [R] - ally mana
+constexpr uint32 SOOTHE            = 2908;       // class talent [R] - enrage dispel
+constexpr uint32 REMOVE_CORRUPTION = 2782;       // class talent [R] - Curse + Poison dispel
+constexpr uint32 REGROWTH          = 8936;       // self heal (drops Moonkin Form)
 constexpr uint32 MARK_OF_THE_WILD  = 1126;       // group buff
-constexpr uint32 NATURES_VIGIL     = 124974;     // talent — heal+dmg buff
 
 // Astral Power lives at POWER_LUNAR_POWER (8) in the WoW 12.0 power array.
 constexpr uint8 POWER_LUNAR_POWER_IDX = 8;
@@ -162,6 +163,18 @@ bool CanShapeshiftNow(ApPredicateContext const& ctx)
 {
     auto const& mv = ctx.bot.raw().movement;
     return !mv.is_mounted && !mv.is_flying;
+}
+
+// Several 12.1 talents are exposed as a talent spell that teaches the
+// classic castable (kit: "teaches"). Depending on how the talent build was
+// applied the bot may know either id, so pick whichever is in the spellbook
+// - classic castable first, talent id as fallback - and gate is_ready() on
+// that id (is_ready folds knows_spell). Returns 0 when neither is known.
+uint32 KnownId(ApPredicateContext const& ctx, uint32 castable, uint32 talent)
+{
+    if (ctx.bot.knows_spell(castable)) return castable;
+    if (ctx.bot.knows_spell(talent))   return talent;
+    return 0;
 }
 
 // ---- Stance / buffs ----
@@ -200,24 +213,15 @@ bool ShouldBarkskin(ApPredicateContext const& ctx)
 }
 void DoBarkskin(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BARKSKIN); }
 
-bool ShouldRenewal(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(RENEWAL)) return false;
-    if (!ctx.bot.is_ready(RENEWAL)) return false;
-    return ctx.bot.hp_pct() <= 40;
-}
-void DoRenewal(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(RENEWAL); }
-
 // Regrowth is a 1.5s hard-cast that DROPS Moonkin Form. Only fire at the
-// deep-panic threshold (<=30%) and only when other instants are on CD —
+// deep-panic threshold (<=30%) and only when Barkskin is on CD -
 // otherwise the lost Moonkin aura window costs more damage than the heal
-// saves. Renewal (rule above) and Barkskin (above) run first.
+// saves. Barkskin (above) runs first.
 bool ShouldRegrowth(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.knows_spell(REGROWTH)) return false;
     if (ctx.bot.hp_pct() > 30) return false;
-    // If a faster panic option is up, prefer it.
-    if (ctx.bot.knows_spell(RENEWAL) && ctx.bot.is_ready(RENEWAL)) return false;
+    // If the instant DR is up, prefer it.
     if (ctx.bot.knows_spell(BARKSKIN) && ctx.bot.is_ready(BARKSKIN)) return false;
     if (ctx.bot.is_moving() && !ctx.bot.can_cast_while_moving(REGROWTH)) return false;
     return true;
@@ -265,6 +269,26 @@ bool ShouldSoothe(ApPredicateContext const& ctx)
 void DoSoothe(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(SOOTHE, ctx.bot.victim());
+}
+
+// Remove Corruption: Curse + Poison dispel (class talent [R]). Castable in
+// Moonkin Form. Group member first, self as fallback.
+bool ShouldRemoveCorruption(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.knows_spell(REMOVE_CORRUPTION)) return false;
+    if (!ctx.bot.is_ready(REMOVE_CORRUPTION)) return false;
+    if (ctx.group.dispel_candidate(Playerbot::DispelType::Curse)  != nullptr) return true;
+    if (ctx.group.dispel_candidate(Playerbot::DispelType::Poison) != nullptr) return true;
+    return ctx.bot.self_dispellable(Playerbot::DispelType::Curse)
+        || ctx.bot.self_dispellable(Playerbot::DispelType::Poison);
+}
+void DoRemoveCorruption(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    if (auto const* m = ctx.group.dispel_candidate(Playerbot::DispelType::Curse))
+    { e.cast(REMOVE_CORRUPTION, m->guid); return; }
+    if (auto const* m = ctx.group.dispel_candidate(Playerbot::DispelType::Poison))
+    { e.cast(REMOVE_CORRUPTION, m->guid); return; }
+    e.cast(REMOVE_CORRUPTION, ctx.bot.raw().guid);
 }
 
 // ---- Interrupt / CC ----
@@ -316,44 +340,79 @@ bool ShouldTyphoon(ApPredicateContext const& ctx)
 void DoTyphoon(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(TYPHOON); }
 
 // ---- Major offensive cooldowns ----
+// Incarnation: Chosen of Elune replaces Celestial Alignment when talented;
+// both are exposed as talent-teaches-castable pairs (see KnownId).
 bool ShouldIncarnation(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(INCARNATION_CHOSEN_OF_ELUNE)) return false;
-    if (!ctx.bot.is_ready(INCARNATION_CHOSEN_OF_ELUNE)) return false;
+    const uint32 id = KnownId(ctx, INCARNATION_CHOSEN_OF_ELUNE, INCARNATION_TALENT);
+    if (!id || !ctx.bot.is_ready(id)) return false;
     return BossLikeTargetEngaged(ctx) || NearbyEnemiesInRange(ctx, 40.0f) >= 3;
 }
-void DoIncarnation(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(INCARNATION_CHOSEN_OF_ELUNE); }
+void DoIncarnation(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    if (const uint32 id = KnownId(ctx, INCARNATION_CHOSEN_OF_ELUNE, INCARNATION_TALENT))
+        e.cast(id);
+}
 
 bool ShouldCelestialAlign(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(CELESTIAL_ALIGN)) return false;
-    if (!ctx.bot.is_ready(CELESTIAL_ALIGN)) return false;
-    // Incarnation replaces Celestial Alignment via talent — they share a
-    // CD only one will be known at any given time.
+    // Incarnation owns the burst slot when it is talented.
+    if (KnownId(ctx, INCARNATION_CHOSEN_OF_ELUNE, INCARNATION_TALENT)) return false;
+    const uint32 id = KnownId(ctx, CELESTIAL_ALIGN, CELESTIAL_ALIGN_TALENT);
+    if (!id || !ctx.bot.is_ready(id)) return false;
     return BossLikeTargetEngaged(ctx) || NearbyEnemiesInRange(ctx, 40.0f) >= 3;
 }
-void DoCelestialAlign(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(CELESTIAL_ALIGN); }
-
-bool ShouldNaturesVigil(ApPredicateContext const& ctx)
+void DoCelestialAlign(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(NATURES_VIGIL)) return false;
-    if (!ctx.bot.is_ready(NATURES_VIGIL)) return false;
-    return BossLikeTargetEngaged(ctx);
+    if (const uint32 id = KnownId(ctx, CELESTIAL_ALIGN, CELESTIAL_ALIGN_TALENT))
+        e.cast(id);
 }
-void DoNaturesVigil(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(NATURES_VIGIL); }
 
-bool ShouldWarriorOfElune(ApPredicateContext const& ctx)
+// ---- Eclipse (12.1: an active button) ----
+// The Eclipse talent turns Eclipse into a cast: the button enters Solar
+// Eclipse (empowers Wrath) or Lunar Eclipse (empowers Starfire); the mode
+// follows the last filler cast (Wrath -> Solar, Starfire -> Lunar) and both
+// modes share the button and its cooldown. Press it whenever no Eclipse
+// (or CA / Incarnation, which grant both) is active, after letting one
+// filler arm the mode that fits the fight shape: Lunar on 2+ targets,
+// Solar single-target.
+bool ShouldEclipse(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(WARRIOR_OF_ELUNE)) return false;
-    if (!ctx.bot.is_ready(WARRIOR_OF_ELUNE)) return false;
-    if (ctx.bot.has_aura(WARRIOR_OF_ELUNE)) return false;
+    const uint32 id = KnownId(ctx, ECLIPSE, ECLIPSE_TALENT);
+    if (!id || !ctx.bot.is_ready(id)) return false;
+    if (ctx.bot.has_aura(ECLIPSE_SOLAR) || ctx.bot.has_aura(ECLIPSE_LUNAR)) return false;
+    if (ctx.bot.has_aura(CELESTIAL_ALIGN) || ctx.bot.has_aura(INCARNATION_CHOSEN_OF_ELUNE)) return false;
+    const bool aoe = ctx.aoe_preference || NearbyEnemiesInRange(ctx, 40.0f) >= 2;
+    const uint32 last = ctx.bot.last_cast_spell_id();
+    // Wrong mode armed for the fight shape - let one filler flip it first.
+    if (aoe && last == WRATH) return false;
+    if (!aoe && last == STARFIRE) return false;
     return true;
 }
-void DoWarriorOfElune(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(WARRIOR_OF_ELUNE); }
+void DoEclipse(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    if (const uint32 id = KnownId(ctx, ECLIPSE, ECLIPSE_TALENT))
+        e.cast(id);
+}
+
+// Heart of the Wild in Moonkin Form = a burst of empowered falling stars
+// around the bot (2min CD). Treat it as an AoE / boss cooldown next to
+// Fury of Elune; self-targeted since the Moonkin variant is caster-centred.
+bool ShouldHeartOfTheWild(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(HEART_OF_THE_WILD)) return false;
+    if (!ctx.bot.is_ready(HEART_OF_THE_WILD)) return false;
+    if (!ctx.bot.has_aura(MOONKIN_FORM)) return false;
+    return BossLikeTargetEngaged(ctx) || NearbyEnemiesInRange(ctx, 40.0f) >= 2;
+}
+void DoHeartOfTheWild(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(HEART_OF_THE_WILD, ctx.bot.raw().guid);
+}
 
 bool ShouldForceOfNature(ApPredicateContext const& ctx)
 {
@@ -398,23 +457,13 @@ bool ShouldStarfall(ApPredicateContext const& ctx)
 void DoStarfall(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(STARFALL); }
 
 // ---- DoTs ----
-bool ShouldStellarFlare(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(STELLAR_FLARE)) return false;
-    AuraEntry const* a = ctx.bot.find_aura(STELLAR_FLARE, ctx.bot.victim());
-    return !a || a->remaining.count() <= 4000;
-}
-void DoStellarFlare(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(STELLAR_FLARE, ctx.bot.victim());
-}
-
+// Moonfire / Sunfire casts apply separate periodic auras (164812 / 164815),
+// so refresh and multi-dot checks look for the DoT ids, not the cast ids.
 bool ShouldMoonfirePrimary(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(MOONFIRE)) return false;
-    AuraEntry const* a = ctx.bot.find_aura(MOONFIRE, ctx.bot.victim());
+    AuraEntry const* a = ctx.bot.find_aura(MOONFIRE_DOT, ctx.bot.victim());
     return !a || a->remaining.count() <= 4000;
 }
 void DoMoonfirePrimary(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -426,7 +475,7 @@ bool ShouldSunfirePrimary(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(SUNFIRE)) return false;
-    AuraEntry const* a = ctx.bot.find_aura(SUNFIRE, ctx.bot.victim());
+    AuraEntry const* a = ctx.bot.find_aura(SUNFIRE_DOT, ctx.bot.victim());
     return !a || a->remaining.count() <= 4000;
 }
 void DoSunfirePrimary(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -438,11 +487,11 @@ bool ShouldMoonfireExpand(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
     if (!ctx.bot.knows_spell(MOONFIRE)) return false;
-    return ctx.bot.enemy_without_my_aura(MOONFIRE, 40.0f) != nullptr;
+    return ctx.bot.enemy_without_my_aura(MOONFIRE_DOT, 40.0f) != nullptr;
 }
 void DoMoonfireExpand(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    if (auto const* off = ctx.bot.enemy_without_my_aura(MOONFIRE, 40.0f))
+    if (auto const* off = ctx.bot.enemy_without_my_aura(MOONFIRE_DOT, 40.0f))
         e.cast(MOONFIRE, off->guid);
 }
 
@@ -450,31 +499,15 @@ bool ShouldSunfireExpand(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
     if (!ctx.bot.knows_spell(SUNFIRE)) return false;
-    return ctx.bot.enemy_without_my_aura(SUNFIRE, 40.0f) != nullptr;
+    return ctx.bot.enemy_without_my_aura(SUNFIRE_DOT, 40.0f) != nullptr;
 }
 void DoSunfireExpand(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    if (auto const* off = ctx.bot.enemy_without_my_aura(SUNFIRE, 40.0f))
+    if (auto const* off = ctx.bot.enemy_without_my_aura(SUNFIRE_DOT, 40.0f))
         e.cast(SUNFIRE, off->guid);
 }
 
-// ---- New Moon / Half Moon / Full Moon chain ----
-bool ShouldFullMoon(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(FULL_MOON)) return false;
-    return ctx.bot.is_ready(FULL_MOON);
-}
-void DoFullMoon(ApPredicateContext const& ctx, BotIntentEmitter& e) { e.cast(FULL_MOON, ctx.bot.victim()); }
-
-bool ShouldHalfMoon(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(HALF_MOON)) return false;
-    return ctx.bot.is_ready(HALF_MOON);
-}
-void DoHalfMoon(ApPredicateContext const& ctx, BotIntentEmitter& e) { e.cast(HALF_MOON, ctx.bot.victim()); }
-
+// ---- New Moon (the button morphs into Half / Full Moon in 12.1) ----
 bool ShouldNewMoon(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -489,8 +522,8 @@ bool ShouldStarsurge(ApPredicateContext const& ctx)
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(STARSURGE)) return false;
     if (!ctx.bot.is_ready(STARSURGE)) return false;
-    if (ctx.bot.power(POWER_LUNAR_POWER_IDX) < 30) return false;
-    // Hard-cast spender — don't waste 30 AP on a moving cast that fails.
+    if (ctx.bot.power(POWER_LUNAR_POWER_IDX) < 40) return false;
+    // Instant in 12.1; the moving guard stays harmless if build data differs.
     if (ctx.bot.is_moving() && !ctx.bot.can_cast_while_moving(STARSURGE)) return false;
     // Single-target spender — defer to Starfall when 2+ enemies.
     return NearbyEnemiesInRange(ctx, 40.0f) <= 1 || BossLikeTargetEngaged(ctx);
@@ -501,11 +534,12 @@ void DoStarsurge(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Eclipse fillers ----
-// Starfire is the heavier filler — preferred in Lunar Eclipse (cleave
+// Starfire is the heavier filler - preferred in Lunar Eclipse (cleave
 // bonus on secondary targets) and on 2+ enemy AoE. Wrath is the lighter
-// filler — preferred in Solar Eclipse and on single-target sustained
-// damage. Two consecutive casts of EITHER one triggers the opposing
-// Eclipse aura, so the bot naturally alternates over a fight.
+// filler - preferred in Solar Eclipse and on single-target sustained
+// damage. In 12.1 the last filler cast also arms which mode the Eclipse
+// button enters (see ShouldEclipse), so this split doubles as the mode
+// selector.
 bool ShouldStarfire(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -534,41 +568,40 @@ void DoNothing(ApPredicateContext const&, BotIntentEmitter&) {}
 
 // ---- Rule table (priority order top-down) ----
 // Order rationale:
-//   1.  Rebirth                — battle-rez has highest impact in group.
-//   2.  Barkskin               — off-GCD survival, fire on damage spikes.
-//   3.  Renewal                — instant 30% self-heal (talent).
-//   4.  Regrowth               — hard-cast panic only (DROPS Moonkin
-//                                briefly) when nothing else is up.
-//   5.  Typhoon                — peel knockback when surrounded.
-//   6.  Moonkin Form           — spec stance entry, sits above DPS rules
+//   1.  Rebirth                - battle-rez has highest impact in group.
+//   2.  Barkskin               - off-GCD survival, fire on damage spikes.
+//   3.  Regrowth               - hard-cast panic only (DROPS Moonkin
+//                                briefly) when Barkskin is down.
+//   4.  Typhoon                - peel knockback when surrounded.
+//   5.  Moonkin Form           - spec stance entry, sits above DPS rules
 //                                so a stripped/dispelled form re-applies
 //                                before any nuke fires.
-//   7.  Mark of the Wild       — OOC group buff maintenance.
-//   8.  Solar Beam             — primary interrupt (AoE silence too).
-//   9.  Mighty Bash            — interrupt fallback when Solar Beam down.
-//   10. Soothe                 — enrage dispel on target.
-//   11. Innervate              — ally caster mana cooldown.
-//   12. Nature's Vigil         — burst+heal smear on bosses.
-//   13. Incarnation            — major CD pair (talent override of CA).
-//   14. Celestial Alignment    — major CD when Incarnation not talented.
-//   15. Warrior of Elune       — buff (3 instant Starfires).
-//   16. Force of Nature        — treant adds (talent).
-//   17. Fury of Elune          — ground AoE channel (talent).
-//   18. Starfall               — 50-AP AoE spender (2+ targets).
-//   19. Stellar Flare          — talent DoT refresh.
-//   20. Sunfire primary        — instant DoT on victim.
-//   21. Moonfire primary       — instant DoT on victim.
-//   22. Sunfire expand         — blanket DoT on off-target enemies.
-//   23. Moonfire expand        — blanket DoT on off-target enemies.
-//   24. Full / Half / New Moon — talent chain finisher.
-//   25. Starsurge              — 30-AP ST spender.
-//   26. Starfire               — heavier filler (Lunar / AoE).
-//   27. Wrath                  — lighter filler (Solar build).
-//   28. Idle                   — alive fallthrough.
+//   6.  Mark of the Wild       - OOC group buff maintenance.
+//   7.  Solar Beam             - primary interrupt (AoE silence too).
+//   8.  Mighty Bash            - interrupt fallback when Solar Beam down.
+//   9.  Soothe                 - enrage dispel on target.
+//   10. Remove Corruption      - Curse / Poison dispel on group or self.
+//   11. Innervate              - ally caster mana cooldown.
+//   12. Incarnation            - major CD (replaces CA when talented).
+//   13. Celestial Alignment    - major CD when Incarnation not talented.
+//   14. Eclipse                - active Eclipse button (12.1) whenever no
+//                                Eclipse / CA / Incarnation is up.
+//   15. Heart of the Wild      - empowered Starfall burst (2+ / boss).
+//   16. Force of Nature        - treant adds (talent, not in build).
+//   17. Fury of Elune          - ground AoE beam (talent).
+//   18. Starfall               - 50-AP AoE spender (2+ targets).
+//   19. Sunfire primary        - instant DoT on victim.
+//   20. Moonfire primary       - instant DoT on victim.
+//   21. Sunfire expand         - blanket DoT on off-target enemies.
+//   22. Moonfire expand        - blanket DoT on off-target enemies.
+//   23. New Moon               - talent nuke (button morphs Half / Full).
+//   24. Starsurge              - 40-AP ST spender.
+//   25. Starfire               - heavier filler (Lunar / AoE).
+//   26. Wrath                  - lighter filler (Solar build).
+//   27. Idle                   - alive fallthrough.
 ApRule const kRules[] = {
     { ShouldRebirth,          DoRebirth,          "Rebirth (battle rez)"       },
     { ShouldBarkskin,         DoBarkskin,         "Barkskin (<=50%)"           },
-    { ShouldRenewal,          DoRenewal,          "Renewal (<=40%)"            },
     { ShouldRegrowth,         DoRegrowth,         "Regrowth (<=30% deep panic)"},
     { ShouldTyphoon,          DoTyphoon,          "Typhoon (peel)"             },
     { ShouldMoonkinForm,      DoMoonkinForm,      "Moonkin Form"               },
@@ -576,21 +609,19 @@ ApRule const kRules[] = {
     { ShouldSolarBeam,        DoSolarBeam,        "Solar Beam (interrupt)"     },
     { ShouldMightyBash,       DoMightyBash,       "Mighty Bash (interrupt fb)" },
     { ShouldSoothe,           DoSoothe,           "Soothe (enrage)"            },
+    { ShouldRemoveCorruption, DoRemoveCorruption, "Remove Corruption (dispel)" },
     { ShouldInnervate,        DoInnervate,        "Innervate (healer mana)"    },
-    { ShouldNaturesVigil,     DoNaturesVigil,     "Nature's Vigil (boss)"      },
     { ShouldIncarnation,      DoIncarnation,      "Incarnation"                },
     { ShouldCelestialAlign,   DoCelestialAlign,   "Celestial Alignment"        },
-    { ShouldWarriorOfElune,   DoWarriorOfElune,   "Warrior of Elune"           },
+    { ShouldEclipse,          DoEclipse,          "Eclipse (enter)"            },
+    { ShouldHeartOfTheWild,   DoHeartOfTheWild,   "Heart of the Wild (stars)"  },
     { ShouldForceOfNature,    DoForceOfNature,    "Force of Nature (treants)"  },
     { ShouldFuryOfElune,      DoFuryOfElune,      "Fury of Elune"              },
     { ShouldStarfall,         DoStarfall,         "Starfall (2+ AoE)"          },
-    { ShouldStellarFlare,     DoStellarFlare,     "Stellar Flare (DoT)"        },
     { ShouldSunfirePrimary,   DoSunfirePrimary,   "Sunfire (primary)"          },
     { ShouldMoonfirePrimary,  DoMoonfirePrimary,  "Moonfire (primary)"         },
     { ShouldSunfireExpand,    DoSunfireExpand,    "Sunfire (expand off-tgt)"   },
     { ShouldMoonfireExpand,   DoMoonfireExpand,   "Moonfire (expand off-tgt)"  },
-    { ShouldFullMoon,         DoFullMoon,         "Full Moon"                  },
-    { ShouldHalfMoon,         DoHalfMoon,         "Half Moon"                  },
     { ShouldNewMoon,          DoNewMoon,          "New Moon"                   },
     { ShouldStarsurge,        DoStarsurge,        "Starsurge (spend)"          },
     { ShouldStarfire,         DoStarfire,         "Starfire (lunar/cleave)"    },

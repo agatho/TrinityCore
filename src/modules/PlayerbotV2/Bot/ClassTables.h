@@ -12,6 +12,11 @@
 
 namespace Playerbot {
 
+// Realm level cap (worldserver MaxPlayerLevel = CONFIG_MAX_PLAYER_LEVEL;
+// 90 for Midnight). Single source of truth for every "is this bot at
+// max level" / "clamp to cap" check in the module - never hardcode 80/90.
+uint8 MaxPlayerLevel();
+
 uint32 ClassSelfBuff(uint8 cls);
 
 uint32 ClassOocHeal(uint8 cls, uint32 spec);
@@ -45,7 +50,7 @@ uint32 ClassCC(uint8 cls, uint32 spec);
 // when the active tank's debuff stacks call for a swap. Returns 0
 // for non-tank-capable classes; caller checks knows_spell()/is_ready().
 // Warrior=355 (Taunt), Paladin=62124 (Hand of Reckoning),
-// DeathKnight=49576 (Death Grip), Druid=6795 (Growl — bear-form
+// DeathKnight=56222 (Dark Command), Druid=6795 (Growl - bear-form
 // only, caller must verify form), Monk=115546 (Provoke),
 // DemonHunter=185245 (Torment).
 uint32 ClassTaunt(uint8 cls);

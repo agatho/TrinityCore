@@ -120,6 +120,7 @@ static SpecAlias const kSpecAliases[] = {
     {"enh",          {263}},
     // Demon Hunter
     {"havoc",        {577}},
+    {"devourer",     {1480}},
     // Druid
     {"balance",      {102}},
     {"feral",        {103}},

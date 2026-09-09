@@ -1,78 +1,85 @@
-﻿// Holy Priest - WoW 12.0 enterprise rotation. Direct-cast healer with Holy
-// Word triplet (Serenity/Sanctify/Chastise) sped up by Heal/PoH/Smite casts.
-// Mastery (Echo of Light) proc-HoTs on direct heals. Spirit of Redemption
-// (20711) is a passive ghost-form on death — no rule needed.
+﻿// Holy Priest - WoW 12.1.0.69587 enterprise rotation. Direct-cast healer
+// built around Flash Heal / Prayer of Healing feeding the Holy Word
+// cooldowns (Serenity / Sanctify / Chastise), Prayer of Mending on the
+// tank, and Halo (Archon hero tree) for raid healing. Mastery (Echo of
+// Light 77489) proc-HoTs on direct heals - no rule needed. Heal (2060) and
+// Renew (139) are gone from the 12.1 kit: Flash Heal is both the spike heal
+// and the efficient filler (Improved Flash Heal / Surge of Light [R][M]).
 // Decision tree:
 //
 //   1) OOC rez:                Mass Resurrection / Resurrection
-//   2) Personal survival:      Desperate Prayer, Fade, PW: Shield self
-//   3) Dispel:                 Purify (Magic), Purify Disease (440006),
-//                              Mass Dispel
-//   4) Interrupt / CC:         Holy Word: Chastise, Psychic Scream,
-//                              Leap of Faith (peel)
-//   5) Hard panic:             Guardian Spirit (ally <=25%), Holy Word:
-//                              Salvation (4+ wiping), Divine Hymn (3+
-//                              <=50%), Power Word: Life (<=35%),
-//                              Vampiric Embrace
-//   6) Mana / burst CDs:       Symbol of Hope, Apotheosis, Power Infusion,
-//                              Premonition of Piety (talent), Empyreal
-//                              Blaze (talent)
-//   7) AoE heal:               Holy Word: Sanctify, Circle of Healing,
-//                              Prayer of Healing, Holy Nova, Halo, Divine Star
-//   8) Spike heal:             Holy Word: Serenity, Flash Heal, Binding Heal
-//   9) HoT maintenance:        Renew, Prayer of Mending on tank
-//  10) Filler:                 Heal (efficient mana)
-//  11) Offensive filler:       Smite / Holy Fire / SW:P when group topped
-//                              (also speeds up Holy Word CDs)
+//   2) Interrupt / CC / threat:Holy Word: Chastise ([M]), Psychic Scream
+//                              ([M]), Leap of Faith (peel), Fade
+//   3) Personal survival:      Desperate Prayer, PW: Shield self (only
+//                              until Prayer of Mending overrides it at L11)
+//   4) Dispel:                 Purify (Magic; + Disease with Improved
+//                              Purify), Mass Dispel
+//   5) Hard panic:             Guardian Spirit (ally <=25%), Divine Hymn
+//                              (3+ <=50%), Holy Word: Serenity (<=60%),
+//                              Apotheosis (Holy Word reset)
+//   6) Burst CD:               Power Infusion
+//   7) HoT maintenance:        Prayer of Mending on tank
+//   8) Spike heal:             Flash Heal (<=50%)
+//   9) AoE heal:               Holy Word: Sanctify (or Serenity with the
+//                              Ultimate Serenity passive), Prayer of
+//                              Healing, Holy Nova, Halo
+//  10) Filler:                 Flash Heal top-off (<=85%, mana-gated)
+//  11) Offensive filler:       Holy Fire / SW:P / Smite when group topped
+//                              (also feeds Holy Word CDR)
 //
-// ---- Validated spell IDs (WoW 12.0 SpellName.csv / SpellLevels.csv) ----
-//   17     Power Word: Shield        (L4 — self-absorb)
-//   139    Renew                     (HoT)
-//   527    Purify                    (L10 — Magic dispel)
-//   440006 Purify Disease            (L10 — Disease dispel)
-//   585    Smite                     (offensive filler / Holy Word CDR)
-//   589    Shadow Word: Pain         (DoT filler)
-//   596    Prayer of Healing
-//   2006   Resurrection
-//   2050   Holy Word: Serenity       (instant heal CD)
-//   2060   Heal                      (mana-efficient filler)
-//   2061   Flash Heal                (L3)
-//   6788   Weakened Soul             (PW:Shield re-cast debuff)
-//   8122   Psychic Scream
-//   10060  Power Infusion            (L58)
-//   13864  Power Word: Fortitude
-//   14914  Holy Fire                 (offensive filler / Holy Word CDR)
-//   15286  Vampiric Embrace          (L25 group lifelink)
-//   19236  Desperate Prayer
-//   20711  Spirit of Redemption      (PASSIVE — die in soul form; no rule)
-//   32375  Mass Dispel
-//   32546  Binding Heal              (heals self + target)
-//   33076  Prayer of Mending         (L11 bouncing HoT)
-//   34861  Holy Word: Sanctify       (raid heal CD)
-//   47788  Guardian Spirit           (ally panic CD)
-//   63733  Serendipity               (PASSIVE — Heal/Flash Heal speed up HW)
-//   64843  Divine Hymn               (raid CD)
-//   64901  Symbol of Hope            (mana regen)
-//   73325  Leap of Faith             (L49 friendly pull)
-//   88625  Holy Word: Chastise       (CC + damage)
-//   110744 Divine Star               (talent)
-//   120517 Halo                      (talent)
-//   132157 Holy Nova                 (modern AoE heal+dmg ID)
-//   200183 Apotheosis                (Holy Word CDR talent)
-//   204883 Circle of Healing         (L39 raid AoE)
-//   212036 Mass Resurrection         (L37 OOC)
-//   265202 Holy Word: Salvation      (L27 raid panic)
-//   372616 Empyreal Blaze            (talent — Holy Fire burst)
-//   373481 Power Word: Life          (instant heal <=35%)
-//   438733 Premonition of Piety      (talent — pre-emptive heal burst)
+// Server-side overrides (Unit::GetCastSpellInfo resolves OVERRIDE_ACTIONBAR
+// auras): Prayer of Mending (33076) overrides PW: Shield (17), Holy Fire
+// (14914 [R][M]) overrides SW: Pain (589), Ultimate Serenity (1246517
+// [R][M] passive) removes HW: Sanctify (34861), Purify overrides Purify
+// Disease. Each base rule is knows_spell-gated on the override so both the
+// talented and the untalented bot cast the right thing.
+//
+// ---- Validated spell IDs (WoW 12.1.0.69587 SpellName.csv / kit) ----
+//   17      Power Word: Shield       (L4 baseline - self absorb until PoM)
+//   527     Purify                   (spec L10 - Magic dispel)
+//   585     Smite                    (L1 baseline - offensive filler / CDR)
+//   586     Fade                     (class talent [R][M])
+//   589     Shadow Word: Pain        (L2 baseline - DoT filler until Holy Fire)
+//   596     Prayer of Healing        (spec talent [R][M])
+//   2006    Resurrection             (L10 baseline)
+//   2050    Holy Word: Serenity      (spec talent [R][M])
+//   2061    Flash Heal               (L3 baseline - spike heal + filler)
+//   8122    Psychic Scream           (class talent [M])
+//   10060   Power Infusion           (class talent [R][M])
+//   14914   Holy Fire                (class talent [R][M] - overrides SW:P)
+//   19236   Desperate Prayer         (class talent [R][M])
+//   32375   Mass Dispel              (class talent [R][M])
+//   33076   Prayer of Mending        (spec L11 - overrides PW: Shield)
+//   34861   Holy Word: Sanctify      (spec talent [R][M]; gone with Ult. Serenity)
+//   47788   Guardian Spirit          (spec talent [R][M])
+//   64843   Divine Hymn              (spec talent [R][M])
+//   73325   Leap of Faith            (class talent [R][M])
+//   88625   Holy Word: Chastise      (spec talent [M])
+//   120517  Halo                     (Archon hero talent [R][M] - Holy ring)
+//   132157  Holy Nova                (class talent [R][M])
+//   200183  Apotheosis               (spec talent [R][M])
+//   212036  Mass Resurrection        (spec L37 OOC)
+//   390632  Improved Purify          (PASSIVE gate - Purify removes Disease)
+//   1246517 Ultimate Serenity        (PASSIVE gate - Serenity AoE, no Sanctify)
 //
 // ---- Skipped spells (and why) ----
-//   - Serendipity (63733): passive proc speeding up Holy Word casts after
-//     Heal/Flash Heal — no active cast, no rule needed (Heal/Flash Heal
-//     are already in the priority list).
-//   - Spirit of Redemption (20711): passive death effect. The bot dies
-//     normally and the engine handles the soul-form aura — no APL rule.
-//   - Holy Nova legacy ID 20694 was older; modern player cast is 132157.
+//   - Heal (2060), Renew (139), Circle of Healing (204883), Symbol of Hope
+//     (64901), Holy Word: Salvation (265202), Binding Heal (32546), Power
+//     Word: Life (373481), Premonition of Piety (438733), Divine Star
+//     (110744): not learnable by Holy in 12.1.
+//   - Vampiric Embrace (15286): Shadow spec spell now.
+//   - Empyreal Blaze (372616 [M]): a PASSIVE in 12.1 ("Holy Word: Chastise
+//     makes your next Holy Fires instant") - not castable.
+//   - Purify Disease (440006): learned with Purify (527), which overrides
+//     it; disease removal exists only via Improved Purify (390632).
+//   - Weakened Soul (6788): nothing applies it in 12.1 - is_ready() gates
+//     the PW: Shield re-cast (7.5s category cooldown).
+//   - Echo of Light (77489), Spirit of Redemption (215769 PvP talent),
+//     Light of T'uure (208065), Light's Wrath (207946), Void Torrent
+//     (205065): passives / legacy Artifact rows with no learn level.
+//   - Angelic Feather (121536), Dominate Mind (205364), Mind Control (605),
+//     Shackle Horror (9484), Dispel Magic (528 [M]): positioning / niche.
+//   - Single-Button Assistant (1229376): the APL is the assistant.
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -87,34 +94,24 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
-constexpr uint32 FLASH_HEAL              = 2061;
-constexpr uint32 HEAL                    = 2060;
-constexpr uint32 RENEW                   = 139;
+// ---- Spell IDs (WoW 12.1.0.69587, validated) ----
+constexpr uint32 FLASH_HEAL              = 2061;         // spike heal AND efficient filler (Heal / Renew are gone)
 constexpr uint32 PRAYER_OF_HEALING       = 596;
-constexpr uint32 PRAYER_OF_MENDING       = 33076;
-constexpr uint32 CIRCLE_OF_HEALING       = 204883;
+constexpr uint32 PRAYER_OF_MENDING       = 33076;        // spec L11 - overrides PW: Shield
 constexpr uint32 HOLY_WORD_SERENITY      = 2050;
-constexpr uint32 HOLY_WORD_SANCTIFY      = 34861;
+constexpr uint32 HOLY_WORD_SANCTIFY      = 34861;        // removed by the Ultimate Serenity passive
+constexpr uint32 ULTIMATE_SERENITY       = 1246517;      // PASSIVE gate [R][M] - Serenity heals nearby allies, no Sanctify
 constexpr uint32 HOLY_WORD_CHASTISE      = 88625;
 constexpr uint32 DIVINE_HYMN             = 64843;
 constexpr uint32 GUARDIAN_SPIRIT         = 47788;
-constexpr uint32 SYMBOL_OF_HOPE          = 64901;
-constexpr uint32 HOLY_WORD_SALVATION     = 265202;
-constexpr uint32 PURIFY                  = 527;          // Magic dispel
-constexpr uint32 PURIFY_DISEASE          = 440006;       // Disease dispel — Holy/Disc
+constexpr uint32 PURIFY                  = 527;          // Magic dispel (+ Disease with Improved Purify)
+constexpr uint32 IMPROVED_PURIFY         = 390632;       // PASSIVE gate - Purify additionally removes Disease
 constexpr uint32 MASS_DISPEL             = 32375;
-constexpr uint32 BINDING_HEAL            = 32546;
-constexpr uint32 HOLY_NOVA               = 132157;       // modern player cast (legacy 20694 deprecated)
-constexpr uint32 POWER_WORD_LIFE         = 373481;
-constexpr uint32 APOTHEOSIS              = 200183;       // talent — Holy Word CDR + buff
-constexpr uint32 PREMONITION_OF_PIETY    = 438733;       // talent — pre-emptive heal burst (was wrongly 428930)
-constexpr uint32 EMPYREAL_BLAZE          = 372616;       // talent — Holy Fire burst (Holy)
+constexpr uint32 HOLY_NOVA               = 132157;       // class talent [R][M] - AoE heal + dmg
+constexpr uint32 APOTHEOSIS              = 200183;       // talent - Holy Word reset + buff
 constexpr uint32 POWER_INFUSION          = 10060;
-constexpr uint32 VAMPIRIC_EMBRACE        = 15286;
 constexpr uint32 DESPERATE_PRAYER        = 19236;
-constexpr uint32 POWER_WORD_SHIELD       = 17;           // self-absorb baseline
-constexpr uint32 WEAKENED_SOUL           = 6788;         // PW:Shield debuff — gates re-cast
+constexpr uint32 POWER_WORD_SHIELD       = 17;           // self-absorb until Prayer of Mending overrides it
 constexpr uint32 FADE                    = 586;
 constexpr uint32 LEAP_OF_FAITH           = 73325;
 constexpr uint32 PSYCHIC_SCREAM          = 8122;
@@ -123,10 +120,9 @@ constexpr uint32 MASS_RESURRECTION       = 212036;
 
 // Offensive filler
 constexpr uint32 SMITE                   = 585;
-constexpr uint32 HOLY_FIRE               = 14914;
+constexpr uint32 HOLY_FIRE               = 14914;        // class talent [R][M] - overrides SW: Pain
 constexpr uint32 SHADOW_WORD_PAIN        = 589;
-constexpr uint32 HALO                    = 120517;       // talent
-constexpr uint32 DIVINE_STAR             = 110744;       // talent
+constexpr uint32 HALO                    = 120517;       // Archon hero talent [R][M] - Holy variant
 
 // ---- Helpers ----
 struct HealTarget
@@ -170,12 +166,12 @@ int WoundedFriendCount(ApPredicateContext const& ctx, int below_pct)
 }
 
 // Mana-floor gate. <=15% mana = only emergencies (LowestFriendOrSelf
-// <=35% HP) — let active HoTs / Renew ticks carry the rest until the
-// bot regenerates. Without this, Holy Priest spammed Flash Heal into
-// OOM and had zero mana when the tank actually spiked (every spec
-// other than Holy already had this gate). Apply at the top of normal-
-// heal predicates ONLY — Guardian Spirit, HW: Salvation, Divine Hymn,
-// PW: Life are the emergency floor and stay unmodified.
+// <=35% HP) - let Prayer of Mending bounces / Echo of Light carry the
+// rest until the bot regenerates. Without this, Holy Priest spammed Flash
+// Heal into OOM and had zero mana when the tank actually spiked (every
+// spec other than Holy already had this gate). Apply at the top of normal-
+// heal predicates ONLY - Guardian Spirit, Divine Hymn, HW: Serenity are
+// the emergency floor and stay unmodified.
 bool InManaFloor(ApPredicateContext const& ctx)
 {
     return ctx.bot.max_power(0) > 0 && ctx.bot.power_pct(0) <= 15;
@@ -221,7 +217,7 @@ GroupMemberSummary const* OffensivePIBeneficiary(ApPredicateContext const& ctx)
 bool ShouldCancelHealForSwap(ApPredicateContext const& ctx)
 {
     return ShouldCancelHealForSwapImpl(ctx,
-        { HEAL, FLASH_HEAL, BINDING_HEAL, PRAYER_OF_HEALING });
+        { FLASH_HEAL, PRAYER_OF_HEALING });
 }
 
 // ---- OOC rez ----
@@ -271,40 +267,28 @@ bool ShouldFade(ApPredicateContext const& ctx)
 }
 void DoFade(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(FADE); }
 
-bool ShouldVampiricEmbrace(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(VAMPIRIC_EMBRACE)) return false;
-    if (!ctx.bot.is_ready(VAMPIRIC_EMBRACE)) return false;
-    return WoundedFriendCount(ctx, 75) >= 2;
-}
-void DoVampiricEmbrace(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(VAMPIRIC_EMBRACE); }
-
 // ---- Dispel ----
-// Purify dispatches to Purify (Magic) or Purify Disease based on what the
-// debuff actually is on the chosen target. We pick the spell at predicate
-// time so the target lookup matches the cast.
+// Purify (527) removes Magic; with the Improved Purify passive (390632) it
+// also removes Disease. Purify Disease (440006) is learned alongside but
+// always overridden by 527, so every friendly dispel goes through PURIFY.
 bool ShouldPurify(ApPredicateContext const& ctx)
 {
-    const bool can_magic   = ctx.bot.knows_spell(PURIFY)         && ctx.bot.is_ready(PURIFY);
-    const bool can_disease = ctx.bot.knows_spell(PURIFY_DISEASE) && ctx.bot.is_ready(PURIFY_DISEASE);
-    if (!can_magic && !can_disease) return false;
-    if (auto const* mg = ctx.group.dispel_candidate(DispelType::Magic);   mg && can_magic)   return true;
-    if (auto const* ds = ctx.group.dispel_candidate(DispelType::Disease); ds && can_disease) return true;
-    if (can_magic   && ctx.bot.self_dispellable(DispelType::Magic))   return true;
+    if (!ctx.bot.knows_spell(PURIFY) || !ctx.bot.is_ready(PURIFY)) return false;
+    const bool can_disease = ctx.bot.knows_spell(IMPROVED_PURIFY);
+    if (ctx.group.dispel_candidate(DispelType::Magic)) return true;
+    if (can_disease && ctx.group.dispel_candidate(DispelType::Disease)) return true;
+    if (ctx.bot.self_dispellable(DispelType::Magic)) return true;
     if (can_disease && ctx.bot.self_dispellable(DispelType::Disease)) return true;
     return false;
 }
 void DoPurify(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    const bool can_magic   = ctx.bot.knows_spell(PURIFY)         && ctx.bot.is_ready(PURIFY);
-    const bool can_disease = ctx.bot.knows_spell(PURIFY_DISEASE) && ctx.bot.is_ready(PURIFY_DISEASE);
-    if (can_magic)
-        if (auto const* mg = ctx.group.dispel_candidate(DispelType::Magic)) { e.cast(PURIFY, mg->guid); return; }
+    const bool can_disease = ctx.bot.knows_spell(IMPROVED_PURIFY);
+    if (auto const* mg = ctx.group.dispel_candidate(DispelType::Magic)) { e.cast(PURIFY, mg->guid); return; }
     if (can_disease)
-        if (auto const* ds = ctx.group.dispel_candidate(DispelType::Disease)) { e.cast(PURIFY_DISEASE, ds->guid); return; }
-    if (can_magic   && ctx.bot.self_dispellable(DispelType::Magic))   { e.cast(PURIFY,         ctx.bot.raw().guid); return; }
-    if (can_disease && ctx.bot.self_dispellable(DispelType::Disease)) { e.cast(PURIFY_DISEASE, ctx.bot.raw().guid); return; }
+        if (auto const* ds = ctx.group.dispel_candidate(DispelType::Disease)) { e.cast(PURIFY, ds->guid); return; }
+    if (ctx.bot.self_dispellable(DispelType::Magic)) { e.cast(PURIFY, ctx.bot.raw().guid); return; }
+    if (can_disease && ctx.bot.self_dispellable(DispelType::Disease)) { e.cast(PURIFY, ctx.bot.raw().guid); return; }
 }
 
 // CB-P1d: Mass Dispel is a GROUND-targeted AoE that strips Magic from allies
@@ -392,14 +376,6 @@ void DoLeapOfFaith(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Hard panic ----
-bool ShouldHolyWordSalvation(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(HOLY_WORD_SALVATION)) return false;
-    if (!ctx.bot.is_ready(HOLY_WORD_SALVATION)) return false;
-    return WoundedFriendCount(ctx, 50) >= 4;
-}
-void DoHolyWordSalvation(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(HOLY_WORD_SALVATION); }
-
 bool ShouldGuardianSpirit(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.knows_spell(GUARDIAN_SPIRIT)) return false;
@@ -419,29 +395,7 @@ bool ShouldDivineHymn(ApPredicateContext const& ctx)
 }
 void DoDivineHymn(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DIVINE_HYMN); }
 
-bool ShouldPowerWordLife(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(POWER_WORD_LIFE)) return false;
-    if (!ctx.bot.is_ready(POWER_WORD_LIFE)) return false;
-    return LowestFriendOrSelf(ctx).hp_pct <= 35;
-}
-void DoPowerWordLife(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(POWER_WORD_LIFE, LowestFriendOrSelf(ctx).guid);
-}
-
-// ---- Mana / burst CDs ----
-bool ShouldSymbolOfHope(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(SYMBOL_OF_HOPE)) return false;
-    if (!ctx.bot.is_ready(SYMBOL_OF_HOPE)) return false;
-    if (auto const* m = ctx.group.lowest_mana_caster())
-        if (m->max_mana > 0 && (m->mana * 100) / m->max_mana <= 35)
-            return true;
-    return ctx.bot.max_power(0) > 0 && ctx.bot.power_pct(0) <= 35;
-}
-void DoSymbolOfHope(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SYMBOL_OF_HOPE); }
-
+// ---- Burst CDs ----
 bool ShouldApotheosis(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
@@ -450,14 +404,6 @@ bool ShouldApotheosis(ApPredicateContext const& ctx)
     return WoundedFriendCount(ctx, 75) >= 3;
 }
 void DoApotheosis(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(APOTHEOSIS); }
-
-bool ShouldPremonitionOfPiety(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(PREMONITION_OF_PIETY)) return false;
-    if (!ctx.bot.is_ready(PREMONITION_OF_PIETY)) return false;
-    return WoundedFriendCount(ctx, 80) >= 2;
-}
-void DoPremonitionOfPiety(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(PREMONITION_OF_PIETY); }
 
 bool ShouldPowerInfusion(ApPredicateContext const& ctx)
 {
@@ -475,21 +421,13 @@ void DoPowerInfusion(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(POWER_INFUSION, ctx.bot.raw().guid);
 }
 
-bool ShouldEmpyrealBlaze(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTargetInline(ctx)) return false;
-    if (!ctx.bot.knows_spell(EMPYREAL_BLAZE)) return false;
-    return ctx.bot.is_ready(EMPYREAL_BLAZE);
-}
-void DoEmpyrealBlaze(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(EMPYREAL_BLAZE, ctx.bot.victim());
-}
-
 // ---- AoE heal ----
+// Holy Word: Sanctify is removed by the Ultimate Serenity passive ([R][M]);
+// the talented bot uses the Serenity AoE branch below instead.
 bool ShouldHolyWordSanctify(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.knows_spell(HOLY_WORD_SANCTIFY)) return false;
+    if (ctx.bot.knows_spell(ULTIMATE_SERENITY)) return false;
     if (!ctx.bot.is_ready(HOLY_WORD_SANCTIFY)) return false;
     return WoundedFriendCount(ctx, 70) >= 3;
 }
@@ -498,16 +436,18 @@ void DoHolyWordSanctify(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(HOLY_WORD_SANCTIFY, LowestFriendOrSelf(ctx).guid);
 }
 
-bool ShouldCircleOfHealing(ApPredicateContext const& ctx)
+// Ultimate Serenity branch: Serenity also heals nearby injured allies, so it
+// takes over the 3+ wounded raid-spike slot.
+bool ShouldHolyWordSerenityAoe(ApPredicateContext const& ctx)
 {
-    if (!ctx.bot.knows_spell(CIRCLE_OF_HEALING)) return false;
-    if (!ctx.bot.is_ready(CIRCLE_OF_HEALING)) return false;
-    if (InManaFloor(ctx) && LowestFriendOrSelf(ctx).hp_pct > 35) return false;
-    return WoundedFriendCount(ctx, 80) >= 3;
+    if (!ctx.bot.knows_spell(ULTIMATE_SERENITY)) return false;
+    if (!ctx.bot.knows_spell(HOLY_WORD_SERENITY)) return false;
+    if (!ctx.bot.is_ready(HOLY_WORD_SERENITY)) return false;
+    return WoundedFriendCount(ctx, 70) >= 3;
 }
-void DoCircleOfHealing(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoHolyWordSerenityAoe(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    e.cast(CIRCLE_OF_HEALING, LowestFriendOrSelf(ctx).guid);
+    e.cast(HOLY_WORD_SERENITY, LowestFriendOrSelf(ctx).guid);
 }
 
 bool ShouldPrayerOfHealing(ApPredicateContext const& ctx)
@@ -538,15 +478,6 @@ bool ShouldHaloHeal(ApPredicateContext const& ctx)
 }
 void DoHaloHeal(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(HALO); }
 
-bool ShouldDivineStar(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(DIVINE_STAR)) return false;
-    if (!ctx.bot.is_ready(DIVINE_STAR)) return false;
-    return WoundedFriendCount(ctx, 90) >= 2;
-}
-void DoDivineStar(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DIVINE_STAR); }
-
 // ---- Spike heal ----
 bool ShouldHolyWordSerenity(ApPredicateContext const& ctx)
 {
@@ -570,20 +501,6 @@ void DoFlashHeal(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(FLASH_HEAL, LowestFriendOrSelf(ctx).guid);
 }
 
-bool ShouldBindingHeal(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(BINDING_HEAL)) return false;
-    HealTarget t = LowestFriendOrSelf(ctx);
-    if (InManaFloor(ctx) && t.hp_pct > 35) return false;
-    // Binding Heal heals self + target — best when both bot AND another are
-    // wounded.
-    return t.hp_pct <= 65 && ctx.bot.hp_pct() <= 80 && t.guid != ctx.bot.raw().guid;
-}
-void DoBindingHeal(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(BINDING_HEAL, LowestFriendOrSelf(ctx).guid);
-}
-
 // ---- HoT maintenance ----
 bool ShouldPrayerOfMending(ApPredicateContext const& ctx)
 {
@@ -601,31 +518,21 @@ void DoPrayerOfMending(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(PRAYER_OF_MENDING, target);
 }
 
-bool ShouldRenew(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(RENEW)) return false;
-    HealTarget t = LowestFriendOrSelf(ctx);
-    if (t.hp_pct >= 95) return false;
-    AuraEntry const* a = ctx.bot.find_aura(RENEW, t.guid);
-    return !a || a->remaining.count() <= 3000;
-}
-void DoRenew(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(RENEW, LowestFriendOrSelf(ctx).guid);
-}
-
 // ---- Filler ----
-bool ShouldHeal(ApPredicateContext const& ctx)
+// Flash Heal top-off - Heal (2060) and Renew (139) are gone in 12.1, so
+// Flash Heal doubles as the efficient filler (Improved Flash Heal [R][M])
+// and drives the Serenity cooldown reduction. Mana-floor gated.
+bool ShouldFlashHealFiller(ApPredicateContext const& ctx)
 {
-    if (!ctx.bot.knows_spell(HEAL)) return false;
-    if (LowestFriendOrSelf(ctx).hp_pct > 90) return false;
+    if (!ctx.bot.knows_spell(FLASH_HEAL)) return false;
+    if (LowestFriendOrSelf(ctx).hp_pct > 85) return false;
     if (InManaFloor(ctx) && LowestFriendOrSelf(ctx).hp_pct > 35) return false;
-    if (ctx.bot.is_moving() && !ctx.bot.can_cast_while_moving(HEAL)) return false;
+    if (ctx.bot.is_moving() && !ctx.bot.can_cast_while_moving(FLASH_HEAL)) return false;
     return true;
 }
-void DoHeal(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoFlashHealFiller(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    e.cast(HEAL, LowestFriendOrSelf(ctx).guid);
+    e.cast(FLASH_HEAL, LowestFriendOrSelf(ctx).guid);
 }
 
 // ---- Offensive filler (group topped — drives Holy Word CDR) ----
@@ -641,11 +548,15 @@ void DoHolyFireFiller(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(HOLY_FIRE, ctx.bot.victim());
 }
 
+// SW: Pain filler - only for the untalented bot: the Holy Fire talent
+// ([R][M]) overrides SW: Pain, so casting 589 would resolve to Holy Fire
+// and fail against its 10s cooldown.
 bool ShouldShadowWordPainFiller(ApPredicateContext const& ctx)
 {
     if (!HasLiveTargetInline(ctx)) return false;
     if (!GroupTopped(ctx)) return false;
     if (!ctx.bot.knows_spell(SHADOW_WORD_PAIN)) return false;
+    if (ctx.bot.knows_spell(HOLY_FIRE)) return false;
     AuraEntry const* a = ctx.bot.find_aura(SHADOW_WORD_PAIN, ctx.bot.victim());
     return !a || a->remaining.count() <= 3000;
 }
@@ -669,21 +580,20 @@ void DoSmiteFiller(ApPredicateContext const& ctx, BotIntentEmitter& e)
 bool AlwaysAlive(ApPredicateContext const& ctx) { return ctx.bot.is_alive(); }
 void DoNothing(ApPredicateContext const&, BotIntentEmitter&) {}
 
-// Self Power Word: Shield — Holy's only non-talent damage-reduction CD on
-// self. Discipline has it on kRules; Holy previously omitted it, leaving
-// self-defense limited to Fade (threat dump) + Desperate Prayer (heal at
-// <=40%). PW:Shield absorbs ~25-30% max HP for 15s. Weakened Soul (debuff
-// 6788) prevents re-cast on the same target for 6s — gate on its absence.
-// Fires at <=55% with active fight + a nearby enemy.
+// Self Power Word: Shield - Holy's only non-talent damage-reduction CD on
+// self, and only until L11: Prayer of Mending (spec spell) OVERRIDES PW:
+// Shield, so once PoM is known casting 17 would resolve to PoM. PW: Shield
+// carries a 7.5s category cooldown in 12.1 (Weakened Soul is gone), which
+// is_ready() covers. Fires at <=55% with active fight + a nearby enemy.
 bool ShouldPowerWordShieldSelf(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
     if (!ctx.bot.knows_spell(POWER_WORD_SHIELD)) return false;
+    if (ctx.bot.knows_spell(PRAYER_OF_MENDING)) return false;
     if (!ctx.bot.is_ready(POWER_WORD_SHIELD)) return false;
     if (ctx.bot.hp_pct() > 55) return false;
     if (ctx.bot.enemies_within(40.0f) == 0) return false;
-    // Weakened Soul gate — can't re-shield self while debuff is up.
-    if (ctx.bot.find_aura(WEAKENED_SOUL, ctx.bot.raw().guid)) return false;
+    if (ctx.bot.find_aura(POWER_WORD_SHIELD, ctx.bot.raw().guid)) return false;
     return true;
 }
 void DoPowerWordShieldSelf(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -693,13 +603,15 @@ void DoPowerWordShieldSelf(ApPredicateContext const& ctx, BotIntentEmitter& e)
 
 // ---- Rule table (priority order) ----
 // Order follows the Holy decision tree: cast-swap first (so we can change
-// targets mid-cast), OOC rez, hard panic CDs (Guardian Spirit ally → Divine
-// Hymn raid → HW: Salvation → HW: Serenity instant → Apotheosis CD), then
-// PW: Shield self, Renew, Heal/Flash Heal, HW: Sanctify raid spike,
-// Prayer of Mending bouncing HoT, Circle of Healing AoE, and finally the
-// offensive filler that drives Holy Word CDR (Smite/Holy Fire/SW: Pain).
+// targets mid-cast), OOC rez, interrupt / CC / threat, personal survival,
+// dispels, hard panic CDs (Guardian Spirit ally -> Divine Hymn raid -> HW:
+// Serenity instant -> Apotheosis reset), Power Infusion, Prayer of Mending
+// bouncing HoT, Flash Heal spike, AoE heals (HW: Sanctify or the Ultimate
+// Serenity branch -> Prayer of Healing -> Holy Nova -> Halo), the Flash
+// Heal top-off filler, and finally the offensive filler that drives Holy
+// Word CDR (Holy Fire / SW: Pain / Smite).
 ApRule const kRules[] = {
-    // Cast-swap MUST be first in the priority list — if we don't
+    // Cast-swap MUST be first in the priority list - if we don't
     // cancel the in-flight cast immediately, lower rules can't change
     // target because is_casting blocks them.
     { ShouldCancelHealForSwap,   DoCancelHealForSwap,   "Cancel heal — swap to lower target" },
@@ -714,39 +626,30 @@ ApRule const kRules[] = {
     { ShouldDesperatePrayer,     DoDesperatePrayer,     "Desperate Prayer (<=40%)"       },
     { ShouldPowerWordShieldSelf, DoPowerWordShieldSelf, "PW: Shield self (<=55%)"        },
     // ---- Dispel ----
-    { ShouldPurify,              DoPurify,              "Purify / Purify Disease"        },
+    { ShouldPurify,              DoPurify,              "Purify (Magic / Disease)"       },
     { ShouldMassDispel,          DoMassDispel,          "Mass Dispel (raid)"             },
     // ---- Hard panic heals (ally life-savers, ordered by raw save power) ----
     { ShouldGuardianSpirit,      DoGuardianSpirit,      "Guardian Spirit (ally panic)"   },
     { ShouldDivineHymn,          DoDivineHymn,          "Divine Hymn (raid panic)"       },
-    { ShouldHolyWordSalvation,   DoHolyWordSalvation,   "HW: Salvation (4+ at <=50%)"    },
     { ShouldHolyWordSerenity,    DoHolyWordSerenity,    "HW: Serenity (instant <=60%)"   },
-    { ShouldApotheosis,          DoApotheosis,          "Apotheosis (Holy Word CDR)"     },
-    { ShouldPowerWordLife,       DoPowerWordLife,       "PW: Life (<=35%)"               },
-    { ShouldVampiricEmbrace,     DoVampiricEmbrace,     "Vampiric Embrace"               },
-    // ---- Mana / burst CDs ----
-    { ShouldSymbolOfHope,        DoSymbolOfHope,        "Symbol of Hope (mana)"          },
-    { ShouldPremonitionOfPiety,  DoPremonitionOfPiety,  "Premonition of Piety"           },
+    { ShouldApotheosis,          DoApotheosis,          "Apotheosis (Holy Word reset)"   },
+    // ---- Burst CD ----
     { ShouldPowerInfusion,       DoPowerInfusion,       "Power Infusion"                 },
     // ---- HoT maintenance ----
-    { ShouldRenew,               DoRenew,               "Renew (HoT refresh)"            },
     { ShouldPrayerOfMending,     DoPrayerOfMending,     "Prayer of Mending (tank)"       },
-    // ---- Spike heals ----
+    // ---- Spike heal ----
     { ShouldFlashHeal,           DoFlashHeal,           "Flash Heal (<=50%)"             },
-    { ShouldBindingHeal,         DoBindingHeal,         "Binding Heal (<=65% other)"     },
     // ---- AoE heals ----
     { ShouldHolyWordSanctify,    DoHolyWordSanctify,    "HW: Sanctify (raid spike)"      },
-    { ShouldCircleOfHealing,     DoCircleOfHealing,     "Circle of Healing (3+ at 80%)"  },
+    { ShouldHolyWordSerenityAoe, DoHolyWordSerenityAoe, "HW: Serenity (Ult. AoE)"        },
     { ShouldPrayerOfHealing,     DoPrayerOfHealing,     "Prayer of Healing (3+ at 80%)"  },
     { ShouldHolyNova,            DoHolyNova,            "Holy Nova (cleave heal+dmg)"    },
     { ShouldHaloHeal,            DoHaloHeal,            "Halo (raid heal)"               },
-    { ShouldDivineStar,          DoDivineStar,          "Divine Star (cleave heal)"      },
-    // ---- Mana-efficient filler ----
-    { ShouldHeal,                DoHeal,                "Heal (efficient filler)"        },
-    // ---- Offensive filler (group topped — drives Holy Word CDR) ----
-    { ShouldEmpyrealBlaze,       DoEmpyrealBlaze,       "Empyreal Blaze (HF burst)"      },
+    // ---- Efficient filler ----
+    { ShouldFlashHealFiller,     DoFlashHealFiller,     "Flash Heal (top-off <=85%)"     },
+    // ---- Offensive filler (group topped - drives Holy Word CDR) ----
     { ShouldHolyFireFiller,      DoHolyFireFiller,      "Holy Fire (filler / CDR)"       },
-    { ShouldShadowWordPainFiller,DoShadowWordPainFiller,"SW: Pain (filler / CDR)"        },
+    { ShouldShadowWordPainFiller,DoShadowWordPainFiller,"SW: Pain (filler, no HF)"       },
     { ShouldSmiteFiller,         DoSmiteFiller,         "Smite (filler / CDR)"           },
     { AlwaysAlive,               DoNothing,             "Idle"                           },
 };

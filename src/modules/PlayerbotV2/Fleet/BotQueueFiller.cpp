@@ -77,9 +77,9 @@ uint8 BracketMidpoint(uint8 bracket)
 {
     // bracket is the bracket "tag" used by BG queues: 0 for 10-19, 1 for 20-29...
     // For our purposes treat bracket as approximate floor of the player level / 10.
-    // Convert by midpoint: bracket=2 -> level 25, bracket=7 -> level 75, etc.
-    if (bracket >= 7) return 80;
-    return uint8(bracket * 10 + 15);
+    // Convert by midpoint: bracket=2 -> level 25, bracket=7 -> level 75, etc.,
+    // clamped to the realm cap (the top bracket is the single max-level band).
+    return uint8(std::min<int>(int(MaxPlayerLevel()), int(bracket) * 10 + 15));
 }
 
 } // anonymous
@@ -614,7 +614,7 @@ void BotQueueFiller::Fill(FillRequest const& req)
             const uint8 lvl_lo = (is_bg && req.bracket_min_level > 0)
                 ? req.bracket_min_level : uint8(std::max(1, int(target_level) - 3));
             const uint8 lvl_hi = (is_bg && req.bracket_max_level > 0)
-                ? req.bracket_max_level : uint8(std::min(80, int(target_level) + 3));
+                ? req.bracket_max_level : uint8(std::min(int(MaxPlayerLevel()), int(target_level) + 3));
             // totaltime>0 excludes the failed-login corpse pool (hygiene
             // sweeps those); the pool-account join excludes player alts.
             auto reuse_res = CharacterDatabase.PQuery(

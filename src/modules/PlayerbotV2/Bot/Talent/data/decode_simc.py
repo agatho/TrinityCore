@@ -1,30 +1,16 @@
 #!/usr/bin/env python3
-# Offline simc-loadout-string decoder.
+# Offline Blizzard-talent-import-string decoder (simc `talents=` encoding).
 #
-# Reads:
-#   - simc/midnight engine/dbc/generated/trait_data.inc  (download below)
-#   - SimcMidnight1Profiles.h (profile array embedded in PlayerbotV2 module)
+# Library used by gen_talent_seed.py (the driver that turns simc raid profiles
+# + method.gg guide builds into sql/playerbot_v2/00NN_talent_builds_*.sql).
 #
-# Walks each loadout string against simc's per-class node enumeration (the
-# same one parse_traits_hash uses) and emits sql/playerbot_v2/0004_simc_seed.sql
-# with INSERT statements that seed playerbot_v2_talent_build (context=1=Raid)
-# with one row per decoded spec.
+# Reads simc's engine/dbc/generated/trait_data.inc for the target client build
+# and walks each loadout string against simc's per-class node enumeration (the
+# same one parse_traits_hash uses), yielding (id_node, id_trait_node_entry, ranks)
+# triples that map 1:1 onto TraitConfig entries. Running it directly (legacy
+# `main`) is no longer the supported path; use gen_talent_seed.py.
 #
-# This runs OFFLINE so the V2 module's apply_talent_build path stays unchanged.
-# To refresh against a newer simc build / wow patch:
-#
-#   1. Re-fetch profiles (e.g., download MID2_*.simc when it ships) and
-#      regenerate SimcMidnight1Profiles.h from the talents= lines.
-#   2. Re-fetch trait_data.inc to this directory:
-#        curl -o trait_data.inc \
-#          https://raw.githubusercontent.com/simulationcraft/simc/midnight/engine/dbc/generated/trait_data.inc
-#   3. python decode_simc.py
-#
-# Known limitation: 6 specs (all Hunter, all DK) currently fail mid-walk
-# with "choice idx oob — bit stream desync from simc". Their rows are NOT
-# emitted. Root cause is a node-enumeration mismatch between this script
-# and simc's `generate_tree_nodes` for hero subtrees on those classes;
-# investigate when next refreshing.
+# Refresh procedure for a new WoW build: see README.md in this directory.
 
 import re
 import sys
@@ -118,6 +104,8 @@ def parse_trait_data(path):
             'id_spec':              [int(g[14]), int(g[15]), int(g[16]), int(g[17])],
             'id_sub_tree':          int(g[22]),
             'node_type':            int(g[23]),
+            'id_spell':            int(g[7]),
+            'id_override_spell':   int(g[9]),
             'name':                 g[13],
         })
     print(f'parsed {len(traits)} trait_data rows', file=sys.stderr)

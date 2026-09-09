@@ -1,99 +1,86 @@
-// Protection Paladin - WoW 12.0 enterprise rotation. Plate tank with Holy
-// Power as the active-mitigation resource (Shield of the Righteous), pull
-// + interrupt + cleave from Avenger's Shield, Consecration ground tick for
-// AoE threat, and Word of Glory as a Holy Power heal alternative.
+// Protection Paladin - WoW 12.1.0.69587 (Midnight) rotation. Plate tank
+// with Holy Power as the active-mitigation resource (Shield of the
+// Righteous), pull + interrupt + cleave from Avenger's Shield, Consecration
+// ground tick for AoE threat, Divine Toll for burst Holy Power, and Word of
+// Glory as the Holy Power self heal. Lightsmith hero tree adds Holy Bulwark
+// / Sacred Weapon armaments.
 //
 // Survival ladder: Lay on Hands (full heal panic) -> Divine Shield
-// (immunity bail) -> Ardent Defender (50% DR + cheat death) -> Guardian of
-// Ancient Kings (50% DR) -> Aegis of Light (talent, group ranged DR) ->
-// Word of Glory (HP self heal). Group utility: Blessing of Sacrifice,
-// Blessing of Protection, Blessing of Freedom, Aura Mastery (50% magic DR
-// group buff). Tank duties: Hand of Reckoning taunt, Rebuke interrupt,
-// Hammer of Justice fallback, Avenger's Shield for ranged silence.
+// (immunity bail) -> Word of Glory self -> Ardent Defender (cheat death)
+// -> Guardian of Ancient Kings (50% DR) -> Holy Bulwark (absorb) -> Eye of
+// Tyr (25% enemy damage DR). Group utility: Blessing of Sacrifice,
+// Blessing of Protection, Blessing of Freedom. Tank duties: Hand of
+// Reckoning taunt, Rebuke interrupt, Hammer of Justice fallback, Avenger's
+// Shield ranged silence.
 //
 // =================================================================
-// Validated IDs (cross-checked vs SpellName.csv + SpellLevels.csv,
-// Wago dump, WoW 12.0 client)
+// Validated spell IDs (WoW 12.1.0.69587, kit Apl_Paladin_Protection.md)
 // =================================================================
-//    31935 — Avenger's Shield
-//    53600 — Shield of the Righteous           (baseline)
-//   415091 — Shield of the Righteous           (Holy talent variant — not
-//                                                used by Prot; documented)
-//    53595 — Hammer of the Righteous
-//   204019 — Blessed Hammer                     (talent — replaces HotR)
-//    20271 — Judgment                            (baseline)
-//   275779 — Judgment                            (Prot spec variant; primary)
-//   315867 — Judgment                            (modern unified spec variant)
-//    26573 — Consecration                         (baseline)
-//   327980 — Consecration                         (Prot spec variant; primary)
-//   387174 — Eye of Tyr                            (talent — frontal cone fear)
-//    31850 — Ardent Defender
-//    86659 — Guardian of Ancient Kings
-//      633 — Lay on Hands
-//    24275 — Hammer of Wrath
-//    96231 — Rebuke
-//      853 — Hammer of Justice
-//    62124 — Hand of Reckoning
-//      642 — Divine Shield
-//      498 — Divine Protection                       (defensive 20% DR)
-//   353367 — Aegis of Light                          (talent — group DR
-//                                                       channel)
-//   358934 — Aegis of Light                          (talent rank/variant)
-//     6940 — Blessing of Sacrifice
-//     1022 — Blessing of Protection
-//     1044 — Blessing of Freedom
-//    31821 — Aura Mastery
-//      465 — Devotion Aura
-//   203538 — Blessing of Kings
-//    31884 — Avenging Wrath                          (classic)
-//   384376 — Avenging Wrath                          (modern spec variant)
-//   152262 — Seraphim                                  (talent)
-//   327193 — Moment of Glory                           (talent — AS reset)
-//    85673 — Word of Glory                              (baseline ID)
-//   315921 — Word of Glory                              (Prot spec variant —
-//                                                          self-heal flavour)
-//    25771 — Forbearance
-//    35395 — Crusader Strike                            (baseline)
-//   342348 — Crusader Strike                            (Prot/Ret spec
-//                                                          variant)
-//   105805 — Sanctuary                                    (PASSIVE — talent
-//                                                          mitigation aura;
-//                                                          not cast)
-//    25780 — Righteous Fury                               (PASSIVE — talent
-//                                                          threat aura;
-//                                                          not cast)
+//    31935 - Avenger's Shield             (spec talent [R])
+//    53600 - Shield of the Righteous      (baseline L2)
+//    53595 - Hammer of the Righteous      (spec talent, choice vs Blessed Hammer)
+//   204019 - Blessed Hammer               (spec talent [R]; replaces HotR)
+//   275779 - Judgment                     (Prot spec spell; overrides 20271)
+//    20271 - Judgment                     (baseline L3; pre-spec fallback)
+//    26573 - Consecration                 (baseline L6)
+//   209202 - Eye of Tyr                   (class baseline; was 387174)
+//    31850 - Ardent Defender              (spec talent [R])
+//    86659 - Guardian of Ancient Kings    (spec talent [R])
+//   432459 - Holy Bulwark                 (Lightsmith [R]; becomes Sacred Weapon)
+//   432472 - Sacred Weapon                (Lightsmith; other half of the armament)
+//      633 - Lay on Hands                 (class talent [R])
+//    24275 - Hammer of Wrath              (class baseline)
+//    96231 - Rebuke                       (class talent [R])
+//      853 - Hammer of Justice            (baseline L5)
+//    62124 - Hand of Reckoning            (baseline L9)
+//      642 - Divine Shield                (baseline L10)
+//     6940 - Blessing of Sacrifice        (class talent [R])
+//     1022 - Blessing of Protection       (class talent [R])
+//     1044 - Blessing of Freedom          (class talent [R])
+//      465 - Devotion Aura                (Auras of the Resolute [R])
+//    31884 - Avenging Wrath               (spec talent [R]; cast + buff aura)
+//   389539 - Sentinel                     (spec talent [M]; overrides Avenging Wrath)
+//   375576 - Divine Toll                  (class talent [R])
+//    85673 - Word of Glory                (baseline L7)
+//    25771 - Forbearance                  (debuff only - never cast)
 //
 // =================================================================
 // Skipped spells (and why)
 // =================================================================
-//   376996 — Seasoned Warhorse: mount, not a combat rotation spell.
-//   105805 — Sanctuary: passive talent (mitigation/threat aura); no cast
-//             surface.
-//    25780 — Righteous Fury: passive (legacy threat aura, persistent
-//             passive on modern Prot); not cast.
-//   415091 — Shield of the Righteous (Holy talent variant): Prot uses the
-//             baseline 53600. The 415091 ID is a Holy-specific talent
-//             that converts WoG into a SotR-like absorb.
-//   342348 — Crusader Strike (Prot variant): Prot's HP generator is
-//             Hammer of the Righteous / Blessed Hammer, not Crusader
-//             Strike. Documented but not in the rotation; if a future
-//             talent path brings CS back, wire here.
+//      498 - Divine Protection: Holy spec spell in 12.1; Prot cannot learn it.
+//   353367 / 358934 - Aegis of Light: not an active Prot talent in 12.1
+//             (only a passive of that name remains); no cast surface.
+//    31821 - Aura Mastery: Holy spec talent only in 12.1.
+//   203538 - Blessing of Kings / 152262 Seraphim: not in 12.1 SpellName.
+//   327193 - Moment of Glory: removed from the Prot tree in 12.1.
+//   384376 - Avenging Wrath rank passive, 327980 Consecration rank passive,
+//             315921 Word of Glory rank passive, 315867 Judgment passive:
+//             not castable - a multi-id pick that lists them first stalls
+//             the rule, so only the real cast ids are used.
+//   204018 - Blessing of Spellwarding [M]: shares the BoP cooldown; BoP
+//             covers the ally-save slot for both builds.
+//   213644 - Cleanse Toxins [M] / 115750 Blinding Light [M]: M+-only picks
+//             the default build does not own; not wired to keep the ladder
+//             readable.
+//   433568 - Rite of Sanctification: pre-pull weapon imbue, not combat.
+//    35395 - Crusader Strike: Prot generates HP with Blessed Hammer /
+//             Hammer of the Righteous; CS stays out of the ladder.
 //
 // =================================================================
 // Decision tree (top-down)
 // =================================================================
-//   0) Aura/buff maintenance: Devotion Aura, Blessing of Kings
+//   0) Aura maintenance:       Devotion Aura
 //   1) Survival ladder:        LoH -> DS -> WoG self -> Ardent Defender
-//                                -> GoAK -> Divine Protection -> Aegis
+//                                -> GoAK -> Holy Bulwark
 //   2) Tank duty:              Hand of Reckoning
 //   3) Interrupt:              Rebuke -> Hammer of Justice
-//   4) Group utility:          Aura Mastery, BoSac, BoP
-//   5) Major offensive CDs:    Avenging Wrath, Seraphim, Moment of Glory
-//   6) Active mitigation:      Shield of the Righteous (HP3)
-//   7) Threat/pull:            Avenger's Shield (opener + ranged silence)
-//   8) AoE:                    Eye of Tyr
-//   9) Damage:                 Judgment -> HoW -> Consecration -> HotR /
-//                                Blessed Hammer
+//   4) Freedom self:           rooted / snared
+//   5) Group utility:          BoSac, BoP
+//   6) Major offensive CDs:    Avenging Wrath / Sentinel, Divine Toll
+//   7) Active mitigation:      Shield of the Righteous (HP3)
+//   8) Threat/pull:            Avenger's Shield (opener + ranged silence)
+//   9) Damage:                 Judgment -> Eye of Tyr -> HoW -> Consecration
+//                                -> Blessed Hammer / HotR
 //  10) AutoAttack fallback
 
 #include "../ApRegistry.h"
@@ -109,43 +96,40 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
+// ---- Spell IDs (WoW 12.1.0.69587, validated against the kit) ----
 constexpr uint32 AVENGERS_SHIELD            = 31935;
 constexpr uint32 SHIELD_OF_THE_RIGHTEOUS    = 53600;
 constexpr uint32 HAMMER_OF_THE_RIGHTEOUS    = 53595;
-constexpr uint32 BLESSED_HAMMER             = 204019;     // talent — replaces HotR
-constexpr uint32 JUDGMENT_PROT              = 275779;     // Prot judgment variant (primary)
-constexpr uint32 JUDGMENT_UNIFIED           = 315867;     // modern unified spec variant
+constexpr uint32 BLESSED_HAMMER             = 204019;     // talent [R] - replaces HotR
+constexpr uint32 JUDGMENT_PROT              = 275779;     // Prot spec spell (overrides baseline)
 constexpr uint32 JUDGMENT_BASELINE          = 20271;
-constexpr uint32 CONSECRATION_PROT          = 327980;     // Prot spec variant
-constexpr uint32 CONSECRATION_BASELINE      = 26573;
-constexpr uint32 EYE_OF_TYR                 = 387174;
+constexpr uint32 CONSECRATION               = 26573;      // cast + ground aura
+constexpr uint32 EYE_OF_TYR                 = 209202;     // 12.1 id (was 387174)
 constexpr uint32 ARDENT_DEFENDER            = 31850;
 constexpr uint32 GUARDIAN_OF_ANCIENT_KINGS  = 86659;
+constexpr uint32 HOLY_BULWARK               = 432459;     // Lightsmith [R] - self absorb armament
+constexpr uint32 SACRED_WEAPON              = 432472;     // Lightsmith - Bulwark toggles into this
 constexpr uint32 LAY_ON_HANDS               = 633;
 constexpr uint32 HAMMER_OF_WRATH            = 24275;
 constexpr uint32 REBUKE                     = 96231;
 constexpr uint32 HAMMER_OF_JUSTICE          = 853;
 constexpr uint32 HAND_OF_RECKONING          = 62124;
 constexpr uint32 DIVINE_SHIELD              = 642;
-constexpr uint32 DIVINE_PROTECTION          = 498;        // 20% all-school DR
-constexpr uint32 AEGIS_OF_LIGHT_A           = 353367;     // talent — group DR channel
-constexpr uint32 AEGIS_OF_LIGHT_B           = 358934;     // talent variant
 constexpr uint32 BLESSING_OF_SACRIFICE      = 6940;
 constexpr uint32 BLESSING_OF_PROTECTION     = 1022;
 constexpr uint32 BLESSING_OF_FREEDOM        = 1044;
-constexpr uint32 AURA_MASTERY               = 31821;
 constexpr uint32 DEVOTION_AURA              = 465;
-constexpr uint32 BLESSING_OF_KINGS          = 203538;
-constexpr uint32 AVENGING_WRATH             = 31884;
-constexpr uint32 AVENGING_WRATH_MODERN      = 384376;     // Prot spec variant
-constexpr uint32 SERAPHIM                   = 152262;
-constexpr uint32 MOMENT_OF_GLORY            = 327193;     // talent — Avenger's Shield reset
+constexpr uint32 AVENGING_WRATH             = 31884;      // cast + buff aura
+constexpr uint32 SENTINEL                   = 389539;     // talent [M] - overrides Avenging Wrath
+constexpr uint32 DIVINE_TOLL                = 375576;     // class talent [R] - 5x Avenger's Shield
 constexpr uint32 WORD_OF_GLORY              = 85673;
-constexpr uint32 WORD_OF_GLORY_PROT         = 315921;     // Prot variant (self-heal flavour)
-constexpr uint32 FORBEARANCE                = 25771;
+constexpr uint32 FORBEARANCE                = 25771;      // debuff only
 
 constexpr uint8 POWER_HOLY_POWER_IDX = 9;
+
+// Mechanic ids (SharedDefines.h) for the Freedom self-cast.
+constexpr uint32 MECHANIC_ROOT_ID  = 7;
+constexpr uint32 MECHANIC_SNARE_ID = 11;
 
 // ---- Multi-ID helpers ----
 uint32 PickKnownAndReady(ApPredicateContext const& ctx, std::initializer_list<uint32> ids)
@@ -183,16 +167,6 @@ bool ShouldDevotionAura(ApPredicateContext const& ctx)
 }
 void DoDevotionAura(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DEVOTION_AURA); }
 
-bool ShouldKings(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(BLESSING_OF_KINGS)) return false;
-    return !ctx.bot.has_aura(BLESSING_OF_KINGS);
-}
-void DoKings(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(BLESSING_OF_KINGS, ctx.bot.raw().guid);
-}
-
 // ---- Survival ladder ----
 bool ShouldLayOnHands(ApPredicateContext const& ctx)
 {
@@ -217,7 +191,8 @@ bool ShouldDivineShield(ApPredicateContext const& ctx)
 }
 void DoDivineShield(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DIVINE_SHIELD); }
 
-// Word of Glory self heal — try the Prot spec variant first.
+// Word of Glory self heal (85673; the Prot "rank 2" 315921 is a passive
+// and must not be in the cast list).
 bool ShouldWordOfGlorySelf(ApPredicateContext const& ctx)
 {
     if (HolyPower(ctx) < 3) return false;
@@ -228,12 +203,11 @@ bool ShouldWordOfGlorySelf(ApPredicateContext const& ctx)
     // physical active-mitigation uptime to ~zero. Reserve WoG for real
     // spikes so SotR wins the Holy Power during normal tanking.
     if (ctx.bot.hp_pct() > 35) return false;
-    return PickKnownAndReady(ctx, { WORD_OF_GLORY_PROT, WORD_OF_GLORY }) != 0;
+    return ctx.bot.knows_spell(WORD_OF_GLORY) && ctx.bot.is_ready(WORD_OF_GLORY);
 }
 void DoWordOfGlorySelf(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    uint32 id = PickKnownAndReady(ctx, { WORD_OF_GLORY_PROT, WORD_OF_GLORY });
-    if (id) e.cast(id, ctx.bot.raw().guid);
+    e.cast(WORD_OF_GLORY, ctx.bot.raw().guid);
 }
 
 bool ShouldArdentDefender(ApPredicateContext const& ctx)
@@ -254,42 +228,35 @@ bool ShouldGuardianOfAncientKings(ApPredicateContext const& ctx)
 }
 void DoGuardianOfAncientKings(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(GUARDIAN_OF_ANCIENT_KINGS); }
 
-// Divine Protection — 20% all-school DR. Mid-tier defensive that
-// alternates with AD/GoAK so we always have *something* up under
-// pressure.
-bool ShouldDivineProtection(ApPredicateContext const& ctx)
+// Holy Bulwark (Lightsmith [R]) - self absorb armament; the button
+// toggles into Sacred Weapon after use, so both ids are candidates and
+// whichever is currently castable goes on the bot. Mid-tier defensive
+// that fills the gap when AD/GoAK are down.
+bool ShouldHolyArmament(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(DIVINE_PROTECTION)) return false;
-    if (!ctx.bot.is_ready(DIVINE_PROTECTION)) return false;
-    if (ctx.bot.has_aura(DIVINE_PROTECTION)) return false;
-    return ctx.bot.hp_pct() <= 60;
+    if (PickKnownAndReady(ctx, { HOLY_BULWARK, SACRED_WEAPON }) == 0) return false;
+    return ctx.bot.hp_pct() <= 75;
 }
-void DoDivineProtection(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DIVINE_PROTECTION); }
+void DoHolyArmament(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    uint32 id = PickKnownAndReady(ctx, { HOLY_BULWARK, SACRED_WEAPON });
+    if (id) e.cast(id, ctx.bot.raw().guid);
+}
 
-// Aegis of Light — talent: channelled 65% DR for the bot + allies in a
-// frontal cone. Heavy AoE damage save; gated on multiple wounded
-// allies to avoid wasting a 5-min CD on solo damage.
-bool ShouldAegisOfLight(ApPredicateContext const& ctx)
+// Blessing of Freedom on self when rooted / snared - a tank that cannot
+// reposition loses the pull.
+bool ShouldBlessingOfFreedom(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
-    if (PickKnownAndReady(ctx, { AEGIS_OF_LIGHT_A, AEGIS_OF_LIGHT_B }) == 0) return false;
-    int wounded = 0;
-    auto const* members = ctx.group.members();
-    if (members) {
-        for (auto const& m : *members) {
-            if (!m.online || m.max_hp <= 0 || m.hp <= 0) continue;
-            if ((m.hp * 100) / m.max_hp <= 60) ++wounded;
-        }
-    } else {
-        wounded = ctx.bot.hp_pct() <= 60 ? 1 : 0;
-    }
-    return wounded >= 2 && ctx.bot.hp_pct() <= 70;
+    if (!ctx.bot.knows_spell(BLESSING_OF_FREEDOM)) return false;
+    if (!ctx.bot.is_ready(BLESSING_OF_FREEDOM)) return false;
+    if (ctx.bot.has_aura(BLESSING_OF_FREEDOM)) return false;
+    return ctx.bot.has_mechanic(MECHANIC_ROOT_ID) || ctx.bot.has_mechanic(MECHANIC_SNARE_ID);
 }
-void DoAegisOfLight(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoBlessingOfFreedom(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    uint32 id = PickKnownAndReady(ctx, { AEGIS_OF_LIGHT_A, AEGIS_OF_LIGHT_B });
-    if (id) e.cast(id);
+    e.cast(BLESSING_OF_FREEDOM, ctx.bot.raw().guid);
 }
 
 // ---- Tank utility ----
@@ -338,15 +305,6 @@ void DoHammerOfJustice(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Group utility ----
-bool ShouldAuraMastery(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(AURA_MASTERY)) return false;
-    if (!ctx.bot.is_ready(AURA_MASTERY)) return false;
-    return BossLikeTargetEngaged(ctx) && ctx.bot.hp_pct() <= 70;
-}
-void DoAuraMastery(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(AURA_MASTERY); }
-
 bool ShouldBlessingOfSacrifice(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.knows_spell(BLESSING_OF_SACRIFICE)) return false;
@@ -382,35 +340,39 @@ void DoBlessingOfProtection(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Major offensive cooldowns ----
+// Avenging Wrath 31884 is overridden by Sentinel 389539 when that talent
+// is known ([M] build); cast whichever the bot actually has. 384376 is
+// only the rank passive and is never cast.
+uint32 WingsId(ApPredicateContext const& ctx)
+{
+    return ctx.bot.knows_spell(SENTINEL) ? SENTINEL : AVENGING_WRATH;
+}
+
 bool ShouldAvengingWrath(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (PickKnownAndReady(ctx, { AVENGING_WRATH_MODERN, AVENGING_WRATH }) == 0) return false;
+    const uint32 id = WingsId(ctx);
+    if (!ctx.bot.knows_spell(id) || !ctx.bot.is_ready(id)) return false;
     return BossLikeTargetEngaged(ctx) || ctx.bot.attackers_count() >= 3;
 }
 void DoAvengingWrath(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    uint32 id = PickKnownAndReady(ctx, { AVENGING_WRATH_MODERN, AVENGING_WRATH });
-    if (id) e.cast(id);
+    e.cast(WingsId(ctx));
 }
 
-bool ShouldSeraphim(ApPredicateContext const& ctx)
+// Divine Toll - Avenger's Shield on up to 5 enemies, each generating Holy
+// Power. Fire on a pull with 2+ attackers or when starved for HP.
+bool ShouldDivineToll(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SERAPHIM)) return false;
-    if (!ctx.bot.is_ready(SERAPHIM)) return false;
-    return HolyPower(ctx) >= 3;
+    if (!ctx.bot.knows_spell(DIVINE_TOLL)) return false;
+    if (!ctx.bot.is_ready(DIVINE_TOLL)) return false;
+    return ctx.bot.attackers_count() >= 2 || HolyPower(ctx) <= 1;
 }
-void DoSeraphim(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SERAPHIM); }
-
-bool ShouldMomentOfGlory(ApPredicateContext const& ctx)
+void DoDivineToll(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(MOMENT_OF_GLORY)) return false;
-    if (!ctx.bot.is_ready(MOMENT_OF_GLORY)) return false;
-    return ctx.bot.attackers_count() >= 3;
+    e.cast(DIVINE_TOLL, ctx.bot.victim());
 }
-void DoMomentOfGlory(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(MOMENT_OF_GLORY); }
 
 // ---- Active mitigation ----
 bool ShouldShieldOfTheRighteous(ApPredicateContext const& ctx)
@@ -434,15 +396,19 @@ void DoAvengersShield(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(AVENGERS_SHIELD, ctx.bot.victim());
 }
 
+// Eye of Tyr 209202 - AoE Holy damage + 25% less damage dealt to the
+// bot by every enemy hit for 9s. Cleave threat on 2+, or a defensive
+// when the tank is getting low even on a single target.
 bool ShouldEyeOfTyr(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(EYE_OF_TYR)) return false;
     if (!ctx.bot.is_ready(EYE_OF_TYR)) return false;
-    return ctx.bot.enemies_within(8.0f) >= 2;
+    return ctx.bot.enemies_within(8.0f) >= 2 || ctx.bot.hp_pct() <= 60;
 }
 void DoEyeOfTyr(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(EYE_OF_TYR); }
 
+// Hammer of Wrath: execute (<=20%) or any target during Wings.
 bool ShouldHammerOfWrath(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -452,40 +418,35 @@ bool ShouldHammerOfWrath(ApPredicateContext const& ctx)
     if (!t || t->max_hp <= 0 || t->hp <= 0) return false;
     return (t->hp * 100) / t->max_hp <= 20
         || ctx.bot.has_aura(AVENGING_WRATH)
-        || ctx.bot.has_aura(AVENGING_WRATH_MODERN);
+        || ctx.bot.has_aura(SENTINEL);
 }
 void DoHammerOfWrath(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(HAMMER_OF_WRATH, ctx.bot.victim());
 }
 
-// Judgment: Prot spec variant 275779 -> unified 315867 -> baseline 20271.
+// Judgment: Prot spec spell 275779 (overrides baseline) -> baseline 20271.
 bool ShouldJudgment(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    return PickKnownAndReady(ctx, { JUDGMENT_PROT, JUDGMENT_UNIFIED, JUDGMENT_BASELINE }) != 0;
+    return PickKnownAndReady(ctx, { JUDGMENT_PROT, JUDGMENT_BASELINE }) != 0;
 }
 void DoJudgment(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    uint32 id = PickKnownAndReady(ctx, { JUDGMENT_PROT, JUDGMENT_UNIFIED, JUDGMENT_BASELINE });
+    uint32 id = PickKnownAndReady(ctx, { JUDGMENT_PROT, JUDGMENT_BASELINE });
     if (id) e.cast(id, ctx.bot.victim());
 }
 
-// Consecration: Prot spec variant 327980 -> baseline 26573. Maintain
-// the ground tick by checking the *baseline* aura — both variants
-// apply the same player aura on cast (TC checks by spell-effect, not
-// spell-ID, but we keep the simple baseline-aura check for safety).
+// Consecration 26573 - maintain the ground tick (the 12.1 Prot "rank 3"
+// 327980 is a passive cooldown reduction, not a separate cast).
 bool ShouldConsecration(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
-    if (PickKnownAndReady(ctx, { CONSECRATION_PROT, CONSECRATION_BASELINE }) == 0) return false;
-    return !ctx.bot.has_aura(CONSECRATION_PROT) && !ctx.bot.has_aura(CONSECRATION_BASELINE);
+    if (!ctx.bot.knows_spell(CONSECRATION)) return false;
+    if (!ctx.bot.is_ready(CONSECRATION)) return false;
+    return !ctx.bot.has_aura(CONSECRATION);
 }
-void DoConsecration(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    uint32 id = PickKnownAndReady(ctx, { CONSECRATION_PROT, CONSECRATION_BASELINE });
-    if (id) e.cast(id);
-}
+void DoConsecration(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(CONSECRATION); }
 
 bool ShouldBlessedHammer(ApPredicateContext const& ctx)
 {
@@ -531,7 +492,6 @@ void DoAutoAttack(ApPredicateContext const& ctx, BotIntentEmitter& e)
 // mitigation + threat + AoE + filler).
 ApRule const kRules[] = {
     { ShouldDevotionAura,          DoDevotionAura,          "Devotion Aura"             },
-    { ShouldKings,                 DoKings,                 "Blessing of Kings"         },
     { ShouldLayOnHands,            DoLayOnHands,            "Lay on Hands (<=15%)"      },
     { ShouldDivineShield,          DoDivineShield,          "Divine Shield (panic)"     },
     { ShouldWordOfGlorySelf,       DoWordOfGlorySelf,       "Word of Glory (self heal)" },
@@ -540,18 +500,16 @@ ApRule const kRules[] = {
     { ShouldHammerOfJustice,       DoHammerOfJustice,       "Hammer of Justice (fb)"    },
     { ShouldArdentDefender,        DoArdentDefender,        "Ardent Defender (<=30%)"   },
     { ShouldGuardianOfAncientKings,DoGuardianOfAncientKings,"Guardian of Ancient Kings" },
-    { ShouldDivineProtection,      DoDivineProtection,      "Divine Protection (<=60%)" },
-    { ShouldAegisOfLight,          DoAegisOfLight,          "Aegis of Light"            },
-    { ShouldAuraMastery,           DoAuraMastery,           "Aura Mastery"              },
+    { ShouldHolyArmament,          DoHolyArmament,          "Holy Bulwark (<=75%)"      },
+    { ShouldBlessingOfFreedom,     DoBlessingOfFreedom,     "Blessing of Freedom (self)"},
     { ShouldBlessingOfSacrifice,   DoBlessingOfSacrifice,   "BoSac (low ally)"          },
     { ShouldBlessingOfProtection,  DoBlessingOfProtection,  "Blessing of Protection"    },
-    { ShouldAvengingWrath,         DoAvengingWrath,         "Avenging Wrath"            },
-    { ShouldSeraphim,              DoSeraphim,              "Seraphim"                  },
-    { ShouldMomentOfGlory,         DoMomentOfGlory,         "Moment of Glory"           },
+    { ShouldAvengingWrath,         DoAvengingWrath,         "Avenging Wrath / Sentinel" },
+    { ShouldDivineToll,            DoDivineToll,            "Divine Toll"               },
     { ShouldShieldOfTheRighteous,  DoShieldOfTheRighteous,  "Shield of the Righteous"   },
     { ShouldAvengersShield,        DoAvengersShield,        "Avenger's Shield"          },
     { ShouldJudgment,              DoJudgment,              "Judgment"                  },
-    { ShouldEyeOfTyr,              DoEyeOfTyr,              "Eye of Tyr (2+ AoE)"       },
+    { ShouldEyeOfTyr,              DoEyeOfTyr,              "Eye of Tyr (AoE / DR)"     },
     { ShouldHammerOfWrath,         DoHammerOfWrath,         "Hammer of Wrath"           },
     { ShouldConsecration,          DoConsecration,          "Consecration (maintain)"   },
     { ShouldBlessedHammer,         DoBlessedHammer,         "Blessed Hammer"            },

@@ -1,49 +1,57 @@
-﻿// Frost Death Knight - WoW 12.0 enterprise rotation. Two-handed melee DPS
-// with runes + runic power, Killing Machine proc spending on Obliterate,
-// Rime proc free Howling Blasts, Pillar of Frost burst window, Breath of
-// Sindragosa channel option, Remorseless Winter for AoE.
+﻿// Frost Death Knight - WoW 12.1.0.69587 (Midnight) enterprise rotation.
+// Melee DPS with runes + runic power, Killing Machine proc spending on
+// Obliterate (Frostscythe on packs), Rime proc free Howling Blasts, Pillar
+// of Frost burst window (Frozen Dominion makes Pillar summon Remorseless
+// Winter itself), Breath of Sindragosa 8s burst, Reaper's Mark hero active.
 //
-// Layered survival: Icebound Fortitude (30% DR) -> Anti-Magic Shell ->
-// Death Strike self-heal (Dark Succor proc = free + bigger heal) -> Lichborne.
-// Group utility: Raise Ally (combat rez), Anti-Magic Zone, Path of Frost.
+// Layered survival: Icebound Fortitude (30% DR) -> Death Pact -> Anti-Magic
+// Shell -> Death Strike self-heal (Dark Succor proc = free + bigger heal) ->
+// Lichborne. Group utility: Raise Ally (combat rez), Anti-Magic Zone.
 // CC: Mind Freeze, Asphyxiate (talent stun), Death Grip (peel/pull), Chains
-// of Ice (slow). Major CDs: Pillar of Frost, Empower Rune Weapon,
-// Frostwyrm's Fury, Breath of Sindragosa, Obliteration.
+// of Ice (slow). Major CDs: Pillar of Frost, Reaper's Mark, Breath of
+// Sindragosa, Frostwyrm's Fury, Empower Rune Weapon.
 //
-// ---- Validated spell IDs (wago.tools SpellName.csv + SpellLevels.csv, 2026-05) ----
-//   49143  Frost Strike
-//   49184  Howling Blast
-//   49020  Obliterate
-//   194913 Glacial Advance               (talent)
-//   196770 Remorseless Winter
-//   51271  Pillar of Frost
-//   152279 Breath of Sindragosa          (talent channel)
-//   279302 Frostwyrm's Fury              (3min)
-//   281238 Obliteration                  (talent — KM uptime burst)
-//   47568  Empower Rune Weapon
-//   57330  Horn of Winter                (talent — instant runes + RP)
-//   45524  Chains of Ice
-//   195621 Frost Fever                   (FIXED 2026-05: was 55095 which is the LEGACY id with no SpellLevels row; 195621 is BaseLevel 23 active)
-//   51128  Killing Machine               (proc buff)
-//   59057  Rime                          (FIXED 2026-05: was 59052 which is the LEGACY id with no SpellLevels row; 59057 is BaseLevel 21 active)
-//   178819 Dark Succor                   (added 2026-05 — L18 proc, makes next Death Strike free + 20% heal)
-//   47528  Mind Freeze
-//   108194 Asphyxiate                    (talent)
-//   49576  Death Grip
-//   61999  Raise Ally
-//   48792  Icebound Fortitude
-//   48707  Anti-Magic Shell
-//   51052  Anti-Magic Zone
-//   49039  Lichborne
-//   49998  Death Strike
+// ---- Validated spell IDs (WoW 12.1.0.69587 SpellName.csv / SkillLineAbility / trait data) ----
+//   49143   Frost Strike              (spec talent [R])
+//   49184   Howling Blast             (spec talent [R])
+//   49020   Obliterate                (spec talent [R])
+//   207230  Frostscythe               (spec talent [R] - frontal AoE, KM 4x crit)
+//   194913  Glacial Advance           (spec spell - AoE RP spender)
+//   196770  Remorseless Winter        (spec spell L19; not castable with Frozen Dominion)
+//   377226  Frozen Dominion           (passive talent [R] - Pillar summons RW, gates the RW rule)
+//   51271   Pillar of Frost           (spec talent [R], 45s CD / 12s)
+//   1249658 Breath of Sindragosa      (spec talent [R]; was 152279 - now 8s burst, 60 RP)
+//   279302  Frostwyrm's Fury          (spec talent [R], 90s CD)
+//   281238  Obliteration              (passive talent [R] - Frost Strike/HB grant KM during Pillar)
+//   47568   Empower Rune Weapon       (spec talent [R] - damage + RP + KM)
+//   439843  Reaper's Mark             (Deathbringer hero talent [R])
+//   46585   Raise Dead                (class talent [M] - 60s ghoul)
+//   45524   Chains of Ice             (baseline L13)
+//   195621  Frost Fever               (disease debuff, tracked on victim)
+//   51128   Killing Machine           (proc buff)
+//   59057   Rime                      (proc buff)
+//   178819  Dark Succor               (proc buff - next Death Strike free + heal)
+//   47528   Mind Freeze               (class talent [M])
+//   221562  Asphyxiate                (class talent; was 108194)
+//   49576   Death Grip                (baseline L5)
+//   61999   Raise Ally                (baseline L19)
+//   48792   Icebound Fortitude        (class talent [R])
+//   48743   Death Pact                (class talent [M] - 50% heal)
+//   48707   Anti-Magic Shell          (baseline L14)
+//   51052   Anti-Magic Zone           (class talent [M])
+//   49039   Lichborne                 (baseline L9)
+//   49998   Death Strike              (class talent [M])
 //
 // ---- Skipped (with reason) ----
-//   Might of the Frozen Wastes (81333)   — passive 2H damage bonus, not castable. Auto-applied
-//                                          by the spec when wielding a 2H weapon, no rotation choice.
-//   Frostwyrm Roar (8th Tier talent)     — too specialized for talent-blind rotation.
-//   Soul Reaper (343294)                 — execute talent, needs <35% HP gate. Deferred.
-//   Path of Frost (3714)                 — water-walking utility, out-of-combat.
-//   Runic Empowerment (81229) passive    — proc-only, no cast.
+//   Horn of Winter (57330)             - passive in 12.1 (triggers when all runes are spent); no cast.
+//   Exterminate (441378 -> 443564)     - passive: makes the next Obliterates free after Reaper's Mark
+//                                        explodes; the regular Obliterate rules consume it.
+//   Blinding Sleet (207167), Wraith Walk (212552), Control Undead (111673)
+//                                      - M+-only / movement / niche; not in the default build.
+//   Sindragosa's Fury (190778), Consumption (205223), Apocalypse (220143)
+//                                      - Legion artifact remnant rows in SkillLineAbility, not real 12.1 kit.
+//   Path of Frost (3714)               - water-walking utility, out-of-combat.
+//   Runeforging (53428) and runes      - out-of-combat weapon-enchant, not rotation.
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -56,28 +64,32 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
+// ---- Spell IDs (WoW 12.1.0.69587, validated) ----
 constexpr uint32 FROST_STRIKE          = 49143;
 constexpr uint32 HOWLING_BLAST         = 49184;
 constexpr uint32 OBLITERATE            = 49020;
-constexpr uint32 GLACIAL_ADVANCE       = 194913;     // talent — AoE spender
+constexpr uint32 FROSTSCYTHE           = 207230;     // talent — frontal AoE, 2 runes, KM -> 4x crit
+constexpr uint32 GLACIAL_ADVANCE       = 194913;     // spec spell — AoE RP spender
 constexpr uint32 REMORSELESS_WINTER    = 196770;
+constexpr uint32 FROZEN_DOMINION       = 377226;     // passive talent — Pillar of Frost summons RW itself
 constexpr uint32 PILLAR_OF_FROST       = 51271;
-constexpr uint32 BREATH_SINDRAGOSA     = 152279;     // talent burst channel
-constexpr uint32 FROSTWYRMS_FURY       = 279302;     // 3min CD
-constexpr uint32 OBLITERATION          = 281238;     // talent — KM uptime burst
+constexpr uint32 BREATH_SINDRAGOSA     = 1249658;    // talent — 8s burst, 60 RP (was 152279)
+constexpr uint32 FROSTWYRMS_FURY       = 279302;     // 90s CD
+constexpr uint32 OBLITERATION          = 281238;     // passive talent — FS/HB grant KM during Pillar
 constexpr uint32 EMPOWER_RUNE_WEAPON   = 47568;
-constexpr uint32 HORN_OF_WINTER        = 57330;      // talent — instant runes + RP
+constexpr uint32 REAPERS_MARK          = 439843;     // Deathbringer hero talent — 2 runes, 45s CD
+constexpr uint32 RAISE_DEAD            = 46585;      // class talent — 60s ghoul, 120s CD
 constexpr uint32 CHAINS_OF_ICE         = 45524;
-constexpr uint32 FROST_FEVER           = 195621;     // FIXED: legacy 55095 -> modern 195621 (BaseLevel 23, validated 2026-05)
+constexpr uint32 FROST_FEVER           = 195621;     // disease debuff tracked on the victim
 constexpr uint32 KILLING_MACHINE       = 51128;
-constexpr uint32 RIME                  = 59057;      // FIXED: legacy 59052 -> modern 59057 (BaseLevel 21, validated 2026-05)
-constexpr uint32 DARK_SUCCOR           = 178819;     // L18 — proc makes next Death Strike free + heal 20%
+constexpr uint32 RIME                  = 59057;      // proc buff — free Howling Blast
+constexpr uint32 DARK_SUCCOR           = 178819;     // proc makes next Death Strike free + heal 20%
 constexpr uint32 MIND_FREEZE           = 47528;
-constexpr uint32 ASPHYXIATE            = 108194;
+constexpr uint32 ASPHYXIATE            = 221562;     // 12.1 id (was 108194)
 constexpr uint32 DEATH_GRIP            = 49576;
 constexpr uint32 RAISE_ALLY            = 61999;
 constexpr uint32 ICEBOUND_FORTITUDE    = 48792;
+constexpr uint32 DEATH_PACT            = 48743;      // class talent — 50% heal, healing absorb after
 constexpr uint32 ANTI_MAGIC_SHELL      = 48707;
 constexpr uint32 ANTI_MAGIC_ZONE       = 51052;
 constexpr uint32 LICHBORNE             = 49039;
@@ -109,6 +121,18 @@ bool ShouldIceboundFortitude(ApPredicateContext const& ctx)
     return ctx.bot.hp_pct() <= 35;
 }
 void DoIceboundFortitude(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(ICEBOUND_FORTITUDE); }
+
+// Death Pact — big instant self-heal with a healing-absorb tail. Panic
+// button below IBF's threshold-ish band so a healer isn't wasting casts
+// into the absorb at moderate HP.
+bool ShouldDeathPact(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.in_combat()) return false;
+    if (!ctx.bot.knows_spell(DEATH_PACT)) return false;
+    if (!ctx.bot.is_ready(DEATH_PACT)) return false;
+    return ctx.bot.hp_pct() <= 35;
+}
+void DoDeathPact(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DEATH_PACT); }
 
 bool ShouldAntiMagicShell(ApPredicateContext const& ctx)
 {
@@ -157,6 +181,17 @@ bool ShouldDeathStrikeDarkSuccor(ApPredicateContext const& ctx)
     if (!ctx.bot.has_aura(DARK_SUCCOR)) return false;
     return ctx.bot.hp_pct() <= 85;
 }
+
+// Raise Dead — class talent (M+ build): 60s ghoul on a 120s CD. Keep one out
+// whenever we're fighting without a pet.
+bool ShouldRaiseDead(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.in_combat()) return false;
+    if (!ctx.bot.knows_spell(RAISE_DEAD)) return false;
+    if (ctx.bot.has_pet()) return false;
+    return ctx.bot.is_ready(RAISE_DEAD);
+}
+void DoRaiseDead(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(RAISE_DEAD); }
 
 // ---- Group utility ----
 bool ShouldRaiseAlly(ApPredicateContext const& ctx)
@@ -255,6 +290,20 @@ bool ShouldPillarOfFrost(ApPredicateContext const& ctx)
 }
 void DoPillarOfFrost(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(PILLAR_OF_FROST); }
 
+// Reaper's Mark — Deathbringer hero active (2 runes, 45s CD). Mark stacks
+// on every Frost/Shadow hit and explodes; Exterminate then makes the next
+// Obliterates free. Fire on cooldown, ideally inside Pillar.
+bool ShouldReapersMark(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(REAPERS_MARK)) return false;
+    return ctx.bot.is_ready(REAPERS_MARK);
+}
+void DoReapersMark(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(REAPERS_MARK, ctx.bot.victim());
+}
+
 bool ShouldFrostwyrmsFury(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -269,22 +318,15 @@ bool ShouldBreathSindragosa(ApPredicateContext const& ctx)
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(BREATH_SINDRAGOSA)) return false;
     if (!ctx.bot.is_ready(BREATH_SINDRAGOSA)) return false;
-    if (ctx.bot.power(POWER_RUNIC_POWER_IDX) < 50) return false;
-    return BossLikeTargetEngaged(ctx);
+    // 12.1 Breath is an 8s burst costing 60 RP up front (KM/Rime consumption
+    // extends it), not the old RP-drain channel.
+    if (ctx.bot.power(POWER_RUNIC_POWER_IDX) < 60) return false;
+    return BossLikeTargetEngaged(ctx) || ctx.bot.enemies_within(10.0f) >= 3;
 }
 void DoBreathSindragosa(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(BREATH_SINDRAGOSA, ctx.bot.victim());
 }
-
-bool ShouldObliterationCD(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(OBLITERATION)) return false;
-    if (!ctx.bot.is_ready(OBLITERATION)) return false;
-    return ctx.bot.has_aura(PILLAR_OF_FROST);
-}
-void DoObliterationCD(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(OBLITERATION); }
 
 bool ShouldEmpowerRuneWeapon(ApPredicateContext const& ctx)
 {
@@ -295,25 +337,35 @@ bool ShouldEmpowerRuneWeapon(ApPredicateContext const& ctx)
 }
 void DoEmpowerRuneWeapon(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(EMPOWER_RUNE_WEAPON); }
 
-bool ShouldHornOfWinter(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(HORN_OF_WINTER)) return false;
-    if (!ctx.bot.is_ready(HORN_OF_WINTER)) return false;
-    return ctx.bot.power(POWER_RUNIC_POWER_IDX) <= 50;
-}
-void DoHornOfWinter(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(HORN_OF_WINTER); }
-
 // ---- AoE ----
 bool ShouldRemorselessWinter(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(REMORSELESS_WINTER)) return false;
+    // Frozen Dominion (default build): Pillar of Frost summons Remorseless
+    // Winter itself and the button is removed from the bar — don't spend a
+    // rune trying to press it.
+    if (ctx.bot.knows_spell(FROZEN_DOMINION)) return false;
     if (!ctx.bot.is_ready(REMORSELESS_WINTER)) return false;
-    // Single-target value too: also generates Frost Fever via Frigid Executioner.
+    // Single-target value too (Gathering Storm / Frost Fever pressure).
     return true;
 }
 void DoRemorselessWinter(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(REMORSELESS_WINTER); }
+
+// Frostscythe — frontal cone for 2 runes; with Killing Machine it crits for
+// 4x, so on a pack it beats Obliterate for the proc. 8y reach.
+bool ShouldFrostscythe(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(FROSTSCYTHE)) return false;
+    if (!ctx.bot.is_ready(FROSTSCYTHE)) return false;
+    const size_t near = ctx.bot.enemies_within(8.0f);
+    return near >= 3 || (ctx.aoe_preference && near >= 2);
+}
+void DoFrostscythe(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(FROSTSCYTHE, ctx.bot.victim());
+}
 
 bool ShouldGlacialAdvance(ApPredicateContext const& ctx)
 {
@@ -356,6 +408,21 @@ bool ShouldObliterateProc(ApPredicateContext const& ctx)
 void DoObliterate(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(OBLITERATE, ctx.bot.victim());
+}
+
+// Obliteration (passive, default build): during Pillar of Frost every Frost
+// Strike / Howling Blast grants Killing Machine. So inside Pillar, whenever
+// KM is NOT up, a Frost Strike (35 RP) is the way to fish the next
+// guaranteed-crit Obliterate rather than pressing a plain Obliterate.
+bool ShouldFrostStrikeObliteration(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(OBLITERATION)) return false;
+    if (!ctx.bot.has_aura(PILLAR_OF_FROST)) return false;
+    if (ctx.bot.has_aura(KILLING_MACHINE)) return false;
+    if (!ctx.bot.knows_spell(FROST_STRIKE)) return false;
+    if (!ctx.bot.is_ready(FROST_STRIKE)) return false;
+    return ctx.bot.power(POWER_RUNIC_POWER_IDX) >= 35;
 }
 
 bool ShouldFrostStrike(ApPredicateContext const& ctx)
@@ -415,6 +482,7 @@ void DoAutoAttack(ApPredicateContext const& ctx, BotIntentEmitter& e)
 ApRule const kRules[] = {
     { ShouldRaiseAlly,            DoRaiseAlly,            "Raise Ally (battle rez)"   },
     { ShouldIceboundFortitude,    DoIceboundFortitude,    "Icebound Fortitude (<=35%)"},
+    { ShouldDeathPact,            DoDeathPact,            "Death Pact (<=35%)"        },
     { ShouldAntiMagicShell,       DoAntiMagicShell,       "AMS (incoming cast)"       },
     { ShouldLichborne,            DoLichborne,            "Lichborne"                 },
     { ShouldDeathStrikeDarkSuccor,DoDeathStrike,          "Death Strike (Dark Succor)"},
@@ -424,17 +492,19 @@ ApRule const kRules[] = {
     { ShouldDeathGrip,            DoDeathGrip,            "Death Grip (peel)"         },
     { ShouldChainsOfIce,          DoChainsOfIce,          "Chains of Ice"             },
     { ShouldAntiMagicZone,        DoAntiMagicZone,        "Anti-Magic Zone (boss)"    },
+    { ShouldRaiseDead,            DoRaiseDead,            "Raise Dead (ghoul)"        },
     { ShouldPillarOfFrost,        DoPillarOfFrost,        "Pillar of Frost"           },
-    { ShouldFrostwyrmsFury,       DoFrostwyrmsFury,       "Frostwyrm's Fury"          },
+    { ShouldReapersMark,          DoReapersMark,          "Reaper's Mark"             },
     { ShouldBreathSindragosa,     DoBreathSindragosa,     "Breath of Sindragosa"      },
-    { ShouldObliterationCD,       DoObliterationCD,       "Obliteration"              },
+    { ShouldFrostwyrmsFury,       DoFrostwyrmsFury,       "Frostwyrm's Fury"          },
     { ShouldEmpowerRuneWeapon,    DoEmpowerRuneWeapon,    "Empower Rune Weapon"       },
-    { ShouldHornOfWinter,         DoHornOfWinter,         "Horn of Winter"            },
     { ShouldRemorselessWinter,    DoRemorselessWinter,    "Remorseless Winter"        },
+    { ShouldFrostscythe,          DoFrostscythe,          "Frostscythe (3+ AoE)"      },
     { ShouldGlacialAdvance,       DoGlacialAdvance,       "Glacial Advance (2+ AoE)"  },
     { ShouldHowlingBlastFreeProc, DoHowlingBlast,         "Howling Blast (Rime)"      },
     { ShouldFrostFever,           DoHowlingBlast,         "Frost Fever (refresh)"     },
     { ShouldObliterateProc,       DoObliterate,           "Obliterate (KM proc)"      },
+    { ShouldFrostStrikeObliteration, DoFrostStrike,       "Frost Strike (Obliteration)"},
     { ShouldFrostStrike,          DoFrostStrike,          "Frost Strike (cap-spend)"  },
     { ShouldObliterate,           DoObliterate,           "Obliterate"                },
     { ShouldFrostStrikeFiller,    DoFrostStrike,          "Frost Strike (RP filler)"  },

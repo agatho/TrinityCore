@@ -1,73 +1,81 @@
-﻿// Discipline Priest - WoW 12.0 enterprise rotation. Atonement-driven healer:
-// damage dealt to enemies heals all targets carrying Atonement (the buff is
-// applied by PW:Shield / PW:Radiance / Power Word: Life). Decision tree:
+﻿// Discipline Priest - WoW 12.1.0.69587 enterprise rotation. Atonement-driven
+// healer: damage dealt to enemies heals every ally carrying Atonement (the
+// buff is applied by PW: Shield / PW: Radiance / Evangelism). Decision tree:
 //
-//   1) Battle rez / OOC rez:    Resurrection
+//   1) OOC rez:                 Mass Resurrection / Resurrection
 //   2) Hard panic peel:         Pain Suppression (ally <=30%), Power Word:
 //                               Barrier (3+ at <=50%), Desperate Prayer
-//                               (self <=40%), Power Word: Life (<=35%)
-//   3) Personal survival:       Fade, Vampiric Embrace
-//   4) Dispel:                  Purify (Magic), Purify Disease, Mass Dispel
-//   5) Interrupt / CC:          Silence, Psychic Scream, Leap of Faith (peel),
-//                               Power Infusion
-//   6) Big damage CDs:          Evangelism (extend all Atonement), Spirit
-//                               Shell (banked absorbs), Boon of the Ascended,
-//                               Ultimate Penitence (burst), Mindbender /
-//                               Shadowfiend, Rapture (free shields)
-//   7) Atonement application:   PW: Shield on tank/lowest (Weakened Soul
-//                               guarded), PW: Radiance pre-dmg (3+ wounded)
-//   8) Atonement extension:     Penance (heal+dmg cleave), Halo / Divine
-//                               Star, Mindgames
-//   9) Atonement damage rotor:  Schism, Shadow Word: Death (execute), Mind
-//                               Blast, Shadow Word: Pain refresh, Smite
-//                               filler
+//                               (self <=40%)
+//   3) Personal survival:       Leap of Faith (tank peel), Fade
+//   4) Dispel:                  Purify (Magic; + Disease with Improved
+//                               Purify), Mass Dispel
+//   5) CC:                      Psychic Scream (panic AoE fear)
+//   6) Big CDs:                 Evangelism (instant Radiance + next two
+//                               Radiances instant), Ultimate Penitence
+//                               (burst), Power Infusion
+//   7) Atonement application:   PW: Radiance (3+ wounded), PW: Shield on
+//                               tank / lowest
+//   8) Spike heal:              Penance (heal branch), Flash Heal, Plea
+//   9) Atonement damage rotor:  Holy Nova (3+ enemies), Penance (dmg),
+//                               Shadow Word: Death (execute), Mind Blast,
+//                               Shadow Word: Pain / Purge the Wicked
+//                               refresh, Smite filler
 //
-// ---- Validated spell IDs (WoW 12.0 SpellName.csv / SpellLevels.csv) ----
-//   17     Power Word: Shield       (L4)
-//   139    Renew                    (passive learn)
-//   527    Purify                   (L10; Magic dispel)
-//   440006 Purify Disease           (L10; Disease dispel — Disc/Holy)
-//   585    Smite
-//   589    Shadow Word: Pain
-//   2006   Resurrection
-//   6788   Weakened Soul            (PW:Shield re-cast debuff)
-//   8092   Mind Blast
-//   8122   Psychic Scream
-//   10060  Power Infusion           (L58)
-//   15286  Vampiric Embrace         (L25)
-//   15487  Silence                  (L26 — Shadow but trained pre-spec)
-//   19236  Desperate Prayer
-//   32375  Mass Dispel
-//   32379  Shadow Word: Death       (L14)
-//   34433  Shadowfiend
-//   47536  Rapture                  (L41)
-//   47540  Penance                  (L11 — channel heal/damage)
-//   62618  Power Word: Barrier
-//   73325  Leap of Faith            (L49)
-//   81749  Atonement                (buff applied by PW:Shield/Radiance/Life)
-//   109964 Spirit Shell             (talent — heals become absorbs)
-//   110744 Divine Star              (talent)
-//   120517 Halo                     (talent)
-//   194509 Power Word: Radiance     (raid Atonement applicator)
-//   200174 Mindbender               (talent replaces Shadowfiend)
-//   212036 Mass Resurrection        (L37 OOC)
-//   325013 Boon of the Ascended     (L48 talent — covenant-era burst CD)
-//   33206  Pain Suppression
-//   373481 Power Word: Life         (instant heal <=35% HP gate)
-//   375901 Mindgames                (talent — heal/dmg flip)
-//   421453 Ultimate Penitence       (talent — channeled burst Penance)
-//   424509 Schism                   (talent — damage amp + Atonement transfer)
+// Server-side overrides (Unit::GetCastSpellInfo resolves OVERRIDE_ACTIONBAR
+// auras) swap talent versions in when the bot casts the base id: SW: Pain
+// -> Purge the Wicked (1250218 [R]), Smite -> Void Blast while an Entropic
+// Rift is open (450405 [R][M]), Flash Heal -> Shadow Mend (1252217 [M]),
+// Purify Disease -> Purify. No extra rules are needed for those.
+//
+// ---- Validated spell IDs (WoW 12.1.0.69587 SpellName.csv / kit) ----
+//   17     Power Word: Shield       (L4 baseline; 7.5s category CD)
+//   527    Purify                   (spec L10; Magic dispel, overrides 440006)
+//   585    Smite                    (L1 baseline)
+//   586    Fade                     (class talent [R][M])
+//   589    Shadow Word: Pain        (L2 baseline)
+//   2006   Resurrection             (L10 baseline)
+//   2061   Flash Heal               (L3 baseline)
+//   8092   Mind Blast               (class talent [R][M])
+//   8122   Psychic Scream           (class talent [M])
+//   10060  Power Infusion           (class talent [R][M])
+//   19236  Desperate Prayer         (class talent [R][M])
+//   32375  Mass Dispel              (class talent [R][M])
+//   32379  Shadow Word: Death       (class talent [R][M])
+//   33206  Pain Suppression         (spec talent [R][M])
+//   47540  Penance                  (spec L11 - heal/dmg channel)
+//   62618  Power Word: Barrier      (spec talent - choice vs Ult. Penitence)
+//   73325  Leap of Faith            (class talent [R][M])
+//   81749  Atonement                (AURA - applied by Shield / Radiance)
+//   132157 Holy Nova                (class talent [R])
+//   194509 Power Word: Radiance     (spec talent [R][M])
+//   200829 Plea                     (spec L80 - cheap instant heal)
+//   204213 Purge the Wicked         (AURA - DoT applied when 1250218 taken)
+//   212036 Mass Resurrection        (spec L37 OOC)
+//   390632 Improved Purify          (PASSIVE gate - Purify removes Disease)
+//   421453 Ultimate Penitence       (spec talent [R][M])
+//   472433 Evangelism               (spec talent [R][M] - instant Radiance)
 //
 // ---- Skipped spells (and why) ----
-//   - Power Word: Solace (talent removed in 12.0; CSV has no player-cast row).
-//   - Mind Bomb (205369): removed from Discipline kit in modern WoW; Psychic
-//     Scream covers the AoE CC slot.
-//   - Premonition (Disc): the modern Premonition family is on Holy spec
-//     ("Premonition of Piety" 438733); Disc has no equivalent talent in
-//     12.0, so the old PREMONITION_SUNDERING placeholder (428933 = wrong —
-//     that ID is "Premonition of Insight") is removed entirely.
-//   - Evangelism (was 246287 → now 472433): kept as a knows_spell-gated CD;
-//     extends all Atonement durations by 6s.
+//   - Power Word: Life (373481), Schism (424509), Rapture (47536), Spirit
+//     Shell (109964), Boon of the Ascended (325013), Divine Star (110744),
+//     Mindgames (375901): not learnable by Discipline in 12.1.
+//   - Silence (15487), Vampiric Embrace (15286): Shadow spec spells now.
+//   - Halo (120517 / 120644): Holy (Archon) / Shadow hero talent; the Disc
+//     hero trees (Voidweaver / Oracle) have no active Halo.
+//   - Evangelism legacy row 246287: no longer exists in SpellName.
+//   - Shadowfiend (34433): PASSIVE in 12.1 ("SW: Death has a chance to
+//     summon a Shadowfiend"). Mindbender (1280137 [M]): PASSIVE
+//     ("Evangelism summons a Mindbender"). Neither is castable.
+//   - Purify Disease (440006): learned together with Purify (527), which
+//     overrides it, so the cast always resolves to Purify; disease removal
+//     exists only through Improved Purify (390632), which gates it here.
+//   - Weakened Soul (6788): nothing applies it in 12.1 - is_ready() on
+//     PW: Shield covers the category cooldown instead.
+//   - Light's Wrath (207946) / Light of T'uure (208065) / Void Torrent
+//     (205065): legacy Artifact rows in the baseline list, no learn level.
+//   - Angelic Feather (121536), Dominate Mind (205364), Mind Control (605),
+//     Shackle Horror (9484), Dispel Magic (528 [M]): positioning / niche.
+//   - Single-Button Assistant (1229376): the APL is the assistant.
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -82,41 +90,29 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
-constexpr uint32 PW_SHIELD              = 17;
-constexpr uint32 WEAKENED_SOUL          = 6788;       // PW:Shield cooldown debuff (~7.5s)
-constexpr uint32 PENANCE                = 47540;      // channel heal+damage (Disc base, same spell line as 197419)
+// ---- Spell IDs (WoW 12.1.0.69587, validated) ----
+constexpr uint32 PW_SHIELD              = 17;         // 7.5s category CD (Weakened Soul is gone)
+constexpr uint32 PENANCE                = 47540;      // channel heal+damage (Disc spec L11)
 constexpr uint32 PAIN_SUPPRESSION       = 33206;
 constexpr uint32 PW_RADIANCE            = 194509;
 constexpr uint32 PW_BARRIER             = 62618;
-constexpr uint32 PW_LIFE                = 373481;     // <=35% emergency heal
-constexpr uint32 SCHISM                 = 424509;     // talent — damage amp (modern 12.0 ID — was 214621 which is now "Mind Blast")
+constexpr uint32 FLASH_HEAL             = 2061;       // L3 baseline spike heal (Shadow Mend [M] upgrades it via override)
+constexpr uint32 PLEA                   = 200829;     // spec L80 - cheap instant heal
 constexpr uint32 SHADOW_WORD_PAIN_D     = 589;
-constexpr uint32 SHADOW_WORD_DEATH      = 32379;      // execute (L14 baseline)
+constexpr uint32 PURGE_THE_WICKED_DOT   = 204213;     // DoT applied instead of SW:P when Purge the Wicked (1250218 [R]) is taken
+constexpr uint32 SHADOW_WORD_DEATH      = 32379;      // execute (class talent)
 constexpr uint32 ATONEMENT              = 81749;
 constexpr uint32 MIND_BLAST             = 8092;
 constexpr uint32 SMITE                  = 585;
-constexpr uint32 RAPTURE                = 47536;
-constexpr uint32 SILENCE                = 15487;
-constexpr uint32 PURIFY                 = 527;        // Magic dispel (Priest baseline)
-constexpr uint32 PURIFY_DISEASE         = 440006;     // Disease dispel — Disc/Holy
+constexpr uint32 HOLY_NOVA              = 132157;     // class talent [R] - 12yd AoE dmg + heal
+constexpr uint32 PURIFY                 = 527;        // Magic dispel (spec L10; + Disease with Improved Purify)
+constexpr uint32 IMPROVED_PURIFY        = 390632;     // PASSIVE gate - Purify additionally removes Disease
 constexpr uint32 MASS_DISPEL            = 32375;      // group magic dispel + cleanses CC
-constexpr uint32 HALO                   = 120517;     // talent — outgoing ring of dmg+heal
-constexpr uint32 DIVINE_STAR            = 110744;     // talent
-constexpr uint32 MINDGAMES              = 375901;     // talent — heal/dmg flip
-// Evangelism: 472433 is the modern Disc talent ID, 246287 was the legacy
-// row. Both probed via knows_spell so older data builds still work.
-constexpr uint32 EVANGELISM             = 472433;
-constexpr uint32 EVANGELISM_LEGACY      = 246287;
-constexpr uint32 SPIRIT_SHELL           = 109964;     // talent — heals become absorbs
-constexpr uint32 BOON_OF_THE_ASCENDED   = 325013;     // covenant-talent burst CD (L48)
-constexpr uint32 ULTIMATE_PENITENCE     = 421453;     // talent — channeled burst penance
-constexpr uint32 MINDBENDER             = 200174;     // talent — pet
-constexpr uint32 SHADOWFIEND            = 34433;      // baseline — pet, mana return
+constexpr uint32 EVANGELISM             = 472433;     // instant Radiance + next 2 Radiances instant/cheap
+constexpr uint32 ULTIMATE_PENITENCE     = 421453;     // talent - channeled burst penance
 constexpr uint32 DESPERATE_PRAYER       = 19236;      // self heal CD
 constexpr uint32 FADE                   = 586;        // threat drop / temp DR talent
-constexpr uint32 VAMPIRIC_EMBRACE       = 15286;      // group lifelink CD
-constexpr uint32 POWER_INFUSION         = 10060;      // 25% haste, 20s
+constexpr uint32 POWER_INFUSION         = 10060;      // haste CD
 constexpr uint32 LEAP_OF_FAITH          = 73325;      // friendly pull / peel
 constexpr uint32 PSYCHIC_SCREAM         = 8122;       // AoE fear
 constexpr uint32 RESURRECTION           = 2006;
@@ -183,10 +179,11 @@ bool HasLiveTargetInline(ApPredicateContext const& ctx)
     return !ctx.bot.victim().IsEmpty();
 }
 
-// Skip Shield if target has Weakened Soul (PW:Shield will not stick).
-bool ShieldEligible(ApPredicateContext const& ctx, ObjectGuid g)
+// PW: Shield carries a 7.5s category cooldown in 12.1 (Weakened Soul no
+// longer exists) - is_ready() is the re-cast gate for every target.
+bool ShieldEligible(ApPredicateContext const& ctx)
 {
-    return !ctx.bot.has_aura(WEAKENED_SOUL, g);
+    return ctx.bot.is_ready(PW_SHIELD);
 }
 
 GroupMemberSummary const* OffensivePIBeneficiary(ApPredicateContext const& ctx)
@@ -254,40 +251,28 @@ bool ShouldFade(ApPredicateContext const& ctx)
 }
 void DoFade(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(FADE); }
 
-bool ShouldVampiricEmbrace(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(VAMPIRIC_EMBRACE)) return false;
-    if (!ctx.bot.is_ready(VAMPIRIC_EMBRACE)) return false;
-    return WoundedFriendCount(ctx, 75) >= 2;
-}
-void DoVampiricEmbrace(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(VAMPIRIC_EMBRACE); }
-
 // ---- Dispel ----
-// Purify casts the right spell for the right debuff type: Purify (527) for
-// Magic, Purify Disease (440006) for Disease. We pick the spell at predicate
-// time so the target lookup matches the dispel call exactly.
+// Purify (527) removes Magic; with the Improved Purify passive (390632) it
+// also removes Disease. Purify Disease (440006) is learned alongside but
+// always overridden by 527, so every friendly dispel goes through PURIFY.
 bool ShouldPurify(ApPredicateContext const& ctx)
 {
-    const bool can_magic   = ctx.bot.knows_spell(PURIFY)         && ctx.bot.is_ready(PURIFY);
-    const bool can_disease = ctx.bot.knows_spell(PURIFY_DISEASE) && ctx.bot.is_ready(PURIFY_DISEASE);
-    if (!can_magic && !can_disease) return false;
-    if (auto const* mg = ctx.group.dispel_candidate(DispelType::Magic);   mg && can_magic)   return true;
-    if (auto const* ds = ctx.group.dispel_candidate(DispelType::Disease); ds && can_disease) return true;
-    if (can_magic   && ctx.bot.self_dispellable(DispelType::Magic))   return true;
+    if (!ctx.bot.knows_spell(PURIFY) || !ctx.bot.is_ready(PURIFY)) return false;
+    const bool can_disease = ctx.bot.knows_spell(IMPROVED_PURIFY);
+    if (ctx.group.dispel_candidate(DispelType::Magic)) return true;
+    if (can_disease && ctx.group.dispel_candidate(DispelType::Disease)) return true;
+    if (ctx.bot.self_dispellable(DispelType::Magic)) return true;
     if (can_disease && ctx.bot.self_dispellable(DispelType::Disease)) return true;
     return false;
 }
 void DoPurify(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    const bool can_magic   = ctx.bot.knows_spell(PURIFY)         && ctx.bot.is_ready(PURIFY);
-    const bool can_disease = ctx.bot.knows_spell(PURIFY_DISEASE) && ctx.bot.is_ready(PURIFY_DISEASE);
-    if (can_magic)
-        if (auto const* mg = ctx.group.dispel_candidate(DispelType::Magic)) { e.cast(PURIFY, mg->guid); return; }
+    const bool can_disease = ctx.bot.knows_spell(IMPROVED_PURIFY);
+    if (auto const* mg = ctx.group.dispel_candidate(DispelType::Magic)) { e.cast(PURIFY, mg->guid); return; }
     if (can_disease)
-        if (auto const* ds = ctx.group.dispel_candidate(DispelType::Disease)) { e.cast(PURIFY_DISEASE, ds->guid); return; }
-    if (can_magic   && ctx.bot.self_dispellable(DispelType::Magic))   { e.cast(PURIFY,         ctx.bot.raw().guid); return; }
-    if (can_disease && ctx.bot.self_dispellable(DispelType::Disease)) { e.cast(PURIFY_DISEASE, ctx.bot.raw().guid); return; }
+        if (auto const* ds = ctx.group.dispel_candidate(DispelType::Disease)) { e.cast(PURIFY, ds->guid); return; }
+    if (ctx.bot.self_dispellable(DispelType::Magic)) { e.cast(PURIFY, ctx.bot.raw().guid); return; }
+    if (can_disease && ctx.bot.self_dispellable(DispelType::Disease)) { e.cast(PURIFY, ctx.bot.raw().guid); return; }
 }
 
 // CB-P1d (Discipline sibling of the Holy fix): Mass Dispel is a GROUND-targeted
@@ -330,23 +315,9 @@ void DoMassDispel(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast_at(MASS_DISPEL, cx, cy, cz);
 }
 
-// ---- Interrupt / CC ----
-bool ShouldSilence(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(SILENCE)) return false;
-    if (!ctx.bot.is_ready(SILENCE)) return false;
-    const bool pvp = ctx.pvp.in_battleground || ctx.pvp.in_arena;
-    if (pvp) return ctx.bot.kick_target(true, 30.0f) != nullptr;
-    auto const* c = ctx.bot.interruptible_caster();
-    return c && c->guid == ctx.bot.victim();
-}
-void DoSilence(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    const bool pvp = ctx.pvp.in_battleground || ctx.pvp.in_arena;
-    if (auto const* c = ctx.bot.kick_target(pvp, 30.0f))
-        e.cast(SILENCE, c->guid);
-}
-
+// ---- CC ----
+// Discipline has no interrupt in 12.1 (Silence is a Shadow spec spell);
+// Psychic Scream ([M] class talent) is the only emergency CC.
 bool ShouldPsychicScream(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
@@ -418,51 +389,22 @@ void DoPainSuppression(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(PAIN_SUPPRESSION, LowestFriendOrSelf(ctx).guid);
 }
 
-bool ShouldPowerWordLife(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(PW_LIFE)) return false;
-    if (!ctx.bot.is_ready(PW_LIFE)) return false;
-    return LowestFriendOrSelf(ctx).hp_pct <= 35;
-}
-void DoPowerWordLife(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(PW_LIFE, LowestFriendOrSelf(ctx).guid);
-}
-
-// ---- Big damage CDs ----
-// Evangelism: modern Disc talent ID is 472433; older data may carry 246287.
-// Probe both via knows_spell so the rotation works regardless of which row
-// the data build picked up.
+// ---- Big CDs ----
+// Evangelism (472433): 12.1 version is an instant Power Word: Radiance on
+// the target plus two instant, cheaper Radiances afterwards - the raid
+// Atonement opener. Needs a friendly target. The Mindbender [M] passive
+// (1280137) summons its pet off this cast.
 bool ShouldEvangelism(ApPredicateContext const& ctx)
 {
-    uint32 sid = 0;
-    if (ctx.bot.knows_spell(EVANGELISM)        && ctx.bot.is_ready(EVANGELISM))        sid = EVANGELISM;
-    else if (ctx.bot.knows_spell(EVANGELISM_LEGACY) && ctx.bot.is_ready(EVANGELISM_LEGACY)) sid = EVANGELISM_LEGACY;
-    if (sid == 0) return false;
+    if (!ctx.bot.in_combat()) return false;
+    if (!ctx.bot.knows_spell(EVANGELISM)) return false;
+    if (!ctx.bot.is_ready(EVANGELISM)) return false;
     return WoundedFriendCount(ctx, 80) >= 3;
 }
 void DoEvangelism(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    if (ctx.bot.knows_spell(EVANGELISM) && ctx.bot.is_ready(EVANGELISM)) { e.cast(EVANGELISM); return; }
-    e.cast(EVANGELISM_LEGACY);
+    e.cast(EVANGELISM, LowestFriendOrSelf(ctx).guid);
 }
-
-bool ShouldSpiritShell(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(SPIRIT_SHELL)) return false;
-    if (!ctx.bot.is_ready(SPIRIT_SHELL)) return false;
-    return WoundedFriendCount(ctx, 85) >= 2;
-}
-void DoSpiritShell(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SPIRIT_SHELL); }
-
-bool ShouldBoonOfTheAscended(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(BOON_OF_THE_ASCENDED)) return false;
-    if (!ctx.bot.is_ready(BOON_OF_THE_ASCENDED)) return false;
-    return BossLikeTargetEngaged(ctx) || WoundedFriendCount(ctx, 75) >= 2;
-}
-void DoBoonOfTheAscended(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BOON_OF_THE_ASCENDED); }
 
 bool ShouldUltimatePenitence(ApPredicateContext const& ctx)
 {
@@ -474,42 +416,6 @@ bool ShouldUltimatePenitence(ApPredicateContext const& ctx)
 void DoUltimatePenitence(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(ULTIMATE_PENITENCE, LowestFriendOrSelf(ctx).guid);
-}
-
-bool ShouldMindbender(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTargetInline(ctx)) return false;
-    if (!ctx.bot.knows_spell(MINDBENDER)) return false;
-    if (!ctx.bot.is_ready(MINDBENDER)) return false;
-    return ctx.bot.in_combat();
-}
-void DoMindbender(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(MINDBENDER, ctx.bot.victim());
-}
-
-bool ShouldShadowfiend(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTargetInline(ctx)) return false;
-    if (!ctx.bot.knows_spell(SHADOWFIEND)) return false;
-    if (!ctx.bot.is_ready(SHADOWFIEND)) return false;
-    if (ctx.bot.knows_spell(MINDBENDER)) return false;
-    return ctx.bot.in_combat();
-}
-void DoShadowfiend(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(SHADOWFIEND, ctx.bot.victim());
-}
-
-bool ShouldRapture(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(RAPTURE)) return false;
-    if (!ctx.bot.is_ready(RAPTURE)) return false;
-    return WoundedFriendCount(ctx, 70) >= 3;
-}
-void DoRapture(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(RAPTURE, LowestFriendOrSelf(ctx).guid);
 }
 
 // ---- Atonement application ----
@@ -529,7 +435,7 @@ bool ShouldShieldTankAtonement(ApPredicateContext const& ctx)
     if (!ctx.bot.knows_spell(PW_SHIELD)) return false;
     GroupMemberSummary const* tank = ctx.group.tank();
     if (!tank || !tank->online || tank->hp <= 0) return false;
-    if (!ShieldEligible(ctx, tank->guid)) return false;
+    if (!ShieldEligible(ctx)) return false;
     AuraEntry const* shield = ctx.bot.find_aura(PW_SHIELD, tank->guid);
     AuraEntry const* atone  = ctx.bot.find_aura(ATONEMENT, tank->guid);
     return !shield && (!atone || atone->remaining.count() <= 4000);
@@ -545,7 +451,7 @@ bool ShouldShield(ApPredicateContext const& ctx)
     if (!ctx.bot.knows_spell(PW_SHIELD)) return false;
     HealTarget t = LowestFriendOrSelf(ctx);
     if (t.hp_pct >= 95) return false;
-    if (!ShieldEligible(ctx, t.guid)) return false;
+    if (!ShieldEligible(ctx)) return false;
     AuraEntry const* shield = ctx.bot.find_aura(PW_SHIELD, t.guid);
     AuraEntry const* atone  = ctx.bot.find_aura(ATONEMENT, t.guid);
     return !shield && (!atone || atone->remaining.count() <= 4000);
@@ -572,45 +478,45 @@ void DoPenance(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(PENANCE, ctx.bot.victim());
 }
 
-bool ShouldHalo(ApPredicateContext const& ctx)
+// Flash Heal - direct spike heal when Penance is on cooldown or not enough.
+// With the Shadow Mend [M] passive the server casts the upgraded version.
+bool ShouldFlashHeal(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.knows_spell(FLASH_HEAL)) return false;
+    if (!ctx.bot.is_ready(FLASH_HEAL)) return false;
+    return LowestFriendOrSelf(ctx).hp_pct <= 50;
+}
+void DoFlashHeal(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(FLASH_HEAL, LowestFriendOrSelf(ctx).guid);
+}
+
+// Plea (spec L80) - cheap instant top-off; fires in the band above Flash
+// Heal so a moving priest still has a direct heal.
+bool ShouldPlea(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.knows_spell(PLEA)) return false;
+    if (!ctx.bot.is_ready(PLEA)) return false;
+    return LowestFriendOrSelf(ctx).hp_pct <= 60;
+}
+void DoPlea(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(PLEA, LowestFriendOrSelf(ctx).guid);
+}
+
+// Holy Nova (class talent [R]) - 12yd self-centred AoE damage + heal. With
+// 3+ enemies in reach (or the owner /aoe pin) it is the best Atonement
+// feed per GCD.
+bool ShouldHolyNova(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(HALO)) return false;
-    if (!ctx.bot.is_ready(HALO)) return false;
-    return WoundedFriendCount(ctx, 85) >= 2 || ctx.bot.attackers_count() >= 2;
+    if (!ctx.bot.knows_spell(HOLY_NOVA)) return false;
+    if (!ctx.bot.is_ready(HOLY_NOVA)) return false;
+    const size_t near = ctx.bot.enemies_within(12.0f);
+    if (ctx.aoe_preference && near >= 1) return true;
+    return near >= 3;
 }
-void DoHalo(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(HALO); }
-
-bool ShouldDivineStar(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(DIVINE_STAR)) return false;
-    if (!ctx.bot.is_ready(DIVINE_STAR)) return false;
-    return WoundedFriendCount(ctx, 90) >= 2 || ctx.bot.attackers_count() >= 2;
-}
-void DoDivineStar(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DIVINE_STAR); }
-
-bool ShouldMindgames(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTargetInline(ctx)) return false;
-    if (!ctx.bot.knows_spell(MINDGAMES)) return false;
-    return ctx.bot.is_ready(MINDGAMES);
-}
-void DoMindgames(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(MINDGAMES, ctx.bot.victim());
-}
-
-bool ShouldSchism(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTargetInline(ctx)) return false;
-    if (!ctx.bot.knows_spell(SCHISM)) return false;
-    return ctx.bot.is_ready(SCHISM);
-}
-void DoSchism(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(SCHISM, ctx.bot.victim());
-}
+void DoHolyNova(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(HOLY_NOVA); }
 
 bool ShouldShadowWordDeath(ApPredicateContext const& ctx)
 {
@@ -638,11 +544,16 @@ void DoMindBlast(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(MIND_BLAST, ctx.bot.victim());
 }
 
+// SW: Pain refresh. With Purge the Wicked ([R] passive 1250218) the server
+// swaps the cast for Purge the Wicked and the victim carries its own DoT
+// (204213) instead of 589 - check both so the talented bot does not
+// re-cast every tick.
 bool ShouldSWP(ApPredicateContext const& ctx)
 {
     if (!HasLiveTargetInline(ctx)) return false;
     if (!ctx.bot.knows_spell(SHADOW_WORD_PAIN_D)) return false;
     AuraEntry const* a = ctx.bot.find_aura(SHADOW_WORD_PAIN_D, ctx.bot.victim());
+    if (!a) a = ctx.bot.find_aura(PURGE_THE_WICKED_DOT, ctx.bot.victim());
     return !a || a->remaining.count() <= 3000;
 }
 void DoSWP(ApPredicateContext const& ctx, BotIntentEmitter& e)
@@ -665,61 +576,55 @@ void DoSmite(ApPredicateContext const& ctx, BotIntentEmitter& e)
 bool AlwaysAlive(ApPredicateContext const& ctx) { return ctx.bot.is_alive(); }
 void DoNothing(ApPredicateContext const&, BotIntentEmitter&) {}
 
-// Cast-swap shim — Disc's healing kit is mostly absorbs/Atonement
-// (very short or instant casts), so PENANCE (heal channel) is the
-// main spell long enough to be worth cancelling. See ApHealHelpers.h.
+// Cast-swap shim - Disc's healing kit is mostly absorbs/Atonement (very
+// short or instant casts); Penance (heal channel), Flash Heal and PW:
+// Radiance (2s) are the casts long enough to be worth cancelling. See
+// ApHealHelpers.h.
 bool ShouldCancelHealForSwap(ApPredicateContext const& ctx)
 {
-    return ShouldCancelHealForSwapImpl(ctx, { PENANCE });
+    return ShouldCancelHealForSwapImpl(ctx, { PENANCE, FLASH_HEAL, PW_RADIANCE });
 }
 
 // ---- Rule table (priority order top-down) ----
 // Order follows the Discipline decision tree in the header comment block:
-// emergencies first (cast-swap + OOC rez), hard panic (Pain Suppression →
-// PW: Barrier → Desperate Prayer → PW: Life), survival/threat, dispels,
-// interrupts/CC, group CDs, Atonement application (Shield + Radiance), then
-// the Atonement-feed damage rotor (Penance heal/dmg → SW:P → Smite).
+// emergencies first (cast-swap + OOC rez), hard panic (Pain Suppression ->
+// PW: Barrier -> Desperate Prayer), survival/threat, dispels, CC, big CDs
+// (Evangelism -> Ultimate Penitence -> Power Infusion), Atonement
+// application (Radiance + Shield), spike heals (Penance heal branch ->
+// Flash Heal -> Plea), then the Atonement-feed damage rotor (Holy Nova ->
+// SW: Death -> Mind Blast -> SW: Pain -> Smite).
 ApRule const kRules[] = {
     { ShouldCancelHealForSwap,   DoCancelHealForSwap,   "Cancel heal — swap to lower target" },
     { ShouldMassResurrection,    DoMassResurrection,    "Mass Resurrection (OOC)"        },
     { ShouldResurrection,        DoResurrection,        "Resurrection (OOC)"             },
-    // ---- Hard panic peels (highest priority — ally life-savers) ----
+    // ---- Hard panic peels (highest priority - ally life-savers) ----
     { ShouldPainSuppression,     DoPainSuppression,     "Pain Suppression (ally <=30%)"  },
     { ShouldPowerWordBarrier,    DoPowerWordBarrier,    "PW: Barrier (3+ at 50%)"        },
     { ShouldDesperatePrayer,     DoDesperatePrayer,     "Desperate Prayer (self <=40%)"  },
-    { ShouldPowerWordLife,       DoPowerWordLife,       "PW: Life (<=35%)"               },
     // ---- Threat / personal survival ----
     { ShouldLeapOfFaith,         DoLeapOfFaith,         "Leap of Faith (peel tank)"      },
     { ShouldFade,                DoFade,                "Fade (threat / DR)"             },
-    { ShouldVampiricEmbrace,     DoVampiricEmbrace,     "Vampiric Embrace"               },
     // ---- Dispel ----
-    { ShouldPurify,              DoPurify,              "Purify / Purify Disease"        },
+    { ShouldPurify,              DoPurify,              "Purify (Magic / Disease)"       },
     { ShouldMassDispel,          DoMassDispel,          "Mass Dispel (raid)"             },
-    // ---- Interrupt / CC ----
-    { ShouldSilence,             DoSilence,             "Silence (interrupt)"            },
+    // ---- CC ----
     { ShouldPsychicScream,       DoPsychicScream,       "Psychic Scream (panic AoE)"     },
     // ---- Big CDs ----
-    { ShouldRapture,             DoRapture,             "Rapture (free shields)"         },
-    { ShouldEvangelism,          DoEvangelism,          "Evangelism (extend Atone)"      },
-    { ShouldSpiritShell,         DoSpiritShell,         "Spirit Shell (banked absorbs)"  },
+    { ShouldEvangelism,          DoEvangelism,          "Evangelism (instant Radiance)"  },
     { ShouldUltimatePenitence,   DoUltimatePenitence,   "Ultimate Penitence (burst)"     },
-    { ShouldBoonOfTheAscended,   DoBoonOfTheAscended,   "Boon of the Ascended"           },
     { ShouldPowerInfusion,       DoPowerInfusion,       "Power Infusion (DPS)"           },
-    { ShouldMindbender,          DoMindbender,          "Mindbender"                     },
-    { ShouldShadowfiend,         DoShadowfiend,         "Shadowfiend"                    },
     // ---- Atonement application (PW: Shield = Atonement applicator) ----
     { ShouldRadiance,            DoRadiance,            "PW: Radiance (3+ at 90%)"       },
     { ShouldShieldTankAtonement, DoShieldTankAtonement, "PW: Shield (tank atonement)"    },
     { ShouldShield,              DoShield,              "PW: Shield (lowest atonement)"  },
     // ---- Spike heal + Atonement-feed damage rotor ----
     { ShouldPenance,             DoPenance,             "Penance (heal/dmg channel)"     },
-    { ShouldHalo,                DoHalo,                "Halo (AoE atone-feed)"          },
-    { ShouldDivineStar,          DoDivineStar,          "Divine Star (cleave)"           },
-    { ShouldMindgames,           DoMindgames,           "Mindgames"                      },
-    { ShouldSchism,              DoSchism,              "Schism (424509)"                },
+    { ShouldFlashHeal,           DoFlashHeal,           "Flash Heal (<=50%)"             },
+    { ShouldPlea,                DoPlea,                "Plea (<=60% instant)"           },
+    { ShouldHolyNova,            DoHolyNova,            "Holy Nova (3+ atone-feed)"      },
     { ShouldShadowWordDeath,     DoShadowWordDeath,     "SW: Death (<=20% execute)"      },
     { ShouldMindBlast,           DoMindBlast,           "Mind Blast"                     },
-    { ShouldSWP,                 DoSWP,                 "SW: Pain (refresh, DoT)"        },
+    { ShouldSWP,                 DoSWP,                 "SW: Pain / PtW (refresh)"       },
     { ShouldSmite,               DoSmite,               "Smite (atonement filler)"       },
     { AlwaysAlive,               DoNothing,             "Idle"                           },
 };

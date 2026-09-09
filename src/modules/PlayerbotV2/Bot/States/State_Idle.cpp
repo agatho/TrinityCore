@@ -803,7 +803,7 @@ bool MaintainContextTalents(BotSnapshotView const& s, BotAI& ai,
         ctx = 1;
     else if (raw.instance_ctx.is_in_dungeon)
         ctx = 2;
-    else if (s.level() < 80)  // pragmatic level cap proxy; tune to MAX_LEVEL
+    else if (s.level() < MaxPlayerLevel())  // below realm cap -> leveling context
         ctx = 4;
     else
         ctx = 0;

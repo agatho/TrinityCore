@@ -1,63 +1,61 @@
-﻿// Unholy Death Knight - WoW 12.0 enterprise rotation. Disease-driven melee
-// DPS with Festering Wound stacking, ghoul minion uptime, Army of the Dead /
-// Apocalypse burst, and multi-target Virulent Plague spread via Outbreak +
-// the BotSnapshotBuilder enemy outbound scan that already covers spec 252.
+﻿// Unholy Death Knight - WoW 12.1.0.69587 (Midnight) enterprise rotation.
+// Midnight removed Festering Wounds: Festering Strike now blights the weapon
+// so the next 2-3 Scourge Strikes each summon a Lesser Ghoul, Army of the
+// Dead empowers those ghouls into an "Orders" army, Putrefy summons and
+// detonates one, and Soul Reaper (<35%) consumes them. Diseases: Outbreak
+// applies Virulent Plague + Dread Plague; Death Coil / Epidemic extend both
+// and Dark Transformation (Eternal Agony); Sudden Doom procs cheap Coils.
 //
 // Layered survival: Icebound Fortitude (30% DR) -> Anti-Magic Shell (magic
 // absorb) -> Death Strike (self-heal via Runic Power, free + bigger heal on
-// Dark Succor proc) -> Lichborne (talent). Group utility: Raise Ally
-// (combat rez), Anti-Magic Zone (10s group magic soak), Death's Advance
-// (movement), Path of Frost. CC: Mind Freeze interrupt, Asphyxiate (talent
-// stun), Strangulate (talent silence), Death Grip (peel/pull). Major CDs:
-// Army of the Dead, Apocalypse, Dark Transformation, Summon Gargoyle,
-// Unholy Assault.
+// Dark Succor proc) -> Lichborne. Group utility: Raise Ally (combat rez),
+// Anti-Magic Zone (group magic soak). CC: Mind Freeze interrupt, Asphyxiate
+// (stun fallback), Death Grip (peel/pull). Major CDs: Army of the Dead,
+// Dark Transformation, Soul Reaper execute.
 //
-// ---- Validated spell IDs (wago.tools SpellName.csv + SpellLevels.csv, 2026-05) ----
-//   85948  Festering Strike
-//   197147 Festering Wound              (FIXED 2026-05: was 194310 which does NOT resolve in SpellName.csv;
-//                                        197147 is the actual debuff stack id, BaseLevel 1)
-//   55090  Scourge Strike
-//   207311 Clawing Shadows              (talent — replaces Scourge Strike)
-//   47541  Death Coil
-//   49998  Death Strike
-//   77575  Outbreak
-//   191587 Virulent Plague
-//   275699 Apocalypse
-//   42650  Army of the Dead
-//   325554 Dark Transformation          (FIXED 2026-05: was 63560 legacy with no SpellLevels row;
-//                                        325554 is BaseLevel 52, the modern pet-CD cast)
-//   207289 Unholy Assault               (talent)
-//   49206  Summon Gargoyle              (talent / replaced by Dark Arbiter row)
-//   81340  Sudden Doom                  (proc — free Death Coil)
-//   195621 Frost Fever                  (added 2026-05 — applied alongside Virulent Plague by Outbreak;
-//                                        tracked passively, not gated explicitly because Outbreak
-//                                        already maintains both diseases together)
-//   178819 Dark Succor                  (added 2026-05 — L18 proc, makes next Death Strike free + 20% heal)
-//   47528  Mind Freeze
-//   108194 Asphyxiate                   (talent)
-//   47476  Strangulate                  (talent)
-//   47482  Leap                         (pet ghoul ability — fallback interrupt)
-//   49576  Death Grip
-//   61999  Raise Ally
-//   48792  Icebound Fortitude
-//   48707  Anti-Magic Shell
-//   51052  Anti-Magic Zone
-//   49039  Lichborne                    (talent)
-//   43265  Death and Decay
-//   207317 Epidemic
-//   48265  Death's Advance
-//   46584  Raise Dead
+// ---- Validated spell IDs (WoW 12.1.0.69587 SpellName.csv / SkillLineAbility / trait data) ----
+//   85948   Festering Strike          (spec spell L10, overrides Rune Strike - 2 runes, blights weapon)
+//   1240994 Festering Strike buff     (blight: next Scourge Strikes summon a Lesser Ghoul)
+//   55090   Scourge Strike            (spec talent [R] - 1 rune, plagues erupt)
+//   47541   Death Coil                (baseline L2 - 30 RP)
+//   49998   Death Strike              (class talent [R])
+//   77575   Outbreak                  (spec talent [R] - Virulent + Dread Plague)
+//   191587  Virulent Plague           (disease debuff tracked on enemies)
+//   42650   Army of the Dead          (spec talent [R], 90s CD)
+//   1233448 Dark Transformation       (spec talent [R], 45s CD; was 325554 = Rank 2 passive)
+//   1247378 Putrefy                   (spec talent [R] - 1 rune, 40y, summon + detonate ghoul)
+//   343294  Soul Reaper               (spec talent [R] - execute <35%, 15s CD)
+//   81340   Sudden Doom proc          (buff from 49530 passive - cheap Death Coil / Epidemic)
+//   178819  Dark Succor               (proc buff - next Death Strike free + heal)
+//   433895  Vampiric Strike           (San'layn hero [R][M] - aura-driven override of Scourge Strike;
+//                                      NOT in the spellbook, so gated on the 433899 proc buff only)
+//   433899  Vampiric Strike proc      (buff granted by 433901 passive)
+//   47528   Mind Freeze               (class talent [R])
+//   221562  Asphyxiate                (class talent; was 108194)
+//   49576   Death Grip                (baseline L5)
+//   61999   Raise Ally                (baseline L19)
+//   48792   Icebound Fortitude        (class talent [R])
+//   48707   Anti-Magic Shell          (baseline L14)
+//   51052   Anti-Magic Zone           (class talent [R])
+//   49039   Lichborne                 (baseline L9)
+//   43265   Death and Decay           (baseline L3)
+//   207317  Epidemic                  (spec spell L18 - 30 RP AoE spender)
+//   46584   Raise Dead                (spec spell, overrides 46585 - permanent ghoul, 30s CD)
+//   46585   Raise Dead                (class talent [R] - fallback when the spec override is absent)
 //
 // ---- Skipped (with reason) ----
-//   Runic Corruption (51462)            — PASSIVE proc that speeds rune regen on Festering Wound
-//                                          consumption. Not castable; auto-engages from the rotation's
-//                                          Scourge/Clawing strikes. No rule needed.
-//   Lesser Ghoul (1255830)              — pet creature identity, not a player spell. Skipped per
-//                                          SpecializationSpells audit note.
-//   Soul Reaper (343294)                — execute-window talent, needs <35% HP gate. Deferred.
-//   Reanimation (210128)                — out-of-combat utility, not rotation.
-//   Festering Wound legacy id 194310    — does NOT resolve in modern SpellName.csv; replaced
-//                                          with the correct 197147 above.
+//   Festering Wound (197147)           - mechanic removed from Unholy in Midnight; no 12.1 ability
+//                                        applies or bursts wounds. Old wound-count gating deleted.
+//   Clawing Shadows (207311 -> 1241567) - passive in 12.1 (Scourge Strike damage + chain stacks);
+//                                        Scourge Strike stays the cast.
+//   Summon Gargoyle (49206 -> 1242147) - passive in 12.1 (Army of the Dead summons the Gargoyle).
+//   Apocalypse (275699 / 220143)       - talent gone; 220143 is a Legion artifact remnant row.
+//   Unholy Assault (207289), Strangulate (47476 PvP talent) - not learnable by Unholy in 12.1.
+//   Ghoul Leap (47482)                 - pet gap-closer, not an interrupt/stun; fallback rule removed.
+//   Runic Corruption (51462)           - passive, no cast.
+//   Wraith Walk (212552), Death's Advance (48265) - movement utility, not rotation.
+//   Dread Plague (1240996)             - host-limited (few targets); not gated to avoid Outbreak spam.
+//   Runeforging (53428) and runes      - out-of-combat weapon-enchant, not rotation.
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -70,39 +68,36 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
-constexpr uint32 FESTERING_STRIKE     = 85948;
-constexpr uint32 FESTERING_WOUND      = 197147;       // FIXED 2026-05: legacy 194310 does not exist in modern SpellName.csv; 197147 is the correct stack-tracked debuff
-constexpr uint32 SCOURGE_STRIKE       = 55090;
-constexpr uint32 CLAWING_SHADOWS      = 207311;       // talent — replaces Scourge Strike
+// ---- Spell IDs (WoW 12.1.0.69587, validated) ----
+constexpr uint32 FESTERING_STRIKE     = 85948;        // 2 runes — blights weapon (next Scourge Strikes summon ghouls)
+constexpr uint32 FESTERING_BLIGHT     = 1240994;      // buff from Festering Strike (stacks = ghoul-summoning Scourge Strikes left)
+constexpr uint32 SCOURGE_STRIKE       = 55090;        // 1 rune — plagues erupt, spreads Virulent Plague
 constexpr uint32 DEATH_COIL           = 47541;
 constexpr uint32 DEATH_STRIKE         = 49998;        // RP -> self heal
 constexpr uint32 OUTBREAK             = 77575;
 constexpr uint32 VIRULENT_PLAGUE      = 191587;
-constexpr uint32 APOCALYPSE           = 275699;
-constexpr uint32 ARMY_OF_THE_DEAD     = 42650;
-constexpr uint32 DARK_TRANSFORMATION  = 325554;       // FIXED 2026-05: legacy 63560 has no SpellLevels row; 325554 is the modern BaseLevel-52 pet CD
-constexpr uint32 UNHOLY_ASSAULT       = 207289;       // talent — burst CD
-constexpr uint32 SUMMON_GARGOYLE      = 49206;        // talent — replaced by Dark Arbiter line
-constexpr uint32 SUDDEN_DOOM          = 81340;
-constexpr uint32 RUNIC_CORRUPTION     = 51462;        // passive proc — speeds rune regen on FW consumption; NOT cast directly (kept for documentation)
-constexpr uint32 DARK_SUCCOR          = 178819;       // L18 — proc, next Death Strike free + 20% heal
+constexpr uint32 ARMY_OF_THE_DEAD     = 42650;        // 90s CD — empowers Lesser Ghouls into Orders
+constexpr uint32 DARK_TRANSFORMATION  = 1233448;      // 45s CD (was 325554 = Rank 2 passive)
+constexpr uint32 PUTREFY              = 1247378;      // 1 rune, 40y — summon a Lesser Ghoul that strikes + explodes
+constexpr uint32 SOUL_REAPER          = 343294;       // execute <35% — consumes Lesser Ghouls, 15s CD
+constexpr uint32 SUDDEN_DOOM          = 81340;        // proc buff — cheap Death Coil / Epidemic
+constexpr uint32 DARK_SUCCOR          = 178819;       // proc, next Death Strike free + 20% heal
+constexpr uint32 VAMPIRIC_STRIKE      = 433895;       // San'layn — aura override of Scourge Strike (never in spellbook)
+constexpr uint32 VAMPIRIC_STRIKE_BUFF = 433899;       // proc buff that swaps Scourge Strike -> Vampiric Strike
 constexpr uint32 MIND_FREEZE          = 47528;
-constexpr uint32 ASPHYXIATE           = 108194;       // talent — 5sec stun
-constexpr uint32 STRANGULATE          = 47476;        // talent — silence
-constexpr uint32 GHOUL_LEAP           = 47482;        // pet ghoul leap — 2sec stun fallback
+constexpr uint32 ASPHYXIATE           = 221562;       // 12.1 id (was 108194) — 5sec stun
 constexpr uint32 DEATH_GRIP           = 49576;        // pull / peel
 constexpr uint32 RAISE_ALLY           = 61999;
 constexpr uint32 ICEBOUND_FORTITUDE   = 48792;
 constexpr uint32 ANTI_MAGIC_SHELL     = 48707;
 constexpr uint32 ANTI_MAGIC_ZONE      = 51052;        // group magic soak
-constexpr uint32 LICHBORNE            = 49039;        // talent — undead self heal
+constexpr uint32 LICHBORNE            = 49039;        // undead self heal
 constexpr uint32 DEATH_AND_DECAY      = 43265;
 constexpr uint32 EPIDEMIC             = 207317;
-constexpr uint32 DEATHS_ADVANCE       = 48265;        // movement
-constexpr uint32 RAISE_DEAD           = 46584;        // permanent ghoul (talent)
+constexpr uint32 RAISE_DEAD           = 46584;        // spec override — permanent ghoul, 30s CD
+constexpr uint32 RAISE_DEAD_BASE      = 46585;        // class talent — 60s ghoul, fallback without the override
 
-// Runic Power index in WoW 12.0 power array.
+// Runic Power index in the power array.
 constexpr uint8 POWER_RUNIC_POWER_IDX = 6;
 
 bool HasLiveTarget(ApPredicateContext const& ctx)
@@ -120,12 +115,10 @@ bool BossLikeTargetEngaged(ApPredicateContext const& ctx)
     return false;
 }
 
-uint8 FesteringWoundStacks(ApPredicateContext const& ctx)
-{
-    return ctx.bot.aura_stacks(FESTERING_WOUND, ctx.bot.victim());
-}
-
 // ---- Pet maintenance ----
+// Raise Dead: the Unholy spec spell 46584 (permanent ghoul) overrides the
+// class talent 46585 (60s ghoul). Two-branch like Victory Rush / Impending
+// Victory so both the override and the plain talent bots keep a pet out.
 bool ShouldRaiseDead(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.knows_spell(RAISE_DEAD)) return false;
@@ -134,6 +127,16 @@ bool ShouldRaiseDead(ApPredicateContext const& ctx)
     return true;
 }
 void DoRaiseDead(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(RAISE_DEAD); }
+
+bool ShouldRaiseDeadBase(ApPredicateContext const& ctx)
+{
+    if (ctx.bot.knows_spell(RAISE_DEAD)) return false;
+    if (!ctx.bot.in_combat()) return false;
+    if (!ctx.bot.knows_spell(RAISE_DEAD_BASE)) return false;
+    if (ctx.bot.has_pet()) return false;
+    return ctx.bot.is_ready(RAISE_DEAD_BASE);
+}
+void DoRaiseDeadBase(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(RAISE_DEAD_BASE); }
 
 // ---- Survival ----
 bool ShouldIceboundFortitude(ApPredicateContext const& ctx)
@@ -222,25 +225,6 @@ void DoAntiMagicZone(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast_at(ANTI_MAGIC_ZONE, bx, by, bz);
 }
 
-// Pet ghoul Leap — fallback interrupt when bot's own Mind Freeze /
-// Asphyxiate / Strangulate are all on CD. Fired through PetCastSpellIntent
-// since the leap belongs to the ghoul's spellbook, not the DK's.
-bool ShouldGhoulLeap(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.has_pet()) return false;
-    if (ctx.bot.is_ready(MIND_FREEZE)) return false;
-    if (ctx.bot.is_ready(ASPHYXIATE)) return false;
-    if (ctx.bot.is_ready(STRANGULATE)) return false;
-    auto const* c = ctx.bot.interruptible_caster();
-    return c && c->guid == ctx.bot.victim();
-}
-void DoGhoulLeap(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (auto const* c = ctx.bot.interruptible_caster())
-        e.pet_cast(GHOUL_LEAP, c->guid);
-}
-
 // ---- Interrupt / CC ----
 bool ShouldMindFreeze(ApPredicateContext const& ctx)
 {
@@ -270,21 +254,6 @@ void DoAsphyxiate(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(ASPHYXIATE, c->guid);
 }
 
-bool ShouldStrangulate(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(STRANGULATE)) return false;
-    if (!ctx.bot.is_ready(STRANGULATE)) return false;
-    if (ctx.bot.is_ready(MIND_FREEZE)) return false;
-    if (ctx.bot.is_ready(ASPHYXIATE)) return false;
-    return ctx.bot.interruptible_caster() != nullptr;
-}
-void DoStrangulate(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    if (auto const* c = ctx.bot.interruptible_caster())
-        e.cast(STRANGULATE, c->guid);
-}
-
 bool ShouldDeathGrip(ApPredicateContext const& ctx)
 {
     if (!ctx.bot.knows_spell(DEATH_GRIP)) return false;
@@ -301,49 +270,32 @@ void DoDeathGrip(ApPredicateContext const& ctx, BotIntentEmitter& e)
 }
 
 // ---- Major offensive cooldowns ----
+// Army of the Dead (12.1): 90s CD, 30s window that turns every Lesser Ghoul
+// summon into an "Order" (cleave / strike / etc.). Short enough to use on
+// bosses and on any real pack, not just the 3-minute boss-only opener.
 bool ShouldArmyOfTheDead(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(ARMY_OF_THE_DEAD)) return false;
     if (!ctx.bot.is_ready(ARMY_OF_THE_DEAD)) return false;
-    return BossLikeTargetEngaged(ctx);
+    return BossLikeTargetEngaged(ctx) || ctx.bot.enemies_within(10.0f) >= 3;
 }
 void DoArmyOfTheDead(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(ARMY_OF_THE_DEAD); }
 
-bool ShouldUnholyAssault(ApPredicateContext const& ctx)
+// Soul Reaper — execute: only usable below 35% target HP, 15s CD, 1 rune;
+// consumes Lesser Ghouls for extra hits and amps disease/minion damage.
+bool ShouldSoulReaper(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(UNHOLY_ASSAULT)) return false;
-    if (!ctx.bot.is_ready(UNHOLY_ASSAULT)) return false;
-    return BossLikeTargetEngaged(ctx);
+    if (!ctx.bot.knows_spell(SOUL_REAPER)) return false;
+    if (!ctx.bot.is_ready(SOUL_REAPER)) return false;
+    NearbyUnit const* v = ctx.bot.victim_info();
+    if (!v || v->max_hp <= 0) return false;
+    return (int64_t(v->hp) * 100) < (int64_t(v->max_hp) * 35);
 }
-void DoUnholyAssault(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoSoulReaper(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    e.cast(UNHOLY_ASSAULT, ctx.bot.victim());
-}
-
-bool ShouldSummonGargoyle(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SUMMON_GARGOYLE)) return false;
-    if (!ctx.bot.is_ready(SUMMON_GARGOYLE)) return false;
-    return true;
-}
-void DoSummonGargoyle(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(SUMMON_GARGOYLE, ctx.bot.victim());
-}
-
-bool ShouldApocalypse(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(APOCALYPSE)) return false;
-    if (!ctx.bot.is_ready(APOCALYPSE)) return false;
-    return FesteringWoundStacks(ctx) >= 4;
-}
-void DoApocalypse(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(APOCALYPSE, ctx.bot.victim());
+    e.cast(SOUL_REAPER, ctx.bot.victim());
 }
 
 bool ShouldDarkTransformation(ApPredicateContext const& ctx)
@@ -412,6 +364,28 @@ void DoEpidemic(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(EPIDEMIC, ctx.bot.victim());
 }
 
+// Putrefy — 1 rune, 40y: a Lesser Ghoul strikes the target and explodes
+// on nearby enemies. Rune spender of choice on packs (explosion cleave +
+// an Order during Army), and the ranged filler when the victim is out of
+// melee reach instead of walking with runes banked.
+bool ShouldPutrefy(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(PUTREFY)) return false;
+    if (!ctx.bot.is_ready(PUTREFY)) return false;
+    const size_t near = ctx.bot.enemies_within(10.0f);
+    if (near >= 2 || ctx.aoe_preference) return true;
+    NearbyUnit const* v = ctx.bot.victim_info();
+    if (!v) return false;
+    float bx, by, bz; ctx.bot.position(bx, by, bz);
+    const float dx = v->x - bx, dy = v->y - by;
+    return (dx*dx + dy*dy) > 64.0f;   // >8y: out of melee, use the ranged summon
+}
+void DoPutrefy(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(PUTREFY, ctx.bot.victim());
+}
+
 // ---- Proc spend ----
 bool ShouldSuddenDoomCoil(ApPredicateContext const& ctx)
 {
@@ -424,42 +398,59 @@ void DoDeathCoil(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(DEATH_COIL, ctx.bot.victim());
 }
 
-// ---- Wound burst / build ----
-bool ShouldClawingShadows(ApPredicateContext const& ctx)
+// ---- Blight build / Scourge spend ----
+// Vampiric Strike — San'layn proc: Death Coil / Epidemic / Death Strike turn
+// the next Scourge Strike into Vampiric Strike (Shadow damage + % max-HP
+// heal + Essence of the Blood Queen haste). The override spell is granted
+// by the aura, not learned, so knows_spell/is_ready would never pass — gate
+// on the proc buff and cast the override id directly.
+bool ShouldVampiricStrike(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(CLAWING_SHADOWS)) return false;
-    if (!ctx.bot.is_ready(CLAWING_SHADOWS)) return false;
-    return FesteringWoundStacks(ctx) >= 1;
+    if (!ctx.bot.knows_spell(SCOURGE_STRIKE)) return false;
+    if (!ctx.bot.has_aura(VAMPIRIC_STRIKE_BUFF)) return false;
+    return !ctx.bot.gcd_active();
 }
-void DoClawingShadows(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoVampiricStrike(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    e.cast(CLAWING_SHADOWS, ctx.bot.victim());
+    e.cast(VAMPIRIC_STRIKE, ctx.bot.victim());
 }
 
-bool ShouldScourgeStrike(ApPredicateContext const& ctx)
+// Scourge Strike while the weapon is blighted: each strike summons a
+// Lesser Ghoul (the 12.1 damage engine) and erupts the plagues.
+bool ShouldScourgeStrikeBlighted(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (ctx.bot.knows_spell(CLAWING_SHADOWS)) return false;
     if (!ctx.bot.knows_spell(SCOURGE_STRIKE)) return false;
     if (!ctx.bot.is_ready(SCOURGE_STRIKE)) return false;
-    return FesteringWoundStacks(ctx) >= 1;
+    return ctx.bot.has_aura(FESTERING_BLIGHT);
 }
 void DoScourgeStrike(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(SCOURGE_STRIKE, ctx.bot.victim());
 }
 
+// Festering Strike (2 runes) re-blights the weapon once the charges are
+// spent. Without the buff, this is the rune priority.
 bool ShouldFesteringStrike(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(FESTERING_STRIKE)) return false;
     if (!ctx.bot.is_ready(FESTERING_STRIKE)) return false;
-    return FesteringWoundStacks(ctx) < 4;
+    return !ctx.bot.has_aura(FESTERING_BLIGHT);
 }
 void DoFesteringStrike(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(FESTERING_STRIKE, ctx.bot.victim());
+}
+
+// Plain Scourge Strike filler: only 1 rune available (Festering needs 2)
+// or the blight buff id does not resolve on this build — never sit on runes.
+bool ShouldScourgeStrike(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(SCOURGE_STRIKE)) return false;
+    return ctx.bot.is_ready(SCOURGE_STRIKE);
 }
 
 bool ShouldDeathCoilDump(ApPredicateContext const& ctx)
@@ -496,26 +487,25 @@ ApRule const kRules[] = {
     { ShouldDeathStrikeDarkSuccor, DoDeathStrike,   "Death Strike (Dark Succor)"   },
     { ShouldDeathStrike,       DoDeathStrike,       "Death Strike (<=70% heal)"    },
     { ShouldRaiseDead,         DoRaiseDead,         "Raise Dead (ghoul)"           },
+    { ShouldRaiseDeadBase,     DoRaiseDeadBase,     "Raise Dead (talent ghoul)"    },
     { ShouldMindFreeze,        DoMindFreeze,        "Mind Freeze (interrupt)"      },
     { ShouldAsphyxiate,        DoAsphyxiate,        "Asphyxiate (interrupt fb)"    },
-    { ShouldStrangulate,       DoStrangulate,       "Strangulate (silence fb)"     },
-    { ShouldGhoulLeap,         DoGhoulLeap,         "Ghoul Leap (interrupt fb)"    },
     { ShouldDeathGrip,         DoDeathGrip,         "Death Grip (peel)"            },
     { ShouldAntiMagicZone,     DoAntiMagicZone,     "Anti-Magic Zone (boss)"       },
     { ShouldArmyOfTheDead,     DoArmyOfTheDead,     "Army of the Dead"             },
-    { ShouldApocalypse,        DoApocalypse,        "Apocalypse (4+ wounds)"       },
     { ShouldDarkTransformation,DoDarkTransformation,"Dark Transformation"          },
-    { ShouldUnholyAssault,     DoUnholyAssault,     "Unholy Assault"               },
-    { ShouldSummonGargoyle,    DoSummonGargoyle,    "Summon Gargoyle"              },
+    { ShouldSoulReaper,        DoSoulReaper,        "Soul Reaper (<35% execute)"   },
     { ShouldOutbreakPrimary,   DoOutbreakPrimary,   "Outbreak (primary)"           },
     { ShouldOutbreakExpand,    DoOutbreakExpand,    "Outbreak (expand off-target)" },
     { ShouldDeathAndDecay,     DoDeathAndDecay,     "Death and Decay (3+ AoE)"     },
     { ShouldEpidemic,          DoEpidemic,          "Epidemic (3+ AoE)"            },
     { ShouldSuddenDoomCoil,    DoDeathCoil,         "Death Coil (Sudden Doom)"     },
-    { ShouldClawingShadows,    DoClawingShadows,    "Clawing Shadows (burst wound)"},
-    { ShouldScourgeStrike,     DoScourgeStrike,     "Scourge Strike (burst wound)" },
-    { ShouldFesteringStrike,   DoFesteringStrike,   "Festering Strike (build)"     },
+    { ShouldVampiricStrike,    DoVampiricStrike,    "Vampiric Strike (proc)"       },
+    { ShouldPutrefy,           DoPutrefy,           "Putrefy (AoE / ranged)"       },
+    { ShouldScourgeStrikeBlighted, DoScourgeStrike, "Scourge Strike (blighted)"    },
+    { ShouldFesteringStrike,   DoFesteringStrike,   "Festering Strike (blight)"    },
     { ShouldDeathCoilDump,     DoDeathCoil,         "Death Coil (RP dump)"         },
+    { ShouldScourgeStrike,     DoScourgeStrike,     "Scourge Strike (filler)"      },
     { AlwaysInCombat,          DoAutoAttack,        "Engage auto attack"           },
 };
 

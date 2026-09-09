@@ -1,48 +1,55 @@
-﻿// Blood Death Knight - WoW 12.0 enterprise rotation. Tank with Bone Shield
-// active mitigation, Death Strike self-heal driven by Runic Power, Heart
-// Strike for rune dump and threat. Major CDs layered: Dancing Rune Weapon
-// (parry burst + cleave), Vampiric Blood (HP buff + healing), Tombstone
-// (talent — RP burst + absorb), Bonestorm (talent — AoE channel + heal),
-// Lichborne (undead self heal), Anti-Magic Zone (group magic soak), Asphyxiate.
+﻿// Blood Death Knight - WoW 12.1.0.69587 (Midnight) enterprise rotation. Tank
+// with Bone Shield active mitigation, Death Strike self-heal driven by Runic
+// Power, Heart Strike for rune dump and threat. Major CDs layered: Dancing
+// Rune Weapon (parry burst + cleave), Vampiric Blood (HP buff + healing),
+// Reaper's Mark (Deathbringer hero burst), Consumption (talent - DR window +
+// Blood Plague burst), Lichborne (undead self heal), Anti-Magic Zone (group
+// magic soak), Asphyxiate / Blinding Sleet CC, Raise Dead ghoul.
 //
-// Survival ladder: Vampiric Blood -> Anti-Magic Shell -> Icebound Fortitude
-// -> Rune Tap -> Death Strike. Tank duties: Dark Command taunt, Mind Freeze
-// interrupt, Death Grip pull, Death and Decay zone for AoE threat.
+// Survival ladder: Icebound Fortitude -> Vampiric Blood -> Anti-Magic Shell
+// -> Lichborne -> Blinding Sleet (swarmed) -> Death Strike. Tank duties: Dark
+// Command taunt, Mind Freeze interrupt, Death Grip pull, Gorefiend's Grasp,
+// Death and Decay zone for AoE threat.
 //
-// ---- Validated spell IDs (wago.tools SpellName.csv, 2026-05) ----
-//   49998  Death Strike
-//   195182 Marrowrend
-//   206930 Heart Strike
-//   50842  Blood Boil
-//   194679 Rune Tap
-//   55233  Vampiric Blood
-//   49028  Dancing Rune Weapon
-//   194844 Bonestorm                 (talent)
-//   219809 Tombstone                 (talent)
-//   195181 Bone Shield               (buff debuff stack tracker)
-//   195292 Death's Caress            (L23 ranged opener — added 2026-05 from SpecializationSpells audit)
-//   195621 Frost Fever               (debuff DK keeps up via Death's Caress/Blood Plague — added 2026-05)
-//   47528  Mind Freeze
-//   56222  Dark Command
-//   108194 Asphyxiate
-//   49576  Death Grip
-//   61999  Raise Ally
-//   48792  Icebound Fortitude
-//   48707  Anti-Magic Shell
-//   51052  Anti-Magic Zone
-//   49039  Lichborne
-//   43265  Death and Decay
-//   274156 Consumption               (talent)
-//   206931 Blooddrinker              (talent)
-//   108199 Gorefiend's Grasp
+// ---- Validated spell IDs (WoW 12.1.0.69587 SpellName.csv / SkillLineAbility / trait data) ----
+//   49998   Death Strike              (class talent [R])
+//   195182  Marrowrend                (spec talent [R])
+//   206930  Heart Strike              (spec talent [R])
+//   50842   Blood Boil                (spec talent [R])
+//   55233   Vampiric Blood            (spec talent [R])
+//   49028   Dancing Rune Weapon       (spec talent [R])
+//   1263824 Consumption               (spec talent, not in default build; was 274156)
+//   195181  Bone Shield               (buff stack tracker)
+//   195292  Death's Caress            (spec spell L23 - ranged opener / disease)
+//   195621  Frost Fever               (disease debuff carried by Blood Plague)
+//   439843  Reaper's Mark             (Deathbringer hero talent [R])
+//   46585   Raise Dead                (class talent [R] - 60s ghoul)
+//   47528   Mind Freeze               (class talent [R])
+//   56222   Dark Command              (baseline L9)
+//   221562  Asphyxiate                (class talent [R]; was 108194)
+//   207167  Blinding Sleet            (class talent [R] - cone disorient)
+//   49576   Death Grip                (baseline L5)
+//   61999   Raise Ally                (baseline L19)
+//   48792   Icebound Fortitude        (class talent [R])
+//   48707   Anti-Magic Shell          (baseline L14)
+//   51052   Anti-Magic Zone           (class talent [R])
+//   49039   Lichborne                 (baseline L9)
+//   43265   Death and Decay           (baseline L3)
+//   108199  Gorefiend's Grasp         (spec talent [R])
+//   433895  Vampiric Strike           (San'layn hero [R] - aura-driven override of Heart Strike;
+//                                      NOT in the spellbook, so gated on the 433899 proc buff only)
+//   433899  Vampiric Strike proc      (buff granted by 433901 passive)
 //
 // ---- Skipped (with reason) ----
-//   Soul Reaper (343294)             — execute-window talent; would need <35% HP
-//                                       target gate + sub-spec talent detection, complex tracking
-//                                       not warranted at this iteration.
-//   Runeforging (53428)              — out-of-combat weapon-enchant, not rotation.
-//   Bone Shield passive ticks        — auto-driven by Marrowrend / Heart Strike;
-//                                       we track stack count only (see ShouldMarrowrend).
+//   Rune Tap (194679), Bonestorm (194844), Tombstone (219809), Blooddrinker (206931)
+//                                     - removed from the Blood kit in Midnight; not learnable in 12.1.
+//   Consumption 205223 / 205224       - Legion artifact remnant rows; 1263824 is the 12.1 talent cast.
+//   Abomination Limb (1263569)        - not in the curated builds; 20y pull is disruptive for a bot tank.
+//   Death Pact (48743), Wraith Walk (212552), Control Undead (111673)
+//                                     - not selected in the default build / movement-only.
+//   Runeforging (53428) and runes     - out-of-combat weapon-enchant, not rotation.
+//   Bone Shield passive ticks         - auto-driven by Marrowrend / Death's Caress; stack count
+//                                       tracked only (see ShouldMarrowrend).
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -55,20 +62,20 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
+// ---- Spell IDs (WoW 12.1.0.69587, validated) ----
 constexpr uint32 DEATH_STRIKE         = 49998;
 constexpr uint32 MARROWREND           = 195182;
 constexpr uint32 HEART_STRIKE         = 206930;
 constexpr uint32 BLOOD_BOIL           = 50842;
-constexpr uint32 RUNE_TAP             = 194679;
 constexpr uint32 VAMPIRIC_BLOOD       = 55233;
 constexpr uint32 DANCING_RUNE_WEAPON  = 49028;
-constexpr uint32 BONESTORM            = 194844;     // talent — channel
-constexpr uint32 TOMBSTONE            = 219809;     // talent — RP burst + absorb
 constexpr uint32 BONE_SHIELD          = 195181;
+constexpr uint32 REAPERS_MARK         = 439843;     // Deathbringer hero talent - 2 runes, 45s CD
+constexpr uint32 RAISE_DEAD           = 46585;      // class talent - 60s ghoul, 120s CD
 constexpr uint32 MIND_FREEZE          = 47528;
 constexpr uint32 DARK_COMMAND         = 56222;
-constexpr uint32 ASPHYXIATE           = 108194;
+constexpr uint32 ASPHYXIATE           = 221562;     // 12.1 id (was 108194)
+constexpr uint32 BLINDING_SLEET       = 207167;     // class talent - cone disorient, 60s CD
 constexpr uint32 DEATH_GRIP           = 49576;
 constexpr uint32 RAISE_ALLY           = 61999;
 constexpr uint32 ICEBOUND_FORTITUDE   = 48792;
@@ -76,9 +83,10 @@ constexpr uint32 ANTI_MAGIC_SHELL     = 48707;
 constexpr uint32 ANTI_MAGIC_ZONE      = 51052;
 constexpr uint32 LICHBORNE            = 49039;
 constexpr uint32 DEATH_AND_DECAY      = 43265;
-constexpr uint32 CONSUMPTION          = 274156;     // talent — heal + dmg
-constexpr uint32 BLOODDRINKER         = 206931;     // talent — channel + heal
+constexpr uint32 CONSUMPTION          = 1263824;    // spec talent - DR window + Blood Plague burst (was 274156)
 constexpr uint32 GOREFIENDS_GRASP     = 108199;     // mass DR-grip
+constexpr uint32 VAMPIRIC_STRIKE      = 433895;     // San'layn — aura override of Heart Strike (never in spellbook)
+constexpr uint32 VAMPIRIC_STRIKE_BUFF = 433899;     // proc buff that swaps Heart Strike -> Vampiric Strike
 constexpr uint32 DEATHS_CARESS        = 195292;     // L23 — ranged opener / out-of-melee filler, Blood-only
 constexpr uint32 FROST_FEVER          = 195621;     // disease applied by Blood Plague/Death's Caress; Blood keeps this rolling for the proc engine
 
@@ -170,6 +178,21 @@ void DoAsphyxiate(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(ASPHYXIATE, c->guid);
 }
 
+// Blinding Sleet — cone disorient (damage breaks it). Only worth it as an
+// emergency breather when a trash pack is beating on us and we're dipping;
+// never on a boss (immune) and never while the pack is still stacked for
+// Heart Strike cleave on a healthy tank.
+bool ShouldBlindingSleet(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.in_combat()) return false;
+    if (!ctx.bot.knows_spell(BLINDING_SLEET)) return false;
+    if (!ctx.bot.is_ready(BLINDING_SLEET)) return false;
+    if (BossLikeTargetEngaged(ctx)) return false;
+    if (ctx.bot.hp_pct() > 45) return false;
+    return ctx.bot.melee_attackers_within(8.0f) >= 3;
+}
+void DoBlindingSleet(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BLINDING_SLEET); }
+
 // ---- Survival ladder ----
 bool ShouldIceboundFortitude(ApPredicateContext const& ctx)
 {
@@ -208,15 +231,6 @@ bool ShouldLichborne(ApPredicateContext const& ctx)
 }
 void DoLichborne(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(LICHBORNE); }
 
-bool ShouldRuneTap(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.in_combat()) return false;
-    if (!ctx.bot.knows_spell(RUNE_TAP)) return false;
-    if (!ctx.bot.is_ready(RUNE_TAP)) return false;
-    return ctx.bot.hp_pct() <= 70;
-}
-void DoRuneTap(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(RUNE_TAP); }
-
 bool ShouldDeathStrike(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -231,26 +245,29 @@ void DoDeathStrike(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(DEATH_STRIKE, ctx.bot.victim());
 }
 
-bool ShouldBlooddrinker(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(BLOODDRINKER)) return false;
-    if (!ctx.bot.is_ready(BLOODDRINKER)) return false;
-    return ctx.bot.hp_pct() <= 70;
-}
-void DoBlooddrinker(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(BLOODDRINKER, ctx.bot.victim());
-}
-
+// Consumption (12.1) — 2s damage-reduction window that ends in a frontal
+// Shadow burst consuming Blood Plague from the targets. Pop it when hurting
+// or when a pack is stacked in front of us (plague on 2+ = big burst).
 bool ShouldConsumption(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(CONSUMPTION)) return false;
     if (!ctx.bot.is_ready(CONSUMPTION)) return false;
-    return ctx.bot.enemies_within(10.0f) >= 2 || ctx.bot.hp_pct() <= 60;
+    return ctx.bot.enemies_within(8.0f) >= 2 || ctx.bot.hp_pct() <= 60;
 }
 void DoConsumption(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(CONSUMPTION); }
+
+// Raise Dead — class talent in 12.1: a 60s ghoul on a 120s CD. Keep it out
+// whenever we're fighting and don't have one (extra threat + damage; the
+// San'layn build also feeds Vampiric procs off pet damage).
+bool ShouldRaiseDead(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.in_combat()) return false;
+    if (!ctx.bot.knows_spell(RAISE_DEAD)) return false;
+    if (ctx.bot.has_pet()) return false;
+    return ctx.bot.is_ready(RAISE_DEAD);
+}
+void DoRaiseDead(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(RAISE_DEAD); }
 
 // ---- Group utility ----
 bool ShouldRaiseAlly(ApPredicateContext const& ctx)
@@ -289,25 +306,20 @@ bool ShouldDancingRuneWeapon(ApPredicateContext const& ctx)
 }
 void DoDancingRuneWeapon(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(DANCING_RUNE_WEAPON); }
 
-bool ShouldBonestorm(ApPredicateContext const& ctx)
+// Reaper's Mark — Deathbringer hero active (2 runes, 45s CD). Marks the
+// target; every Shadow/Frost hit stacks it and it explodes for heavy
+// Shadowfrost damage. Simply on cooldown against the current victim —
+// Blood's Heart Strike/Blood Boil/Death's Caress feed the stacks anyway.
+bool ShouldReapersMark(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(BONESTORM)) return false;
-    if (!ctx.bot.is_ready(BONESTORM)) return false;
-    if (ctx.bot.power(POWER_RUNIC_POWER_IDX) < 100) return false;
-    return ctx.bot.enemies_within(8.0f) >= 2;
+    if (!ctx.bot.knows_spell(REAPERS_MARK)) return false;
+    return ctx.bot.is_ready(REAPERS_MARK);
 }
-void DoBonestorm(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BONESTORM); }
-
-bool ShouldTombstone(ApPredicateContext const& ctx)
+void DoReapersMark(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(TOMBSTONE)) return false;
-    if (!ctx.bot.is_ready(TOMBSTONE)) return false;
-    AuraEntry const* bs = ctx.bot.find_aura(BONE_SHIELD);
-    return bs && bs->stacks >= 5;
+    e.cast(REAPERS_MARK, ctx.bot.victim());
 }
-void DoTombstone(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(TOMBSTONE); }
 
 // ---- Active mitigation ----
 bool ShouldMarrowrend(ApPredicateContext const& ctx)
@@ -350,6 +362,23 @@ bool ShouldBloodBoil(ApPredicateContext const& ctx)
     return ctx.bot.is_ready(BLOOD_BOIL);
 }
 void DoBloodBoil(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BLOOD_BOIL); }
+
+// Vampiric Strike — San'layn proc: Death Coil / Death Strike turn the next
+// Heart Strike into Vampiric Strike (Shadow damage + % max-HP heal + Essence
+// of the Blood Queen haste). The override spell is granted by the aura, not
+// learned, so knows_spell/is_ready would never pass — gate on the proc buff
+// and cast the override id directly (core Spell system honours it).
+bool ShouldVampiricStrike(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(HEART_STRIKE)) return false;
+    if (!ctx.bot.has_aura(VAMPIRIC_STRIKE_BUFF)) return false;
+    return !ctx.bot.gcd_active();
+}
+void DoVampiricStrike(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    e.cast(VAMPIRIC_STRIKE, ctx.bot.victim());
+}
 
 bool ShouldHeartStrike(ApPredicateContext const& ctx)
 {
@@ -434,15 +463,15 @@ ApRule const kRules[] = {
     { ShouldVampiricBlood,       DoVampiricBlood,       "Vampiric Blood (<=50%)"      },
     { ShouldAntiMagicShell,      DoAntiMagicShell,      "AMS (incoming cast)"         },
     { ShouldLichborne,           DoLichborne,           "Lichborne"                   },
+    { ShouldBlindingSleet,       DoBlindingSleet,       "Blinding Sleet (swarmed)"    },
     { ShouldAntiMagicZone,       DoAntiMagicZone,       "Anti-Magic Zone (boss)"      },
-    { ShouldRuneTap,             DoRuneTap,             "Rune Tap (<=70%)"            },
     { ShouldDeathStrike,         DoDeathStrike,         "Death Strike (heal/cap)"     },
-    { ShouldBlooddrinker,        DoBlooddrinker,        "Blooddrinker (heal channel)" },
     { ShouldConsumption,         DoConsumption,         "Consumption"                 },
+    { ShouldRaiseDead,           DoRaiseDead,           "Raise Dead (ghoul)"          },
     { ShouldDancingRuneWeapon,   DoDancingRuneWeapon,   "Dancing Rune Weapon"         },
-    { ShouldBonestorm,           DoBonestorm,           "Bonestorm"                   },
-    { ShouldTombstone,           DoTombstone,           "Tombstone"                   },
+    { ShouldReapersMark,         DoReapersMark,         "Reaper's Mark"               },
     { ShouldMarrowrend,          DoMarrowrend,          "Marrowrend (Bone Shield<=4)" },
+    { ShouldVampiricStrike,      DoVampiricStrike,      "Vampiric Strike (proc)"      },
     { ShouldDeathAndDecay,       DoDeathAndDecay,       "Death and Decay (2+ AoE)"    },
     { ShouldFrostFeverRefresh,   DoFrostFeverRefresh,   "Blood Boil (refresh disease)"},
     { ShouldBloodBoil,           DoBloodBoil,           "Blood Boil"                  },

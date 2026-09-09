@@ -98,9 +98,11 @@ constexpr float  kHardCapMultiplier   = 1.5f;       // total bots ≤ target * 1
 // (no BG/dungeon/raid queues open until L10 anyway), and L1-9 bots clutter
 // starter zones without producing any queue value. Bots that level past 10
 // via gameplay come from the natural questing pipeline, not distribution.
+// Midnight (12.x) cap is 90: the old {80,80} cap bucket becomes a normal
+// 80-89 leveling band and {90,90} is the max-level band.
 constexpr uint8 kBuckets[][2] = {
-    {10, 19}, {20, 29}, {30, 39},
-    {40, 49}, {50, 59}, {60, 69}, {70, 79}, {80, 80},
+    {10, 19}, {20, 29}, {30, 39}, {40, 49},
+    {50, 59}, {60, 69}, {70, 79}, {80, 89}, {90, 90},
 };
 
 // #5 session-rhythm: cheap deterministic 64->32 bit mix (splitmix64
@@ -1937,7 +1939,8 @@ void BotPopulationManager::SeedBgMatches(uint32 now_ms)
     // so the matchmaker could never assemble a side (live: WSG stuck PREP 0/0,
     // never IN_PROGRESS). Cap to the BG's MaxPlayersPerTeam so each side spawns just
     // enough; reuse of already-built L80 bots then dominates over fresh creation.
-    req.target_level_override = 80;
+    const uint8 max_level = MaxPlayerLevel();
+    req.target_level_override = max_level;
     if (BattlegroundTemplate const* tmpl =
             sBattlegroundMgr->GetBattlegroundTemplateByTypeId(BattlegroundTypeId(bg_type)))
     {
@@ -1945,12 +1948,13 @@ void BotPopulationManager::SeedBgMatches(uint32 now_ms)
             req.max_total_bots = uint8(std::min<uint16>(max_per_team, 255));
         if (!tmpl->MapIDs.empty())
         {
+            // Resolve the max-level bracket by LEVEL (not a hardcoded bracket
+            // id) so it follows the realm cap (80 -> 90 with Midnight).
             if (PVPDifficultyEntry const* diff =
-                    DB2Manager::GetBattlegroundBracketById(tmpl->MapIDs.front(),
-                                                           BattlegroundBracketId(7)))
+                    DB2Manager::GetBattlegroundBracketByLevel(tmpl->MapIDs.front(), max_level))
             {
-                req.bracket_min_level = uint8(std::clamp<int32>(diff->MinLevel, 1, 80));
-                req.bracket_max_level = uint8(std::clamp<int32>(diff->MaxLevel, 1, 80));
+                req.bracket_min_level = uint8(std::clamp<int32>(diff->MinLevel, 1, max_level));
+                req.bracket_max_level = uint8(std::clamp<int32>(diff->MaxLevel, 1, max_level));
             }
         }
     }
@@ -2064,13 +2068,14 @@ void BotPopulationManager::SeedArenaMatches(uint32 now_ms)
         return n;
     };
 
-    // ADAPTIVE bracket (2026-06-23): the fixed max-level (80) band is empty in a
+    // ADAPTIVE bracket (2026-06-23): the fixed max-level band is empty in a
     // mostly-leveling fleet, so scan TC's 10-level PvP bands high->low and seed
     // the first where BOTH factions have >=kArenaType idle bots. Bands align to
     // TC bracket boundaries so a formed group shares one matchmaking bracket.
+    // Midnight cap is 90: {90,90} is the max-level band, 80-89 a leveling band.
     struct Band { uint8 lo, hi; };
     static constexpr Band kBands[] = {
-        {80,80},{70,79},{60,69},{50,59},{40,49},{30,39},{20,29},{10,19}};
+        {90,90},{80,89},{70,79},{60,69},{50,59},{40,49},{30,39},{20,29},{10,19}};
     uint8 bracket_min = 0, bracket_max = 0;
     uint32 alli_ok = 0, horde_ok = 0;
     for (Band const& b : kBands)
@@ -2206,9 +2211,10 @@ void BotPopulationManager::TopUpActiveBGs(uint32 now_ms)
                     DB2Manager::GetBattlegroundBracketById(bg->GetMapId(),
                                                           BattlegroundBracketId(bracket)))
             {
-                target_level_for_bracket = uint8(std::min<uint16>(diff->MaxLevel, 80));
-                bracket_min = uint8(std::clamp<int32>(diff->MinLevel, 1, 80));
-                bracket_max = uint8(std::clamp<int32>(diff->MaxLevel, 1, 80));
+                const uint8 max_level = MaxPlayerLevel();
+                target_level_for_bracket = uint8(std::min<uint16>(diff->MaxLevel, max_level));
+                bracket_min = uint8(std::clamp<int32>(diff->MinLevel, 1, max_level));
+                bracket_max = uint8(std::clamp<int32>(diff->MaxLevel, 1, max_level));
             }
             BotQueueFiller filler;
 

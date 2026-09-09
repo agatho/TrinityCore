@@ -1,44 +1,54 @@
-﻿// Outlaw Rogue - WoW 12.0 enterprise rotation. Pistol-style melee with
-// Roll the Bones buff window driving DPS, Adrenaline Rush burst phase,
-// Blade Flurry cleave, Ghostly Strike debuff, Pistol Shot proc spend
-// (Opportunity), Sinister Strike + Ambush opener.
+﻿// Outlaw Rogue - WoW 12.1.0.69587 (Midnight) enterprise rotation.
+// Pistol-style melee with the reworked Roll the Bones (dice "sets":
+// One of a Kind / Double Trouble / Triple Threat / Jackpot) driving DPS,
+// Keep It Rolling to extend a strong roll, Adrenaline Rush burst phase
+// with Preparation resetting the burst kit, Blade Flurry cleave, Killing
+// Spree finisher, Between the Eyes / Dispatch spend, Pistol Shot proc
+// spend (Opportunity), Sinister Strike builder, Ambush stealth opener,
+// Slice and Dice upkeep, Instant + Atrophic poison upkeep, Thistle Tea.
 //
 // Survival: Crimson Vial, Evasion, Cloak of Shadows, Feint (DR), Vanish.
-// Group utility: Tricks of the Trade, Smoke Bomb, Shroud of Concealment.
-// CC: Kick interrupt, Cheap Shot (stealth opener), Kidney Shot stun (CP),
-// Blind sap, Sap (OOC), Gouge incapacitate. Major CDs: Adrenaline Rush,
-// Roll the Bones (refresh under threshold), Killing Spree (talent burst),
-// Sepsis (talent), Marked for Death, Ghostly Strike maintenance.
+// Group utility: Tricks of the Trade. CC: Kick interrupt, Kidney Shot stun
+// (CP), Blind (panic CC). Gap-close: Grappling Hook, Blade Rush.
 //
-// Validated spell IDs (SpellName.csv lookup, WoW 12.0):
-//   193315  Sinister Strike       (Outlaw replaces 1752; both real)
+// Validated spell IDs (SpellName.csv lookup, WoW 12.1.0.69587):
+//   193315  Sinister Strike       (spec override of 1752)
 //   185763  Pistol Shot
-//   315341  Between the Eyes      (modern ID — replaces old 199804)
-//   2098    Dispatch
-//   315508  Roll the Bones        (classic cast id)
-//   1214909 Roll the Bones        (modern variant — both supported)
-//   13750   Adrenaline Rush
+//   315341  Between the Eyes
+//   2098    Dispatch              (spec override of Eviscerate 196819)
+//   1214909 Roll the Bones        (12.1 cast id; 315508 no longer learnable)
+//   1214933 One of a Kind         (RtB 1-set buff)
+//   1214934 Double Trouble        (RtB 2-set buff)
+//   1214935 Triple Threat         (RtB 3-set buff)
+//   1214937 Jackpot               (RtB top buff)
+//   381989  Keep It Rolling       (talent [R] - extends RtB)
+//   13750   Adrenaline Rush       (talent [R])
+//   1277933 Preparation           (talent [R] - resets AR/BtE/BF/Blade Rush/KS)
 //   13877   Blade Flurry
-//   196937  Ghostly Strike        (talent)
-//   195627  Opportunity           (proc aura — gates Pistol Shot)
-//   51690   Killing Spree
-//   385408  Sepsis
-//   137619  Marked for Death
-//   385616  Echoing Reprimand
-//   271877  Blade Rush            (talent)
+//   195627  Opportunity           (proc aura - gates Pistol Shot)
+//   51690   Killing Spree         (talent [R] - now a CP finisher)
+//   271877  Blade Rush            (talent, not in curated build - gated)
 //   195457  Grappling Hook        (gap-close)
 //   8676    Ambush                (stealth opener)
-//   1766/408/2094/6770/1776  Kick / Kidney Shot / Blind / Sap / Gouge
-//   57934/76577/114018/195457   Tricks / Smoke Bomb / Shroud / Grappling Hook
+//   315496  Slice and Dice
+//   315584  Instant Poison / 8679 Wound Poison (lethal, baseline)
+//   381637  Atrophic Poison       (talent [R] non-lethal) / 3408 Crippling Poison fallback
+//   381623  Thistle Tea           (taught by class passive 469779 [R]) / 1298826 active variant
+//   1766/408/2094            Kick / Kidney Shot / Blind
+//   57934                    Tricks of the Trade
 //   185311/5277/31224/1966/1856 Crimson Vial / Evasion / Cloak / Feint / Vanish
-//   1784/115191/115192          Stealth / Subterfuge / post-break aura
+//   1784/115191/115192          Stealth / Subterfuge stealth / Subterfuge window
 //
 // Skipped (with reason):
-//   51667   Cut to the Chase      — passive (Sinister Strike auto-extends Slice and Dice / RtB).
-//   79096   Restless Blades       — passive (finishers reduce CD on RtB / AR / KS / GS / SS / Vanish / BR / Sepsis).
-//   199736  Find Treasure         — passive utility (auto-loots coin); no cast rule.
-//   199804  Between the Eyes (old) — pre-12.0 cast id; SpellName.csv at 12.0 has 315341 only.
-//   1752    Sinister Strike (old) — baseline-only; spec uses 193315.
+//   196937  Ghostly Strike        - removed from the game (not in 12.1 SpellName).
+//   385408  Sepsis / 137619 Marked for Death / 76577 Smoke Bomb - not learnable in 12.1.
+//   385616  Echoing Reprimand     - 12.1 version (470669) is a passive.
+//   315508  Roll the Bones (old)  - not learnable in 12.1; 1214909 is the cast.
+//   193356/193357/193358/193359/199600/199603 - pre-12.1 RtB buffs, replaced by dice sets.
+//   79096   Restless Blades / 256170 Loaded Dice / 279876 Opportunity - passives.
+//   199736  Find Treasure         - passive utility (minimap treasure); no cast rule.
+//   1776    Gouge                 - [R] but needs facing and Kidney Shot covers the CC slot.
+//   1229376 Single-Button Assistant - client convenience macro, not a rotation ability.
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -51,43 +61,50 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (WoW 12.0, validated) ----
+// ---- Spell IDs (WoW 12.1.0.69587, validated) ----
 constexpr uint32 SINISTER_STRIKE      = 193315;
 constexpr uint32 PISTOL_SHOT          = 185763;
-constexpr uint32 BETWEEN_THE_EYES     = 315341;       // modern ID (was 199804 pre-12.0)
+constexpr uint32 BETWEEN_THE_EYES     = 315341;
 constexpr uint32 DISPATCH             = 2098;
-// Roll the Bones: TWO valid cast ids in WoW 12.0 — 315508 (classic) and
-// 1214909 (modern variant). Bots probe both via `knows_spell` and cast
-// whichever is known so the rotation works pre/post tree migration.
-constexpr uint32 ROLL_THE_BONES       = 315508;
-constexpr uint32 ROLL_THE_BONES_MOD   = 1214909;
-constexpr uint32 ADRENALINE_RUSH      = 13750;
+// Roll the Bones (12.1 rework): 25 Energy, 45s CD, no CP cost. Rolls dice
+// and applies ONE of four tiered buffs instead of the old six named ones.
+constexpr uint32 ROLL_THE_BONES       = 1214909;
+constexpr uint32 RTB_ONE_OF_A_KIND    = 1214933;      // 1 set  - reroll
+constexpr uint32 RTB_DOUBLE_TROUBLE   = 1214934;      // 2 sets - keep
+constexpr uint32 RTB_TRIPLE_THREAT    = 1214935;      // 3 sets - keep, Keep It Rolling
+constexpr uint32 RTB_JACKPOT          = 1214937;      // top    - keep, Keep It Rolling
+constexpr uint32 KEEP_IT_ROLLING      = 381989;       // talent [R] - extend active roll
+constexpr uint32 ADRENALINE_RUSH      = 13750;        // talent [R]
+constexpr uint32 PREPARATION          = 1277933;      // talent [R] - resets AR/BtE/BF/Blade Rush/KS
 constexpr uint32 BLADE_FLURRY         = 13877;
-constexpr uint32 GHOSTLY_STRIKE       = 196937;
-constexpr uint32 OPPORTUNITY          = 195627;
-constexpr uint32 KILLING_SPREE        = 51690;       // talent burst
-constexpr uint32 SEPSIS               = 385408;
-constexpr uint32 MARKED_FOR_DEATH     = 137619;
-constexpr uint32 ECHOING_REPRIMAND    = 385616;
-constexpr uint32 BLADE_RUSH           = 271877;       // talent — gap close + AoE
+constexpr uint32 OPPORTUNITY          = 195627;       // proc aura (from passive 279876)
+constexpr uint32 KILLING_SPREE        = 51690;        // talent [R] - CP finisher burst
+constexpr uint32 BLADE_RUSH           = 271877;       // talent - gap close + AoE
+constexpr uint32 SLICE_AND_DICE       = 315496;
+// Weapon poisons: the self-buff aura carries the cast spell's id.
+constexpr uint32 INSTANT_POISON       = 315584;       // baseline lethal
+constexpr uint32 ATROPHIC_POISON      = 381637;       // talent [R] non-lethal
+constexpr uint32 CRIPPLING_POISON     = 3408;         // baseline non-lethal fallback
+// Thistle Tea: class passive 469779 [R] teaches 381623; the active talent
+// node variant is 1298826. Cast whichever is in the spellbook.
+constexpr uint32 THISTLE_TEA          = 381623;
+constexpr uint32 THISTLE_TEA_ALT      = 1298826;
 constexpr uint32 KICK                 = 1766;
 constexpr uint32 KIDNEY_SHOT          = 408;
 constexpr uint32 BLIND                = 2094;
-constexpr uint32 SAP                  = 6770;
-constexpr uint32 GOUGE                = 1776;
 constexpr uint32 TRICKS_OF_TRADE      = 57934;
 constexpr uint32 CRIMSON_VIAL         = 185311;
 constexpr uint32 EVASION              = 5277;
 constexpr uint32 CLOAK_OF_SHADOWS     = 31224;
 constexpr uint32 FEINT                = 1966;
 constexpr uint32 VANISH               = 1856;
-constexpr uint32 SMOKE_BOMB           = 76577;
 constexpr uint32 GRAPPLING_HOOK       = 195457;       // gap-close
 constexpr uint32 STEALTH              = 1784;
 constexpr uint32 STEALTH_AURA         = 115191;       // Subterfuge improved
 constexpr uint32 SUBTERFUGE_AURA      = 115192;       // post-stealth-break talent window
-constexpr uint32 AMBUSH               = 8676;         // stealth-only opener (5 CP gen)
+constexpr uint32 AMBUSH               = 8676;         // stealth-only opener
 
+constexpr uint8 POWER_ENERGY_IDX       = 3;
 constexpr uint8 POWER_COMBO_POINTS_IDX = 4;
 
 bool HasLiveTarget(ApPredicateContext const& ctx)
@@ -110,11 +127,53 @@ uint8 ComboPoints(ApPredicateContext const& ctx)
     return static_cast<uint8>(ctx.bot.power(POWER_COMBO_POINTS_IDX));
 }
 
+int32 Energy(ApPredicateContext const& ctx)
+{
+    return ctx.bot.power(POWER_ENERGY_IDX);
+}
+
 bool InStealth(ApPredicateContext const& ctx)
 {
     return ctx.bot.has_aura(STEALTH)
         || ctx.bot.has_aura(STEALTH_AURA)
         || ctx.bot.has_aura(SUBTERFUGE_AURA);
+}
+
+// ---- Weapon poisons (OOC upkeep, 1.5s cast, 1h buff) ----
+bool PoisonCastWindow(ApPredicateContext const& ctx)
+{
+    if (ctx.bot.in_combat()) return false;
+    if (ctx.bot.is_moving()) return false;
+    if (ctx.bot.is_mounted()) return false;
+    return true;
+}
+bool ShouldInstantPoison(ApPredicateContext const& ctx)
+{
+    if (!PoisonCastWindow(ctx)) return false;
+    if (!ctx.bot.knows_spell(INSTANT_POISON)) return false;
+    if (!ctx.bot.is_ready(INSTANT_POISON)) return false;
+    return !ctx.bot.has_aura(INSTANT_POISON);
+}
+void DoInstantPoison(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(INSTANT_POISON); }
+
+uint32 PickNonLethalPoison(ApPredicateContext const& ctx)
+{
+    if (ctx.bot.knows_spell(ATROPHIC_POISON))
+        return ctx.bot.has_aura(ATROPHIC_POISON) ? 0 : ATROPHIC_POISON;
+    if (ctx.bot.knows_spell(CRIPPLING_POISON) && !ctx.bot.has_aura(CRIPPLING_POISON))
+        return CRIPPLING_POISON;
+    return 0;
+}
+bool ShouldNonLethalPoison(ApPredicateContext const& ctx)
+{
+    if (!PoisonCastWindow(ctx)) return false;
+    const uint32 sid = PickNonLethalPoison(ctx);
+    return sid != 0 && ctx.bot.is_ready(sid);
+}
+void DoNonLethalPoison(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    const uint32 sid = PickNonLethalPoison(ctx);
+    if (sid != 0) e.cast(sid);
 }
 
 // ---- Stealth opener: Stealth OOC, Ambush from stealth ----
@@ -200,15 +259,6 @@ void DoTricks(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(TRICKS_OF_TRADE, tank->guid);
 }
 
-bool ShouldSmokeBomb(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SMOKE_BOMB)) return false;
-    if (!ctx.bot.is_ready(SMOKE_BOMB)) return false;
-    return ctx.bot.attackers_count() >= 3;
-}
-void DoSmokeBomb(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SMOKE_BOMB); }
-
 // ---- Interrupt / CC ----
 bool ShouldKick(ApPredicateContext const& ctx)
 {
@@ -275,17 +325,38 @@ bool ShouldAdrenalineRush(ApPredicateContext const& ctx)
 }
 void DoAdrenalineRush(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(ADRENALINE_RUSH); }
 
+// Killing Spree (12.1): a CP FINISHER (45 Energy + CP) on a 180s CD that
+// gains strikes per combo point. Spend it at 5+ CP on boss-tier targets or
+// dense packs so the 3-minute CD is not wasted on a single trash mob.
 bool ShouldKillingSpree(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
     if (!ctx.bot.knows_spell(KILLING_SPREE)) return false;
     if (!ctx.bot.is_ready(KILLING_SPREE)) return false;
-    return BossLikeTargetEngaged(ctx);
+    if (ComboPoints(ctx) < 5) return false;
+    return BossLikeTargetEngaged(ctx) || ctx.bot.enemies_within(8.0f) >= 3;
 }
 void DoKillingSpree(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(KILLING_SPREE, ctx.bot.victim());
 }
+
+// Preparation: resets Adrenaline Rush, Between the Eyes, Blade Flurry,
+// Blade Rush and Killing Spree. Worth it once AR is deep on cooldown and
+// the target will still be around (boss-tier) - the reset re-opens a
+// full burst window.
+bool ShouldPreparation(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(PREPARATION)) return false;
+    if (!ctx.bot.is_ready(PREPARATION)) return false;
+    if (!ctx.bot.knows_spell(ADRENALINE_RUSH)) return false;
+    if (ctx.bot.is_ready(ADRENALINE_RUSH)) return false;
+    if (ctx.bot.cd_remaining(ADRENALINE_RUSH).count() < 60000) return false;
+    if (ctx.bot.knows_spell(KILLING_SPREE) && ctx.bot.is_ready(KILLING_SPREE)) return false;
+    return BossLikeTargetEngaged(ctx);
+}
+void DoPreparation(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(PREPARATION); }
 
 bool ShouldBladeRush(ApPredicateContext const& ctx)
 {
@@ -296,87 +367,91 @@ bool ShouldBladeRush(ApPredicateContext const& ctx)
 }
 void DoBladeRush(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BLADE_RUSH); }
 
-bool ShouldSepsis(ApPredicateContext const& ctx)
+// ---- Thistle Tea (Energy restore, charge-based, off-GCD) ----
+uint32 BestThistleTeaSpell(ApPredicateContext const& ctx)
+{
+    if (ctx.bot.knows_spell(THISTLE_TEA) && ctx.bot.is_ready(THISTLE_TEA))
+        return THISTLE_TEA;
+    if (ctx.bot.knows_spell(THISTLE_TEA_ALT) && ctx.bot.is_ready(THISTLE_TEA_ALT))
+        return THISTLE_TEA_ALT;
+    return 0;
+}
+bool ShouldThistleTea(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SEPSIS)) return false;
-    if (!ctx.bot.is_ready(SEPSIS)) return false;
-    return BossLikeTargetEngaged(ctx);
+    if (!ctx.bot.in_combat()) return false;
+    if (BestThistleTeaSpell(ctx) == 0) return false;
+    if (Energy(ctx) > 40) return false;
+    // Starved inside Adrenaline Rush, or plainly empty.
+    return ctx.bot.has_aura(ADRENALINE_RUSH) || Energy(ctx) <= 20;
 }
-void DoSepsis(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoThistleTea(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    e.cast(SEPSIS, ctx.bot.victim());
-}
-
-bool ShouldMarkedForDeath(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(MARKED_FOR_DEATH)) return false;
-    if (!ctx.bot.is_ready(MARKED_FOR_DEATH)) return false;
-    return ComboPoints(ctx) <= 1;
-}
-void DoMarkedForDeath(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(MARKED_FOR_DEATH, ctx.bot.victim());
+    const uint32 sid = BestThistleTeaSpell(ctx);
+    if (sid != 0) e.cast(sid);
 }
 
 // ---- Maintenance ----
-// Roll the Bones cast id resolver — bot might know either the classic
-// (315508) or modern (1214909) cast spell. Return whichever is known
-// AND ready; 0 means neither is castable this tick.
-uint32 BestRollTheBonesSpell(ApPredicateContext const& ctx)
+// Roll the Bones (12.1): the cast applies exactly ONE tiered buff -
+// One of a Kind (1 set), Double Trouble (2), Triple Threat (3) or
+// Jackpot. Returns the active tier's aura, or nullptr when no roll is up.
+// `tier` is 1..4 for the four buffs.
+AuraEntry const* ActiveRtbBuff(ApPredicateContext const& ctx, int& tier)
 {
-    if (ctx.bot.knows_spell(ROLL_THE_BONES_MOD) && ctx.bot.is_ready(ROLL_THE_BONES_MOD))
-        return ROLL_THE_BONES_MOD;
-    if (ctx.bot.knows_spell(ROLL_THE_BONES) && ctx.bot.is_ready(ROLL_THE_BONES))
-        return ROLL_THE_BONES;
-    return 0;
+    constexpr uint32 kTiers[] = { RTB_ONE_OF_A_KIND, RTB_DOUBLE_TROUBLE, RTB_TRIPLE_THREAT, RTB_JACKPOT };
+    for (int i = 3; i >= 0; --i)
+        if (AuraEntry const* a = ctx.bot.find_aura(kTiers[i]))
+        {
+            tier = i + 1;
+            return a;
+        }
+    tier = 0;
+    return nullptr;
 }
 bool ShouldRollTheBones(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (BestRollTheBonesSpell(ctx) == 0) return false;
-    if (ComboPoints(ctx) < 5) return false;
-    // The CAST spell id 315508 is NOT applied as an aura — server
-    // instead applies one or more of the six RtB-family buffs:
-    //   Broadside 193356, Ruthless Precision 193357, Grand Melee 193358,
-    //   True Bearing 193359, Buried Treasure 199600, Skull and
-    //   Crossbones 199603. Walk the aura set to count how many are
-    //   active and find the shortest remaining duration.
-    constexpr uint32 BROADSIDE            = 193356;
-    constexpr uint32 RUTHLESS_PRECISION   = 193357;
-    constexpr uint32 GRAND_MELEE          = 193358;
-    constexpr uint32 TRUE_BEARING         = 193359;
-    constexpr uint32 BURIED_TREASURE      = 199600;
-    constexpr uint32 SKULL_AND_CROSSBONES = 199603;
-    constexpr uint32 kRtbBuffs[] = {
-        BROADSIDE, RUTHLESS_PRECISION, GRAND_MELEE, TRUE_BEARING,
-        BURIED_TREASURE, SKULL_AND_CROSSBONES,
-    };
-    int active = 0;
-    int64_t shortest_ms = INT64_MAX;
-    for (uint32 bid : kRtbBuffs)
-    {
-        if (AuraEntry const* a = ctx.bot.find_aura(bid))
-        {
-            ++active;
-            if (a->remaining.count() < shortest_ms)
-                shortest_ms = a->remaining.count();
-        }
-    }
-    // No buffs → reroll. Single-buff roll → reroll (suboptimal).
-    // 2+ buffs ("multi-roll" — top tier) → only reroll when within
-    // 6s of expiry to avoid losing uptime mid-execute. WoW 12.0
-    // Outlaw guidance: keep rolls with 2+ buffs, reroll otherwise.
-    if (active == 0) return true;
-    if (active < 2) return true;
-    return shortest_ms <= 6000;
+    if (!ctx.bot.knows_spell(ROLL_THE_BONES)) return false;
+    if (!ctx.bot.is_ready(ROLL_THE_BONES)) return false;
+    if (Energy(ctx) < 25) return false;
+    int tier = 0;
+    AuraEntry const* a = ActiveRtbBuff(ctx, tier);
+    // No roll -> roll. A 1-set roll (One of a Kind) -> reroll; Loaded Dice
+    // [R] guarantees an upgrade right after Adrenaline Rush. 2+ sets ->
+    // keep, refresh only inside the last 6s so uptime is not lost.
+    if (!a) return true;
+    if (tier <= 1) return true;
+    return a->remaining.count() <= 6000;
 }
-void DoRollTheBones(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoRollTheBones(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(ROLL_THE_BONES); }
+
+// Keep It Rolling: 6-minute CD that extends the current roll. Only worth
+// spending on a Triple Threat / Jackpot roll with enough time left that
+// the extension is not immediately overwritten.
+bool ShouldKeepItRolling(ApPredicateContext const& ctx)
 {
-    const uint32 sid = BestRollTheBonesSpell(ctx);
-    if (sid != 0) e.cast(sid);
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(KEEP_IT_ROLLING)) return false;
+    if (!ctx.bot.is_ready(KEEP_IT_ROLLING)) return false;
+    int tier = 0;
+    AuraEntry const* a = ActiveRtbBuff(ctx, tier);
+    if (!a || tier < 3) return false;
+    return a->remaining.count() >= 8000;
 }
+void DoKeepItRolling(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(KEEP_IT_ROLLING); }
+
+// Slice and Dice: Outlaw keeps SnD up manually (Ruthlessness/Fatal
+// Flourish feed CP). Refresh at 4+ CP when missing or in the last 5s.
+bool ShouldSliceAndDice(ApPredicateContext const& ctx)
+{
+    if (!HasLiveTarget(ctx)) return false;
+    if (!ctx.bot.knows_spell(SLICE_AND_DICE)) return false;
+    if (!ctx.bot.is_ready(SLICE_AND_DICE)) return false;
+    if (ComboPoints(ctx) < 4) return false;
+    AuraEntry const* a = ctx.bot.find_aura(SLICE_AND_DICE);
+    return !a || a->remaining.count() <= 5000;
+}
+void DoSliceAndDice(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(SLICE_AND_DICE); }
 
 bool ShouldBladeFlurry(ApPredicateContext const& ctx)
 {
@@ -387,20 +462,6 @@ bool ShouldBladeFlurry(ApPredicateContext const& ctx)
     return ctx.aoe_preference || ctx.bot.enemies_within(8.0f) >= 2;
 }
 void DoBladeFlurry(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BLADE_FLURRY); }
-
-bool ShouldGhostlyStrike(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(GHOSTLY_STRIKE)) return false;
-    if (!ctx.bot.is_ready(GHOSTLY_STRIKE)) return false;
-    NearbyUnit const* v = ctx.bot.victim_info();
-    if (!v) return false;
-    return !ctx.bot.has_aura(GHOSTLY_STRIKE, v->guid);
-}
-void DoGhostlyStrike(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(GHOSTLY_STRIKE, ctx.bot.victim());
-}
 
 // ---- Spenders / generators ----
 bool ShouldBetweenTheEyes(ApPredicateContext const& ctx)
@@ -425,18 +486,6 @@ bool ShouldDispatch(ApPredicateContext const& ctx)
 void DoDispatch(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(DISPATCH, ctx.bot.victim());
-}
-
-bool ShouldEchoingReprimand(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(ECHOING_REPRIMAND)) return false;
-    if (!ctx.bot.is_ready(ECHOING_REPRIMAND)) return false;
-    return ComboPoints(ctx) <= 2;
-}
-void DoEchoingReprimand(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(ECHOING_REPRIMAND, ctx.bot.victim());
 }
 
 bool ShouldPistolShot(ApPredicateContext const& ctx)
@@ -481,12 +530,13 @@ void DoAutoAttack(ApPredicateContext const& ctx, BotIntentEmitter& e)
     if (!t.IsEmpty()) e.start_attack(t);
 }
 
-// Rule order (per HANDOFF):
-//   Cloak (magic emerg) → Vanish (panic) → Evasion → Crimson Vial → Feint
-//   → Kick → Kidney Shot (kick fb) → Blind → Stealth (OOC) → Ambush opener
-//   → Tricks → Smoke Bomb → Grappling Hook (gap close) → major CDs
-//   → Roll the Bones (maintenance) → Blade Flurry → Ghostly Strike
-//   → finishers (BtE, Dispatch) → Pistol Shot proc → Sinister Strike → AA.
+// Rule order:
+//   Cloak (magic emerg) -> Vanish (panic) -> Evasion -> Crimson Vial -> Feint
+//   -> Kick -> Kidney Shot (kick fb) -> Blind -> poisons (OOC upkeep)
+//   -> Stealth (OOC) -> Ambush opener -> Tricks -> Grappling Hook (gap close)
+//   -> Thistle Tea -> major CDs (Adrenaline Rush, Preparation, Blade Rush)
+//   -> Roll the Bones / Keep It Rolling -> Blade Flurry -> Slice and Dice
+//   -> finishers (Killing Spree, BtE, Dispatch) -> Pistol Shot proc -> Sinister Strike -> AA.
 ApRule const kRules[] = {
     { ShouldCloakOfShadows,   DoCloakOfShadows,   "Cloak of Shadows (magic emergency)" },
     { ShouldVanish,           DoVanish,           "Vanish (panic <=25%)"               },
@@ -496,20 +546,21 @@ ApRule const kRules[] = {
     { ShouldKick,             DoKick,             "Kick (interrupt)"                   },
     { ShouldKidneyShot,       DoKidneyShot,       "Kidney Shot (interrupt fb)"         },
     { ShouldBlind,            DoBlind,            "Blind (panic CC)"                   },
+    { ShouldInstantPoison,    DoInstantPoison,    "Instant Poison (OOC upkeep)"        },
+    { ShouldNonLethalPoison,  DoNonLethalPoison,  "Non-lethal poison (OOC upkeep)"     },
     { ShouldStealthOOC,       DoStealthOOC,       "Stealth (OOC opener)"               },
     { ShouldAmbushOpener,     DoAmbushOpener,     "Ambush (stealth opener)"            },
     { ShouldTricks,           DoTricks,           "Tricks of the Trade"                },
-    { ShouldSmokeBomb,        DoSmokeBomb,        "Smoke Bomb (3+ AoE)"                },
     { ShouldGrapplingHook,    DoGrapplingHook,    "Grappling Hook (gap close)"         },
+    { ShouldThistleTea,       DoThistleTea,       "Thistle Tea (energy restore)"       },
     { ShouldAdrenalineRush,   DoAdrenalineRush,   "Adrenaline Rush"                    },
-    { ShouldKillingSpree,     DoKillingSpree,     "Killing Spree"                      },
+    { ShouldPreparation,      DoPreparation,      "Preparation (reset burst CDs)"      },
     { ShouldBladeRush,        DoBladeRush,        "Blade Rush"                         },
-    { ShouldSepsis,           DoSepsis,           "Sepsis"                             },
-    { ShouldMarkedForDeath,   DoMarkedForDeath,   "Marked for Death"                   },
-    { ShouldEchoingReprimand, DoEchoingReprimand, "Echoing Reprimand"                  },
-    { ShouldRollTheBones,     DoRollTheBones,     "Roll the Bones (5 CP refresh)"      },
+    { ShouldRollTheBones,     DoRollTheBones,     "Roll the Bones (reroll/refresh)"    },
+    { ShouldKeepItRolling,    DoKeepItRolling,    "Keep It Rolling (3+ sets)"          },
     { ShouldBladeFlurry,      DoBladeFlurry,      "Blade Flurry (2+ AoE)"              },
-    { ShouldGhostlyStrike,    DoGhostlyStrike,    "Ghostly Strike (debuff)"            },
+    { ShouldSliceAndDice,     DoSliceAndDice,     "Slice and Dice (refresh)"           },
+    { ShouldKillingSpree,     DoKillingSpree,     "Killing Spree (5 CP finisher)"      },
     { ShouldBetweenTheEyes,   DoBetweenTheEyes,   "Between the Eyes (5 CP finisher)"   },
     { ShouldDispatch,         DoDispatch,         "Dispatch (5 CP spend)"              },
     { ShouldPistolShot,       DoPistolShot,       "Pistol Shot (Opportunity)"          },

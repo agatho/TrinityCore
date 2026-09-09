@@ -5042,6 +5042,7 @@ done_dispel:
             case 105: spec_name = "Restoration Druid"; break;
             case 577: spec_name = "Havoc DH"; break;
             case 581: spec_name = "Vengeance DH"; break;
+            case 1480: spec_name = "Devourer DH"; break;
             case 1467: spec_name = "Devastation Evoker"; break;
             case 1468: spec_name = "Preservation Evoker"; break;
             case 1473: spec_name = "Augmentation Evoker"; break;

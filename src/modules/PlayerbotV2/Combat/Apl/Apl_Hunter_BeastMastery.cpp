@@ -1,40 +1,58 @@
-﻿// Hunter Beast Mastery - WoW 12.0 enterprise rotation. Pet-driven ranged
-// DPS with Frenzy uptime via Barbed Shot, Bestial Wrath / Aspect of the
-// Wild burst, and Kill Command focus economy. Multi-target via Multi-Shot
-// (Beast Cleave) + Stomp talent.
+﻿// Hunter Beast Mastery - WoW 12.1.0.69587 (Midnight) enterprise rotation.
+// Pet-driven ranged DPS with Frenzy uptime via Barbed Shot, Bestial Wrath
+// burst, Kill Command focus economy and Black Arrow (Dark Ranger hero
+// talent) as the execute / opener shot. Multi-target via Wild Thrash
+// (turns on Beast Cleave) + Stomp / Kill Cleave passives.
 //
 // Leveling-bracket aware (rework 2026-06-10, live-verified on Uraimus L13):
 // before this rework a low-level BM bot cast ONLY Steady Shot between Kill
-// Commands — no focus spender existed in the rule list for the pre-Cobra
+// Commands - no focus spender existed in the rule list for the pre-Cobra
 // bracket (Arcane Shot was missing entirely), so focus sat capped while
 // Steady kept over-generating. Every rule gates on knows_spell, so one
-// rule list serves L10 through max level:
+// rule list serves L10 through max level (90 in Midnight):
 //   * Arcane Shot is the focus dump until Cobra Shot is learned, then
 //     Cobra takes over (Arcane rule self-disables once Cobra is known).
 //   * Spenders fire only with >=30 focus headroom left AFTER the cast so
-//     Kill Command — the highest damage-per-focus BM button — is never
+//     Kill Command - the highest damage-per-focus BM button - is never
 //     starved by a filler.
-//   * Multi-Shot is cast to ACTIVATE/refresh Beast Cleave (pet aura
+//   * Wild Thrash is cast to ACTIVATE/refresh Beast Cleave (pet aura
 //     118455), not spammed every AoE GCD.
 //   * Bestial Wrath is a leveling workhorse (90s CD vs 15s kills): fires
 //     on meaty single targets and 2+ pulls, not just raid bosses.
 // Ranged white damage (Auto Shot 75) is armed by API::start_attack, not
-// by an APL rule — see PlayerbotAPI.cpp ensureAutoShot.
+// by an APL rule - see PlayerbotAPI.cpp ensureAutoShot.
 //
 // Layered survival: Aspect of the Turtle -> Exhilaration -> Survival of the
 // Fittest -> Disengage / Feign Death. Group utility: Misdirection (tank
 // threat), Primal Rage (pet-cast Bloodlust, Ferocity pets). Pet upkeep:
-// Mend Pet, Revive Pet, Call Pet. CC: Counter Shot, Intimidation (pet
-// stun), Binding Shot. Major CDs: Bestial Wrath, Bloodshed, Dire Beast
-// (12.0 removed Aspect of the Wild / Call of the Wild / Stampede).
+// Mend Pet, Revive Pet. CC: Counter Shot, Intimidation (pet stun), Binding
+// Shot, Tar Trap. Major CD: Bestial Wrath (Bloodshed and Dire Beast are
+// PASSIVES in 12.1 - they ride on Bestial Wrath / bleed ticks).
 //
-// IDs re-validated against wago.tools DB2 exports, build 12.0.5.67823
-// (2026-06-10). Every ID below resolves to a live learn path.
+// Validated spell IDs (WoW 12.1.0.69587, kit + SpellName.csv):
+//   217200 Barbed Shot      | 34026  Kill Command     | 193455 Cobra Shot
+//   185358 Arcane Shot      | 56641  Steady Shot      | 19574  Bestial Wrath
+//   466930 Black Arrow      | 1264359 Wild Thrash     | 147362 Counter Shot
+//   19577  Intimidation     | 109248 Binding Shot     | 187698 Tar Trap
+//   34477  Misdirection     | 264735 Survival o.t.Fit.| 186265 Aspect of the Turtle
+//   109304 Exhilaration     | 781    Disengage        | 5384   Feign Death
+//   136    Mend Pet         | 982    Revive Pet       | 257284 Hunter's Mark
+//   264667 Primal Rage (PET ability, pet_cast)        | 272790 Frenzy (pet aura)
+//   118455 Beast Cleave (pet aura)
 //
-// Skipped spec spells (not rotation-relevant — intentional omissions):
-//   * Track Pets         (1244920) — minimap-utility, never a damage cast.
-//   * Exotic Beasts      (   53270) — passive (unlocks tameable families).
-//   * Eyes of the Beast  (  321297) — pet-vision toy, breaks bot AI control.
+// Skipped (deliberate, 12.1):
+//   * Kill Shot        (  53351) - Marksmanship-only talent in 12.1; BM's
+//                                  execute is Black Arrow (466930).
+//   * Bloodshed        (1272099) - passive in 12.1 (Bestial Wrath applies it).
+//   * Dire Beast       ( 120679) - passive in 12.1 (bleed-proc summon).
+//   * Aspect of the Wild / Call of the Wild / Stampede / Multi-Shot - no
+//     12.1 learn path for BM (Wild Thrash is the AoE button).
+//   * Freezing Trap    ( 187650) / Aspect of the Cheetah (186257) - out of
+//     combat / positional utility, not driven by the combat APL.
+//   * Tranquilizing Shot (19801) - [M]-only class talent, dispel logic
+//     lives outside the DPS ladder.
+//   * Track Pets / Exotic Beasts / Eyes of the Beast - minimap utility,
+//     passive, pet-vision toy (breaks bot AI control).
 
 #include "../ApRegistry.h"
 #include "../ApRotation.h"
@@ -47,20 +65,17 @@ namespace Playerbot::Combat {
 
 namespace {
 
-// ---- Spell IDs (re-validated against wago.tools DB2 exports for retail
-// build 12.0.5.67823 on 2026-06-10; 12.0 removed/replaced several legacy
-// BM buttons — see each entry) ----
-constexpr uint32 KILL_SHOT          = 53351;        // MM-only in 12.0; BM keeps the rule but knows_spell gates it off
-constexpr uint32 BARBED_SHOT        = 217200;       // BM spec talent (~3rd spec point); OVERRIDES Steady Shot on the bar
-constexpr uint32 KILL_COMMAND       = 34026;        // BM spec talent, 1st starter-build pick -> effectively L10
-constexpr uint32 COBRA_SHOT         = 193455;       // BM spec talent (min L14); OVERRIDES Arcane Shot on the bar
+// ---- Spell IDs (WoW 12.1.0.69587, validated against the 12.1 kit and
+// SpellName.csv; see the header table) ----
+constexpr uint32 BARBED_SHOT        = 217200;       // BM spec talent [R][M] (L12); OVERRIDES Steady Shot on the bar
+constexpr uint32 KILL_COMMAND       = 34026;        // BM spec talent [R][M], 1st starter-build pick -> effectively L10
+constexpr uint32 COBRA_SHOT         = 193455;       // BM spec talent [R][M] (L14); OVERRIDES Arcane Shot on the bar
 constexpr uint32 ARCANE_SHOT        = 185358;       // baseline L2 spender; BM's focus dump until Cobra Shot is talented
 constexpr uint32 STEADY_SHOT        = 56641;        // baseline L1 filler/generator until Barbed Shot overrides it
-constexpr uint32 BESTIAL_WRATH      = 19574;        // BM spec talent (~L20-26 via starter build)
-constexpr uint32 BLOODSHED          = 1272099;      // talent — pet bleed. 12.0 re-ID; the old 321530 is dead data
-constexpr uint32 DIRE_BEAST         = 120679;       // BM spec talent (moved from class tree in 12.0)
-constexpr uint32 COUNTER_SHOT       = 147362;       // class talent (L18+), BM/MM only
-constexpr uint32 WILD_THRASH        = 1264359;      // 12.0 BM AoE button — replaces Multi-Shot (2643 is unobtainable) and triggers Beast Cleave
+constexpr uint32 BESTIAL_WRATH      = 19574;        // BM spec talent [R][M] (L20)
+constexpr uint32 BLACK_ARROW        = 466930;       // Dark Ranger hero talent [R][M] - execute (<20%) / opener (>80%) shot
+constexpr uint32 COUNTER_SHOT       = 147362;       // class talent [R][M] (L18), BM/MM only
+constexpr uint32 WILD_THRASH        = 1264359;      // BM AoE button [M] - replaces Multi-Shot and triggers Beast Cleave
 constexpr uint32 MISDIRECTION       = 34477;
 constexpr uint32 ASPECT_TURTLE      = 186265;
 constexpr uint32 EXHILARATION       = 109304;
@@ -73,20 +88,21 @@ constexpr uint32 INTIMIDATION       = 19577;
 constexpr uint32 TAR_TRAP           = 187698;
 constexpr uint32 FREEZING_TRAP      = 187650;
 constexpr uint32 BINDING_SHOT       = 109248;
-constexpr uint32 PRIMAL_RAGE        = 264667;
-constexpr uint32 FRENZY_AURA        = 272790;
-constexpr uint32 BEAST_CLEAVE_PET   = 118455;      // pet aura applied by Multi-Shot; pet melee cleaves while up
+constexpr uint32 PRIMAL_RAGE        = 264667;      // PET ability (Ferocity, via Command Pet 272651) - pet_cast only
+constexpr uint32 FRENZY_AURA        = 272790;      // pet buff stacked by Barbed Shot (talent passive is 1264934)
+constexpr uint32 BEAST_CLEAVE_PET   = 118455;      // pet aura applied by Wild Thrash; pet melee cleaves while up
 constexpr uint32 ASPECT_CHEETAH     = 186257;
 constexpr uint32 HUNTERS_MARK       = 257284;
 
 constexpr uint8 POWER_FOCUS_IDX = 2;
 
 // Focus costs (display units, stable since Legion). Spenders only fire
-// when the cast leaves >= KILL_COMMAND_COST in the tank so KC — BM's
-// best damage-per-focus button — is never delayed by a filler.
+// when the cast leaves >= KILL_COMMAND_COST in the tank so KC - BM's
+// best damage-per-focus button - is never delayed by a filler.
 constexpr int32 KILL_COMMAND_COST = 30;
 constexpr int32 COBRA_SHOT_COST   = 35;
 constexpr int32 ARCANE_SHOT_COST  = 40;
+constexpr int32 BLACK_ARROW_COST  = 10;
 
 bool HasLiveTarget(ApPredicateContext const& ctx)
 {
@@ -117,11 +133,15 @@ bool BotHasSatedDebuff(ApPredicateContext const& ctx)
 
 int32 FocusVal(ApPredicateContext const& ctx) { return ctx.bot.power(POWER_FOCUS_IDX); }
 
-bool TargetExecuteRange(ApPredicateContext const& ctx)
+// Black Arrow window: "Only usable on enemies above 80% health or below
+// 20% health" (466930). Mirrors the classic Kill Shot execute band plus
+// the opener band.
+bool TargetBlackArrowWindow(ApPredicateContext const& ctx)
 {
     NearbyUnit const* t = ctx.bot.victim_info();
     if (!t || t->max_hp <= 0 || t->hp <= 0) return false;
-    return (t->hp * 100) / t->max_hp <= 20;
+    const int64 pct = (int64_t(t->hp) * 100) / t->max_hp;
+    return pct <= 20 || pct >= 80;
 }
 
 // ---- Pet maintenance ----
@@ -221,12 +241,13 @@ void DoMisdirection(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(MISDIRECTION, tank->guid);
 }
 
-// Primal Rage is a PET ability (Ferocity family), not a hunter spell —
-// knows_spell()/is_ready() query the BOT's spellbook and always failed, and
-// even if they passed, e.cast() would cast from the player and bounce off
-// NOT_KNOWN. Route through pet_cast; API::pet_cast validates the pet knows
-// it (Ferocity) and checks the pet's own SpellHistory, so no bot-side
-// spellbook gates apply.
+// Primal Rage is a PET ability (Ferocity family, surfaced to the hunter via
+// Command Pet 272651), not a hunter spell - knows_spell()/is_ready() query
+// the BOT's spellbook and always failed, and even if they passed, e.cast()
+// would cast from the player and bounce off NOT_KNOWN. Route through
+// pet_cast; API::pet_cast validates the pet knows it (Ferocity) and checks
+// the pet's own SpellHistory, so no bot-side spellbook gates apply. 264667
+// still exists in 12.1 SpellName ("Ferocity Ability").
 bool ShouldPrimalRage(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -281,11 +302,27 @@ void DoBindingShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
         e.cast(BINDING_SHOT);
 }
 
+// Tar Trap [R] (187698): ground slow. Defensive use only - drop it under
+// a pack when the bot is taking real pressure, same gate as the MM file.
+bool ShouldTarTrap(ApPredicateContext const& ctx)
+{
+    if (!ctx.bot.knows_spell(TAR_TRAP)) return false;
+    if (!ctx.bot.is_ready(TAR_TRAP)) return false;
+    return ctx.bot.enemies_within(15.0f) >= 2 && ctx.bot.hp_pct() <= 50;
+}
+void DoTarTrap(ApPredicateContext const& ctx, BotIntentEmitter& e)
+{
+    if (auto const* v = ctx.bot.victim_info())
+        e.cast_at(TAR_TRAP, v->x, v->y, v->z);
+    else
+        e.cast(TAR_TRAP);
+}
+
 // ---- Major offensive cooldowns ----
-// 12.0 removed Aspect of the Wild (193530), Call of the Wild (359844) and
-// Stampede (201430) — no SkillLineAbility / SpecializationSpells / live
-// trait node grants them (wago.tools 12.0.5.67823). Their rules were
-// deleted with them; BM burst is Bestial Wrath + Bloodshed + Dire Beast.
+// 12.1: Aspect of the Wild, Call of the Wild and Stampede have no BM learn
+// path; Bloodshed (1272099) and Dire Beast (120679) are PASSIVES (Bestial
+// Wrath applies the Bloodshed bleed, Dire Beasts proc from bleed ticks).
+// BM burst is therefore a single button: Bestial Wrath.
 bool ShouldBestialWrath(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -303,20 +340,7 @@ bool ShouldBestialWrath(ApPredicateContext const& ctx)
 }
 void DoBestialWrath(ApPredicateContext const&, BotIntentEmitter& e) { e.cast(BESTIAL_WRATH); }
 
-bool ShouldBloodshed(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.has_pet()) return false;
-    if (!ctx.bot.knows_spell(BLOODSHED)) return false;
-    if (!ctx.bot.is_ready(BLOODSHED)) return false;
-    return BossLikeTargetEngaged(ctx) || ctx.bot.enemies_within(10.0f) >= 3;
-}
-void DoBloodshed(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(BLOODSHED, ctx.bot.victim());
-}
-
-// Hunter's Mark — baseline ranged-damage-taken debuff (5%). Auto-granted
+// Hunter's Mark - baseline ranged-damage-taken debuff (5%). Auto-granted
 // around L7 and persists across all three specs. Apply once per target
 // (the aura is permanent on the victim until they die or the bot dies).
 bool ShouldHuntersMark(ApPredicateContext const& ctx)
@@ -331,28 +355,23 @@ void DoHuntersMark(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(HUNTERS_MARK, ctx.bot.victim());
 }
 
-bool ShouldDireBeast(ApPredicateContext const& ctx)
+// ---- Execute / opener ----
+// Black Arrow (466930, Dark Ranger [R][M]) is BM's Kill Shot replacement in
+// 12.1: 10 focus, usable only when the target is above 80% or below 20%
+// health. Fires ahead of Barbed Shot / Kill Command inside its window - it
+// is the highest damage-per-GCD shot BM owns. No focus reserve needed at
+// 10 focus.
+bool ShouldBlackArrow(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(DIRE_BEAST)) return false;
-    return ctx.bot.is_ready(DIRE_BEAST);
+    if (!ctx.bot.knows_spell(BLACK_ARROW)) return false;
+    if (!ctx.bot.is_ready(BLACK_ARROW)) return false;
+    if (FocusVal(ctx) < BLACK_ARROW_COST) return false;
+    return TargetBlackArrowWindow(ctx);
 }
-void DoDireBeast(ApPredicateContext const& ctx, BotIntentEmitter& e)
+void DoBlackArrow(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
-    e.cast(DIRE_BEAST, ctx.bot.victim());
-}
-
-// ---- Execute ----
-bool ShouldKillShot(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(KILL_SHOT)) return false;
-    if (!ctx.bot.is_ready(KILL_SHOT)) return false;
-    return TargetExecuteRange(ctx);
-}
-void DoKillShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(KILL_SHOT, ctx.bot.victim());
+    e.cast(BLACK_ARROW, ctx.bot.victim());
 }
 
 // ---- Frenzy + AoE + filler ----
@@ -377,8 +396,8 @@ void DoBarbedShot(ApPredicateContext const& ctx, BotIntentEmitter& e)
     e.cast(BARBED_SHOT, ctx.bot.victim());
 }
 
-// Wild Thrash (12.0) — BM's AoE button, replacing the unobtainable
-// Multi-Shot (2643): it triggers Beast Cleave so the pet's melee + Kill
+// Wild Thrash (1264359, [M]) - BM's AoE button, replacing the unobtainable
+// Multi-Shot: it triggers Beast Cleave (115939) so the pet's melee + Kill
 // Command strike everything nearby for ~8s. Cast it to TURN CLEAVE ON
 // and keep it up through a pack, not every AoE GCD: re-cast only when
 // the pet's cleave aura is missing or about to fall off. AoE detection
@@ -518,12 +537,11 @@ ApRule const kRules[] = {
     { ShouldCounterShot,       DoCounterShot,       "Counter Shot (interrupt)"    },
     { ShouldIntimidation,      DoIntimidation,      "Intimidation (interrupt fb)" },
     { ShouldBindingShot,       DoBindingShot,       "Binding Shot (3+ AoE)"       },
+    { ShouldTarTrap,           DoTarTrap,           "Tar Trap (slow)"             },
     { ShouldPrimalRage,        DoPrimalRage,        "Primal Rage (Bloodlust)"     },
     { ShouldBestialWrath,      DoBestialWrath,      "Bestial Wrath"               },
-    { ShouldBloodshed,         DoBloodshed,         "Bloodshed"                   },
-    { ShouldDireBeast,         DoDireBeast,         "Dire Beast"                  },
     { ShouldHuntersMark,       DoHuntersMark,       "Hunter's Mark (debuff)"      },
-    { ShouldKillShot,          DoKillShot,          "Kill Shot (<=20%)"           },
+    { ShouldBlackArrow,        DoBlackArrow,        "Black Arrow (<20% / >80%)"   },
     { ShouldBarbedShot,        DoBarbedShot,        "Barbed Shot (Frenzy)"        },
     { ShouldWildThrash,        DoWildThrash,        "Wild Thrash (Beast Cleave)"  },
     { ShouldKillCommand,       DoKillCommand,       "Kill Command"                },

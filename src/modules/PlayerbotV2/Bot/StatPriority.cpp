@@ -149,6 +149,8 @@ std::unordered_map<uint32, StatPriority> const& SpecTable()
         { 577, MakeRow(0.0f, W_ILVL_PRIMARY, 0.85f, 0.0f, 0.0f, 0.75f, 0.85f, 0.70f, 0.65f, 0.30f, 0.30f, 0.30f, 12.0f) },
         // Vengeance (581): Agi tank.
         { 581, MakeRow(0.0f, 0.85f, W_TANK_STAMINA, 0.0f, 0.0f, 0.55f, 0.65f, 0.75f, 0.80f, 0.55f, 0.55f, 0.35f, 10.0f) },
+        // Devourer (1480, 12.1): Agi mid-range DPS (Consume/Reap/Void Ray), modelled on Havoc.
+        { 1480, MakeRow(0.0f, W_ILVL_PRIMARY, 0.85f, 0.0f, 0.0f, 0.75f, 0.85f, 0.70f, 0.65f, 0.30f, 0.30f, 0.30f, 12.0f) },
 
         // ===== Evoker =====
         // Devastation (1467): Int caster DPS.

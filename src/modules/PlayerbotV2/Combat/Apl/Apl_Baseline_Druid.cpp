@@ -13,29 +13,31 @@
 // caster form auto-attacking with a staff is what the previous baseline
 // did and it was wrong. The user explicitly called that out.
 //
+// WoW 12.1.0.69587 kit note: the baseline may only use class-baseline
+// SkillLineAbility spells. Rake, Rip, Tiger's Fury, Swipe, Rejuvenation
+// and Cenarion Ward are talents (or gone) in Midnight, so they belong to
+// the spec files; the baseline cat kit is Cat Form / Prowl / Shred /
+// Ferocious Bite / Thrash.
+//
 // Rules that work IN CAT FORM (form-independent or cat-only):
-//   * Barkskin              — INSTANT, off-GCD, no shapeshift gate.
-//   * Cenarion Ward         — INSTANT, off-GCD.
-//   * Cat Form entry        — the shapeshift cast itself; only fires
+//   * Barkskin              - INSTANT, off-GCD, no shapeshift gate (L10).
+//   * Cat Form entry        - the shapeshift cast itself; only fires
 //                             when not yet in cat, not mounted, not
 //                             flying, and we have a live target (or
 //                             we're OOC and want to Prowl).
-//   * Prowl                 — cat-form stealth opener, OOC only.
-//   * Tiger's Fury          — cat-form energy CD.
-//   * Rake / Rip            — cat-form bleeds (CP builder / 5-CP finisher).
-//   * Shred                 — cat-form CP filler.
-//   * Ferocious Bite        — cat-form 4-5 CP finisher.
-//   * Thrash (cat)          — cat-form AoE bleed (3+ enemies).
-//   * Swipe (cat)           — cat-form AoE damage (3+ enemies).
-//   * Auto attack           — works in any form.
+//   * Prowl                 - cat-form stealth opener, OOC only.
+//   * Shred                 - cat-form CP builder.
+//   * Ferocious Bite        - cat-form 4-5 CP finisher (the only baseline
+//                             finisher in 12.1).
+//   * Thrash (cat)          - cat-form AoE bleed (3+ enemies).
+//   * Auto attack           - works in any form.
 //
 // Rules that DROP cat form when they fire (caster-form spells):
 //   * Regrowth (panic)      — emergency hard-cast at <=50%; bot will be
 //                             back in caster form afterwards, and the
 //                             next tick's Cat Form rule will re-shift.
-//   * Rejuvenation          — only fires OOC, so the form drop is cheap
+//   * Mark of the Wild      - only fires OOC, so the form drop is cheap
 //                             (we'll re-enter cat on pull).
-//   * Mark of the Wild      — only fires OOC, same rationale.
 //   * Wrath / Moonfire      — caster-form fillers ONLY used if the bot
 //                             somehow has no Cat Form known (very low
 //                             level pre-L1 racial?, polymorphed,
@@ -51,9 +53,8 @@
 // - **Do not refresh Mark of the Wild mid-combat.** It requires caster
 //   form, which would drop the cat-form bleeds + reset Prowl. Gated on
 //   `!in_combat`.
-// - **Rejuvenation is OOC-only** for the same reason: a 1-rule HoT
-//   refresh would otherwise blast us out of cat every 12s on the dot.
-//   Emergency healing is Regrowth's job at <=50% HP.
+// - **No HoT upkeep**: Rejuvenation is a class talent in 12.1 (the spec
+//   files own it). Emergency healing is Regrowth's job at <=50% HP.
 // - **Regrowth panic IS allowed to drop cat.** Dying in cat with full CP
 //   is worse than spending a GCD healing and re-shifting on the next
 //   tick. The Cat Form re-entry rule sits high in priority so the
@@ -65,9 +66,12 @@
 // What we DON'T cover (intentionally):
 //   * Bear Form / Mangle / Growl / Maul — tank specialty. Guardian spec
 //     owns the bear stance + tank kit; the baseline is for any druid.
-//   * Predatory Swiftness instant Regrowth proc — requires aura tracking
+//   * Predatory Swiftness instant Regrowth proc - requires aura tracking
 //     past baseline scope; Feral spec handles it.
-//   * Combo-point-aware finishers below 4 CP — the baseline treats Rip /
+//   * Rake / Rip / Tiger's Fury / Swipe / Rejuvenation / Cenarion Ward -
+//     class or spec talents in 12.1 (Cenarion Ward is gone entirely);
+//     not in the class baseline list, so the spec rotations own them.
+//   * Combo-point-aware finishers below 4 CP - the baseline treats
 //     Ferocious Bite as "4-5 CP go", not "5 CP only". Feral is stricter.
 //   * Tank-form swap on heavy hits — Feral does that; baseline can't
 //     assume the bot has bear-form rotations to run after the swap.
@@ -85,27 +89,21 @@ using ::Playerbot::Combat::baseline_common::HasLiveTarget;
 using ::Playerbot::Combat::baseline_common::AlwaysInCombat;
 using ::Playerbot::Combat::baseline_common::DoAutoAttack;
 
-// ---- Spell IDs (WoW 12.0, mined from Apl_Druid_Feral.cpp) ----
-constexpr uint32 CAT_FORM          = 768;        // shapeshift; aura id == spell id
-constexpr uint32 PROWL             = 5215;       // cat-form OOC stealth
-constexpr uint32 DASH              = 1850;       // cat-form sprint
-constexpr uint32 SHRED             = 5221;       // cat-form CP builder
-constexpr uint32 RAKE              = 1822;       // cat-form bleed CP builder
-constexpr uint32 RAKE_DEBUFF       = 155722;     // Rake bleed aura id
-constexpr uint32 RIP               = 1079;       // cat-form 5-CP bleed finisher
-constexpr uint32 FEROCIOUS_BITE    = 22568;      // cat-form 4-5 CP finisher
-constexpr uint32 TIGERS_FURY       = 5217;       // cat-form energy CD
-constexpr uint32 THRASH_CAT        = 106830;     // cat-form AoE bleed (cast = debuff)
-constexpr uint32 SWIPE_CAT         = 106785;     // cat-form AoE damage
+// ---- Spell IDs (WoW 12.1.0.69587, class baseline SkillLineAbility list) ----
+constexpr uint32 CAT_FORM          = 768;        // L5  shapeshift; aura id == spell id
+constexpr uint32 PROWL             = 5215;       // L13 cat-form OOC stealth
+constexpr uint32 SHRED             = 5221;       // L5  cat-form CP builder
+constexpr uint32 FEROCIOUS_BITE    = 22568;      // L7  cat-form 4-5 CP finisher
+constexpr uint32 THRASH_CAT        = 106830;     // cat-form AoE bleed (cast id)
+constexpr uint32 THRASH_CAT_DOT    = 405233;     // cat Thrash bleed aura
 
-constexpr uint32 WRATH             = 5176;       // caster-form filler nuke
-constexpr uint32 MOONFIRE          = 8921;       // caster-form DoT
-constexpr uint32 REJUVENATION      = 774;        // caster-form HoT
-constexpr uint32 ENTANGLING_ROOTS  = 339;        // caster-form root CC
-constexpr uint32 REGROWTH          = 8936;       // caster-form panic heal
-constexpr uint32 MARK_OF_THE_WILD  = 1126;       // caster-form buff
-constexpr uint32 BARKSKIN          = 22812;      // form-independent, off-GCD, 20% DR
-constexpr uint32 CENARION_WARD     = 102351;     // form-independent talent shield
+constexpr uint32 WRATH             = 5176;       // L1  caster-form filler nuke
+constexpr uint32 MOONFIRE          = 8921;       // L2  caster-form DoT (cast id)
+constexpr uint32 MOONFIRE_DOT      = 164812;     // Moonfire periodic aura
+constexpr uint32 ENTANGLING_ROOTS  = 339;        // L4  caster-form root CC
+constexpr uint32 REGROWTH          = 8936;       // L3  caster-form panic heal
+constexpr uint32 MARK_OF_THE_WILD  = 1126;       // L9  caster-form buff
+constexpr uint32 BARKSKIN          = 22812;      // L10 form-independent, off-GCD, 20% DR
 
 // Combo points / energy live in the snapshot power array. Indices match
 // the WoW 12.0 power enum used by Apl_Druid_Feral.cpp.
@@ -138,9 +136,6 @@ inline uint8 ComboPoints(ApPredicateContext const& ctx)
 // has no other big DR cooldown.
 BASELINE_DEFENSIVE_RULE(Barkskin, BARKSKIN, 60)
 
-// Cenarion Ward: pre-shield HoT trigger. Refires after fall-off.
-BASELINE_SELFBUFF_RULE(CenarionWard, CENARION_WARD)
-
 // ---- Emergency hard-cast heal (Regrowth) ----
 // Regrowth is the only direct heal a druid has at low level. It REQUIRES
 // caster form — casting it shifts us out of cat. That's an accepted cost
@@ -156,23 +151,6 @@ bool ShouldRegrowthSelfPanic(ApPredicateContext const& ctx)
 void DoRegrowthSelfPanic(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
     e.cast(REGROWTH, ctx.bot.raw().guid);
-}
-
-// ---- HoT self-maintain (Rejuvenation) ----
-// Rejuv requires caster form, so we gate on `!in_combat` — refreshing a
-// HoT mid-pull would otherwise blast us out of cat every 12s. OOC top-up
-// only; emergency healing during combat is Regrowth's job.
-bool ShouldRejuvenationSelf(ApPredicateContext const& ctx)
-{
-    if (!ctx.bot.knows_spell(REJUVENATION)) return false;
-    if (!ctx.bot.is_ready(REJUVENATION)) return false;
-    if (ctx.bot.in_combat()) return false;             // OOC-only — see header
-    if (ctx.bot.hp_pct() > 80) return false;
-    return ctx.bot.find_aura(REJUVENATION, ObjectGuid::Empty) == nullptr;
-}
-void DoRejuvenationSelf(ApPredicateContext const&, BotIntentEmitter& e)
-{
-    e.cast(REJUVENATION, ObjectGuid::Empty);
 }
 
 // ---- Buff (Mark of the Wild) ----
@@ -232,64 +210,9 @@ void DoProwl(ApPredicateContext const&, BotIntentEmitter& e)
     e.cast(PROWL);
 }
 
-// ---- Tiger's Fury (cat-form energy CD) ----
-// Fills energy + boosts damage. Only worthwhile when we have room for
-// the refund (energy <= 50). Requires cat form to be useful — gate on it
-// so we don't pop the CD outside cat (it works there too but wastes the
-// energy refund).
-bool ShouldTigersFury(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(TIGERS_FURY)) return false;
-    if (!ctx.bot.is_ready(TIGERS_FURY)) return false;
-    if (!InCatForm(ctx)) return false;
-    return ctx.bot.power(POWER_ENERGY_IDX) <= 50;
-}
-void DoTigersFury(ApPredicateContext const&, BotIntentEmitter& e)
-{
-    e.cast(TIGERS_FURY);
-}
-
-// ---- Rake (cat-form bleed CP builder) ----
-// Apply / refresh on victim. Costs energy; requires cat form. We refresh
-// when the bleed is missing or has <=4.5s remaining (pandemic-window
-// approximation — Feral uses the same threshold).
-bool ShouldRake(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(RAKE)) return false;
-    if (!InCatForm(ctx)) return false;
-    AuraEntry const* a = ctx.bot.find_aura(RAKE_DEBUFF, ctx.bot.victim());
-    if (a && a->remaining.count() > 4500) return false;
-    return true;
-}
-void DoRake(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(RAKE, ctx.bot.victim());
-}
-
-// ---- Rip (cat-form 5-CP bleed finisher) ----
-// Highest priority finisher when Rip is missing/short and we have CP.
-// Baseline relaxes Feral's "5 CP only" to "4+ CP" — a 4-CP Rip is still
-// better than no Rip at all on this bracket.
-bool ShouldRip(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(RIP)) return false;
-    if (!InCatForm(ctx)) return false;
-    if (ComboPoints(ctx) < 4) return false;
-    AuraEntry const* a = ctx.bot.find_aura(RIP, ctx.bot.victim());
-    if (a && a->remaining.count() > 4500) return false;
-    return true;
-}
-void DoRip(ApPredicateContext const& ctx, BotIntentEmitter& e)
-{
-    e.cast(RIP, ctx.bot.victim());
-}
-
 // ---- Ferocious Bite (cat-form 4-5 CP finisher) ----
-// Fires only AFTER Rip is up (Rip rule sits higher in the table so this
-// only triggers when Rip is present + long-duration). Baseline: 4+ CP.
+// The only finisher in the 12.1 baseline kit (Rip is a class talent that
+// the Feral file owns). Baseline: 4+ CP.
 bool ShouldFerociousBite(ApPredicateContext const& ctx)
 {
     if (!HasLiveTarget(ctx)) return false;
@@ -312,26 +235,13 @@ bool ShouldThrashCat(ApPredicateContext const& ctx)
     if (!ctx.bot.knows_spell(THRASH_CAT)) return false;
     if (!InCatForm(ctx)) return false;
     if (ctx.bot.enemies_within(8.0f) < 3) return false;
-    AuraEntry const* a = ctx.bot.find_aura(THRASH_CAT, ctx.bot.victim());
+    AuraEntry const* a = ctx.bot.find_aura(THRASH_CAT_DOT, ctx.bot.victim());
     if (a && a->remaining.count() > 4500) return false;
     return true;
 }
 void DoThrashCat(ApPredicateContext const&, BotIntentEmitter& e)
 {
     e.cast(THRASH_CAT);
-}
-
-// ---- Swipe (cat-form AoE damage, 3+ enemies) ----
-bool ShouldSwipeCat(ApPredicateContext const& ctx)
-{
-    if (!HasLiveTarget(ctx)) return false;
-    if (!ctx.bot.knows_spell(SWIPE_CAT)) return false;
-    if (!InCatForm(ctx)) return false;
-    return ctx.bot.enemies_within(8.0f) >= 3;
-}
-void DoSwipeCat(ApPredicateContext const&, BotIntentEmitter& e)
-{
-    e.cast(SWIPE_CAT);
 }
 
 // ---- Shred (cat-form CP filler) ----
@@ -374,7 +284,7 @@ bool ShouldMoonfireCaster(ApPredicateContext const& ctx)
     if (!ctx.bot.knows_spell(MOONFIRE)) return false;
     if (!ctx.bot.is_ready(MOONFIRE)) return false;
     if (InCatForm(ctx)) return false;
-    return ctx.bot.find_aura(MOONFIRE, ctx.bot.victim()) == nullptr;
+    return ctx.bot.find_aura(MOONFIRE_DOT, ctx.bot.victim()) == nullptr;
 }
 void DoMoonfireCaster(ApPredicateContext const& ctx, BotIntentEmitter& e)
 {
@@ -397,41 +307,29 @@ void DoEntanglingRoots(ApPredicateContext const& ctx, BotIntentEmitter& e)
 
 // ---- Rule table ----
 // Order rationale (top = highest priority):
-//   1.  Barkskin             — off-GCD panic DR, fires from any form.
-//   2.  Cenarion Ward        — pre-shield, form-independent.
-//   3.  RegrowthSelfPanic    — emergency hard-cast heal at <=50%.
+//   1.  Barkskin             - off-GCD panic DR, fires from any form.
+//   2.  RegrowthSelfPanic    - emergency hard-cast heal at <=50%.
 //                              DROPS cat form; accepted cost vs. dying.
-//   4.  MarkOfTheWild        — OOC buff maintenance (caster form).
-//   5.  RejuvenationSelf     — OOC HoT top-up when wounded.
-//   6.  CatForm              — re-enter cat ASAP after any caster-form
+//   3.  MarkOfTheWild        - OOC buff maintenance (caster form).
+//   4.  CatForm              - re-enter cat ASAP after any caster-form
 //                              spell or fresh login. High priority so the
 //                              caster-form-exposure window is short.
-//   7.  Prowl                — OOC stealth opener once in cat.
-//   8.  TigersFury           — energy CD when running low.
-//   9.  Rake                 — bleed CP builder (refresh on victim).
-//   10. ThrashCat            — AoE bleed at 3+ targets.
-//   11. SwipeCat             — AoE damage at 3+ targets.
-//   12. Rip                  — 4-5 CP bleed finisher (priority over FB).
-//   13. FerociousBite        — 4-5 CP direct finisher (only after Rip).
-//   14. Shred                — CP filler.
-//   15. EntanglingRoots      — caster-form CC fallback (only if not cat).
-//   16. MoonfireCaster       — caster-form DoT fallback.
-//   17. WrathCaster          — caster-form nuke fallback.
-//   18. AutoAttack           — no-mana floor (works in cat).
+//   5.  Prowl                - OOC stealth opener once in cat.
+//   6.  ThrashCat            - AoE bleed at 3+ targets.
+//   7.  FerociousBite        - 4-5 CP direct finisher.
+//   8.  Shred                - CP builder / filler.
+//   9.  EntanglingRoots      - caster-form CC fallback (only if not cat).
+//   10. MoonfireCaster       - caster-form DoT fallback.
+//   11. WrathCaster          - caster-form nuke fallback.
+//   12. AutoAttack           - no-mana floor (works in cat).
 ApRule const baseline_druid_kRules[] = {
     { ShouldBarkskin,          DoBarkskin,          "Barkskin (<60% panic DR)"          },
-    { ShouldCenarionWard,      DoCenarionWard,      "Cenarion Ward (pre-shield)"        },
     { ShouldRegrowthSelfPanic, DoRegrowthSelfPanic, "Regrowth (<=50% self panic)"       },
     { ShouldMarkOfTheWild,     DoMarkOfTheWild,     "Mark of the Wild (OOC buff)"       },
-    { ShouldRejuvenationSelf,  DoRejuvenationSelf,  "Rejuvenation (<=80% OOC HoT)"      },
     { ShouldCatForm,           DoCatForm,           "Cat Form (form entry)"             },
     { ShouldProwl,             DoProwl,             "Prowl (OOC stealth opener)"        },
-    { ShouldTigersFury,        DoTigersFury,        "Tiger's Fury (energy CD)"          },
-    { ShouldRake,              DoRake,              "Rake (cat bleed builder)"          },
     { ShouldThrashCat,         DoThrashCat,         "Thrash cat (3+ AoE bleed)"         },
-    { ShouldSwipeCat,          DoSwipeCat,          "Swipe cat (3+ AoE damage)"         },
-    { ShouldRip,               DoRip,               "Rip (4+ CP bleed finisher)"        },
-    { ShouldFerociousBite,     DoFerociousBite,     "Ferocious Bite (4+ CP finisher)"   },
+    { ShouldFerociousBite,     DoFerociousBite,     "Ferocious Bite (4+ CP)"            },
     { ShouldShred,             DoShred,             "Shred (CP filler)"                 },
     { ShouldEntanglingRoots,   DoEntanglingRoots,   "Entangling Roots (caster CC)"      },
     { ShouldMoonfireCaster,    DoMoonfireCaster,    "Moonfire (caster DoT fallback)"    },
