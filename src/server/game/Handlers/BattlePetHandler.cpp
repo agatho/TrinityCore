@@ -34,6 +34,12 @@ void WorldSession::HandleBattlePetRequestJournal(WorldPackets::BattlePet::Battle
 
 void WorldSession::HandleBattlePetRequestJournalLock(WorldPackets::BattlePet::BattlePetRequestJournalLock& /*battlePetRequestJournalLock*/)
 {
+    // Retail 12.1.0.69587 (three captures): the client sends this whenever the journal UI opens;
+    // a session that already holds the lock (SMSG_BATTLE_PET_JOURNAL_LOCK_ACQUIRED was pushed at
+    // login) gets NO reply -- no lock packet and no 10 KB journal resend.
+    if (GetBattlePetMgr()->HasJournalLock())
+        return;
+
     GetBattlePetMgr()->SendJournalLockStatus();
 
     if (GetBattlePetMgr()->HasJournalLock())
@@ -1123,45 +1129,10 @@ void WorldSession::HandleJoinPetBattleQueue(WorldPackets::BattlePet::JoinPetBatt
     if (!player)
         return;
 
-    if (sPetBattleMgr->IsPlayerInBattle(player->GetGUID()))
-    {
-        WorldPackets::BattlePet::PetBattleQueueStatus status;
-        status.Status = 0;
-        SendPacket(status.Write());
-        return;
-    }
-
-    // Validate that player has at least one alive pet in battle slots
-    {
-        BattlePets::BattlePetMgr* petMgr = GetBattlePetMgr();
-        bool hasPet = false;
-        for (uint8 i = 0; i < uint8(BattlePets::BattlePetSlot::Count); ++i)
-        {
-            WorldPackets::BattlePet::BattlePetSlot* slot = petMgr->GetSlot(BattlePets::BattlePetSlot(i));
-            if (slot && !slot->Locked && !slot->Pet.Guid.IsEmpty())
-            {
-                BattlePets::BattlePet* pet = petMgr->GetPet(slot->Pet.Guid);
-                if (pet && pet->PacketInfo.Health > 0)
-                {
-                    hasPet = true;
-                    break;
-                }
-            }
-        }
-        if (!hasPet)
-        {
-            WorldPackets::BattlePet::PetBattleQueueStatus status;
-            status.Status = 0;
-            SendPacket(status.Write());
-            return;
-        }
-    }
-
+    // PetBattleMgr::JoinQueue validates (in battle, journal lock, alive slotted pets) and answers
+    // with exactly one SMSG_PET_BATTLE_QUEUE_STATUS; retail sends a single QUEUED at join. The old
+    // handler sent a second copy (and status 0 on failure), which is not what the client expects.
     sPetBattleMgr->JoinQueue(player->GetGUID());
-
-    WorldPackets::BattlePet::PetBattleQueueStatus status;
-    status.Status = 1; // Queued
-    SendPacket(status.Write());
 }
 
 void WorldSession::HandleLeavePetBattleQueue(WorldPackets::BattlePet::LeavePetBattleQueue& /*leavePetBattleQueue*/)
@@ -1170,11 +1141,7 @@ void WorldSession::HandleLeavePetBattleQueue(WorldPackets::BattlePet::LeavePetBa
     if (!player)
         return;
 
-    sPetBattleMgr->LeaveQueue(player->GetGUID());
-
-    WorldPackets::BattlePet::PetBattleQueueStatus status;
-    status.Status = 0; // Not in queue
-    SendPacket(status.Write());
+    sPetBattleMgr->LeaveQueue(player->GetGUID());  // LeaveQueue sends REMOVED itself
 }
 
 void WorldSession::HandlePetBattleQueueProposeMatchResult(WorldPackets::BattlePet::PetBattleQueueProposeMatchResult& petBattleQueueProposeMatchResult)

@@ -394,16 +394,17 @@ static void WriteRoundResult(ByteBuffer& data, uint32 curRound, int8 nextPetBatt
 
     data << uint32(cooldowns.size());
 
-    // V12 wire order: Cooldowns, PetXDied count (3 bits), Effects, PetXDied data
-    // (V6 had Effects before Cooldowns, but V12 client expects this order)
+    // 12.1.0.69587 wire order (every FIRST_ROUND / ROUND_RESULT / REPLACEMENTS_MADE of two retail
+    // captures, verified byte-exact): Cooldowns, Effects, PetXDied count (3 bits) + flush, PetXDied.
+    // The count used to be written BEFORE the effects, which shifted every effect by one byte.
     for (PetBattleCooldownInfo const& cd : cooldowns)
         data << cd;
 
-    data << Bits<3>(petXDied.size());
-    data.FlushBits();
-
     for (PetBattleEffectInfo const& effect : effects)
         data << effect;
+
+    data << Bits<3>(petXDied.size());
+    data.FlushBits();
 
     for (int8 pboid : petXDied)
         data << int8(pboid);
@@ -616,16 +617,20 @@ WorldPacket const* PetBattlePVPChallenge::Write()
 WorldPacket const* PetBattleQueueStatus::Write()
 {
     _worldPacket << uint32(Status);
-    _worldPacket << uint32(SlotResult[0]);
-    _worldPacket << uint32(SlotResult[1]);
+    _worldPacket << Size<uint32>(SlotResult);
+    for (uint32 result : SlotResult)
+        _worldPacket << uint32(result);
+
+    _worldPacket << Ticket;
+
     _worldPacket << OptionalInit(ClientWaitTime);
     _worldPacket << OptionalInit(AvgWaitTime);
     _worldPacket.FlushBits();
 
     if (ClientWaitTime)
-        _worldPacket << uint32(*ClientWaitTime);
+        _worldPacket << uint64(*ClientWaitTime);
     if (AvgWaitTime)
-        _worldPacket << uint32(*AvgWaitTime);
+        _worldPacket << uint64(*AvgWaitTime);
 
     return &_worldPacket;
 }

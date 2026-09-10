@@ -30,6 +30,7 @@
 #include "Util.h"
 #include "WorldSession.h"
 #include <algorithm>
+#include <functional>
 
 namespace PetBattles
 {
@@ -2486,12 +2487,20 @@ void PetBattle::CompleteBattle()
 
         BattlePets::BattlePetMgr* petMgr = teamPlayer->GetSession()->GetBattlePetMgr();
         PetBattleTeamData const& team = _teams[t];
+        std::vector<std::reference_wrapper<BattlePets::BattlePet const>> changed;
         for (uint8 p = 0; p < team.PetCount; ++p)
         {
-            if (!team.Pets[p].BattlePetGUID.IsEmpty())
-                petMgr->SyncBattlePetHealth(team.Pets[p].BattlePetGUID, team.Pets[p].Health);
+            if (team.Pets[p].BattlePetGUID.IsEmpty())
+                continue;
+            petMgr->SyncBattlePetHealth(team.Pets[p].BattlePetGUID, team.Pets[p].Health);
+            if (BattlePets::BattlePet const* journalPet = petMgr->GetPet(team.Pets[p].BattlePetGUID))
+                changed.emplace_back(*journalPet);
         }
-        petMgr->SendJournal();
+        // Retail (12.1.0.69587): after SMSG_PET_BATTLE_FINISHED the client receives
+        // SMSG_BATTLE_PET_UPDATES carrying only the pets whose health/xp/level changed --
+        // never a full SMSG_BATTLE_PET_JOURNAL resend (10 KB) at this point.
+        if (!changed.empty())
+            petMgr->SendUpdates(changed, false);
     }
 
     // NPC trainer post-battle: restore movement and play cry emote on loss

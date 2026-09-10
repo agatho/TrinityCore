@@ -20,6 +20,7 @@
 
 #include "Packet.h"
 #include "PacketUtilities.h"
+#include "LFGPacketsCommon.h"
 #include "ObjectGuid.h"
 #include "Optional.h"
 #include "Position.h"
@@ -680,10 +681,16 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
+            // 12.1.0.69587 wire (friend capture, CMSG_JOIN_PET_BATTLE_QUEUE -> two QUEUED statuses):
+            //   Status u32, SlotResult (sized, empty on QUEUED), RideTicket{RequesterGuid = player,
+            //   Id, Type = 3 (PetBattle), Time = enqueue time, IsCrossFaction}, then the two optional
+            //   wait times as 64-bit seconds (ClientWaitTime 0 -> 8 across a 7.3 s gap, AvgWaitTime 60).
+            // The previous layout (fixed SlotResult pair, no ticket, 32-bit times) was 32 bytes short.
             uint32 Status = 0;
-            std::array<uint32, 2> SlotResult = {};
-            Optional<uint32> ClientWaitTime;
-            Optional<uint32> AvgWaitTime;
+            std::vector<uint32> SlotResult;
+            WorldPackets::LFG::RideTicket Ticket;
+            Optional<uint64> ClientWaitTime;
+            Optional<uint64> AvgWaitTime;
         };
 
         class PetBattleQueueProposeMatch final : public ServerPacket

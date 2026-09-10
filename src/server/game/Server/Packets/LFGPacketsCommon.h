@@ -29,7 +29,8 @@ namespace WorldPackets
         {
             None = 0,
             Battlegrounds = 1,
-            Lfg = 2
+            Lfg = 2,
+            PetBattle = 3       // SMSG_PET_BATTLE_QUEUE_STATUS ticket (12.1.0.69587 capture)
         };
 
         struct RideTicket
