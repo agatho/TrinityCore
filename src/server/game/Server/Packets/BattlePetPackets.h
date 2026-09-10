@@ -20,8 +20,10 @@
 
 #include "Packet.h"
 #include "PacketUtilities.h"
+#include "LFGPacketsCommon.h"
 #include "ObjectGuid.h"
 #include "Optional.h"
+#include "Position.h"
 #include "UnitDefines.h"
 #include <array>
 #include <memory>
@@ -194,18 +196,6 @@ namespace WorldPackets
             ObjectGuid PetGuid;
         };
 
-        // Developer/GM cheat variant of DELETE_PET (opcode DELETE_PET+1). Same wire (one pet GUID); the handler
-        // is gated on GM security since the client only emits this in developer mode.
-        class BattlePetDeletePetCheat final : public ClientPacket
-        {
-        public:
-            explicit BattlePetDeletePetCheat(WorldPacket&& packet) : ClientPacket(CMSG_BATTLE_PET_DELETE_PET_CHEAT, std::move(packet)) { }
-
-            void Read() override;
-
-            ObjectGuid PetGuid;
-        };
-
         class BattlePetSetFlags final : public ClientPacket
         {
         public:
@@ -366,7 +356,7 @@ namespace WorldPackets
         struct PetBattleEffectTargetInfo
         {
             uint8 Type = 0;     // JamPetBattleEffectTarget field 0 (wire: uint8(Type << 4); client reads byte>>4)
-            int32 Petx = 0;     // field 1 (petx@4) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ target pet index / PBOID, always read after the discriminator
+            int32 Petx = 0;     // field 1 (petx@4) — target pet index / PBOID, always read after the discriminator
             // Params carry the type-specific union members (ascending reflection offset):
             //  1 aura:     auraInstanceID, auraAbilityID, roundsRemaining, currentRound (fields 2-5)
             //  2 state:    stateID, stateValue                                         (fields 6-7)
@@ -375,7 +365,7 @@ namespace WorldPackets
             //  5 trigger:  triggerAbilityID                                            (field 10)
             //  6 cooldown: changedAbilityID, cooldownRemaining, lockdownRemaining      (fields 11-13)
             //  7 broadcast:broadcastTextID                                             (field 14)
-            //  8 pet:      EmbeddedPetUpdate (field 15 'pet'); slot/newAbilityID (16-17) not serialized ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ see report
+            //  8 pet:      EmbeddedPetUpdate (field 15 'pet'); slot/newAbilityID (16-17) not serialized — see report
             std::vector<int32> Params;
             Optional<PetBattlePetUpdateInfo> EmbeddedPetUpdate; // Only when Type == 8
         };
@@ -647,7 +637,7 @@ namespace WorldPackets
             bool Abandoned = false;
             bool PvpBattle = false;
             // 12.0.7 (68275) JamPetBattleFinalRound (sniff-verified vs b_pets, 5 battles): the winner is the
-            // per-team flag pair in the flag byte ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ bit5=Winners[0] (team0), bit4=Winners[1] (team1). The two
+            // per-team flag pair in the flag byte — bit5=Winners[0] (team0), bit4=Winners[1] (team1). The two
             // flat uint32s after the flush are field#1 (0 in every capture, role unknown, NOT winners) and
             // NpcCreatureID (0 for wild battles, the trainer entry for NPC battles).
             std::array<bool, 2> Winners = {};
@@ -691,10 +681,16 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
 
+            // 12.1.0.69587 wire (friend capture, CMSG_JOIN_PET_BATTLE_QUEUE -> two QUEUED statuses):
+            //   Status u32, SlotResult (sized, empty on QUEUED), RideTicket{RequesterGuid = player,
+            //   Id, Type = 3 (PetBattle), Time = enqueue time, IsCrossFaction}, then the two optional
+            //   wait times as 64-bit seconds (ClientWaitTime 0 -> 8 across a 7.3 s gap, AvgWaitTime 60).
+            // The previous layout (fixed SlotResult pair, no ticket, 32-bit times) was 32 bytes short.
             uint32 Status = 0;
-            std::array<uint32, 2> SlotResult = {};
-            Optional<uint32> ClientWaitTime;
-            Optional<uint32> AvgWaitTime;
+            std::vector<uint32> SlotResult;
+            WorldPackets::LFG::RideTicket Ticket;
+            Optional<uint64> ClientWaitTime;
+            Optional<uint64> AvgWaitTime;
         };
 
         class PetBattleQueueProposeMatch final : public ServerPacket

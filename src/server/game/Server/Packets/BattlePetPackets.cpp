@@ -177,11 +177,6 @@ void BattlePetDeletePet::Read()
     _worldPacket >> PetGuid;
 }
 
-void BattlePetDeletePetCheat::Read()
-{
-    _worldPacket >> PetGuid;
-}
-
 void BattlePetSetFlags::Read()
 {
     _worldPacket >> PetGuid;
@@ -399,16 +394,17 @@ static void WriteRoundResult(ByteBuffer& data, uint32 curRound, int8 nextPetBatt
 
     data << uint32(cooldowns.size());
 
-    // V12 wire order: Cooldowns, PetXDied count (3 bits), Effects, PetXDied data
-    // (V6 had Effects before Cooldowns, but V12 client expects this order)
+    // 12.1.0.69587 wire order (every FIRST_ROUND / ROUND_RESULT / REPLACEMENTS_MADE of two retail
+    // captures, verified byte-exact): Cooldowns, Effects, PetXDied count (3 bits) + flush, PetXDied.
+    // The count used to be written BEFORE the effects, which shifted every effect by one byte.
     for (PetBattleCooldownInfo const& cd : cooldowns)
         data << cd;
 
-    data << Bits<3>(petXDied.size());
-    data.FlushBits();
-
     for (PetBattleEffectInfo const& effect : effects)
         data << effect;
+
+    data << Bits<3>(petXDied.size());
+    data.FlushBits();
 
     for (int8 pboid : petXDied)
         data << int8(pboid);
@@ -588,8 +584,8 @@ WorldPacket const* PetBattleFinalRound::Write()
     // flags_byte = MSB-first bitfield{4}: bit7=Abandoned, bit6=PvpBattle, bit5=Winners[0] (team0), bit4=Winners[1] (team1).
     _worldPacket << Bits<1>(Abandoned);
     _worldPacket << Bits<1>(PvpBattle);
-    _worldPacket << Bits<1>(Winners[0]);    // bit5 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ team0 won (0 in every captured win/loss unless that team won)
-    _worldPacket << Bits<1>(Winners[1]);    // bit4 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ team1 won
+    _worldPacket << Bits<1>(Winners[0]);    // bit5 — team0 won (0 in every captured win/loss unless that team won)
+    _worldPacket << Bits<1>(Winners[1]);    // bit4 — team1 won
     _worldPacket.FlushBits();
 
     _worldPacket << uint32(0);              // flat field #1: 0 in every captured battle; role unknown, NOT winners
@@ -621,16 +617,20 @@ WorldPacket const* PetBattlePVPChallenge::Write()
 WorldPacket const* PetBattleQueueStatus::Write()
 {
     _worldPacket << uint32(Status);
-    _worldPacket << uint32(SlotResult[0]);
-    _worldPacket << uint32(SlotResult[1]);
+    _worldPacket << Size<uint32>(SlotResult);
+    for (uint32 result : SlotResult)
+        _worldPacket << uint32(result);
+
+    _worldPacket << Ticket;
+
     _worldPacket << OptionalInit(ClientWaitTime);
     _worldPacket << OptionalInit(AvgWaitTime);
     _worldPacket.FlushBits();
 
     if (ClientWaitTime)
-        _worldPacket << uint32(*ClientWaitTime);
+        _worldPacket << uint64(*ClientWaitTime);
     if (AvgWaitTime)
-        _worldPacket << uint32(*AvgWaitTime);
+        _worldPacket << uint64(*AvgWaitTime);
 
     return &_worldPacket;
 }

@@ -16,9 +16,12 @@
  */
 
 #include "WorldSession.h"
-#include "AccountMgr.h"
 #include "BattlePetMgr.h"
 #include "BattlePetPackets.h"
+#include "Creature.h"
+#include "DB2Stores.h"
+#include "Log.h"
+#include "MotionMaster.h"
 #include "ObjectAccessor.h"
 #include "PetBattleMgr.h"
 #include "Player.h"
@@ -31,6 +34,12 @@ void WorldSession::HandleBattlePetRequestJournal(WorldPackets::BattlePet::Battle
 
 void WorldSession::HandleBattlePetRequestJournalLock(WorldPackets::BattlePet::BattlePetRequestJournalLock& /*battlePetRequestJournalLock*/)
 {
+    // Retail 12.1.0.69587 (three captures): the client sends this whenever the journal UI opens;
+    // a session that already holds the lock (SMSG_BATTLE_PET_JOURNAL_LOCK_ACQUIRED was pushed at
+    // login) gets NO reply -- no lock packet and no 10 KB journal resend.
+    if (GetBattlePetMgr()->HasJournalLock())
+        return;
+
     GetBattlePetMgr()->SendJournalLockStatus();
 
     if (GetBattlePetMgr()->HasJournalLock())
@@ -123,17 +132,6 @@ void WorldSession::HandleQueryBattlePetName(WorldPackets::BattlePet::QueryBattle
 void WorldSession::HandleBattlePetDeletePet(WorldPackets::BattlePet::BattlePetDeletePet& battlePetDeletePet)
 {
     GetBattlePetMgr()->RemovePet(battlePetDeletePet.PetGuid);
-}
-
-void WorldSession::HandleBattlePetDeletePetCheat(WorldPackets::BattlePet::BattlePetDeletePetCheat& battlePetDeletePetCheat)
-{
-    // Developer/GM cheat variant of CMSG_BATTLE_PET_DELETE_PET - the client only emits it in developer mode.
-    // Gate it on account security so a normal player cannot reach the cheat path; the effect is identical to
-    // the non-cheat handler (remove the pet from the journal).
-    if (AccountMgr::IsPlayerAccount(GetSecurity()))
-        return;
-
-    GetBattlePetMgr()->RemovePet(battlePetDeletePetCheat.PetGuid);
 }
 
 void WorldSession::HandleBattlePetSetFlags(WorldPackets::BattlePet::BattlePetSetFlags& battlePetSetFlags)
@@ -379,7 +377,7 @@ static void BuildRoundEffects(std::vector<WorldPackets::BattlePet::PetBattleEffe
         effect.Flags = roundEffect.Flags;
         effect.SourceAuraInstanceID = 0;
         effect.TurnInstanceID = 0;
-        // Wire offset 12 is the PetBattleEffectType ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ client switches on this to process effects
+        // Wire offset 12 is the PetBattleEffectType — client switches on this to process effects
         // (SetHealth=0, AuraApply=1, PetSwap=4, SetState=6, etc.), NOT a sequential index
         effect.PetBattleEffectType = roundEffect.EffectType;
         effect.CasterPBOID = static_cast<int32>(roundEffect.SourceTeam * PetBattles::MAX_PET_BATTLE_TEAM_SIZE + roundEffect.SourcePet);
@@ -407,7 +405,7 @@ static void BuildRoundEffects(std::vector<WorldPackets::BattlePet::PetBattleEffe
             case PetBattles::PET_BATTLE_EFFECT_AURA_CHANGE:
             {
                 // Sniff-verified retail wire order is [AbilityID, InstanceID, RoundsRemaining, CurrentRound]
-                // (we historically stored Param1=InstanceID, Param2=AbilityID ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ swap on the wire so
+                // (we historically stored Param1=InstanceID, Param2=AbilityID — swap on the wire so
                 // existing call sites keep their semantic naming)
                 target.Type = 1; // Aura: 4 params
                 target.Params.push_back(roundEffect.Param2); // AuraAbilityID
@@ -443,7 +441,7 @@ static void BuildRoundEffects(std::vector<WorldPackets::BattlePet::PetBattleEffe
                 break;
             case PetBattles::PET_BATTLE_EFFECT_AURA_PROCESSING_BEGIN:
             case PetBattles::PET_BATTLE_EFFECT_AURA_PROCESSING_END:
-                target.Type = 0; // No data ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ sentinel markers with PBOID 9
+                target.Type = 0; // No data — sentinel markers with PBOID 9
                 break;
             case PetBattles::PET_BATTLE_EFFECT_REPLACE_PET:
             {
@@ -531,7 +529,7 @@ void WorldSession::HandlePetBattleRequestWild(WorldPackets::BattlePet::PetBattle
         return;
     }
 
-    // Distance check ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ player must be reasonably close to the creature
+    // Distance check — player must be reasonably close to the creature
     if (!player->IsWithinDistInMap(creature, 50.0f))
     {
         WorldPackets::BattlePet::PetBattleRequestFailed failed;
@@ -826,7 +824,7 @@ void WorldSession::HandlePetBattleInput(WorldPackets::BattlePet::PetBattleInput&
     if (!battle)
         return;
 
-    // Only accept input during active round ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ not during pet replacement, final round, or finished
+    // Only accept input during active round — not during pet replacement, final round, or finished
     if (battle->GetBattleState() != PetBattles::PET_BATTLE_STATE_ROUND_IN_PROGRESS)
         return;
 
@@ -1026,7 +1024,7 @@ void WorldSession::HandlePetBattleFinalNotify(WorldPackets::BattlePet::PetBattle
     if (battle->HasPendingFinishDelay())
         return;
 
-    // Transition FINAL_ROUND ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ FINISHED (sends Finished packet, syncs health, sends journal)
+    // Transition FINAL_ROUND → FINISHED (sends Finished packet, syncs health, sends journal)
     battle->CompleteBattle();
 
     // Remove the battle from tracking maps so player can start a new one
@@ -1131,45 +1129,10 @@ void WorldSession::HandleJoinPetBattleQueue(WorldPackets::BattlePet::JoinPetBatt
     if (!player)
         return;
 
-    if (sPetBattleMgr->IsPlayerInBattle(player->GetGUID()))
-    {
-        WorldPackets::BattlePet::PetBattleQueueStatus status;
-        status.Status = 0;
-        SendPacket(status.Write());
-        return;
-    }
-
-    // Validate that player has at least one alive pet in battle slots
-    {
-        BattlePets::BattlePetMgr* petMgr = GetBattlePetMgr();
-        bool hasPet = false;
-        for (uint8 i = 0; i < uint8(BattlePets::BattlePetSlot::Count); ++i)
-        {
-            WorldPackets::BattlePet::BattlePetSlot* slot = petMgr->GetSlot(BattlePets::BattlePetSlot(i));
-            if (slot && !slot->Locked && !slot->Pet.Guid.IsEmpty())
-            {
-                BattlePets::BattlePet* pet = petMgr->GetPet(slot->Pet.Guid);
-                if (pet && pet->PacketInfo.Health > 0)
-                {
-                    hasPet = true;
-                    break;
-                }
-            }
-        }
-        if (!hasPet)
-        {
-            WorldPackets::BattlePet::PetBattleQueueStatus status;
-            status.Status = 0;
-            SendPacket(status.Write());
-            return;
-        }
-    }
-
+    // PetBattleMgr::JoinQueue validates (in battle, journal lock, alive slotted pets) and answers
+    // with exactly one SMSG_PET_BATTLE_QUEUE_STATUS; retail sends a single QUEUED at join. The old
+    // handler sent a second copy (and status 0 on failure), which is not what the client expects.
     sPetBattleMgr->JoinQueue(player->GetGUID());
-
-    WorldPackets::BattlePet::PetBattleQueueStatus status;
-    status.Status = 1; // Queued
-    SendPacket(status.Write());
 }
 
 void WorldSession::HandleLeavePetBattleQueue(WorldPackets::BattlePet::LeavePetBattleQueue& /*leavePetBattleQueue*/)
@@ -1178,11 +1141,7 @@ void WorldSession::HandleLeavePetBattleQueue(WorldPackets::BattlePet::LeavePetBa
     if (!player)
         return;
 
-    sPetBattleMgr->LeaveQueue(player->GetGUID());
-
-    WorldPackets::BattlePet::PetBattleQueueStatus status;
-    status.Status = 0; // Not in queue
-    SendPacket(status.Write());
+    sPetBattleMgr->LeaveQueue(player->GetGUID());  // LeaveQueue sends REMOVED itself
 }
 
 void WorldSession::HandlePetBattleQueueProposeMatchResult(WorldPackets::BattlePet::PetBattleQueueProposeMatchResult& petBattleQueueProposeMatchResult)

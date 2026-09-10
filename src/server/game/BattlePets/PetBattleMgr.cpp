@@ -21,11 +21,17 @@
 #include "Creature.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
+#include "GameTime.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "WorldSession.h"
 #include <algorithm>
+
+// Observed on retail 12.1.0.69587: QUEUED resent 7.3 s after the join; AvgWaitTime 60 s in both frames.
+static constexpr uint32 PET_BATTLE_QUEUE_STATUS_UPDATE_INTERVAL = 7000;
+static constexpr uint64 PET_BATTLE_QUEUE_AVG_WAIT_SECS = 60;
+
 
 namespace PetBattles
 {
@@ -567,14 +573,24 @@ void PetBattleMgr::Update(uint32 diff)
             {
                 if (Player* player = ObjectAccessor::FindPlayer(guid))
                 {
-                    WorldPackets::BattlePet::PetBattleQueueStatus timeoutStatus;
-                    timeoutStatus.Status = PET_BATTLE_QUEUE_STATUS_PROPOSAL_TIMED_OUT;
-                    player->SendDirectMessage(timeoutStatus.Write());
+                    SendQueueStatus(player, PET_BATTLE_QUEUE_STATUS_PROPOSAL_TIMED_OUT);
                 }
-                _pvpQueue.push_back({ guid, 0 });
+                Enqueue(guid);
             }
             _pendingProposal.reset();
         }
+    }
+
+    // Retail (12.1.0.69587 capture): a queued client receives SMSG_PET_BATTLE_QUEUE_STATUS again
+    // while it waits -- QUEUED with the elapsed ClientWaitTime (observed once, 7.3 s after the join).
+    for (PvPQueueEntry& entry : _pvpQueue)
+    {
+        entry.UpdateTimer += diff;
+        if (entry.UpdateTimer < PET_BATTLE_QUEUE_STATUS_UPDATE_INTERVAL)
+            continue;
+        entry.UpdateTimer = 0;
+        if (Player* player = ObjectAccessor::FindPlayer(entry.PlayerGUID))
+            SendQueueStatus(player, PET_BATTLE_QUEUE_STATUS_QUEUED, &entry);
     }
 
     // Try to match PvP queue players periodically (every 5 seconds)
@@ -811,6 +827,36 @@ std::vector<NPCTeamPetInfo> const* PetBattleMgr::GetNPCTeam(uint32 npcEntry) con
 // PvP Queue
 // ============================================================================
 
+void PetBattleMgr::Enqueue(ObjectGuid playerGUID)
+{
+    PvPQueueEntry entry;
+    entry.PlayerGUID = playerGUID;
+    entry.TicketId = _nextQueueTicketId++;
+    entry.EnqueueTime = GameTime::GetGameTime();
+    _pvpQueue.push_back(entry);
+}
+
+// One packet shape for every queue outcome: the ticket names the requester (and the queue entry
+// when there is one); the wait times ride along only while the player is actually queued.
+void PetBattleMgr::SendQueueStatus(Player* player, uint32 status, PvPQueueEntry const* entry) const
+{
+    WorldPackets::BattlePet::PetBattleQueueStatus packet;
+    packet.Status = status;
+    packet.Ticket.RequesterGuid = player->GetGUID();
+    packet.Ticket.Type = WorldPackets::LFG::RideType::PetBattle;
+    if (entry)
+    {
+        packet.Ticket.Id = entry->TicketId;
+        packet.Ticket.Time = entry->EnqueueTime;
+        packet.ClientWaitTime = uint64(std::max<time_t>(0, GameTime::GetGameTime() - entry->EnqueueTime));
+        packet.AvgWaitTime = PET_BATTLE_QUEUE_AVG_WAIT_SECS;
+    }
+    else
+        packet.Ticket.Time = GameTime::GetGameTime();
+
+    player->SendDirectMessage(packet.Write());
+}
+
 void PetBattleMgr::JoinQueue(ObjectGuid playerGUID)
 {
     // Don't add if already in queue
@@ -820,9 +866,7 @@ void PetBattleMgr::JoinQueue(ObjectGuid playerGUID)
         {
             if (Player* player = ObjectAccessor::FindPlayer(playerGUID))
             {
-                WorldPackets::BattlePet::PetBattleQueueStatus status;
-                status.Status = PET_BATTLE_QUEUE_STATUS_ALREADY_QUEUED;
-                player->SendDirectMessage(status.Write());
+                SendQueueStatus(player, PET_BATTLE_QUEUE_STATUS_ALREADY_QUEUED);
             }
             return;
         }
@@ -833,9 +877,7 @@ void PetBattleMgr::JoinQueue(ObjectGuid playerGUID)
     {
         if (Player* player = ObjectAccessor::FindPlayer(playerGUID))
         {
-            WorldPackets::BattlePet::PetBattleQueueStatus status;
-            status.Status = PET_BATTLE_QUEUE_STATUS_JOIN_FAILED;
-            player->SendDirectMessage(status.Write());
+            SendQueueStatus(player, PET_BATTLE_QUEUE_STATUS_JOIN_FAILED);
         }
         return;
     }
@@ -846,9 +888,7 @@ void PetBattleMgr::JoinQueue(ObjectGuid playerGUID)
         BattlePets::BattlePetMgr* petMgr = player->GetSession()->GetBattlePetMgr();
         if (!petMgr->HasJournalLock())
         {
-            WorldPackets::BattlePet::PetBattleQueueStatus status;
-            status.Status = PET_BATTLE_QUEUE_STATUS_JOIN_FAILED_JOURNAL_LOCK;
-            player->SendDirectMessage(status.Write());
+            SendQueueStatus(player, PET_BATTLE_QUEUE_STATUS_JOIN_FAILED_JOURNAL_LOCK);
             return;
         }
 
@@ -869,24 +909,15 @@ void PetBattleMgr::JoinQueue(ObjectGuid playerGUID)
 
         if (!hasPet)
         {
-            WorldPackets::BattlePet::PetBattleQueueStatus status;
-            status.Status = PET_BATTLE_QUEUE_STATUS_JOIN_FAILED_SLOTS;
-            player->SendDirectMessage(status.Write());
+            SendQueueStatus(player, PET_BATTLE_QUEUE_STATUS_JOIN_FAILED_SLOTS);
             return;
         }
     }
 
-    PvPQueueEntry entry;
-    entry.PlayerGUID = playerGUID;
-    entry.EnqueueTime = 0;
-    _pvpQueue.push_back(entry);
+    Enqueue(playerGUID);
 
     if (Player* player = ObjectAccessor::FindPlayer(playerGUID))
-    {
-        WorldPackets::BattlePet::PetBattleQueueStatus status;
-        status.Status = PET_BATTLE_QUEUE_STATUS_QUEUED;
-        player->SendDirectMessage(status.Write());
-    }
+        SendQueueStatus(player, PET_BATTLE_QUEUE_STATUS_QUEUED, &_pvpQueue.back());
 
     TC_LOG_DEBUG("server.loading", "PetBattleMgr: Player {} joined PvP pet battle queue (queue size: {})",
         playerGUID.ToString(), _pvpQueue.size());
@@ -910,15 +941,11 @@ void PetBattleMgr::LeaveQueue(ObjectGuid playerGUID)
 
             if (Player* other = ObjectAccessor::FindPlayer(otherGUID))
             {
-                WorldPackets::BattlePet::PetBattleQueueStatus status;
-                status.Status = PET_BATTLE_QUEUE_STATUS_MATCH_OPPONENT_DECLINED;
-                other->SendDirectMessage(status.Write());
+                SendQueueStatus(other, PET_BATTLE_QUEUE_STATUS_MATCH_OPPONENT_DECLINED);
             }
 
             // Re-add the other player to the queue
-            PvPQueueEntry requeue;
-            requeue.PlayerGUID = otherGUID;
-            _pvpQueue.push_back(requeue);
+                        Enqueue(otherGUID);
 
             _pendingProposal.reset();
         }
@@ -926,9 +953,7 @@ void PetBattleMgr::LeaveQueue(ObjectGuid playerGUID)
 
     if (Player* player = ObjectAccessor::FindPlayer(playerGUID))
     {
-        WorldPackets::BattlePet::PetBattleQueueStatus status;
-        status.Status = PET_BATTLE_QUEUE_STATUS_REMOVED;
-        player->SendDirectMessage(status.Write());
+        SendQueueStatus(player, PET_BATTLE_QUEUE_STATUS_REMOVED);
     }
 }
 
@@ -949,24 +974,18 @@ void PetBattleMgr::HandleProposalResult(ObjectGuid playerGUID, bool accepted)
         // Send declined status to the declining player
         if (Player* player = ObjectAccessor::FindPlayer(playerGUID))
         {
-            WorldPackets::BattlePet::PetBattleQueueStatus status;
-            status.Status = PET_BATTLE_QUEUE_STATUS_MATCH_DECLINED;
-            player->SendDirectMessage(status.Write());
+            SendQueueStatus(player, PET_BATTLE_QUEUE_STATUS_MATCH_DECLINED);
         }
 
         // Notify the other player and re-queue them
         ObjectGuid otherGUID = (_pendingProposal->Player1 == playerGUID) ?
             _pendingProposal->Player2 : _pendingProposal->Player1;
 
-        PvPQueueEntry requeue;
-        requeue.PlayerGUID = otherGUID;
-        _pvpQueue.push_back(requeue);
+                Enqueue(otherGUID);
 
         if (Player* other = ObjectAccessor::FindPlayer(otherGUID))
         {
-            WorldPackets::BattlePet::PetBattleQueueStatus status;
-            status.Status = PET_BATTLE_QUEUE_STATUS_MATCH_OPPONENT_DECLINED;
-            other->SendDirectMessage(status.Write());
+            SendQueueStatus(other, PET_BATTLE_QUEUE_STATUS_MATCH_OPPONENT_DECLINED);
         }
 
         _pendingProposal.reset();
@@ -976,9 +995,7 @@ void PetBattleMgr::HandleProposalResult(ObjectGuid playerGUID, bool accepted)
     // Send accepted status to this player
     if (Player* player = ObjectAccessor::FindPlayer(playerGUID))
     {
-        WorldPackets::BattlePet::PetBattleQueueStatus status;
-        status.Status = PET_BATTLE_QUEUE_STATUS_MATCH_ACCEPTED;
-        player->SendDirectMessage(status.Write());
+        SendQueueStatus(player, PET_BATTLE_QUEUE_STATUS_MATCH_ACCEPTED);
     }
 
     // Check if both accepted
@@ -1063,9 +1080,7 @@ void PetBattleMgr::TryMatchPlayers()
     // Send matchmaking then proposal status to both players
     for (Player* matchPlayer : { player1, player2 })
     {
-        WorldPackets::BattlePet::PetBattleQueueStatus matchStatus;
-        matchStatus.Status = PET_BATTLE_QUEUE_STATUS_MATCHMAKING;
-        matchPlayer->SendDirectMessage(matchStatus.Write());
+        SendQueueStatus(matchPlayer, PET_BATTLE_QUEUE_STATUS_MATCHMAKING);
     }
 
     WorldPackets::BattlePet::PetBattleQueueProposeMatch proposeMatch;

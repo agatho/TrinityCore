@@ -99,7 +99,7 @@ enum FlagsControlType
     FLAGS_CONTROL_TYPE_REMOVE       = 2
 };
 
-// BattlePetState.db2 â€” LuaName-based IDs (verified via wago.tools/WoWDBDefs)
+// BattlePetState.db2 — LuaName-based IDs (verified via wago.tools/WoWDBDefs)
 enum BattlePetState
 {
     STATE_IS_DEAD                       = 1,

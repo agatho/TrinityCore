@@ -238,7 +238,7 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_BATTLE_PAY_START_VAS_PURCHASE,                      STATUS_IGNORED,   PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_BATTLE_PET_CLEAR_FANFARE,                           STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlePetClearFanfare);
     DEFINE_HANDLER(CMSG_BATTLE_PET_DELETE_PET,                              STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlePetDeletePet);
-    DEFINE_HANDLER(CMSG_BATTLE_PET_DELETE_PET_CHEAT,                        STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlePetDeletePetCheat);
+    DEFINE_HANDLER(CMSG_BATTLE_PET_DELETE_PET_CHEAT,                        STATUS_UNHANDLED, PROCESS_THREADUNSAFE, &WorldSession::Handle_NULL);
     DEFINE_HANDLER(CMSG_BATTLE_PET_MODIFY_NAME,                             STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlePetModifyName);
     DEFINE_HANDLER(CMSG_BATTLE_PET_REQUEST_JOURNAL,                         STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlePetRequestJournal);
     DEFINE_HANDLER(CMSG_BATTLE_PET_REQUEST_JOURNAL_LOCK,                    STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleBattlePetRequestJournalLock);

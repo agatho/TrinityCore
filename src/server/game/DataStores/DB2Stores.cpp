@@ -83,10 +83,15 @@ DB2Storage<BankTabEntry>                        sBankTabStore("BankTab.db2", &Ba
 DB2Storage<BannedAddonsEntry>                   sBannedAddonsStore("BannedAddons.db2", &BannedAddonsLoadInfo::Instance);
 DB2Storage<BarberShopStyleEntry>                sBarberShopStyleStore("BarberShopStyle.db2", &BarberShopStyleLoadInfo::Instance);
 DB2Storage<BattlePetAbilityEntry>               sBattlePetAbilityStore("BattlePetAbility.db2", &BattlePetAbilityLoadInfo::Instance);
+DB2Storage<BattlePetAbilityEffectEntry>         sBattlePetAbilityEffectStore("BattlePetAbilityEffect.db2", &BattlePetAbilityEffectLoadInfo::Instance);
+DB2Storage<BattlePetAbilityStateEntry>          sBattlePetAbilityStateStore("BattlePetAbilityState.db2", &BattlePetAbilityStateLoadInfo::Instance);
+DB2Storage<BattlePetAbilityTurnEntry>           sBattlePetAbilityTurnStore("BattlePetAbilityTurn.db2", &BattlePetAbilityTurnLoadInfo::Instance);
 DB2Storage<BattlePetBreedQualityEntry>          sBattlePetBreedQualityStore("BattlePetBreedQuality.db2", &BattlePetBreedQualityLoadInfo::Instance);
 DB2Storage<BattlePetBreedStateEntry>            sBattlePetBreedStateStore("BattlePetBreedState.db2", &BattlePetBreedStateLoadInfo::Instance);
+DB2Storage<BattlePetEffectPropertiesEntry>      sBattlePetEffectPropertiesStore("BattlePetEffectProperties.db2", &BattlePetEffectPropertiesLoadInfo::Instance);
 DB2Storage<BattlePetSpeciesEntry>               sBattlePetSpeciesStore("BattlePetSpecies.db2", &BattlePetSpeciesLoadInfo::Instance);
 DB2Storage<BattlePetSpeciesStateEntry>          sBattlePetSpeciesStateStore("BattlePetSpeciesState.db2", &BattlePetSpeciesStateLoadInfo::Instance);
+DB2Storage<BattlePetSpeciesXAbilityEntry>       sBattlePetSpeciesXAbilityStore("BattlePetSpeciesXAbility.db2", &BattlePetSpeciesXAbilityLoadInfo::Instance);
 DB2Storage<BattlemasterListEntry>               sBattlemasterListStore("BattlemasterList.db2", &BattlemasterListLoadInfo::Instance);
 DB2Storage<BattlemasterListXMapEntry>           sBattlemasterListXMapStore("BattlemasterListXMap.db2", &BattlemasterListXMapLoadInfo::Instance);
 DB2Storage<BountyEntry>                          sBountyStore("Bounty.db2", &BountyLoadInfo::Instance);
@@ -545,11 +550,6 @@ DB2Storage<WarbandSceneSourceInfoEntry>         sWarbandSceneSourceInfoStore("Wa
 DB2Storage<ResearchSiteEntry>                   sResearchSiteStore("ResearchSite.db2", &ResearchSiteLoadInfo::Instance);
 DB2Storage<ResearchProjectEntry>                sResearchProjectStore("ResearchProject.db2", &ResearchProjectLoadInfo::Instance);
 DB2Storage<ResearchBranchEntry>                 sResearchBranchStore("ResearchBranch.db2", &ResearchBranchLoadInfo::Instance);
-DB2Storage<BattlePetSpeciesXAbilityEntry>       sBattlePetSpeciesXAbilityStore("BattlePetSpeciesXAbility.db2", &BattlePetSpeciesXAbilityLoadInfo::Instance);
-DB2Storage<BattlePetEffectPropertiesEntry>      sBattlePetEffectPropertiesStore("BattlePetEffectProperties.db2", &BattlePetEffectPropertiesLoadInfo::Instance);
-DB2Storage<BattlePetAbilityTurnEntry>           sBattlePetAbilityTurnStore("BattlePetAbilityTurn.db2", &BattlePetAbilityTurnLoadInfo::Instance);
-DB2Storage<BattlePetAbilityStateEntry>          sBattlePetAbilityStateStore("BattlePetAbilityState.db2", &BattlePetAbilityStateLoadInfo::Instance);
-DB2Storage<BattlePetAbilityEffectEntry>         sBattlePetAbilityEffectStore("BattlePetAbilityEffect.db2", &BattlePetAbilityEffectLoadInfo::Instance);
 
 TaxiMask                                        sTaxiNodesMask;
 TaxiMask                                        sOldContinentsNodesMask;
@@ -890,10 +890,15 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sBannedAddonsStore);
     LOAD_DB2(sBarberShopStyleStore);
     LOAD_DB2(sBattlePetAbilityStore);
+    LOAD_DB2(sBattlePetAbilityEffectStore);
+    LOAD_DB2(sBattlePetAbilityStateStore);
+    LOAD_DB2(sBattlePetAbilityTurnStore);
     LOAD_DB2(sBattlePetBreedQualityStore);
     LOAD_DB2(sBattlePetBreedStateStore);
+    LOAD_DB2(sBattlePetEffectPropertiesStore);
     LOAD_DB2(sBattlePetSpeciesStore);
     LOAD_DB2(sBattlePetSpeciesStateStore);
+    LOAD_DB2(sBattlePetSpeciesXAbilityStore);
     LOAD_DB2(sBattlemasterListStore);
     LOAD_DB2(sBattlemasterListXMapStore);
     LOAD_DB2(sBountyStore);
@@ -1388,11 +1393,6 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sResearchSiteStore);
     LOAD_DB2(sResearchProjectStore);
     LOAD_DB2(sResearchBranchStore);
-    LOAD_DB2(sBattlePetSpeciesXAbilityStore);
-    LOAD_DB2(sBattlePetEffectPropertiesStore);
-    LOAD_DB2(sBattlePetAbilityTurnStore);
-    LOAD_DB2(sBattlePetAbilityStateStore);
-    LOAD_DB2(sBattlePetAbilityEffectStore);
 
     // error checks
 
