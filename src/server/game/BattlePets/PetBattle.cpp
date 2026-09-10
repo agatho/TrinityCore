@@ -278,14 +278,14 @@ static void CalculateWildPetStats(PetBattlePetData& wildPet)
     wildPet.BaseSpeed = baseSpeed;
 
     // Use same formula as BattlePet::CalculateStats (DB2 values are scaled ~1000-2000)
-    float health = float(baseHP) * qualityMultiplier * wildPet.Level;
-    float power = float(basePower) * qualityMultiplier * wildPet.Level;
-    float speed = float(baseSpeed) * qualityMultiplier * wildPet.Level;
+    double health = double(baseHP) * qualityMultiplier * wildPet.Level;
+    double power = double(basePower) * qualityMultiplier * wildPet.Level;
+    double speed = double(baseSpeed) * qualityMultiplier * wildPet.Level;
 
-    wildPet.MaxHealth = int32(round(health / 20.0f) + 100);
+    wildPet.MaxHealth = int32(round(health / 20.0) + 100);
     wildPet.Health = wildPet.MaxHealth;
-    wildPet.Power = int32(round(power / 100.0f));
-    wildPet.Speed = int32(round(speed / 100.0f));
+    wildPet.Power = int32(round(power / 100.0));
+    wildPet.Speed = int32(round(speed / 100.0));
     wildPet.EffectivePower = wildPet.Power;
     wildPet.EffectiveSpeed = wildPet.Speed;
 
@@ -338,14 +338,14 @@ static void NormalizePetToBattleLevel(PetBattlePetData& pet, uint16 level)
 
     pet.Level = level;
 
-    float health = float(pet.BaseStamina) * qualityMultiplier * level;
-    float power  = float(pet.BasePower)   * qualityMultiplier * level;
-    float speed  = float(pet.BaseSpeed)   * qualityMultiplier * level;
+    double health = double(pet.BaseStamina) * qualityMultiplier * level;
+    double power  = double(pet.BasePower)   * qualityMultiplier * level;
+    double speed  = double(pet.BaseSpeed)   * qualityMultiplier * level;
 
-    pet.MaxHealth = int32(round(health / 20.0f) + 100);
+    pet.MaxHealth = int32(round(health / 20.0) + 100);
     pet.Health = pet.MaxHealth; // PvP teams enter at full health
-    pet.Power = std::max(1, int32(round(power / 100.0f)));
-    pet.Speed = std::max(1, int32(round(speed / 100.0f)));
+    pet.Power = std::max(1, int32(round(power / 100.0)));
+    pet.Speed = std::max(1, int32(round(speed / 100.0)));
     pet.EffectivePower = pet.Power;
     pet.EffectiveSpeed = pet.Speed;
 }
@@ -654,6 +654,7 @@ void PetBattle::ProcessTurnForTeam(uint8 teamIdx)
 {
     PetBattleTeamData& team = _teams[teamIdx];
     PetBattlePetData& activePet = team.Pets[team.FrontPetIndex];
+    activePet.SeenAction = true;
 
     // Stunned pets skip their turn
     if (activePet.IsStunned)
@@ -1685,8 +1686,8 @@ DamageResult PetBattle::CalculateAbilityDamage(int32 abilityPower, int32 attacke
 {
     DamageResult result;
 
-    // Formula: rawDamage = abilityPower * (attackerPower / 20.0f)
-    float rawDamage = abilityPower * (attackerPower / 20.0f);
+    // Formula (12.1.0.69587 wire, 25/25 hits): rawDamage = abilityPower * (1 + attackerPower / 20)
+    float rawDamage = abilityPower * (1.0f + attackerPower / 20.0f);
 
     // Type effectiveness modifier
     result.TypeMod = GetTypeEffectiveness(abilityType, PetBattlePetType(defender.PetType));
@@ -1742,13 +1743,15 @@ DamageResult PetBattle::CalculateAbilityDamage(int32 abilityPower, int32 attacke
     if (attacker.PetType != PET_TYPE_ELEMENTAL)
         critChance += _environments[PET_BATTLE_WEATHER_ENV_SLOT].GetState(BattlePets::STATE_STAT_CRIT_CHANCE) / 100.0f;
     critChance = std::clamp(critChance, 0.0f, 1.0f);
+    // Retail truncates the modified damage, then applies the crit multiplier and truncates again
+    // (wire: 16.5 -> 16, 475.5 -> 475; crit 5 -> 7, 35 -> 52)
+    int32 damage = int32(std::floor(rawDamage));
     if (frand(0.0f, 1.0f) < critChance)
     {
-        rawDamage *= PET_BATTLE_CRIT_MULTIPLIER;
+        damage = int32(std::floor(damage * PET_BATTLE_CRIT_MULTIPLIER));
         result.IsCrit = true;
     }
-
-    int32 damage = std::max(1, int32(std::round(rawDamage)));
+    damage = std::max(1, damage);
 
     // Flat damage taken modifier from environment (e.g. Sandstorm damage shield)
     if (defender.PetType != PET_TYPE_ELEMENTAL)
@@ -1773,7 +1776,7 @@ DamageResult PetBattle::CalculateAbilityDamage(int32 abilityPower, int32 attacke
 
 int32 PetBattle::CalculateAbilityHealing(int32 healPower, int32 attackerPower, PetBattlePetData const& healer)
 {
-    float rawHealing = healPower * (attackerPower / 20.0f);
+    float rawHealing = healPower * (1.0f + attackerPower / 20.0f);
 
     // Weather healing modifier from environment states (Elemental passive: ignores weather)
     if (healer.PetType != PET_TYPE_ELEMENTAL)
@@ -1788,7 +1791,7 @@ int32 PetBattle::CalculateAbilityHealing(int32 healPower, int32 attackerPower, P
         if (stateID == BattlePets::STATE_MOD_HEALING_DEALT_PERCENT && stateValue != 0)
             rawHealing *= (1.0f + stateValue / 100.0f);
 
-    return std::max(1, int32(std::round(rawHealing)));
+    return std::max(1, int32(std::floor(rawHealing)));
 }
 
 // ============================================================================
@@ -2258,13 +2261,14 @@ void PetBattle::AwardExperience()
     for (uint8 i = 0; i < loserTeam.PetCount; ++i)
         maxOpponentLevel = std::max(maxOpponentLevel, loserTeam.Pets[i].Level);
 
-    // Award XP to all surviving pets on the winning team
+    // Award XP to every pet of the winning team that took the field (retail: a pet that died
+    // during the battle still gets XP, a pet that never fought gets none -- FINAL_ROUND SeenAction)
     BattlePets::BattlePetMgr* petMgr = player->GetSession()->GetBattlePetMgr();
 
     for (uint8 i = 0; i < winnerTeam.PetCount; ++i)
     {
         PetBattlePetData& pet = winnerTeam.Pets[i];
-        if (!pet.IsAlive() || pet.Level >= BattlePets::MAX_BATTLE_PET_LEVEL)
+        if (!pet.SeenAction || pet.Level >= BattlePets::MAX_BATTLE_PET_LEVEL)
             continue;
 
         if (pet.BattlePetGUID.IsEmpty())
@@ -2420,8 +2424,8 @@ void PetBattle::SendFinalRoundPacket(bool abandoned)
             pet.Pboid = t * MAX_PET_BATTLE_TEAM_SIZE + i;
             pet.Captured = team.Pets[i].IsCaptured;
             pet.Caged = false;
-            pet.SeenAction = false;
-            pet.AwardedXP = _canAwardXP;
+            pet.SeenAction = team.Pets[i].SeenAction;
+            pet.AwardedXP = _canAwardXP && team.Pets[i].SeenAction && team.Pets[i].Level < BattlePets::MAX_BATTLE_PET_LEVEL;
             finalRound.Pets.push_back(pet);
         }
     }

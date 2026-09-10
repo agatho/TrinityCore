@@ -52,9 +52,11 @@ void BattlePet::CalculateStats()
     if (breedState == _battlePetBreedStates.end()) // non existing breed id
         return;
 
-    float health = breedState->second[STATE_STAT_STAMINA];
-    float power = breedState->second[STATE_STAT_POWER];
-    float speed = breedState->second[STATE_STAT_SPEED];
+    // double: the float32 DB2 quality multiplier (0.65f = 0.6499999761) must not be re-rounded
+    // (retail: species 1959 breed 16 q3 L1 = 171 HP, float locals give 172)
+    double health = breedState->second[STATE_STAT_STAMINA];
+    double power = breedState->second[STATE_STAT_POWER];
+    double speed = breedState->second[STATE_STAT_SPEED];
 
     // modify stats depending on species - not all pets have this
     auto speciesState = _battlePetSpeciesStates.find(PacketInfo.Species);

@@ -357,12 +357,28 @@ static WorldPackets::BattlePet::PetBattlePetUpdateInfo BuildPetUpdateInfo(
         petInfo.Auras.push_back(auraInfo);
     }
 
-    petInfo.States.push_back({ BattlePets::STATE_STAT_POWER, petData.BasePower });
+    petInfo.States.push_back({ BattlePets::STATE_STAT_POWER, petData.Power }); // wire: final power, not the raw base
     petInfo.States.push_back({ BattlePets::STATE_STAT_STAMINA, petData.BaseStamina });
     petInfo.States.push_back({ BattlePets::STATE_STAT_SPEED, petData.BaseSpeed });
     petInfo.States.push_back({ 40, 5 }); // CritChance = 5%
     if (petData.PetType >= 0 && petData.PetType < PetBattles::PET_TYPE_COUNT)
-        petInfo.States.push_back({ uint32(44 + petData.PetType), 1 }); // Family passive flag
+    {
+        // BattlePetState passive ids (Passive_Critter 42 .. Passive_Aquatic 51) are not in PetType order
+        static constexpr uint32 passiveStateByPetType[PetBattles::PET_TYPE_COUNT] =
+        {
+            44, // Humanoid
+            46, // Dragonkin
+            45, // Flying
+            50, // Undead
+            42, // Critter
+            49, // Magic
+            47, // Elemental
+            43, // Beast
+            51, // Aquatic
+            48  // Mechanical
+        };
+        petInfo.States.push_back({ passiveStateByPetType[petData.PetType], 1 });
+    }
 
     return petInfo;
 }
@@ -404,12 +420,11 @@ static void BuildRoundEffects(std::vector<WorldPackets::BattlePet::PetBattleEffe
             case PetBattles::PET_BATTLE_EFFECT_AURA_CANCEL:
             case PetBattles::PET_BATTLE_EFFECT_AURA_CHANGE:
             {
-                // Sniff-verified retail wire order is [AbilityID, InstanceID, RoundsRemaining, CurrentRound]
-                // (we historically stored Param1=InstanceID, Param2=AbilityID — swap on the wire so
-                // existing call sites keep their semantic naming)
+                // 12.1.0.69587 wire order (three captures, WPP ReadPetBattleEffectTarget agrees):
+                // [AuraInstanceID, AuraAbilityID, RoundsRemaining, CurrentRound]
                 target.Type = 1; // Aura: 4 params
-                target.Params.push_back(roundEffect.Param2); // AuraAbilityID
                 target.Params.push_back(roundEffect.Param1); // AuraInstanceID
+                target.Params.push_back(roundEffect.Param2); // AuraAbilityID
                 target.Params.push_back(roundEffect.Param3); // RoundsRemaining
                 target.Params.push_back(roundEffect.Param4); // CurrentRound
                 break;
