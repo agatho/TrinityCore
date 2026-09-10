@@ -10,16 +10,23 @@ CREATE TABLE `battlenet_account_perks_purchases` (
   `mountId` int NOT NULL DEFAULT '0',
   `toyId` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`accountId`,`perksVendorItemId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- AccountStore: account-wide (Battle.net account) record of purchased AccountStoreItem IDs.
 DROP TABLE IF EXISTS `battlenet_account_store_purchases`;
 CREATE TABLE `battlenet_account_store_purchases` (
+  `accountId` int unsigned NOT NULL,
   `accountStoreItemId` int unsigned NOT NULL DEFAULT '0',
+  `purchaseTime` int unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`accountId`,`accountStoreItemId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Recruit-A-Friend: per-account recruitment state. `recruitmentCode` is minted for the account when it requests a
 -- recruitment link; `recruiterAccountId` / `recruitName` are set when this account is recruited by another (so a
 -- recruiter lists its recruits via WHERE recruiterAccountId = <self>).
 DROP TABLE IF EXISTS `battlenet_account_recruitment`;
 CREATE TABLE `battlenet_account_recruitment` (
+  `accountId` int unsigned NOT NULL,
   `recruitmentCode` varchar(32) NOT NULL DEFAULT '',
   `recruiterAccountId` int unsigned NOT NULL DEFAULT '0',
   `recruitName` varchar(64) NOT NULL DEFAULT '',
@@ -30,6 +37,7 @@ CREATE TABLE `battlenet_account_recruitment` (
 -- Recruit-A-Friend: which reward activities each account has already claimed (once-only claims).
 DROP TABLE IF EXISTS `battlenet_account_raf_claimed`;
 CREATE TABLE `battlenet_account_raf_claimed` (
+  `accountId` int unsigned NOT NULL,
   `activityId` int unsigned NOT NULL,
   PRIMARY KEY (`accountId`,`activityId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
