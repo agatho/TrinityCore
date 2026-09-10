@@ -124,6 +124,7 @@ struct PetBattlePetData
 
     // Battle state
     bool IsAlive() const { return Health > 0; }
+    bool SeenAction = false;    // was on the field for at least one turn (FINAL_ROUND SeenAction, XP eligibility)
     int32 GetState(uint32 stateID) const
     {
         for (auto const& [id, val] : States)
