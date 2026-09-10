@@ -254,3 +254,10 @@ void WorldSession::HandleClassTalentsSetUsesSharedActionBars(WorldPackets::Trait
     _player->SetTraitConfigUseSharedActionBars(classTalentsSetUsesSharedActionBars.ConfigID, classTalentsSetUsesSharedActionBars.UsesShared,
         classTalentsSetUsesSharedActionBars.IsLastSelectedSavedConfig);
 }
+
+void WorldSession::HandleConfirmProfessionRespec(WorldPackets::Traits::ConfirmProfessionRespec const& confirmProfessionRespec)
+{
+    // Reset the profession's specialization tree and refund the knowledge the player spent on it. The identifier is
+    // matched against the player's own Profession trait configs, so an unknown/foreign value is a harmless no-op.
+    _player->ResetProfessionSpecialization(confirmProfessionRespec.SkillLineID);
+}

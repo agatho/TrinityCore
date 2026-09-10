@@ -67,4 +67,10 @@ void ClassTalentsSetUsesSharedActionBars::Read()
     _worldPacket >> Bits<1>(UsesShared);
     _worldPacket >> Bits<1>(IsLastSelectedSavedConfig);
 }
+
+void ConfirmProfessionRespec::Read()
+{
+    _worldPacket >> SkillLineID;
+    _worldPacket >> NpcGUID;
+}
 }

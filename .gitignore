@@ -23,3 +23,6 @@ nbproject/*
 cmake-build-*/*
 .vs
 *.user
+
+build_game*.log
+reconfigure.log
