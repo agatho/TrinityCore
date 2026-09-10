@@ -3468,8 +3468,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         std::unique_ptr<Garrison> _garrison;
 
-        uint8 _warbandMaxLevelCharCount = 0;
-
         bool _advancedCombatLoggingEnabled;
 
         // variables to save health and mana before duel and restore them after duel
