@@ -47,7 +47,9 @@ struct NPCTeamPetInfo
 struct PvPQueueEntry
 {
     ObjectGuid PlayerGUID;
-    uint32 EnqueueTime = 0;
+    uint32 TicketId = 0;        // RideTicket.Id sent in every SMSG_PET_BATTLE_QUEUE_STATUS
+    time_t EnqueueTime = 0;     // RideTicket.Time; ClientWaitTime = now - EnqueueTime
+    uint32 UpdateTimer = 0;     // ms since the last QUEUED status resend
 };
 
 // Inferred targeting for ability auras based on the BattlePetAbilityState
@@ -167,6 +169,10 @@ private:
     std::vector<PvPQueueEntry> _pvpQueue;
     std::unique_ptr<PvPMatchProposal> _pendingProposal;
     uint32 _queueMatchTimer = 0;
+    uint32 _nextQueueTicketId = 1;
+
+    void Enqueue(ObjectGuid playerGUID);
+    void SendQueueStatus(Player* player, uint32 status, PvPQueueEntry const* entry = nullptr) const;
 };
 
 } // namespace PetBattles
