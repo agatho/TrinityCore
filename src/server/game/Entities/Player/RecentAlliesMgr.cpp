@@ -17,6 +17,10 @@
 
 #include "RecentAlliesMgr.h"
 #include "CharacterDatabase.h"
+#include "DatabaseEnv.h"
+#include "GameTime.h"
+#include "Player.h"
+#include "RecentAllyPackets.h"
 #include "GameTime.h"
 #include "Player.h"
 #include "WorldSession.h"
@@ -34,6 +38,55 @@ static void RecordOne(ObjectGuid owner, ObjectGuid ally, uint32 allyAccount)
     stmt->setUInt32(2, allyAccount);
     stmt->setUInt32(3, uint32(GameTime::GetGameTime()));
     CharacterDatabase.Execute(stmt);
+}
+
+// Push a recent-player delta to one online player. Only the "added" direction is ever populated. The client erases
+// on the "removed" list, and the only removals observed on retail retract LFG-list applicants that an earlier packet
+// had added - in the premade capture the same two GUIDs are added when they apply and removed when the applications
+// go away. That is the group-finder listing's transient display cache, not recent allies: recent-ally records are
+// persistent and nothing on the server ever means "forget this player". A removal we cannot justify would tell the
+// client to drop someone it should still know, so we send none.
+static void SendRecentPlayerAdds(Player const* to, std::vector<ObjectGuid> added)
+{
+    if (!to || added.empty())
+        return;
+
+    WorldSession* session = to->GetSession();
+    if (!session)
+        return;
+
+    WorldPackets::Social::UpdateRecentPlayerGuids update;
+    update.Added = std::move(added);
+    session->SendPacket(update.Write());
+}
+
+void RecordGroupJoin(Player const* joiner, std::span<Player const* const> existing)
+{
+    if (!joiner)
+        return;
+
+    std::vector<ObjectGuid> addedForJoiner;
+    addedForJoiner.reserve(existing.size());
+
+    for (Player const* other : existing)
+    {
+        if (!other || other == joiner || other->GetGUID() == joiner->GetGUID())
+            continue;
+
+        if (!other->GetSession() || !joiner->GetSession())
+            continue;
+
+        RecordOne(joiner->GetGUID(), other->GetGUID(), other->GetSession()->GetAccountId());
+        RecordOne(other->GetGUID(), joiner->GetGUID(), joiner->GetSession()->GetAccountId());
+
+        addedForJoiner.push_back(other->GetGUID());
+
+        // Everyone already in the group learns about exactly one newcomer.
+        SendRecentPlayerAdds(other, { joiner->GetGUID() });
+    }
+
+    // The joiner learns about everyone already present, in one packet.
+    SendRecentPlayerAdds(joiner, std::move(addedForJoiner));
 }
 
 void RecordGrouping(Player const* a, Player const* b)
