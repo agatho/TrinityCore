@@ -15235,6 +15235,28 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
         if (quest->RewardCurrencyId[i])
             AddCurrency(quest->RewardCurrencyId[i], quest->RewardCurrencyCount[i], currencyGainSource);
 
+    // TreasurePicker (server-authoritative picker contents; independent of the classic RewardItemId[])
+    for (int32 treasurePickerId : quest->GetTreasurePickerId())
+    {
+        TreasurePickerTemplate const* treasurePicker = sObjectMgr->GetTreasurePicker(uint32(treasurePickerId));
+        TreasurePickerItem const* pickerItem = sObjectMgr->SelectTreasurePickerItem(treasurePicker, this, rewardId);
+        if (!pickerItem)
+            continue;
+
+        ItemPosCountVec dest;
+        if (CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, pickerItem->ItemID, pickerItem->Quantity) != EQUIP_ERR_OK)
+            continue;
+
+        std::vector<int32> bonusListIDs;
+        if (pickerItem->BonusListID)
+            bonusListIDs.push_back(pickerItem->BonusListID);
+
+        ItemContext context = ItemContext(pickerItem->Context);
+        Item* item = StoreNewItem(dest, pickerItem->ItemID, true, 0, {}, context, bonusListIDs.empty() ? nullptr : &bonusListIDs);
+        if (item)
+            SendNewItem(item, pickerItem->Quantity, true, false);
+    }
+
     if (uint32 skill = quest->GetRewardSkillId())
         UpdateSkillPro(skill, 1000, quest->GetRewardSkillPoints());
 
