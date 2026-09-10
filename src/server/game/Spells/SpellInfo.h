@@ -449,6 +449,7 @@ class TC_GAME_API SpellInfo
         uint32 GetCategory() const;
         bool HasEffect(SpellEffects effect) const;
         bool HasAura(AuraType aura) const;
+        bool IsDashMovementBundle() const;
         bool HasAreaAuraEffect() const;
         bool HasOnlyDamageEffects() const;
         bool HasTargetType(::Targets target) const;
