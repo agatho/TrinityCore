@@ -127,6 +127,11 @@ void SetSelection::Read()
     _worldPacket >> Selection;
 }
 
+void SetPreferredCemetery::Read()
+{
+    _worldPacket >> CemeteryID;
+}
+
 WorldPacket const* SetupCurrency::Write()
 {
     _worldPacket << Size<uint32>(Data);

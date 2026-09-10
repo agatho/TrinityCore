@@ -551,6 +551,26 @@ namespace WorldPackets
             bool CheckInstance = false;
         };
 
+        // Empty client request sent when the client believes the player is wrongly stuck in combat.
+        class ReportStuckInCombat final : public ClientPacket
+        {
+        public:
+            explicit ReportStuckInCombat(WorldPacket&& packet) : ClientPacket(CMSG_REPORT_STUCK_IN_COMBAT, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        // Player chooses which graveyard (WorldSafeLocs id) they prefer to resurrect at in the current zone.
+        class SetPreferredCemetery final : public ClientPacket
+        {
+        public:
+            explicit SetPreferredCemetery(WorldPacket&& packet) : ClientPacket(CMSG_SET_PREFERRED_CEMETERY, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 CemeteryID = 0;
+        };
+
         class RequestCemeteryList final : public ClientPacket
         {
         public:
