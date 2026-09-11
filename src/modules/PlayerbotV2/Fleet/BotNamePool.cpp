@@ -61,7 +61,7 @@ NameEntry PopRandom_locked(std::vector<NameEntry>& v)
 }
 
 // Single config-driven home for all instance-shared playerbot data
-// (Playerbot.SharedDatabase, default "wowc_playerbot"). Read once. Used to
+// (Playerbot.SharedDatabase, default "playerbot"). Read once. Used to
 // qualify cross-DB queries so swapping the active world/character DB never
 // strands the shared bot data. NOTE: the realm-specific `characters.characters`
 // join below is intentionally NOT this schema.
