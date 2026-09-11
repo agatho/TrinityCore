@@ -645,6 +645,14 @@ struct BattlePetSpeciesXAbilityEntry
     uint32 BattlePetSpeciesID;
 };
 
+struct BattlePetStateEntry
+{
+    uint32 ID;
+    char const* LuaName;
+    int32 Flags;
+    uint16 BattlePetVisualID;
+};
+
 struct BattlemasterListEntry
 {
     uint32 ID;

@@ -934,6 +934,19 @@ struct BattlePetSpeciesXAbilityLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 5, &BattlePetSpeciesXAbilityMeta::Instance, HOTFIX_SEL_BATTLE_PET_SPECIES_X_ABILITY };
 };
 
+struct BattlePetStateLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[4] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "LuaName" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetVisualID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 4, &BattlePetStateMeta::Instance, HOTFIX_SEL_BATTLE_PET_STATE };
+};
+
 struct BattlemasterListLoadInfo
 {
     static constexpr DB2FieldMeta Fields[18] =

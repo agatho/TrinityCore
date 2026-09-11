@@ -1138,6 +1138,7 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
                     cancelEffect.Param1 = _environments[PET_BATTLE_WEATHER_ENV_SLOT].AuraInstanceID;
                     cancelEffect.Param2 = _environments[PET_BATTLE_WEATHER_ENV_SLOT].AbilityID;
                     _roundEffects.push_back(cancelEffect);
+                    EmitWeatherStateEffects(effect->ID, attackerTeam, attackerPet, true);
                     ClearWeatherStates();
                 }
 
@@ -1163,6 +1164,7 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
                 applyEffect.Param3 = auraDuration;
                 applyEffect.Param4 = _currentRound;
                 _roundEffects.push_back(applyEffect);
+                EmitWeatherStateEffects(effect->ID, attackerTeam, attackerPet, false);
                 break;
             }
 
@@ -1286,6 +1288,7 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
                     cancelEffect.Param1 = _environments[PET_BATTLE_WEATHER_ENV_SLOT].AuraInstanceID;
                     cancelEffect.Param2 = _environments[PET_BATTLE_WEATHER_ENV_SLOT].AbilityID;
                     _roundEffects.push_back(cancelEffect);
+                    EmitWeatherStateEffects(effect->ID, attackerTeam, attackerPet, true);
                     ClearWeatherStates();
                 }
 
@@ -1309,6 +1312,7 @@ void PetBattle::ProcessEffect(BattlePetAbilityEffectEntry const* effect, uint8 a
                 applyEffect.Param3 = auraDuration;
                 applyEffect.Param4 = _currentRound;
                 _roundEffects.push_back(applyEffect);
+                EmitWeatherStateEffects(effect->ID, attackerTeam, attackerPet, false);
                 break;
             }
 
@@ -2046,6 +2050,30 @@ void PetBattle::ClearWeatherStates()
     _environments[PET_BATTLE_WEATHER_ENV_SLOT].PeriodicStateIDs.clear();
 }
 
+// The client shows weather from the states it is told about, not from the aura alone. Retail
+// (12.1.0.69587, Call Blizzard): AURA_APPLY on PBOID 8, then one SET_STATE per client-visible
+// state of the weather aura (52 Mechanic_IsChilled = 1, 58 Weather_Blizzard = 1); states without
+// BattlePetState.Flags 0x8 (87, the damage modifier) stay server-side. `clear` sends them as 0.
+void PetBattle::EmitWeatherStateEffects(uint32 abilityEffectID, uint8 casterTeam, uint8 casterPet, bool clear)
+{
+    for (auto const& [stateID, value] : _environments[PET_BATTLE_WEATHER_ENV_SLOT].States)
+    {
+        BattlePetStateEntry const* stateEntry = sBattlePetStateStore.LookupEntry(stateID);
+        if (!stateEntry || !(stateEntry->Flags & BATTLE_PET_STATE_FLAG_CLIENT_VISIBLE))
+            continue;
+
+        PetBattleRoundEffect stateEffect;
+        stateEffect.AbilityEffectID = abilityEffectID;
+        stateEffect.EffectType = PET_BATTLE_EFFECT_SET_STATE;
+        stateEffect.SourceTeam = casterTeam;
+        stateEffect.SourcePet = casterPet;
+        stateEffect.TargetEnvSlot = PET_BATTLE_WEATHER_ENV_SLOT;
+        stateEffect.Param1 = int32(stateID);
+        stateEffect.Param2 = clear ? 0 : value;
+        _roundEffects.push_back(stateEffect);
+    }
+}
+
 void PetBattle::TickWeather()
 {
     for (uint8 envSlot = 0; envSlot < MAX_PET_BATTLE_ENVIRONMENTS; ++envSlot)
@@ -2062,6 +2090,7 @@ void PetBattle::TickWeather()
             changeEffect.EffectType = PET_BATTLE_EFFECT_AURA_CHANGE;
             changeEffect.SourceTeam = env.CasterTeam;
             changeEffect.SourcePet = _teams[env.CasterTeam].FrontPetIndex;
+            changeEffect.SourceEnvSlot = static_cast<int8>(envSlot); // wire: CasterPBOID 8 for the weather aura's own AURA_CHANGE
             changeEffect.TargetEnvSlot = static_cast<int8>(envSlot);
             changeEffect.Param1 = env.AuraInstanceID;
             changeEffect.Param2 = env.AbilityID;
@@ -2107,7 +2136,10 @@ void PetBattle::TickWeather()
             env.AbilityID = 0;
             env.AuraInstanceID = 0;
             if (envSlot == PET_BATTLE_WEATHER_ENV_SLOT)
+            {
+                EmitWeatherStateEffects(0, env.CasterTeam, _teams[env.CasterTeam].FrontPetIndex, true);
                 ClearWeatherStates();
+            }
         }
     }
 }
