@@ -6,27 +6,22 @@
 --
 -- Apply FIRST, then playerbot_shared_data.sql:
 --   mysql -u<user> -p < playerbot_shared_schema.sql
---   mysql -u<user> -p wowc_playerbot < playerbot_shared_data.sql
+--   mysql -u<user> -p playerbot < playerbot_shared_data.sql
 --
--- RENAMING THE SCHEMA: this file hardcodes `wowc_playerbot` in the
--- CREATE DATABASE and USE statements below. If you use another name, edit
--- those and set Playerbot.SharedDatabase in playerbot.conf to match.
+-- The schema is named `playerbot`, matching Playerbot.SharedDatabase in
+-- playerbot.conf.dist. If you rename it, edit the CREATE DATABASE and USE
+-- statements below and set that config key to match.
 --
 -- NON-DESTRUCTIVE: contains no DROP statements and uses
 -- CREATE DATABASE IF NOT EXISTS, so it cannot wipe an existing shared DB.
 --
--- PORTABLE: all DEFINER= clauses were stripped and views use
--- SQL SECURITY INVOKER, so the restoring account becomes the definer. The
--- raw mysqldump carried DEFINER=`root`@`localhost` on 19 objects, which fails
--- for any account lacking SYSTEM_USER.
---
--- Extracted from the live wowc_playerbot schema (2026-09-11). The dated
--- backup table playerbot_dungeon_routes_bak_20260720 is deliberately excluded.
+-- PORTABLE: all DEFINER clauses were stripped and views use
+-- SQL SECURITY INVOKER, so the restoring account becomes the definer.
 -- ===========================================================================
 
 -- MySQL dump 10.13  Distrib 9.4.0, for Win64 (x86_64)
 --
--- Host: localhost    Database: wowc_playerbot
+-- Host: localhost    Database: playerbot
 -- ------------------------------------------------------
 -- Server version	9.4.0
 
@@ -42,12 +37,12 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
--- Current Database: `wowc_playerbot`
+-- Current Database: `playerbot`
 --
 
-CREATE DATABASE /*!32312 IF NOT EXISTS*/ `wowc_playerbot` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+CREATE DATABASE /*!32312 IF NOT EXISTS*/ `playerbot` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
 
-USE `wowc_playerbot`;
+USE `playerbot`;
 
 --
 -- Table structure for table `battle_pet_ability`
@@ -1413,7 +1408,7 @@ SET @saved_cs_client     = @@character_set_client;
 SET character_set_client = @saved_cs_client;
 
 --
--- Dumping routines for database 'wowc_playerbot'
+-- Dumping routines for database 'playerbot'
 --
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -1709,10 +1704,10 @@ DELIMITER ;
 /*!50003 SET collation_connection  = @saved_col_connection */ ;
 
 --
--- Current Database: `wowc_playerbot`
+-- Current Database: `playerbot`
 --
 
-USE `wowc_playerbot`;
+USE `playerbot`;
 
 --
 -- Final view structure for view `v_gear_sets_overview`
