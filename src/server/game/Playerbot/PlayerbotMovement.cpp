@@ -90,6 +90,19 @@ bool SehSafeCalculatePath(PathGenerator& path, float x, float y, float z) noexce
 {
     return path.CalculatePath(x, y, z, /*forceDest=*/false);
 }
+
+// Non-MSVC platforms have no SEH; run the probe directly. Mirrors the
+// _MSC_VER branch above minus the __try/__except guard.
+int SehSafeNearestPolyProbe(void const* query, float const* detourPt,
+                            float const* extents, void const* filter,
+                            float* nearestOut) noexcept
+{
+    dtPolyRef ref = 0;
+    static_cast<dtNavMeshQuery const*>(query)->findNearestPoly(
+        detourPt, extents, static_cast<dtQueryFilter const*>(filter),
+        &ref, nearestOut);
+    return ref ? 1 : 0;
+}
 #endif
 
 // ---- SnapToGround -----------------------------------------------------------
