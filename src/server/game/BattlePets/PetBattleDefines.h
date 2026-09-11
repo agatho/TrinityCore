@@ -338,6 +338,11 @@ enum PetBattleQueueStatus : uint8
 static constexpr float PET_BATTLE_BASE_CRIT_CHANCE = 0.05f;
 static constexpr float PET_BATTLE_CRIT_MULTIPLIER  = 1.5f;
 
+// Battle XP (12.1.0.69587 wire, seven awards): xp(petLevel) * 3 * (1 + 0.2 * levelDiff) / participants, half if dead
+static constexpr float PET_BATTLE_XP_WIN_MULTIPLIER  = 3.0f;
+static constexpr float PET_BATTLE_XP_LEVEL_DIFF_STEP = 0.2f;
+static constexpr float PET_BATTLE_XP_DEATH_FACTOR    = 0.5f;
+
 // Capture success chance based on target HP percentage, quality, and cumulative fail bonus
 // Quality modifiers: Poor(0)=+20%, Common(1)=+10%, Uncommon(2)=0%, Rare(3)=-10%, Epic(4)=-20%, Legendary(5)=-30%
 inline float GetCaptureChance(uint16 trapLevel, float healthPct, uint8 quality = 1, float failBonus = 0.0f)

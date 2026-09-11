@@ -21,6 +21,7 @@
 #include "Creature.h"
 #include "DB2Stores.h"
 #include "GameTables.h"
+#include <cmath>
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
@@ -2261,8 +2262,25 @@ void PetBattle::AwardExperience()
     for (uint8 i = 0; i < loserTeam.PetCount; ++i)
         maxOpponentLevel = std::max(maxOpponentLevel, loserTeam.Pets[i].Level);
 
-    // Award XP to every pet of the winning team that took the field (retail: a pet that died
-    // during the battle still gets XP, a pet that never fought gets none -- FINAL_ROUND SeenAction)
+    // Retail rule, fitted to seven awards in three 12.1.0.69587 captures (five battles with L1-L3
+    // pets, two with the friend's; docs/PET_BATTLES_12.1_PARITY_2026-09-11.md "Fourth iteration"):
+    //
+    //   award = BattlePetXP.xp(petLevel) * 3 * (1 + 0.2 * (opponentLevel - petLevel)) / participants
+    //           * 0.5 if the pet died
+    //
+    // xp(level) is the gt row's per-win value of the PET's own pre-battle level (50 at L1, 55 at
+    // L2, 60 at L3); the whole award is applied at once and cascades through level-ups (L1 pet:
+    // 180 XP -> L3 with 20 left). "participants" are the winning team's pets that took the field;
+    // the bench gets nothing. Retail keeps the fraction (82.5 shows as 82 or 83 depending on the
+    // stored remainder); we round half to even once. Only L2 opponents were observed, so the
+    // factor 3 could also be (opponentLevel + 1) -- see the report before changing it.
+    uint32 participants = 0;
+    for (uint8 i = 0; i < winnerTeam.PetCount; ++i)
+        if (winnerTeam.Pets[i].SeenAction)
+            ++participants;
+    if (!participants)
+        return;
+
     BattlePets::BattlePetMgr* petMgr = player->GetSession()->GetBattlePetMgr();
 
     for (uint8 i = 0; i < winnerTeam.PetCount; ++i)
@@ -2274,18 +2292,21 @@ void PetBattle::AwardExperience()
         if (pet.BattlePetGUID.IsEmpty())
             continue;
 
-        // Look up XP from GameTable
-        GtBattlePetXPEntry const* xpEntry = sBattlePetXPGameTable.GetRow(maxOpponentLevel);
-        uint16 xpAward = xpEntry ? static_cast<uint16>(GetBattlePetXPPerLevel(xpEntry)) : 100;
+        GtBattlePetXPEntry const* xpEntry = sBattlePetXPGameTable.GetRow(pet.Level);
+        if (!xpEntry)
+            continue;
 
-        // Scale by level difference: pets much lower than opponent get more XP
-        int16 levelDiff = static_cast<int16>(maxOpponentLevel) - static_cast<int16>(pet.Level);
-        if (levelDiff > 0)
-            xpAward = static_cast<uint16>(xpAward * (1.0f + levelDiff * 0.1f)); // +10% per level below opponent
-        else if (levelDiff < -5)
-            xpAward = static_cast<uint16>(xpAward * 0.1f); // Heavily reduced for fighting much lower level
+        float levelMod = 1.0f + PET_BATTLE_XP_LEVEL_DIFF_STEP * (int32(maxOpponentLevel) - int32(pet.Level));
+        if (levelMod <= 0.0f)
+            continue;
 
-        if (xpAward < 1) xpAward = 1;
+        float award = xpEntry->Xp * PET_BATTLE_XP_WIN_MULTIPLIER * levelMod / float(participants);
+        if (!pet.IsAlive())
+            award *= PET_BATTLE_XP_DEATH_FACTOR;
+
+        uint16 xpAward = uint16(std::nearbyint(award));
+        if (!xpAward)
+            continue;
 
         petMgr->GrantBattlePetExperience(pet.BattlePetGUID, xpAward, BattlePets::BattlePetXpSource::PetBattle);
     }
@@ -2424,8 +2445,12 @@ void PetBattle::SendFinalRoundPacket(bool abandoned)
             pet.Pboid = t * MAX_PET_BATTLE_TEAM_SIZE + i;
             pet.Captured = team.Pets[i].IsCaptured;
             pet.Caged = false;
-            pet.SeenAction = team.Pets[i].SeenAction;
-            pet.AwardedXP = _canAwardXP && team.Pets[i].SeenAction && team.Pets[i].Level < BattlePets::MAX_BATTLE_PET_LEVEL;
+            // Wire (three captures): AwardedXP = 1 for every pet that took the field, the wild
+            // pet and max-level pets included; SeenAction = 1 only for player pets that took the
+            // field and can still gain XP. The bench is 0/0.
+            pet.AwardedXP = team.Pets[i].SeenAction;
+            pet.SeenAction = _canAwardXP && team.Pets[i].SeenAction && !team.Pets[i].BattlePetGUID.IsEmpty()
+                && team.Pets[i].Level < BattlePets::MAX_BATTLE_PET_LEVEL;
             finalRound.Pets.push_back(pet);
         }
     }
