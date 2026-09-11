@@ -179,7 +179,13 @@ playerbot_v2_configure_sublib(playerbot-v2-core)
 # entry point (it depends on every other sub-lib's symbols).
 # ---------------------------------------------------------------------------
 add_library(playerbot-v2 INTERFACE)
-target_link_libraries(playerbot-v2 INTERFACE
+
+# The sub-libs have circular references between subsystems (Bot <-> Combat,
+# Bot <-> Session, core <-> everything). MSVC's link.exe rescans archives
+# until all symbols resolve, so a plain list works there. GNU ld / LLD do a
+# single left-to-right pass, so circular archive refs must be wrapped in a
+# link group (--start-group/--end-group) via the RESCAN feature.
+set(PLAYERBOT_V2_SUBLIBS
   playerbot-v2-bot
   playerbot-v2-combat
   playerbot-v2-fleet
@@ -193,5 +199,11 @@ target_link_libraries(playerbot-v2 INTERFACE
   playerbot-v2-util
   playerbot-v2-core
 )
+if(MSVC)
+  target_link_libraries(playerbot-v2 INTERFACE ${PLAYERBOT_V2_SUBLIBS})
+else()
+  target_link_libraries(playerbot-v2 INTERFACE
+    "$<LINK_GROUP:RESCAN,${PLAYERBOT_V2_SUBLIBS}>")
+endif()
 
 message(STATUS "Playerbot V2 module enabled (multi-library: 12 sub-libs)")

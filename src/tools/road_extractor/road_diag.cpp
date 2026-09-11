@@ -30,6 +30,10 @@
 //   road_diag --client <wow-root> --manifest <json> --output <csv>
 //             [--listfile <csv>] [--locale enUS] [--product wow]
 
+// GCC/Linux: TrinityCore defines BOOST_BIND_NO_PLACEHOLDERS globally (dep/boost),
+// which suppresses boost::placeholders. Boost.PropertyTree's json_parser needs it.
+#undef BOOST_BIND_NO_PLACEHOLDERS
+
 #include "AdtTextureReader.h"
 #include "CascHandles.h"
 #include "DB2CascFileSource.h"
