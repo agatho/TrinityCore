@@ -149,6 +149,7 @@ TC_GAME_API extern DB2Storage<BattlePetEffectPropertiesEntry>       sBattlePetEf
 TC_GAME_API extern DB2Storage<BattlePetSpeciesEntry>                sBattlePetSpeciesStore;
 TC_GAME_API extern DB2Storage<BattlePetSpeciesStateEntry>           sBattlePetSpeciesStateStore;
 TC_GAME_API extern DB2Storage<BattlePetSpeciesXAbilityEntry>        sBattlePetSpeciesXAbilityStore;
+TC_GAME_API extern DB2Storage<BattlePetStateEntry>                  sBattlePetStateStore;
 TC_GAME_API extern DB2Storage<BattlemasterListEntry>                sBattlemasterListStore;
 TC_GAME_API extern DB2Storage<BattlemasterListXMapEntry>            sBattlemasterListXMapStore;
 TC_GAME_API extern DB2Storage<BountyEntry>                          sBountyStore;

@@ -166,6 +166,7 @@ DB2Storage<BattlePetEffectPropertiesEntry>      sBattlePetEffectPropertiesStore(
 DB2Storage<BattlePetSpeciesEntry>               sBattlePetSpeciesStore("BattlePetSpecies.db2", &BattlePetSpeciesLoadInfo::Instance);
 DB2Storage<BattlePetSpeciesStateEntry>          sBattlePetSpeciesStateStore("BattlePetSpeciesState.db2", &BattlePetSpeciesStateLoadInfo::Instance);
 DB2Storage<BattlePetSpeciesXAbilityEntry>       sBattlePetSpeciesXAbilityStore("BattlePetSpeciesXAbility.db2", &BattlePetSpeciesXAbilityLoadInfo::Instance);
+DB2Storage<BattlePetStateEntry>                 sBattlePetStateStore("BattlePetState.db2", &BattlePetStateLoadInfo::Instance);
 DB2Storage<BattlemasterListEntry>               sBattlemasterListStore("BattlemasterList.db2", &BattlemasterListLoadInfo::Instance);
 DB2Storage<BattlemasterListXMapEntry>           sBattlemasterListXMapStore("BattlemasterListXMap.db2", &BattlemasterListXMapLoadInfo::Instance);
 DB2Storage<BountyEntry>                          sBountyStore("Bounty.db2", &BountyLoadInfo::Instance);
@@ -928,6 +929,7 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sBattlePetSpeciesStore);
     LOAD_DB2(sBattlePetSpeciesStateStore);
     LOAD_DB2(sBattlePetSpeciesXAbilityStore);
+    LOAD_DB2(sBattlePetStateStore);
     LOAD_DB2(sBattlemasterListStore);
     LOAD_DB2(sBattlemasterListXMapStore);
     LOAD_DB2(sBountyStore);

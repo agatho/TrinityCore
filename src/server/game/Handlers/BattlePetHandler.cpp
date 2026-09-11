@@ -396,7 +396,10 @@ static void BuildRoundEffects(std::vector<WorldPackets::BattlePet::PetBattleEffe
         // Wire offset 12 is the PetBattleEffectType — client switches on this to process effects
         // (SetHealth=0, AuraApply=1, PetSwap=4, SetState=6, etc.), NOT a sequential index
         effect.PetBattleEffectType = roundEffect.EffectType;
-        effect.CasterPBOID = static_cast<int32>(roundEffect.SourceTeam * PetBattles::MAX_PET_BATTLE_TEAM_SIZE + roundEffect.SourcePet);
+        if (roundEffect.SourceEnvSlot >= 0)
+            effect.CasterPBOID = static_cast<int32>(PetBattles::PBOID_ENVIRONMENT_BASE + roundEffect.SourceEnvSlot);
+        else
+            effect.CasterPBOID = static_cast<int32>(roundEffect.SourceTeam * PetBattles::MAX_PET_BATTLE_TEAM_SIZE + roundEffect.SourcePet);
         effect.StackDepth = 0;
 
         WorldPackets::BattlePet::PetBattleEffectTargetInfo target;

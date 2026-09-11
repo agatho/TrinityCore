@@ -607,6 +607,11 @@ void HotfixDatabaseConnection::DoPrepareStatements()
         " FROM battle_pet_species_x_ability WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_BATTLE_PET_SPECIES_X_ABILITY, "SELECT MAX(ID) + 1 FROM battle_pet_species_x_ability", CONNECTION_SYNCH);
 
+    // BattlePetState.db2
+    PrepareStatement(HOTFIX_SEL_BATTLE_PET_STATE, "SELECT ID, LuaName, Flags, BattlePetVisualID FROM battle_pet_state"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_BATTLE_PET_STATE, "SELECT MAX(ID) + 1 FROM battle_pet_state", CONNECTION_SYNCH);
+
     // BattlemasterList.db2
     PrepareStatement(HOTFIX_SEL_BATTLEMASTER_LIST, "SELECT ID, Name, GameType, ShortDescription, LongDescription, InstanceType, PvpType, MinLevel, "
         "MaxLevel, RatedPlayers, MinPlayers, MaxPlayers, GroupsAllowed, MaxGroupSize, HolidayWorldState, Flags, IconFileDataID, "

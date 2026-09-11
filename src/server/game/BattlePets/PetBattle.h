@@ -248,6 +248,7 @@ struct PetBattleRoundEffect
     int32 Param3 = 0;      // For aura effects: RoundsRemaining (captured at creation time)
     int32 Param4 = 0;      // For aura effects: CurrentRound (captured at creation time)
     int8 TargetEnvSlot = -1; // >= 0: target is environment slot (PBOID = PBOID_ENVIRONMENT_BASE + slot)
+    int8 SourceEnvSlot = -1; // >= 0: caster is an environment slot (wire: weather AURA_CHANGE has CasterPBOID 8)
 };
 
 class TC_GAME_API PetBattle
@@ -335,6 +336,7 @@ private:
 
     // Environment/weather (state-driven from BattlePetAbilityState DB2)
     void ApplyWeatherStates(uint32 abilityID);
+    void EmitWeatherStateEffects(uint32 abilityEffectID, uint8 casterTeam, uint8 casterPet, bool clear);
     void ClearWeatherStates();
     void TickWeather();
 
