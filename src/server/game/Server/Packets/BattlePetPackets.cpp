@@ -394,14 +394,15 @@ static void WriteRoundResult(ByteBuffer& data, uint32 curRound, int8 nextPetBatt
 
     data << uint32(cooldowns.size());
 
-    // 12.1.0.69587 wire order (every FIRST_ROUND / ROUND_RESULT / REPLACEMENTS_MADE of two retail
-    // captures, verified byte-exact): Cooldowns, Effects, PetXDied count (3 bits) + flush, PetXDied.
-    // The count used to be written BEFORE the effects, which shifted every effect by one byte.
-    for (PetBattleCooldownInfo const& cd : cooldowns)
-        data << cd;
-
+    // 12.1.0.69587 wire order (three retail captures, 61 round packets byte-exact, six of them
+    // with non-empty cooldown lists): Effects, Cooldowns, PetXDied count (3 bits) + flush, PetXDied.
+    // Both the cooldowns and the PetXDied count used to be written BEFORE the effects; every
+    // round in which an ability went on cooldown mis-parsed on the client.
     for (PetBattleEffectInfo const& effect : effects)
         data << effect;
+
+    for (PetBattleCooldownInfo const& cd : cooldowns)
+        data << cd;
 
     data << Bits<3>(petXDied.size());
     data.FlushBits();
