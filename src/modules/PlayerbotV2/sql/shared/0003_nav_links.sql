@@ -1,4 +1,17 @@
 -- ===========================================================================
+-- DEPRECATED / SUPERSEDED (2026-09-11)
+-- ===========================================================================
+-- Superseded by sql/playerbot_shared/, which describes the shared database in
+-- full: playerbot_shared_schema.sql creates every table, view, routine and
+-- trigger in it, and playerbot_shared_data.sql carries the rows. The tables
+-- this file defines, and their data, are already in those two files.
+--
+-- Kept only so an operator who applied it previously is not surprised by its
+-- disappearance. Applying it now is harmless but unnecessary. See
+-- src/modules/PlayerbotV2/INSTALL.md for the current procedure.
+-- ===========================================================================
+
+-- ===========================================================================
 -- PlayerbotV2: DB-authored traversal links (playerbot_nav_links)
 -- Target: the SHARED playerbot database (Playerbot.SharedDatabase, e.g.
 --         "wowc_playerbot") — NOT part of TC's world/char/login updater.

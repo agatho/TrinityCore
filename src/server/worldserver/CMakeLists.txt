@@ -79,11 +79,18 @@ if(UNIX)
     )
     install(FILES worldserver.conf.dist DESTINATION ${CONF_DIR})
     if(BUILD_PLAYERBOT_V2)
+      # Ship the module config into worldserver.conf.d/, not next to
+      # worldserver.conf. ConfigMgr::LoadAdditionalDir walks that directory and
+      # loads every *.conf it finds, so dropping the .dist suffix in place is all
+      # that is needed to activate it. Placed beside worldserver.conf it would
+      # never be read at all, and every Playerbot.* key would silently fall back
+      # to its compiled-in default.
       add_custom_command(TARGET worldserver
         POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${PLAYERBOT_V2_CONF_DIST} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/../etc/playerbot.conf.dist
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/../etc/worldserver.conf.d
+        COMMAND ${CMAKE_COMMAND} -E copy ${PLAYERBOT_V2_CONF_DIST} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/../etc/worldserver.conf.d/playerbot.conf.dist
       )
-      install(FILES ${PLAYERBOT_V2_CONF_DIST} DESTINATION ${CONF_DIR})
+      install(FILES ${PLAYERBOT_V2_CONF_DIST} DESTINATION ${CONF_DIR}/worldserver.conf.d)
     endif()
   endif()
 elseif(WIN32)
@@ -95,11 +102,14 @@ elseif(WIN32)
     )
     install(FILES worldserver.conf.dist DESTINATION "${CMAKE_INSTALL_PREFIX}")
     if(BUILD_PLAYERBOT_V2)
+      # See the UNIX branch above: the module config must live in
+      # worldserver.conf.d/ to be loaded at all.
       add_custom_command(TARGET worldserver
         POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${PLAYERBOT_V2_CONF_DIST} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/worldserver.conf.d
+        COMMAND ${CMAKE_COMMAND} -E copy ${PLAYERBOT_V2_CONF_DIST} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/worldserver.conf.d/playerbot.conf.dist
       )
-      install(FILES ${PLAYERBOT_V2_CONF_DIST} DESTINATION "${CMAKE_INSTALL_PREFIX}")
+      install(FILES ${PLAYERBOT_V2_CONF_DIST} DESTINATION "${CMAKE_INSTALL_PREFIX}/worldserver.conf.d")
     endif()
   endif()
 endif()
