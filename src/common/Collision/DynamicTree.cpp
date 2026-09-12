@@ -28,6 +28,7 @@
 #include <G3D/AABox.h>
 #include <G3D/Ray.h>
 #include <G3D/Vector3.h>
+#include <mutex>
 
 namespace {
 
@@ -97,6 +98,16 @@ struct DynTreeImpl : public ParentTree/*, public Intersectable*/
 
     TimeTracker rebalance_timer;
     int unbalanced_times;
+
+    // Serializes all access to the underlying BIH/grid. The tree is lazily
+    // rebuilt (balance()) on both the write path and the read path
+    // (intersectPoint/intersectRay -> BIHWrap::balance() when unbalanced),
+    // so two threads touching the same map's tree — e.g. a MapUpdater worker
+    // and a main-thread PlayerbotV2 login doing a terrain query — would race
+    // on the rebuild and double-free the BIH's internal vector. Held only for
+    // the duration of a single tree operation and never while calling back
+    // into Map/other locked subsystems, so it is a leaf lock (deadlock-safe).
+    mutable std::mutex _treeMutex;
 };
 
 DynamicMapTree::DynamicMapTree() : impl(new DynTreeImpl()) { }
@@ -105,26 +116,31 @@ DynamicMapTree::~DynamicMapTree() = default;
 
 void DynamicMapTree::insert(GameObjectModel const& mdl)
 {
+    std::scoped_lock guard(impl->_treeMutex);
     impl->insert(mdl);
 }
 
 void DynamicMapTree::remove(GameObjectModel const& mdl)
 {
+    std::scoped_lock guard(impl->_treeMutex);
     impl->remove(mdl);
 }
 
 bool DynamicMapTree::contains(GameObjectModel const& mdl) const
 {
+    std::scoped_lock guard(impl->_treeMutex);
     return impl->contains(mdl);
 }
 
 void DynamicMapTree::balance()
 {
+    std::scoped_lock guard(impl->_treeMutex);
     impl->balance();
 }
 
 void DynamicMapTree::update(uint32 t_diff)
 {
+    std::scoped_lock guard(impl->_treeMutex);
     impl->update(t_diff);
 }
 
@@ -184,6 +200,7 @@ private:
 
 bool DynamicMapTree::getIntersectionTime(G3D::Ray const& ray, G3D::Vector3 const& endPos, PhaseShift const& phaseShift, float& maxDist) const
 {
+    std::scoped_lock guard(impl->_treeMutex);
     float distance = maxDist;
     DynamicTreeIntersectionCallback callback(phaseShift);
     impl->intersectRay(ray, callback, distance, endPos);
@@ -239,6 +256,7 @@ bool DynamicMapTree::isInLineOfSight(G3D::Vector3 const& startPos, G3D::Vector3 
 
     G3D::Ray r(startPos, (endPos - startPos) / maxDist);
     DynamicTreeLosCallback callback(phaseShift);
+    std::scoped_lock guard(impl->_treeMutex);
     impl->intersectRay(r, callback, maxDist, endPos);
 
     return !callback.didHit();
@@ -249,6 +267,7 @@ float DynamicMapTree::getHeight(float x, float y, float z, float maxSearchDist, 
     G3D::Vector3 v(x, y, z);
     G3D::Ray r(v, G3D::Vector3(0, 0, -1));
     DynamicTreeIntersectionCallback callback(phaseShift);
+    std::scoped_lock guard(impl->_treeMutex);
     impl->intersectZAllignedRay(r, callback, maxSearchDist);
 
     if (callback.didHit())
@@ -261,6 +280,7 @@ bool DynamicMapTree::getAreaAndLiquidData(float x, float y, float z, PhaseShift 
 {
     G3D::Vector3 v(x, y, z + 0.5f);
     DynamicTreeLocationInfoCallback intersectionCallBack(phaseShift);
+    std::scoped_lock guard(impl->_treeMutex);
     impl->intersectPoint(v, intersectionCallBack);
     if (VMAP::GroupModel const* hitModel = intersectionCallBack.GetLocationInfo().hitModel)
     {
@@ -284,5 +304,6 @@ bool DynamicMapTree::getAreaAndLiquidData(float x, float y, float z, PhaseShift 
 std::span<GameObjectModel const* const> DynamicMapTree::getModelsInGrid(uint32 gx, uint32 gy) const
 {
     // convert from map tile X/Y to RegularGrid internal representation
+    std::scoped_lock guard(impl->_treeMutex);
     return impl->getObjects(63 - int32(gx), 63 - int32(gy));
 }
