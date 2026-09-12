@@ -86,9 +86,14 @@ public:
     // Currently: true iff the map has a delve_template row.
     bool IsTieredEntranceScenarioMap(uint32 mapId) const;
 
+    // Tier picker rows (delve_tiered_entrance_tier), ordered by tier
+    std::vector<TieredEntranceTierData> const& GetTieredEntranceTiers() const { return _tieredEntranceTiers; }
+    TieredEntranceTierData const* GetTieredEntranceTier(uint32 tieredEntranceTierId) const;
+
 private:
     void LoadDelveTemplates();
     void LoadTierRewards();
+    void LoadTieredEntranceTiers();
     void DetermineActiveSeason();
 
     // Templates indexed by mapId
@@ -103,6 +108,7 @@ private:
     std::unordered_map<uint8, DelveTierReward> _tierRewards;
     // Active season
     uint32 _activeSeasonId = 0;
+    std::vector<TieredEntranceTierData> _tieredEntranceTiers;
 };
 
 } // namespace Delves

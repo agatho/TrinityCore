@@ -99,7 +99,15 @@ void WorldSession::HandleSelectDelveEntranceTier(WorldPackets::Delves::SelectDel
     TC_LOG_DEBUG("network", "CMSG_SELECT_DELVE_ENTRANCE_TIER received from player {} entrance {} tier {}",
         player->GetName(), packet.EntranceGUID.ToString(), packet.Tier);
 
-    if (packet.Tier == 0 || packet.Tier > Delves::MAX_DELVE_TIER)
+    // 12.1 wire: the client echoes the TieredEntranceTierID the picker advertised (75..85 on the
+    // 12.1 delve season), not the 1-based tier. Accept a bare tier number too (legacy pickers).
+    uint8 tier = 0;
+    if (Delves::TieredEntranceTierData const* tierRow = sDelveMgr->GetTieredEntranceTier(packet.Tier))
+        tier = tierRow->Tier;
+    else if (packet.Tier >= 1 && packet.Tier <= Delves::MAX_DELVE_TIER)
+        tier = uint8(packet.Tier);
+
+    if (!tier)
         return;
 
     if (!Delves::DelvesSeason::MeetsMinimumLevelRequirement(player))
@@ -107,7 +115,7 @@ void WorldSession::HandleSelectDelveEntranceTier(WorldPackets::Delves::SelectDel
 
     Delves::DelveProgress progress;
     Delves::DelvesRewards::LoadProgress(player->GetSession()->GetBattlenetAccountId(), progress);
-    if (packet.Tier > progress.HighestTierUnlocked)
+    if (tier > progress.HighestTierUnlocked)
         return;
 
     // The 68275 wire carries the entrance ObjectGuid, not a MapID — re-derive the
@@ -126,7 +134,7 @@ void WorldSession::HandleSelectDelveEntranceTier(WorldPackets::Delves::SelectDel
 
     // Selection is consumed by the subsequent entrance-open flow; the client
     // re-sends the tier on entrance. We accept and validate here so eligibility is logged.
-    player->m_delveSelectedTier = uint8(packet.Tier);
+    player->m_delveSelectedTier = tier;
     player->m_delveSelectedMapId = mapId;
 
     // Republish progression so the mirror's last-selected delve map stays current.
@@ -142,12 +150,6 @@ void WorldSession::HandleTieredEntranceOpen(WorldPackets::Delves::TieredEntrance
     TC_LOG_DEBUG("network", "CMSG_TIERED_ENTRANCE_OPEN received from player {} entrance {}",
         player->GetName(), packet.EntranceGUID.ToString());
 
-    // Resolve the entrance NPC to a delve template (same pattern as
-    // HandleSelectDelveEntranceTier). This previously used
-    // GetDelveTemplateByGossipMenuId(entrance->GetGossipMenuId()); GetGossipMenuId() is the
-    // script-override slot and is 0 for every DB-spawned creature because SetGossipMenuId() has no
-    // call site in the core, so this handler bailed out with "could not resolve entrance" for every
-    // delve - i.e. the entire 12.0.7 tiered-entrance entry path was dead.
     Delves::DelveTemplate const* tmpl = nullptr;
     if (packet.EntranceGUID.IsCreatureOrVehicle())
         if (Creature const* entrance = ObjectAccessor::GetCreature(*player, packet.EntranceGUID))
@@ -164,52 +166,45 @@ void WorldSession::HandleTieredEntranceOpen(WorldPackets::Delves::TieredEntrance
     Delves::DelvesRewards::LoadProgress(GetBattlenetAccountId(), progress);
     bool meetsLevel = Delves::DelvesSeason::MeetsMinimumLevelRequirement(player);
 
-    // Suggested item level per tier. Tiers 1-6 are the sniffed Midnight S1
-    // values (rated BG 12.0.7.pkt, Daggerspine Point: 215/231/244/257/264/274);
-    // tiers 7-11 extrapolate the observed +10/tier endgame slope — ASSUMED.
-    static constexpr uint32 SUGGESTED_ILVL[Delves::MAX_DELVE_TIER] =
-    {
-        215, 231, 244, 257, 264, 274, 284, 294, 304, 314, 324
-    };
-
+    // 12.1.0.69497 captures (Gulf of Memory, Shadow Enclave; 12.0.7 The Darkway agrees): every delve
+    // entrance reports EntranceType 1, field 7 is 234 for every delve, field 6 is 0, fields 3/4/8 and
+    // the widget sets are per entrance (delve_template), the tier rows are season data
+    // (delve_tiered_entrance_tier). The client matches the response by the echoed entrance GUID.
     WorldPackets::Delves::TieredEntranceOpenResponse response;
-    // The client matches the response to its pending open request by the
-    // entrance GUID — the echo must be byte-exact.
     response.EntranceGUID = packet.EntranceGUID;
-    // Sniffed Midnight entrance reports TieredEntranceType 2 (Sites) — all
-    // Midnight S1 tiered entrances are "sites" on the wire.
-    response.EntranceType = Delves::TIERED_ENTRANCE_TYPE_SITES;
+    response.EntranceType = Delves::TIERED_ENTRANCE_TYPE_DELVE;
     response.MapID = tmpl->MapId;
-    // Header unknowns (see TIERED_ENTRANCE_RE_68275.md): Unknown3 observed to
-    // equal the last tier record's TieredEntranceTierID; the rest have no
-    // resolvable server-side source yet and default to 0.
-    response.Unknown3 = Delves::MAX_DELVE_TIER;
+    response.Unknown3 = tmpl->TieredEntranceUnknown3;
+    response.Unknown4 = tmpl->EntranceUiWidgetSetId;
+    response.Unknown6 = 0;
+    response.Unknown7 = Delves::DELVE_TIERED_ENTRANCE_FIELD7;
+    response.Unknown8 = tmpl->TieredEntranceId;
 
     if (MapEntry const* mapEntry = sMapStore.LookupEntry(tmpl->MapId))
         response.EntranceDescription = mapEntry->MapName[GetSessionDbcLocale()];
 
-    response.Tiers.reserve(Delves::MAX_DELVE_TIER);
-    for (uint8 tier = 1; tier <= Delves::MAX_DELVE_TIER; ++tier)
+    std::vector<Delves::TieredEntranceTierData> const& tiers = sDelveMgr->GetTieredEntranceTiers();
+    response.Tiers.reserve(tiers.size());
+    for (Delves::TieredEntranceTierData const& tierRow : tiers)
     {
         WorldPackets::Delves::TieredEntranceTier& tierData = response.Tiers.emplace_back();
-        // Retail uses TieredEntranceTier.db2 row ids here (68974 Darkway capture: 23..33; Daggerspine
-        // Sites entrance: 42-46,86) and the client echoes the chosen id back verbatim in
-        // CMSG_SELECT_DELVE_ENTRANCE_TIER. That DB2 ships empty client-side (rows arrive via hotfix),
-        // so the id is an opaque echo token to the client UI — we advertise the tier number as the id,
-        // which round-trips through the select handler's 1..MAX_DELVE_TIER validation. If real row ids
-        // are ever hotfix-pushed to clients, the select handler must learn to map them back.
-        tierData.TieredEntranceTierID = tier;
-        tierData.Tier = tier;
-        tierData.SuggestedILvl = SUGGESTED_ILVL[tier - 1];
-        // Player conditions 0 = no client-side gate; unlock state is carried
-        // by the Unlocked bit below instead (sniff shows retail sends both).
-        tierData.UnlockPlayerConditionID = 0;
-        tierData.DynamicUnlockPlayerConditionID = 0;
-        tierData.ModifierUIWidgetSetID = 0;
-        tierData.Unlocked = meetsLevel && tier <= progress.HighestTierUnlocked;
-        tierData.TierDescription = Delves::TIER_NAMES[tier - 1];
-        // PreviewTreasureList left empty: the sniffed item ids are
-        // entrance-specific content we cannot generically source yet.
+        tierData.TieredEntranceTierID = tierRow.Id;
+        tierData.Tier = tierRow.Tier;
+        tierData.SuggestedILvl = tierRow.SuggestedILvl;
+        tierData.OverrideTooltipSpellID = tierRow.OverrideTooltipSpellId;
+        tierData.UnlockPlayerConditionID = tierRow.UnlockPlayerConditionId;
+        tierData.DynamicUnlockPlayerConditionID = tierRow.DynamicUnlockPlayerConditionId;
+        tierData.ModifierUIWidgetSetID = tmpl->ModifierUiWidgetSetTier1 && tierRow.Tier ? tmpl->ModifierUiWidgetSetTier1 - (tierRow.Tier - 1) : 0;
+        tierData.Unlocked = meetsLevel && tierRow.Tier <= progress.HighestTierUnlocked;
+        tierData.TierDescription = tierRow.Description;
+        for (Delves::TieredEntranceRewardData const& reward : tierRow.Rewards)
+        {
+            WorldPackets::Delves::TieredEntranceReward& rewardData = tierData.PreviewTreasureList.emplace_back();
+            rewardData.RewardType = reward.RewardType;
+            rewardData.Id = reward.Id;
+            rewardData.Quantity = reward.Quantity;
+            rewardData.Context = reward.Context;
+        }
     }
 
     SendPacket(response.Write());

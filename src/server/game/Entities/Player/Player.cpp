@@ -1422,6 +1422,11 @@ bool Player::TeleportTo(TeleportLocation const& teleportLocation, TeleportToOpti
 
         if (!GetSession()->PlayerLogout() && !(options & TELE_TO_SEAMLESS))
         {
+            // retail clears any open player choice before every world transfer (12.1 captures:
+            // SMSG_PLAYER_CHOICE_CLEAR 0/0 immediately precedes each SMSG_NEW_WORLD)
+            WorldPackets::Quest::PlayerChoiceClear choiceClear;
+            SendDirectMessage(choiceClear.Write());
+
             // send transfer packets
             WorldPackets::Movement::TransferPending transferPending;
             transferPending.MapID = teleportLocation.Location.GetMapId();

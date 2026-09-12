@@ -16,6 +16,7 @@
  */
 
 #include "DelveMgr.h"
+#include <algorithm>
 #include "Creature.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
@@ -47,6 +48,7 @@ void DelveMgr::Initialize()
     DetermineActiveSeason();
     LoadDelveTemplates();
     LoadTierRewards();
+    LoadTieredEntranceTiers();
 
     TC_LOG_INFO("server.loading", ">> Loaded {} delve templates and {} tier rewards in {} ms",
         _delveTemplatesList.size(), _tierRewards.size(), GetMSTimeDiffToNow(oldMSTime));
@@ -85,7 +87,8 @@ void DelveMgr::LoadDelveTemplates()
         "gossipMenuId, lfgDungeonsId, broadcastTextId, firstTierGossipOptionId, "
         "entryX, entryY, entryZ, entryO, "
         "exitX, exitY, exitZ, exitO, "
-        "activeScenarioId, rewardScenarioId, worldState26903, finalBossEntry "
+        "activeScenarioId, rewardScenarioId, worldState26903, finalBossEntry, "
+        "tieredEntranceId, tieredEntranceUnknown3, entranceUiWidgetSetId, modifierUiWidgetSetTier1 "
         "FROM delve_template");
 
     if (!result)
@@ -125,6 +128,10 @@ void DelveMgr::LoadDelveTemplates()
         tmpl.RewardScenarioId         = fields[23].GetUInt32();
         tmpl.WorldState26903          = fields[24].GetUInt32();
         tmpl.FinalBossEntry           = fields[25].GetUInt32();
+        tmpl.TieredEntranceId         = fields[26].GetUInt32();
+        tmpl.TieredEntranceUnknown3   = fields[27].GetUInt32();
+        tmpl.EntranceUiWidgetSetId    = fields[28].GetUInt32();
+        tmpl.ModifierUiWidgetSetTier1 = fields[29].GetUInt32();
 
         _delveTemplatesByMap[tmpl.MapId] = tmpl;
         _delveTemplatesList.push_back(tmpl);
@@ -141,6 +148,64 @@ void DelveMgr::LoadDelveTemplates()
     for (DelveTemplate const& tmpl : _delveTemplatesList)
         if (tmpl.GossipMenuId != 0)
             _delveTemplatesByGossipMenuId[tmpl.GossipMenuId] = &_delveTemplatesByMap[tmpl.MapId];
+}
+
+void DelveMgr::LoadTieredEntranceTiers()
+{
+    _tieredEntranceTiers.clear();
+
+    QueryResult result = WorldDatabase.Query("SELECT id, tier, suggestedILvl, overrideTooltipSpellId, unlockPlayerConditionId, "
+        "dynamicUnlockPlayerConditionId, description FROM delve_tiered_entrance_tier ORDER BY tier");
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 tiered entrance tiers. DB table `delve_tiered_entrance_tier` is empty.");
+        return;
+    }
+
+    do
+    {
+        Field* fields = result->Fetch();
+        TieredEntranceTierData& tier = _tieredEntranceTiers.emplace_back();
+        tier.Id                             = fields[0].GetUInt32();
+        tier.Tier                           = fields[1].GetUInt8();
+        tier.SuggestedILvl                  = fields[2].GetUInt32();
+        tier.OverrideTooltipSpellId         = fields[3].GetUInt32();
+        tier.UnlockPlayerConditionId        = fields[4].GetUInt32();
+        tier.DynamicUnlockPlayerConditionId = fields[5].GetUInt32();
+        tier.Description                    = fields[6].GetString();
+    }
+    while (result->NextRow());
+
+    if (QueryResult rewards = WorldDatabase.Query("SELECT tierId, rewardType, id, quantity, context FROM delve_tiered_entrance_tier_reward ORDER BY tierId, orderIndex"))
+    {
+        do
+        {
+            Field* fields = rewards->Fetch();
+            uint32 tierId = fields[0].GetUInt32();
+            auto itr = std::find_if(_tieredEntranceTiers.begin(), _tieredEntranceTiers.end(), [tierId](TieredEntranceTierData const& t) { return t.Id == tierId; });
+            if (itr == _tieredEntranceTiers.end())
+            {
+                TC_LOG_ERROR("sql.sql", "Table `delve_tiered_entrance_tier_reward` references unknown tier {}, skipped.", tierId);
+                continue;
+            }
+            TieredEntranceRewardData& reward = itr->Rewards.emplace_back();
+            reward.RewardType = fields[1].GetUInt8();
+            reward.Id         = fields[2].GetUInt32();
+            reward.Quantity   = fields[3].GetUInt32();
+            reward.Context    = fields[4].GetUInt8();
+        }
+        while (rewards->NextRow());
+    }
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} tiered entrance tiers", _tieredEntranceTiers.size());
+}
+
+TieredEntranceTierData const* DelveMgr::GetTieredEntranceTier(uint32 tieredEntranceTierId) const
+{
+    for (TieredEntranceTierData const& tier : _tieredEntranceTiers)
+        if (tier.Id == tieredEntranceTierId)
+            return &tier;
+    return nullptr;
 }
 
 void DelveMgr::LoadTierRewards()

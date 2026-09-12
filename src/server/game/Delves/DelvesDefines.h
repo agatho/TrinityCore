@@ -40,6 +40,7 @@ static constexpr uint8  DELVE_SCENARIO_TYPE = 8;                // ScenarioType 
 // (TieredEntrance/TieredEntranceTier DB2 via C_DelvesUI.GetDelveEntranceTiers()).
 // 11 is the sniff-observed live TWW value and remains our server-side cap.
 static constexpr uint8 MAX_DELVE_TIER = 11;
+static constexpr uint32 DELVE_TIERED_ENTRANCE_FIELD7 = 234; // SMSG_TIERED_ENTRANCE_OPEN_RESPONSE field 7 for every delve entrance (12.0.7 and 12.1 captures)
 static constexpr uint8 DELVE_TIER_UNLIMITED_REVIVES_MAX = 3;   // Tiers 1-3 have no death limit
 static constexpr uint8 DELVE_TIER_ENDGAME_START = 4;           // Tier 4+ requires max level
 
@@ -277,10 +278,40 @@ enum class DelveState : uint8
 // Data Structs
 // ---------------------------------------------------------------------------
 
+// One tier row of the delve tier picker (SMSG_TIERED_ENTRANCE_OPEN_RESPONSE). Retail keeps these in
+// the server-only TieredEntranceTier.db2 (not shipped to clients); the 12.1 delve season rows are
+// ids 75..85 and identical for every delve entrance, so they are world data (delve_tiered_entrance_tier).
+struct TieredEntranceRewardData
+{
+    uint8 RewardType = 0;   // 0 item, 1 currency
+    uint32 Id = 0;
+    uint32 Quantity = 1;
+    uint8 Context = 0;      // ItemContext
+};
+
+struct TieredEntranceTierData
+{
+    uint32 Id = 0;                             // TieredEntranceTierID, echoed back in CMSG_SELECT_DELVE_ENTRANCE_TIER
+    uint8 Tier = 0;                            // 1-based
+    uint32 SuggestedILvl = 0;
+    uint32 OverrideTooltipSpellId = 0;         // spell whose tooltip the picker shows (1260939 "Tier 1" ...)
+    uint32 UnlockPlayerConditionId = 0;
+    uint32 DynamicUnlockPlayerConditionId = 0;
+    std::string Description;                   // "Tier 1" ...
+    std::vector<TieredEntranceRewardData> Rewards;
+};
+
 struct DelveTemplate
 {
     uint32 Id = 0;
     uint32 MapId = 0;
+
+    // Tier picker header, per entrance (12.1 captures: Gulf of Memory 26 / 80 / 1779 / 1778,
+    // Shadow Enclave 27 / 78 / 1756 / 1767, The Darkway 29 / 83 / 1828 / 1827)
+    uint32 TieredEntranceId = 0;               // TieredEntrance.db2 row id (packet field 8)
+    uint32 TieredEntranceUnknown3 = 0;         // packet field 3, meaning open
+    uint32 EntranceUiWidgetSetId = 0;          // packet field 4 (UiWidgetSet id space)
+    uint32 ModifierUiWidgetSetTier1 = 0;       // tier N gets ModifierUiWidgetSetTier1 - (N - 1)
     uint32 ScenarioId = 0;
     uint32 MapChallengeModeId = 0;
     uint32 ZoneId = 0;

@@ -36,6 +36,9 @@ void SelectDelveEntranceTier::Read()
 
 WorldPacket const* ShowDelvesDisplayUI::Write()
 {
+    // 12.1.0.69497 wire (midnightintro 4704067 / 4707529): one uint32.
+    _worldPacket << uint32(Unknown);
+
     return &_worldPacket;
 }
 
@@ -45,7 +48,9 @@ WorldPacket const* ShowDelvesDisplayUI::Write()
 
 WorldPacket const* ShowDelvesCompanionConfigurationUI::Write()
 {
-    // 68275: empty body — the client read ctor (0x7FF7290BB940) takes no fields.
+    // 12.1.0.69497 wire (gulf 1096575, eversong 2688539; 12.0.1 deatholme 75171): one uint32.
+    _worldPacket << uint32(Unknown);
+
     return &_worldPacket;
 }
 
@@ -69,8 +74,11 @@ void TieredEntranceOpen::Read()
 
 WorldPacket const* TieredEntranceOpenResponse::Write()
 {
-    // Byte-exact reproduction of the 579B sniff body (rated BG 12.0.7.pkt).
-    // See C:\dumps\TIERED_ENTRANCE_RE_68275.md for the field table + evidence.
+    // 12.1.0.69497 layout, byte-exact on every 12.1 frame (Gulf of Memory 672 B x2, Shadow Enclave
+    // 669 B, Naigtal 200 B; tools/delve_wire_check.py in the sniff rig). Differences to the 12.0.7
+    // layout this was first reconstructed from: the tier record has a 4th uint32
+    // (OverrideTooltipSpellID), the reward list precedes the Unlocked/length bits, a uint16 sits
+    // between them, and the entrance description length is written at the packet tail.
     _worldPacket << EntranceGUID;
     _worldPacket << uint32(EntranceType);
     _worldPacket << uint32(MapID);
@@ -81,24 +89,15 @@ WorldPacket const* TieredEntranceOpenResponse::Write()
     _worldPacket << uint32(Unknown7);
     _worldPacket << uint32(Unknown8);
 
-    // 12-bit description length, flushed with 4 pad bits (sniff: len 17 → `01 10`).
-    _worldPacket.WriteBits(EntranceDescription.length(), 12);
-    _worldPacket.FlushBits();
-
     for (TieredEntranceTier const& tier : Tiers)
     {
         _worldPacket << uint32(tier.TieredEntranceTierID);
         _worldPacket << uint32(tier.Tier);
         _worldPacket << uint32(tier.SuggestedILvl);
+        _worldPacket << uint32(tier.OverrideTooltipSpellID);
         _worldPacket << uint32(tier.UnlockPlayerConditionID);
         _worldPacket << uint32(tier.DynamicUnlockPlayerConditionID);
         _worldPacket << uint32(tier.ModifierUIWidgetSetID);
-
-        // unlocked bit + 12-bit tierDescription length, flushed with 3 pad bits
-        // (sniff: unlocked=1,len=6 → `80 30`; unlocked=0,len=21 → `00 a8`).
-        _worldPacket.WriteBit(tier.Unlocked);
-        _worldPacket.WriteBits(tier.TierDescription.length(), 12);
-        _worldPacket.FlushBits();
 
         _worldPacket << uint32(tier.PreviewTreasureList.size());
         for (TieredEntranceReward const& reward : tier.PreviewTreasureList)
@@ -109,11 +108,17 @@ WorldPacket const* TieredEntranceOpenResponse::Write()
             _worldPacket << uint8(reward.Context);
         }
 
-        // Description chars at record end, no NUL terminator.
+        _worldPacket << uint16(tier.Unknown);
+
+        _worldPacket.WriteBit(tier.Unlocked);
+        _worldPacket.WriteBits(tier.TierDescription.length(), 12);
+        _worldPacket.FlushBits();
+
         _worldPacket.append(tier.TierDescription.data(), tier.TierDescription.length());
     }
 
-    // Entrance description chars form the packet tail, no NUL terminator.
+    _worldPacket.WriteBits(EntranceDescription.length(), 12);
+    _worldPacket.FlushBits();
     _worldPacket.append(EntranceDescription.data(), EntranceDescription.length());
 
     return &_worldPacket;

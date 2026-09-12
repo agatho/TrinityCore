@@ -820,6 +820,19 @@ namespace WorldPackets
             bool IsReroll = false;
         };
 
+        // 12.1.0.69497 wire (49 frames over eleven captures): int32 ChoiceID + 1 bit ForceClose, always
+        // 0 / 0; sent right before every SMSG_NEW_WORLD and after CMSG_CHOICE_RESPONSE.
+        class PlayerChoiceClear final : public ServerPacket
+        {
+        public:
+            explicit PlayerChoiceClear() : ServerPacket(SMSG_PLAYER_CHOICE_CLEAR, 5) { }
+
+            WorldPacket const* Write() override;
+
+            int32 ChoiceID = 0;
+            bool ForceClose = false;
+        };
+
         class UiMapQuestLinesResponse final : public ServerPacket
         {
         public:
