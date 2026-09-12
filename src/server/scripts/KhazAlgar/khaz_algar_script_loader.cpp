@@ -45,6 +45,26 @@ void AddSC_boss_the_candle_king();
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
+void AddSC_instance_atal_aman_delve();
+void AddSC_instance_earthcrawl_mines();
+void AddSC_instance_fungal_folly();
+void AddSC_instance_kriegvals_rest();
+void AddSC_instance_mycomancer_cavern();
+void AddSC_instance_nightfall_sanctum();
+void AddSC_instance_skittering_breach();
+void AddSC_instance_tak_rethan_abyss();
+void AddSC_instance_the_dread_pit();
+void AddSC_instance_shadow_enclave_delve();
+void AddSC_shadow_enclave_encounters();
+void AddSC_instance_the_sinkhole();
+void AddSC_instance_the_spiral_weave();
+void AddSC_instance_the_underkeep();
+void AddSC_instance_the_waterworks();
+void AddSC_instance_zekvirs_lair();
+void AddSC_npc_brann_bronzebeard_delves();
+void AddSC_npc_delve_entrance();
+void AddSC_npc_delvers_supplies();
+
 void AddKhazAlgarScripts()
 {
     // Dornogal
@@ -72,4 +92,25 @@ void AddKhazAlgarScripts()
     // Darkflame Cleft
     AddSC_instance_darkflame_cleft();
     AddSC_boss_the_candle_king();
+
+    // Delves (entrance, companion, supplies, per-delve instance scripts)
+    AddSC_instance_atal_aman_delve();
+    AddSC_instance_earthcrawl_mines();
+    AddSC_instance_fungal_folly();
+    AddSC_instance_kriegvals_rest();
+    AddSC_instance_mycomancer_cavern();
+    AddSC_instance_nightfall_sanctum();
+    AddSC_instance_skittering_breach();
+    AddSC_instance_tak_rethan_abyss();
+    AddSC_instance_the_dread_pit();
+    AddSC_instance_shadow_enclave_delve();
+    AddSC_shadow_enclave_encounters();
+    AddSC_instance_the_sinkhole();
+    AddSC_instance_the_spiral_weave();
+    AddSC_instance_the_underkeep();
+    AddSC_instance_the_waterworks();
+    AddSC_instance_zekvirs_lair();
+    AddSC_npc_brann_bronzebeard_delves();
+    AddSC_npc_delve_entrance();
+    AddSC_npc_delvers_supplies();
 }

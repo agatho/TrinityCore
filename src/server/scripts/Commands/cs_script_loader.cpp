@@ -62,6 +62,8 @@ void AddSC_wp_commandscript();
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
+void AddSC_delve_commandscript();
+
 void AddCommandsScripts()
 {
     AddSC_account_commandscript();
@@ -107,4 +109,7 @@ void AddCommandsScripts()
     AddSC_ticket_commandscript();
     AddSC_titles_commandscript();
     AddSC_wp_commandscript();
+
+    // Delves
+    AddSC_delve_commandscript();
 }
