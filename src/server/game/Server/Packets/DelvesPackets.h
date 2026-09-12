@@ -78,9 +78,11 @@ public:
 class ShowDelvesDisplayUI final : public ServerPacket
 {
 public:
-    explicit ShowDelvesDisplayUI() : ServerPacket(SMSG_SHOW_DELVES_DISPLAY_UI, 0) { }
+    explicit ShowDelvesDisplayUI() : ServerPacket(SMSG_SHOW_DELVES_DISPLAY_UI, 4) { }
 
     WorldPacket const* Write() override;
+
+    uint32 Unknown = 0; // 12.1 wire: one uint32 (2796, 2742 observed; UiMap/Map id range, meaning unverified)
 };
 
 // SMSG_DELVES_ACCOUNT_DATA_ELEMENT_CHANGED (0x42035A @ 12.0.7.68275)
@@ -111,9 +113,11 @@ public:
 class ShowDelvesCompanionConfigurationUI final : public ServerPacket
 {
 public:
-    explicit ShowDelvesCompanionConfigurationUI() : ServerPacket(SMSG_SHOW_DELVES_COMPANION_CONFIGURATION_UI, 0) { }
+    explicit ShowDelvesCompanionConfigurationUI() : ServerPacket(SMSG_SHOW_DELVES_COMPANION_CONFIGURATION_UI, 4) { }
 
     WorldPacket const* Write() override;
+
+    uint32 Unknown = 0; // 12.1 wire: one uint32 (271132 / 249219 / 249222 observed after a delve; meaning unverified)
 };
 
 // SMSG_PARTY_ELIGIBILITY_FOR_DELVE_TIERS_RESPONSE (0x42035D @ 12.0.7.68275)
@@ -176,12 +180,14 @@ struct TieredEntranceTier
     uint32 TieredEntranceTierID = 0;           // sniff: 42..46, 86 (server-data row ids)
     uint32 Tier = 0;                           // 1-based tier level
     uint32 SuggestedILvl = 0;                  // sniff: 215/231/244/257/264/274 for tiers 1..6
+    uint32 OverrideTooltipSpellID = 0;         // 12.1: 4th uint32 of the tier record (1260939 'Tier 1' ...; 0 on locked tiers)
     uint32 UnlockPlayerConditionID = 0;        // sniff: 153815.. (0 = no condition)
     uint32 DynamicUnlockPlayerConditionID = 0; // sniff: 154755.. (0 = no condition)
     uint32 ModifierUIWidgetSetID = 0;          // sniff: 2058..2062, 2133
     bool Unlocked = false;                     // 1 wire bit; sniff: tiers 1-2 unlocked
     std::string TierDescription;               // "Tier 1", "Tier 3 - 1 Challenges", ...
     std::vector<TieredEntranceReward> PreviewTreasureList;
+    uint16 Unknown = 0;                        // 12.1: uint16 between the rewards and the Unlocked/len bits, 0 in all 24 records seen
 };
 
 // SMSG_TIERED_ENTRANCE_OPEN_RESPONSE (0x42037C @ 12.0.7.68275)

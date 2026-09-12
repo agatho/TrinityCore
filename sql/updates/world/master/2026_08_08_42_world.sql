@@ -1,0 +1,78 @@
+--
+-- Delves: retire two ScriptName references that must NOT be implemented
+-- =====================================================================
+--
+-- Both of these were introduced by sql/updates/world/master/2026_04_29_01_world.sql, carried over
+-- from the DoomCore 12.0.1.66527 drop, and both name a script that does not exist in the core. The
+-- live realm logs them on every boot (M:/IntegratedServer/logs/DBErrors.log):
+--
+--     Script 'spell_delve_entry'  is referenced by the database, but does not exist in the core!
+--     Script 'go_delve_campfire'  is referenced by the database, but does not exist in the core!
+--
+-- They are removed rather than implemented. In both cases the client data says the thing the script
+-- would hook is a pure display/no-op dummy, so any server-side behaviour written for it would be
+-- invented, not recovered. Evidence below; re-add the ScriptName the moment a capture contradicts it.
+--
+--
+-- 1) spell_script_names (1260942, 'spell_delve_entry')
+-- ----------------------------------------------------
+-- The 2026_04_29_01 comment calls 1260942 "the Delve entry teleport spell". It is not. Read from
+-- the shipped client tables at M:/WorldofWarcraft/dbc/enUS (12.0.7, the same files worldserver
+-- loads via DataDir):
+--
+--     SpellName.db2   1260942  Name_lang = "Tier 2"
+--     SpellEffect.db2 1260942  EffectIndex 0, Effect = 3 (SPELL_EFFECT_DUMMY),
+--                              ImplicitTarget[0] = 1 (TARGET_UNIT_CASTER),
+--                              EffectAura = 0, EffectTriggerSpell = 0, EffectMiscValue = 0,
+--                              EffectBasePointsF = 187
+--
+-- All eleven tier spells have exactly that shape, and their base points are the tier reward item
+-- level ladder - which is what the Blizzard_DelvesDifficultyPicker tooltip renders:
+--
+--     1260938 "Tier 1"  170     1260960 "Tier 7"  235
+--     1260940 "Tier 1"    0     1260963 "Tier 8"  244
+--     1260942 "Tier 2"  187     1260967 "Tier 9"  250
+--     1260946 "Tier 3"  200     1260970 "Tier 10" 257
+--     1260950 "Tier 4"  213     1260973 "Tier 11" 263
+--     1260954 "Tier 5"  222
+--     1260957 "Tier 6"  229
+--
+-- So 1260942 is the client-side label/tooltip spell for tier 2, carried in
+-- gossip_menu_option.SpellID so the picker can draw the row. It teleports nothing. Actual delve
+-- entry is server-side and already implemented twice over: CMSG_TIERED_ENTRANCE_OPEN /
+-- CMSG_SELECT_DELVE_ENTRANCE_TIER (WorldSession::HandleTieredEntranceOpen, DelvesHandler.cpp) and
+-- npc_delve_entrance::OnGossipSelect. A third path hung off one single tier's tooltip spell would
+-- be both wrong and a double-teleport hazard.
+--
+DELETE FROM `spell_script_names` WHERE `spell_id` = 1260942 AND `ScriptName` = 'spell_delve_entry';
+
+--
+-- 2) gameobject_template.ScriptName (618844, 'go_delve_campfire')
+-- ---------------------------------------------------------------
+-- GO 618844 "Delve Campfire" is type 22 (GAMEOBJECT_TYPE_SPELLCASTER) with
+--     Data0 spell        = 1272119
+--     Data1 charges      = -1  (unlimited)
+--     Data2 partyOnly    = 0
+--     Data3 allowMounted = 0
+--     Data6 playerCast   = 1
+-- Because partyOnly is 0, GameObject::Use() already handles it natively and casts 1272119 with the
+-- using player as caster - the ownerless-partyOnly early-out that breaks some DB-spawned type-22
+-- objects does not apply here. There is nothing for a GameObjectAI to add at the "make it fire"
+-- level.
+--
+-- And the spell it fires does nothing:
+--     SpellName.db2   1272119  Name_lang = "Cozy Fire"
+--     SpellEffect.db2 1272119  EffectIndex 0, Effect = 3 (SPELL_EFFECT_DUMMY),
+--                              ImplicitTarget[0] = 1 (TARGET_UNIT_CASTER),
+--                              EffectBasePointsF = 0, EffectAura = 0, EffectTriggerSpell = 0
+--
+-- A dummy with no base points, no aura and no trigger spell carries zero recoverable intent. The
+-- 2026_04_29_01 comment guesses "heal + well-fed buff"; no client table, no capture on this machine
+-- and no string in the client binary says so. Writing a heal or a buff here would be fabrication,
+-- and an AI that returns success without changing state would be worse.
+--
+-- TO UNBLOCK: a capture of a player interacting with GO 618844 inside a delve, showing the
+-- SMSG_SPELL_GO for 1272119 and whichever aura actually lands (SMSG_AURA_UPDATE). That single
+-- packet pair settles it.
+--
+UPDATE `gameobject_template` SET `ScriptName` = '' WHERE `entry` = 618844 AND `ScriptName` = 'go_delve_campfire';
