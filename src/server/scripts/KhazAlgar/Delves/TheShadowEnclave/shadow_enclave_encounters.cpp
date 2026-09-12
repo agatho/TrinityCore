@@ -98,7 +98,8 @@ enum ShadowEnclaveScenarioEvents : uint32
 {
     EVENT_VOID_FOCUS_DESTROYED  = 99763,    // step order 1, criteria 107838, amount 2
     EVENT_RITUAL_STOPPED        = 99755,    // step order 2, criteria 107834, amount 3
-    EVENT_ANTENORIAN_SLAIN      = 85913,    // step order 4, criteria  60399, amount 1
+    // 85913 (step order 4, criteria 60399 "Antenorian slain") is raised by DelveInstanceScript::OnUnitDeath for the
+    // template's final boss - see Delves::GAME_EVENT_DELVE_BOSS_SLAIN in delves_common.h.
 };
 
 // Matches BOSS_LORD_ANTENORIAN in instance_shadow_enclave_delve.cpp (SetBossNumber(1)).
@@ -162,14 +163,22 @@ struct npc_lord_antenorian : public ScriptedAI
 {
     npc_lord_antenorian(Creature* creature) : ScriptedAI(creature) { }
 
+    void JustEngagedWith(Unit* who) override
+    {
+        ScriptedAI::JustEngagedWith(who);
+
+        // SMSG_ENCOUNTER_START 3368 (eversong 2493067, deatholme 698731); ws 24836 -> 1
+        if (InstanceScript* instance = me->GetInstanceScript())
+            instance->SetBossState(BOSS_LORD_ANTENORIAN, IN_PROGRESS);
+    }
+
     void JustDied(Unit* /*killer*/) override
     {
         Talk(SAY_ANTENORIAN_DEATH);
 
-        RaiseScenarioEvent(me, EVENT_ANTENORIAN_SLAIN);
-
-        // Completion itself is handled by Delves::DelveInstanceScript::OnUnitDeath via
-        // delve_template.finalBossEntry; this only closes the encounter frame.
+        // GameEvent 85913 (EVENT_ANTENORIAN_SLAIN) and the completion itself are raised by
+        // Delves::DelveInstanceScript::OnUnitDeath via delve_template.finalBossEntry = 246717; this only closes the
+        // encounter frame (SMSG_ENCOUNTER_END + SMSG_BOSS_KILL 3368, eversong 2611872).
         if (InstanceScript* instance = me->GetInstanceScript())
             instance->SetBossState(BOSS_LORD_ANTENORIAN, DONE);
     }

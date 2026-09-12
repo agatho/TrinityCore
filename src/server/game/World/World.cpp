@@ -50,6 +50,7 @@
 #include "DatabaseEnv.h"
 #include "DetourMemoryFunctions.h"
 #include "DelveMgr.h"
+#include "DelvesRewards.h"
 #include "DisableMgr.h"
 #include "GameEventMgr.h"
 #include "GameObjectModel.h"
@@ -3116,6 +3117,10 @@ void World::ResetWeeklyQuests()
 
     // reselect pools
     sQuestPoolMgr->ChangeWeeklyQuests();
+
+    // Delves: weekly completion / bountiful / coffer-shard counters roll over with the weekly reset
+    // (REPORT.md 6.4: ResetAllWeeklyProgress had no caller, so the counters never reset)
+    Delves::DelvesRewards::ResetAllWeeklyProgress();
 
     // Update faction balance
     UpdateWarModeRewardValues();

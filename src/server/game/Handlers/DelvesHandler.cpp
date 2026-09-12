@@ -17,7 +17,7 @@
 
 #include "WorldSession.h"
 #include "Creature.h"
-#include "DB2Stores.h"
+#include "DatabaseEnv.h"
 #include "DelveMgr.h"
 #include "DelvesDefines.h"
 #include "DelvesPackets.h"
@@ -28,6 +28,8 @@
 #include "Map.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "QueryCallback.h"
+#include "StringFormat.h"
 
 void WorldSession::HandleDelveTeleportOut(WorldPackets::Delves::DelveTeleportOut& /*delveTeleportOut*/)
 {
@@ -37,9 +39,11 @@ void WorldSession::HandleDelveTeleportOut(WorldPackets::Delves::DelveTeleportOut
 
     TC_LOG_DEBUG("network", "CMSG_DELVE_TELEPORT_OUT received from player {}", player->GetName());
 
-    // Teleport player out of the delve instance to their bind point
-    if (player->GetMap()->Instanceable())
-        player->TeleportTo(player->m_homebind);
+    // Never sent by the 12.x client in any of the five captured runs (REPORT.md 1.1 / 5); retail leaves through the
+    // Leave-O-Bot spell-click or the "Leave Delve" object, both of which call DelveMgr::LeaveDelve from scripts.
+    // Kept as a safety net with the same exit semantics (originating map, template exit, homebind).
+    if (sDelveMgr->GetDelveTemplate(player->GetMapId()))
+        sDelveMgr->LeaveDelve(player);
 }
 
 void WorldSession::HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delves::RequestPartyEligibilityForDelveTiers& packet)
@@ -51,42 +55,48 @@ void WorldSession::HandleRequestPartyEligibilityForDelveTiers(WorldPackets::Delv
     TC_LOG_DEBUG("network", "CMSG_REQUEST_PARTY_ELIGIBILITY_FOR_DELVE_TIERS received from player {} for mapId {}",
         player->GetName(), packet.MapID);
 
-    auto computeMaxEligibleTier = [&](Player const* member) -> uint8
+    // REPORT.md 1.1 / 6.1: SMSG_PARTY_ELIGIBILITY_FOR_DELVE_TIERS_RESPONSE was never sent in any of the four solo
+    // runs (0 frames in five captures) - the client sends the request right after the picker opens (gulf 2964,
+    // eversong 2952) and gets nothing back. Only a party has rows to fill in.
+    Group const* group = player->GetGroup();
+    if (!group || group->isRaidGroup())
+        return;
+
+    // One packet per member (68275: PackedGUID + uint32 + uint32 + bool, no count framing; semantics UNVERIFIED, see
+    // DelvesPackets.h). Tier progress lives in delve_progress per battlenet account - read it asynchronously, one
+    // query per member, and answer from the callback; no synchronous DB round trip on the world thread.
+    for (GroupReference const& itr : group->GetMembers())
     {
-        if (!Delves::DelvesSeason::MeetsMinimumLevelRequirement(member))
-            return 0;
-        Delves::DelveProgress progress;
-        Delves::DelvesRewards::LoadProgress(member->GetSession()->GetBattlenetAccountId(), progress);
-        return std::min<uint8>(progress.HighestTierUnlocked, Delves::MAX_DELVE_TIER);
-    };
+        Player const* member = itr.GetSource();
+        if (!member || !member->GetSession())
+            continue;
 
-    // 68275 wire: the response carries exactly ONE member per packet
-    // (PackedGUID + uint32 + uint32 + bool — no count framing), so we send one
-    // packet per party member. Field semantics UNVERIFIED — see DelvesPackets.h.
-    auto sendMember = [&](Player const* member)
-    {
-        uint8 maxTier = computeMaxEligibleTier(member);
+        ObjectGuid const memberGuid = member->GetGUID();
+        uint8 const levelEligible = Delves::DelvesSeason::MeetsMinimumLevelRequirement(member) ? 1 : 0;
 
-        WorldPackets::Delves::PartyEligibilityForDelveTiersResponse response;
-        response.PlayerGUID = member->GetGUID();
-        response.MaxEligibleTier = maxTier;
-        response.ReasonOrFlags = 0;             // UNVERIFIED — needs sniff
-        response.IsEligible = maxTier > 0;      // UNVERIFIED — needs sniff
-        SendPacket(response.Write());
-    };
+        // same SELECT as CHAR_SEL_DELVE_PROGRESS, which is prepared on the synchronous connection only
+        std::string const query = Trinity::StringFormat("SELECT highestTierUnlocked FROM delve_progress WHERE battlenetAccountId = {}",
+            member->GetSession()->GetBattlenetAccountId());
 
-    // Always emit at least the requesting player so the client populates its own row.
-    sendMember(player);
-
-    if (Group const* group = player->GetGroup(); group && !group->isRaidGroup())
-    {
-        for (GroupReference const& itr : group->GetMembers())
+        GetQueryProcessor().AddCallback(CharacterDatabase.AsyncQuery(query.c_str()).WithCallback([this, memberGuid, levelEligible](QueryResult result)
         {
-            Player const* member = itr.GetSource();
-            if (!member || member == player)
-                continue;
-            sendMember(member);
-        }
+            if (!GetPlayer() || !GetPlayer()->IsInWorld())
+                return;
+
+            // default progress: tiers 1-3 are open for every fresh character (REPORT.md 1.3 unlock state)
+            uint8 highestTierUnlocked = Delves::DelveProgress().HighestTierUnlocked;
+            if (result)
+                highestTierUnlocked = (*result)[0].GetUInt8();
+
+            uint8 const maxTier = levelEligible ? std::min<uint8>(highestTierUnlocked, Delves::MAX_DELVE_TIER) : 0;
+
+            WorldPackets::Delves::PartyEligibilityForDelveTiersResponse response;
+            response.PlayerGUID = memberGuid;
+            response.MaxEligibleTier = maxTier;
+            response.ReasonOrFlags = 0;             // UNVERIFIED - needs a group capture
+            response.IsEligible = maxTier > 0;      // UNVERIFIED - needs a group capture
+            SendPacket(response.Write());
+        }));
     }
 }
 
@@ -118,27 +128,25 @@ void WorldSession::HandleSelectDelveEntranceTier(WorldPackets::Delves::SelectDel
     if (tier > progress.HighestTierUnlocked)
         return;
 
-    // The 68275 wire carries the entrance ObjectGuid, not a MapID — re-derive the
-    // delve map server-side from the entrance creature. This used to read
-    // Creature::GetGossipMenuId() directly, which is always 0 because nothing in the core ever
-    // calls SetGossipMenuId(); DelveMgr::GetDelveTemplateForEntrance() does the real resolution.
-    uint32 mapId = 0;
+    // The wire carries the entrance ObjectGuid, not a MapID - re-derive the delve from the entrance spawn
+    // (DelveMgr::GetDelveTemplateForEntrance; Creature::GetGossipMenuId() is always 0, see DelveMgr.cpp).
+    Delves::DelveTemplate const* tmpl = nullptr;
     if (packet.EntranceGUID.IsCreatureOrVehicle())
         if (Creature const* entrance = ObjectAccessor::GetCreature(*player, packet.EntranceGUID))
-            if (Delves::DelveTemplate const* tmpl = sDelveMgr->GetDelveTemplateForEntrance(entrance))
-                mapId = tmpl->MapId;
+            tmpl = sDelveMgr->GetDelveTemplateForEntrance(entrance);
 
-    if (!mapId)
+    if (!tmpl)
+    {
         TC_LOG_DEBUG("network", "CMSG_SELECT_DELVE_ENTRANCE_TIER: could not resolve entrance {} to a delve template",
             packet.EntranceGUID.ToString());
+        return;
+    }
 
-    // Selection is consumed by the subsequent entrance-open flow; the client
-    // re-sends the tier on entrance. We accept and validate here so eligibility is logged.
-    player->m_delveSelectedTier = tier;
-    player->m_delveSelectedMapId = mapId;
-
-    // Republish progression so the mirror's last-selected delve map stays current.
-    Delves::DelvesRewards::PublishProgress(player, progress);
+    // REPORT.md 1.4 - 1.6 (work item 5): the select IS the entry. Retail answers it with the phase shift,
+    // SMSG_SUSPEND_TOKEN + SMSG_PLAYER_CHOICE_CLEAR and, ~1.9 s later, a seamless SMSG_NEW_WORLD (reason 21, no
+    // SMSG_TRANSFER_PENDING) to the delve's entry position (gulf 100129 -> 101829). Nothing else is requested from
+    // the client in between. Shared with the entrance gossip script.
+    sDelveMgr->EnterDelve(player, *tmpl, tier);
 }
 
 void WorldSession::HandleTieredEntranceOpen(WorldPackets::Delves::TieredEntranceOpen& packet)
@@ -150,62 +158,17 @@ void WorldSession::HandleTieredEntranceOpen(WorldPackets::Delves::TieredEntrance
     TC_LOG_DEBUG("network", "CMSG_TIERED_ENTRANCE_OPEN received from player {} entrance {}",
         player->GetName(), packet.EntranceGUID.ToString());
 
-    Delves::DelveTemplate const* tmpl = nullptr;
-    if (packet.EntranceGUID.IsCreatureOrVehicle())
-        if (Creature const* entrance = ObjectAccessor::GetCreature(*player, packet.EntranceGUID))
-            tmpl = sDelveMgr->GetDelveTemplateForEntrance(entrance);
-
-    if (!tmpl)
+    // REPORT.md 1.1: in 12.1 delve entrances (EntranceType 1) open by proximity - the server pushes the picker
+    // (DelveMgr::OpenEntranceByProximity from the entrance AI). This CMSG is still sent by click-to-open entrances
+    // (69273 Sites witness: creature 264322 -> map 3075 "Naigtal") and is kept for them; the response is built by
+    // the same code either way.
+    Creature const* entrance = packet.EntranceGUID.IsCreatureOrVehicle() ? ObjectAccessor::GetCreature(*player, packet.EntranceGUID) : nullptr;
+    if (!entrance)
     {
-        TC_LOG_DEBUG("network", "CMSG_TIERED_ENTRANCE_OPEN: could not resolve entrance {} to a delve template",
-            packet.EntranceGUID.ToString());
+        TC_LOG_DEBUG("network", "CMSG_TIERED_ENTRANCE_OPEN: entrance {} is not a creature in range of player {}",
+            packet.EntranceGUID.ToString(), player->GetName());
         return;
     }
 
-    Delves::DelveProgress progress;
-    Delves::DelvesRewards::LoadProgress(GetBattlenetAccountId(), progress);
-    bool meetsLevel = Delves::DelvesSeason::MeetsMinimumLevelRequirement(player);
-
-    // 12.1.0.69497 captures (Gulf of Memory, Shadow Enclave; 12.0.7 The Darkway agrees): every delve
-    // entrance reports EntranceType 1, field 7 is 234 for every delve, field 6 is 0, fields 3/4/8 and
-    // the widget sets are per entrance (delve_template), the tier rows are season data
-    // (delve_tiered_entrance_tier). The client matches the response by the echoed entrance GUID.
-    WorldPackets::Delves::TieredEntranceOpenResponse response;
-    response.EntranceGUID = packet.EntranceGUID;
-    response.EntranceType = Delves::TIERED_ENTRANCE_TYPE_DELVE;
-    response.MapID = tmpl->MapId;
-    response.Unknown3 = tmpl->TieredEntranceUnknown3;
-    response.Unknown4 = tmpl->EntranceUiWidgetSetId;
-    response.Unknown6 = 0;
-    response.Unknown7 = Delves::DELVE_TIERED_ENTRANCE_FIELD7;
-    response.Unknown8 = tmpl->TieredEntranceId;
-
-    if (MapEntry const* mapEntry = sMapStore.LookupEntry(tmpl->MapId))
-        response.EntranceDescription = mapEntry->MapName[GetSessionDbcLocale()];
-
-    std::vector<Delves::TieredEntranceTierData> const& tiers = sDelveMgr->GetTieredEntranceTiers();
-    response.Tiers.reserve(tiers.size());
-    for (Delves::TieredEntranceTierData const& tierRow : tiers)
-    {
-        WorldPackets::Delves::TieredEntranceTier& tierData = response.Tiers.emplace_back();
-        tierData.TieredEntranceTierID = tierRow.Id;
-        tierData.Tier = tierRow.Tier;
-        tierData.SuggestedILvl = tierRow.SuggestedILvl;
-        tierData.OverrideTooltipSpellID = tierRow.OverrideTooltipSpellId;
-        tierData.UnlockPlayerConditionID = tierRow.UnlockPlayerConditionId;
-        tierData.DynamicUnlockPlayerConditionID = tierRow.DynamicUnlockPlayerConditionId;
-        tierData.ModifierUIWidgetSetID = tmpl->ModifierUiWidgetSetTier1 && tierRow.Tier ? tmpl->ModifierUiWidgetSetTier1 - (tierRow.Tier - 1) : 0;
-        tierData.Unlocked = meetsLevel && tierRow.Tier <= progress.HighestTierUnlocked;
-        tierData.TierDescription = tierRow.Description;
-        for (Delves::TieredEntranceRewardData const& reward : tierRow.Rewards)
-        {
-            WorldPackets::Delves::TieredEntranceReward& rewardData = tierData.PreviewTreasureList.emplace_back();
-            rewardData.RewardType = reward.RewardType;
-            rewardData.Id = reward.Id;
-            rewardData.Quantity = reward.Quantity;
-            rewardData.Context = reward.Context;
-        }
-    }
-
-    SendPacket(response.Write());
+    sDelveMgr->SendTieredEntranceOpen(player, entrance);
 }

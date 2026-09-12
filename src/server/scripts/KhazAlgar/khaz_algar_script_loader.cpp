@@ -64,6 +64,12 @@ void AddSC_instance_zekvirs_lair();
 void AddSC_npc_brann_bronzebeard_delves();
 void AddSC_npc_delve_entrance();
 void AddSC_npc_delvers_supplies();
+// Midnight delves (12.1 retail flow, C:\sniff\tcharvest\out\delve_research\REPORT.md)
+void AddSC_instance_gulf_of_memory_delve();
+void AddSC_gulf_of_memory_encounters();
+void AddSC_instance_the_darkway_delve();
+void AddSC_npc_delve_companion();
+void AddSC_delve_objects();
 
 void AddKhazAlgarScripts()
 {
@@ -113,4 +119,11 @@ void AddKhazAlgarScripts()
     AddSC_npc_brann_bronzebeard_delves();
     AddSC_npc_delve_entrance();
     AddSC_npc_delvers_supplies();
+
+    // Midnight delves
+    AddSC_instance_gulf_of_memory_delve();
+    AddSC_gulf_of_memory_encounters();
+    AddSC_instance_the_darkway_delve();
+    AddSC_npc_delve_companion();
+    AddSC_delve_objects();
 }

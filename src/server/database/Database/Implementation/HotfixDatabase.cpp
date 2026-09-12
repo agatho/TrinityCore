@@ -44,12 +44,14 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PrepareStatement(HOTFIX_SEL_DELVES_SEASON_X_SPELL, "SELECT ID, SpellID, DelvesSeasonID FROM delves_season_x_spell"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_DELVES_SEASON_X_SPELL, "SELECT MAX(ID) + 1 FROM delves_season_x_spell", CONNECTION_SYNCH);
-    PrepareStatement(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT UnlockDescription, ID, DelvesSeasonID, TraitTreeID, "
+    // PlayerCompanionInfo.db2 (12.1 layout 55DA5E60, 17 fields in PlayerCompanionInfoLoadInfo order)
+    PrepareStatement(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT UnlockDescription, Field_12_1_0_68209_001, ID, DelvesSeasonID, TraitTreeID, "
         "TraitNodeID_DPS, TraitNodeID_Heal, TraitSubTreeID_DPS, TraitSubTreeID_Heal, TraitSubTreeID_Tank, "
-        "FactionID, CreatureDisplayInfoID, UiModelSceneID, "
-        "Field_12_0_0_64499_011, Field_12_0_0_64499_012, ParentID"
+        "FactionID, CreatureDisplayInfoID, UiModelSceneID, PlayerDataElementCharacterID, Field_12_0_0_64499_012, FlavorNodeID, ParentID"
         " FROM player_companion_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT MAX(ID) + 1 FROM player_companion_info", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_PLAYER_COMPANION_INFO, "SELECT ID, UnlockDescription_lang, Field_12_1_0_68209_001_lang FROM player_companion_info_locale"
+        " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PrepareStatement(HOTFIX_SEL_DELVES_SEASON, "SELECT ID, FactionID FROM delves_season"
         " WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_DELVES_SEASON, "SELECT MAX(ID) + 1 FROM delves_season", CONNECTION_SYNCH);

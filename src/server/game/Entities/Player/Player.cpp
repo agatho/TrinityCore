@@ -16,6 +16,7 @@
  */
 
 #include "Player.h"
+#include "DelveMgr.h"
 #include "DelvesDefines.h"
 #include "AreaTrigger.h"
 #include "Account.h"
@@ -1357,9 +1358,14 @@ bool Player::TeleportTo(TeleportLocation const& teleportLocation, TeleportToOpti
             return false;
         }
 
-        // Seamless teleport can happen only if cosmetic maps match
+        // Seamless teleport can happen only if cosmetic maps match - except for delve transfers: retail moves the
+        // player into and out of a delve with SMSG_NEW_WORLD reason 21 (seamless) and no SMSG_TRANSFER_PENDING even
+        // though neither map is a cosmetic child of the other (12.1.0.69497 gulf 100164 -> 101829: Harandar 2694 ->
+        // The Gulf of Memory 2964 and back; eversong: 0 -> 2952 and back; REPORT.md 1.5).
+        bool const delveTransfer = oldmap && (sDelveMgr->GetDelveTemplate(oldmap->GetId()) || sDelveMgr->GetDelveTemplate(teleportLocation.Location.GetMapId()));
         if (!oldmap ||
-            (oldmap->GetEntry()->CosmeticParentMapID != int32(teleportLocation.Location.GetMapId()) && int32(GetMapId()) != mEntry->CosmeticParentMapID &&
+            (!delveTransfer &&
+            oldmap->GetEntry()->CosmeticParentMapID != int32(teleportLocation.Location.GetMapId()) && int32(GetMapId()) != mEntry->CosmeticParentMapID &&
             !((oldmap->GetEntry()->CosmeticParentMapID != -1) ^ (oldmap->GetEntry()->CosmeticParentMapID != mEntry->CosmeticParentMapID))))
             options &= ~TELE_TO_SEAMLESS;
 
@@ -1470,6 +1476,14 @@ bool Player::TeleportTo(TeleportLocation const& teleportLocation, TeleportToOpti
             suspendToken.SequenceIndex = m_movementCounter; // not incrementing
             suspendToken.Reason = options & TELE_TO_SEAMLESS ? 2 : 1;
             SendDirectMessage(suspendToken.Write());
+
+            if (options & TELE_TO_SEAMLESS)
+            {
+                // seamless transfers clear the player choice right after SMSG_SUSPEND_TOKEN instead of before
+                // SMSG_TRANSFER_PENDING (12.1.0.69497 gulf 100164: SUSPEND_TOKEN + PLAYER_CHOICE_CLEAR, NEW_WORLD at 101829)
+                WorldPackets::Quest::PlayerChoiceClear choiceClear;
+                SendDirectMessage(choiceClear.Write());
+            }
         }
     }
     return true;
@@ -1553,6 +1567,11 @@ void Player::RemoveFromWorld()
         m_lootRolls.clear();
         sOutdoorPvPMgr->HandlePlayerLeaveZone(this, m_zoneUpdateId);
         sBattlefieldMgr->HandlePlayerLeaveZone(this, m_zoneUpdateId);
+
+        // A delve entrance opened by proximity (DelveMgr::OpenEntranceByProximity, interaction type 79) is tracked in
+        // the interaction data so it is sent once per approach; leaving the map ends the approach.
+        if (PlayerTalkClass->GetInteractionData().Type == PlayerInteractionType::PlaceholderType79)
+            PlayerTalkClass->GetInteractionData().Reset();
     }
 
     GetSession()->GetBattlenetAccount().RemoveFromWorld();
