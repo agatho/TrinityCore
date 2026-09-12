@@ -42,8 +42,6 @@ void AddSC_duel_reset();
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
-void AddSC_npc_mythic_keystone();
-
 void AddWorldScripts()
 {
     AddSC_areatrigger_scripts();
@@ -71,6 +69,4 @@ void AddWorldScripts()
     if (sWorld->getIntConfig(CONFIG_XP_BOOST_DAYMASK) != 0)
         AddSC_xp_boost();
 
-    // Mythic+ keystone NPC
-    AddSC_npc_mythic_keystone();
 }
