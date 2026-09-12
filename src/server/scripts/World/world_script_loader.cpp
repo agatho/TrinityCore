@@ -42,7 +42,6 @@ void AddSC_duel_reset();
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
-void AddSC_npc_mythic_keystone();
 
 void AddWorldScripts()
 {
@@ -72,5 +71,4 @@ void AddWorldScripts()
         AddSC_xp_boost();
 
     // Mythic+ keystone NPC
-    AddSC_npc_mythic_keystone();
 }
