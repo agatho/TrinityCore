@@ -61,12 +61,9 @@ void DelveInstance::OnPlayerEnter(Player* player)
         _owners.insert(player->GetGUID());
         PopulateDelveData(player);
 
-        // Retail: Coffer Key Shards auto-combine into Restored Coffer Keys on delve entry (100 -> 1).
-        while (player->GetCurrencyQuantity(CURRENCY_COFFER_KEY_SHARDS) >= COFFER_KEY_SHARDS_PER_KEY)
-        {
-            player->RemoveCurrency(CURRENCY_COFFER_KEY_SHARDS, int32(COFFER_KEY_SHARDS_PER_KEY));
-            player->AddCurrency(CURRENCY_RESTORED_COFFER_KEY, 1, CurrencyGainSource::Loot);
-        }
+        // No shard -> key conversion here: none of the five captured runs moved currency 3028 on entry
+        // (REPORT.md 6.2); retail instead completes the hidden entry quest ~6.6 s after SMSG_NEW_WORLD, see
+        // DelveMgr::OnPlayerEnteredDelve.
 
         // Spawn companion for the first player if group size <= MAX_COMPANION_GROUP_SIZE (4)
         if (_state == DelveState::Entering)

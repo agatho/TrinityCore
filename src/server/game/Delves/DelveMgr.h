@@ -25,6 +25,7 @@
 #include <vector>
 
 class Creature;
+class Player;
 struct DelvesSeasonEntry;
 struct PlayerCompanionInfoEntry;
 
@@ -86,9 +87,39 @@ public:
     // Currently: true iff the map has a delve_template row.
     bool IsTieredEntranceScenarioMap(uint32 mapId) const;
 
+    // Tier picker rows (delve_tiered_entrance_tier), ordered by tier
+    std::vector<TieredEntranceTierData> const& GetTieredEntranceTiers() const { return _tieredEntranceTiers; }
+    TieredEntranceTierData const* GetTieredEntranceTier(uint32 tieredEntranceTierId) const;
+
+    // ---------------------------------------------------------------------------------------------
+    // Retail run flow (12.1.0.69497 captures, C:\sniff\tcharvest\out\delve_research\REPORT.md).
+    // Shared by WorldSession::Handle* (DelvesHandler.cpp) and the entrance / instance scripts.
+    // ---------------------------------------------------------------------------------------------
+
+    // Builds and sends SMSG_TIERED_ENTRANCE_OPEN_RESPONSE for the delve this entrance spawn opens (REPORT.md 1.3).
+    // Used by the click path (CMSG_TIERED_ENTRANCE_OPEN) and by OpenEntranceByProximity.
+    void SendTieredEntranceOpen(Player* player, Creature const* entrance);
+    // REPORT.md 1.1 (work item 2): a delve entrance (creature 212407 / 251896) opens by itself when the player comes
+    // into range - SMSG_NPC_INTERACTION_OPEN_RESULT(entrance, type 79) followed by the tier picker. Sent once per
+    // approach: the open interaction is tracked in the player's InteractionData, cleared by CMSG_CLOSE_INTERACTION
+    // (gulf 95751), by CloseEntranceByProximity and when the player leaves the map (Player::RemoveFromWorld).
+    void OpenEntranceByProximity(Player* player, Creature const* entrance);
+    // Counterpart for the entrance AI when the player leaves range without the client closing the interaction.
+    void CloseEntranceByProximity(Player* player, Creature const* entrance);
+    // REPORT.md 1.4 - 1.6 (work item 5): tier selected -> remember where to return, publish the selection and
+    // seamlessly transfer to the delve map (SMSG_NEW_WORLD reason 21, no SMSG_TRANSFER_PENDING).
+    void EnterDelve(Player* player, DelveTemplate const& tmpl, uint8 tier);
+    // Called from the delve instance script's OnPlayerEnter: sets the observed world states on the delve map
+    // (REPORT.md 1.6) and schedules the hidden entry quest reward once per run (REPORT.md 4, work item 6).
+    void OnPlayerEnteredDelve(Player* player);
+    // REPORT.md 5 (work item 11): load screen kit 79917 then seamless transfer to the exit coordinates on the
+    // map the player entered from (fallback: delve_template exit map, then homebind).
+    void LeaveDelve(Player* player);
+
 private:
     void LoadDelveTemplates();
     void LoadTierRewards();
+    void LoadTieredEntranceTiers();
     void DetermineActiveSeason();
 
     // Templates indexed by mapId
@@ -103,6 +134,7 @@ private:
     std::unordered_map<uint8, DelveTierReward> _tierRewards;
     // Active season
     uint32 _activeSeasonId = 0;
+    std::vector<TieredEntranceTierData> _tieredEntranceTiers;
 };
 
 } // namespace Delves

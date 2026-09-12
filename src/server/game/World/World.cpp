@@ -52,6 +52,8 @@
 #include "DB2Stores.h"
 #include "DatabaseEnv.h"
 #include "DetourMemoryFunctions.h"
+#include "DelveMgr.h"
+#include "DelvesRewards.h"
 #include "DisableMgr.h"
 #include "GameEventMgr.h"
 #include "TurbulentTimewaysMgr.h"
@@ -2294,6 +2296,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading scenario poi data");
     sScenarioMgr->LoadScenarioPOI();
 
+    TC_LOG_INFO("server.loading", "Loading delves...");
+    sDelveMgr->Initialize();
+
     TC_LOG_INFO("server.loading", "Loading phase names...");
     sObjectMgr->LoadPhaseNames();
 
@@ -3422,6 +3427,10 @@ void World::ResetWeeklyQuests()
 
     // reselect pools
     sQuestPoolMgr->ChangeWeeklyQuests();
+
+    // Delves: weekly completion / bountiful / coffer-shard counters roll over with the weekly reset
+    // (REPORT.md 6.4: ResetAllWeeklyProgress had no caller, so the counters never reset)
+    Delves::DelvesRewards::ResetAllWeeklyProgress();
 
     // Update faction balance
     UpdateWarModeRewardValues();
