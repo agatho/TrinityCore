@@ -2854,6 +2854,18 @@ template TC_GAME_API bool Map::AddToMap(MeshObject*);
 template TC_GAME_API bool Map::AddToMap(HousingRoomEntity*);
 template TC_GAME_API bool Map::AddToMap(HousingDecorEntity*);
 
+// Map::AddToGrid<T> is defined in this TU but called cross-TU from
+// ObjectGridLoaderBase::AddToMap (ObjectGridLoader.cpp). Without an explicit
+// instantiation the out-of-line copy is only emitted when the optimizer
+// happens not to inline it away, which is fragile (e.g. an ASan build drops
+// it and worldserver fails to link with an undefined reference to
+// Map::AddToGrid<Corpse>). Instantiate it explicitly for the grid-loaded
+// types ObjectGridLoader uses.
+template TC_GAME_API void Map::AddToGrid(GameObject*, Cell const&);
+template TC_GAME_API void Map::AddToGrid(Creature*, Cell const&);
+template TC_GAME_API void Map::AddToGrid(AreaTrigger*, Cell const&);
+template TC_GAME_API void Map::AddToGrid(Corpse*, Cell const&);
+
 template TC_GAME_API void Map::RemoveFromMap(Corpse*, bool);
 template TC_GAME_API void Map::RemoveFromMap(Creature*, bool);
 template TC_GAME_API void Map::RemoveFromMap(GameObject*, bool);
