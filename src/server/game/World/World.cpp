@@ -49,6 +49,7 @@
 #include "DB2Stores.h"
 #include "DatabaseEnv.h"
 #include "DetourMemoryFunctions.h"
+#include "DelveMgr.h"
 #include "DisableMgr.h"
 #include "GameEventMgr.h"
 #include "GameObjectModel.h"
@@ -2069,6 +2070,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading scenario poi data");
     sScenarioMgr->LoadScenarioPOI();
+
+    TC_LOG_INFO("server.loading", "Loading delves...");
+    sDelveMgr->Initialize();
 
     TC_LOG_INFO("server.loading", "Loading phase names...");
     sObjectMgr->LoadPhaseNames();
