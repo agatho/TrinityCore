@@ -45,6 +45,7 @@
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
+#include "GroupMgr.h"
 #include "Guild.h"
 #include "InstanceScript.h"
 #include "Item.h"
@@ -279,7 +280,7 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectNULL,                                     //187 SPELL_EFFECT_RANDOMIZE_ARCHAEOLOGY_DIGSITES
     &Spell::EffectNULL,                                     //188 SPELL_EFFECT_SUMMON_STABLED_PET_AS_GUARDIAN
     &Spell::EffectNULL,                                     //189 SPELL_EFFECT_LOOT
-    &Spell::EffectNULL,                                     //190 SPELL_EFFECT_CHANGE_PARTY_MEMBERS
+    &Spell::EffectChangePartyMembers,                       //190 SPELL_EFFECT_CHANGE_PARTY_MEMBERS
     &Spell::EffectNULL,                                     //191 SPELL_EFFECT_TELEPORT_TO_DIGSITE
     &Spell::EffectUncageBattlePet,                          //192 SPELL_EFFECT_UNCAGE_BATTLEPET
     &Spell::EffectNULL,                                     //193 SPELL_EFFECT_START_PET_BATTLE
@@ -5660,6 +5661,60 @@ void Spell::EffectLaunchQuestChoice()
         return;
 
     unitTarget->ToPlayer()->SendPlayerChoice(GetCaster()->GetGUID(), effectInfo->MiscValue);
+}
+
+// SPELL_EFFECT_CHANGE_PARTY_MEMBERS: a creature joins or leaves a player's party frame. MiscValue 0 leaves,
+// any other value joins (the 12.1 client data uses 1 for every join and 2/3 for the second and third
+// companion of a scripted trio). The caster is the creature and the target the player in every one of the
+// 39 spells that use this effect - "Npc Join Player Party" 1249690 is cast by the delve companion on its
+// summoner right before it appears in SMSG_PARTY_UPDATE.
+void Spell::EffectChangePartyMembers()
+{
+    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
+        return;
+
+    Creature* companion = m_caster->ToCreature();
+    if (!companion && unitTarget)
+        companion = unitTarget->ToCreature();
+
+    Player* player = unitTarget ? unitTarget->ToPlayer() : nullptr;
+    if (!player)
+        player = m_caster->ToPlayer();
+
+    if (!player)
+        return;
+
+    if (!effectInfo->MiscValue)
+    {
+        // leave: the casting creature, or every companion of the player when a player casts it
+        if (companion)
+        {
+            if (Group* group = sGroupMgr->GetGroupByGUID(companion->GetPartyGroupGUID()))
+                group->RemoveNpcMember(companion->GetGUID());
+        }
+        else if (Group* group = player->GetGroup())
+        {
+            std::vector<ObjectGuid> npcMembers;
+            for (Group::NpcMemberSlot const& npcSlot : group->GetNpcMemberSlots())
+                npcMembers.push_back(npcSlot.guid);
+
+            for (ObjectGuid const& npcMember : npcMembers)
+                if (!group->RemoveNpcMember(npcMember))
+                    break;              // the group disbanded itself with its last creature
+        }
+
+        return;
+    }
+
+    if (!companion)
+        return;
+
+    Group* group = player->GetGroup();
+    if (!group)
+        group = Group::CreateNpcParty(player);
+
+    if (group)
+        group->AddNpcMember(companion);
 }
 
 void Spell::EffectUncageBattlePet()

@@ -231,6 +231,7 @@ namespace WorldPackets
 
             WorldPacket const* Write() override;
             void Initialize(Player const* player);
+            void Initialize(Creature const* creature);
 
             bool ForEnemy = false;
             ObjectGuid MemberGuid;

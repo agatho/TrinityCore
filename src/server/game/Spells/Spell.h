@@ -427,6 +427,7 @@ class TC_GAME_API Spell
         void EffectChangeBattlePetQuality();
         void EffectLaunchQuestChoice();
         void EffectUncageBattlePet();
+        void EffectChangePartyMembers();
         void EffectCreateHeirloomItem();
         void EffectUpgradeHeirloom();
         void EffectApplyEnchantIllusion();

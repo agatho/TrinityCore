@@ -219,6 +219,20 @@ class TC_GAME_API Group
             uint8       roles;
             bool        readyChecked;
         };
+        // A creature sharing the party frame with the group's players (SPELL_EFFECT_CHANGE_PARTY_MEMBERS,
+        // "Npc Join Player Party" and friends). These members exist only in memory: they are never written
+        // to `group_member`, never counted towards the group size and never become leader or looter.
+        struct NpcMemberSlot
+        {
+            ObjectGuid guid;
+            std::string name;
+            uint8 _class;
+            uint8 factionGroup;
+            uint8 subGroup;
+            uint8 flags;
+            uint8 roles;
+        };
+
         typedef std::list<MemberSlot> MemberSlotList;
         typedef MemberSlotList::const_iterator member_citerator;
 
@@ -261,6 +275,18 @@ class TC_GAME_API Group
         void RemoveAllInvites();
         bool AddLeaderInvite(Player* player);
         bool AddMember(Player* player);
+
+        // Non-player party members. A group created by CreateNpcParty exists only to give a player a party
+        // frame for its companions; it holds a single player and disbands with its last creature.
+        static Group* CreateNpcParty(Player* player);
+        bool AddNpcMember(Creature* creature);
+        bool RemoveNpcMember(ObjectGuid guid);              // false when the group disbanded itself
+        bool IsNpcMember(ObjectGuid guid) const;
+        std::vector<NpcMemberSlot> const& GetNpcMemberSlots() const { return m_npcMemberSlots; }
+        uint32 GetNpcMembersCount() const { return uint32(m_npcMemberSlots.size()); }
+        bool IsNpcParty() const { return m_npcParty; }
+        void SetNpcParty(bool npcParty) { m_npcParty = npcParty; }
+        void SendNpcMemberFullState(Creature const* creature) const;
         bool RemoveMember(ObjectGuid guid, RemoveMethod method = GROUP_REMOVEMETHOD_DEFAULT, ObjectGuid kicker = ObjectGuid::Empty, const char* reason = nullptr);
         void ChangeLeader(ObjectGuid guid);
         void SetLootMethod(LootMethod method);
@@ -428,6 +454,8 @@ class TC_GAME_API Group
         void ToggleGroupMemberFlag(member_witerator slot, uint8 flag, bool apply);
 
         MemberSlotList      m_memberSlots;
+        std::vector<NpcMemberSlot> m_npcMemberSlots;
+        bool                m_npcParty = false;
         GroupRefManager     m_memberMgr;
         InvitesList         m_invitees;
         ObjectGuid          m_leaderGuid;

@@ -20171,6 +20171,10 @@ bool Player::CheckInstanceValidity(bool /*isLogin*/)
         return true;
 
     Group* group = GetGroup();
+    // a party that exists only to hold NPC companions never owns an instance and must not invalidate one
+    if (group && group->IsNpcParty())
+        group = nullptr;
+
     // raid instances require the player to be in a raid group to be valid
     if (map->IsRaid() && !sWorld->getBoolConfig(CONFIG_INSTANCE_IGNORE_RAID) && (map->GetEntry()->Expansion() >= sWorld->getIntConfig(CONFIG_EXPANSION)))
         if (!group || !group->isRaidGroup())

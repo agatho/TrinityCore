@@ -17,6 +17,7 @@
 
 #include "PartyPackets.h"
 #include "Group.h"
+#include "Creature.h"
 #include "PacketOperators.h"
 #include "Pet.h"
 #include "PhasingHandler.h"
@@ -637,6 +638,55 @@ WorldPacket const* RaidMarkersChanged::Write()
     }
 
     return &_worldPacket;
+}
+
+// A creature that shares the party frame (SPELL_EFFECT_CHANGE_PARTY_MEMBERS). The client keeps a party
+// member's health, power and auras from its object update while the unit is in range; this state is what
+// fills the frame for the rest.
+void PartyMemberFullState::Initialize(Creature const* creature)
+{
+    ForEnemy = false;
+
+    MemberGuid = creature->GetGUID();
+
+    MemberStats.Status = MEMBER_STATUS_ONLINE;
+    if (!creature->IsAlive())
+        MemberStats.Status |= MEMBER_STATUS_DEAD;
+
+    MemberStats.Level = creature->GetLevel();
+
+    MemberStats.CurrentHealth = creature->GetHealth();
+    MemberStats.MaxHealth = creature->GetMaxHealth();
+
+    MemberStats.PowerType = creature->GetPowerType();
+    MemberStats.PowerDisplayID = 0;
+    MemberStats.CurrentPower = creature->GetPower(creature->GetPowerType());
+    MemberStats.MaxPower = creature->GetMaxPower(creature->GetPowerType());
+
+    MemberStats.ZoneID = creature->GetZoneId();
+    MemberStats.PositionX = int16(creature->GetPositionX());
+    MemberStats.PositionY = int16(creature->GetPositionY());
+    MemberStats.PositionZ = int16(creature->GetPositionZ());
+
+    if (::Vehicle const* vehicle = creature->GetVehicle())
+        if (VehicleSeatEntry const* vehicleSeat = vehicle->GetSeatForPassenger(creature))
+            MemberStats.VehicleSeat = vehicleSeat->ID;
+
+    for (AuraApplication const* aurApp : creature->GetVisibleAuras())
+    {
+        PartyMemberAuraStates& aura = MemberStats.Auras.emplace_back();
+
+        aura.SpellID = aurApp->GetBase()->GetId();
+        aura.ActiveFlags = aurApp->GetEffectMask();
+        aura.Flags = aurApp->GetFlags();
+
+        if (aurApp->GetFlags() & AFLAG_SCALABLE)
+            for (AuraEffect const* aurEff : aurApp->GetBase()->GetAuraEffects())
+                if (aurApp->HasEffect(aurEff->GetEffIndex()))
+                    aura.Points.push_back(float(aurEff->GetAmount()));
+    }
+
+    PhasingHandler::FillPartyMemberPhase(&MemberStats.Phases, creature->GetPhaseShift());
 }
 
 void PartyMemberFullState::Initialize(Player const* player)
