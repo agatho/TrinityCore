@@ -16,31 +16,36 @@
  */
 
 /*
- * Delve entrance gossip handler.
+ * Delve entrance - the shared "Enter Delve" creature (212407 on the Midnight/12.1 maps, 251896 for The Darkway).
  *
- * Routes the shared "Enter Delve" NPC (creature entry 212407) to the correct
- * delve template based on the spawn's GossipMenuID (set per-spawn via
- * gossip_menu_addon SQL). Sends the 11-tier gossip menu with TIER_SPELL_IDS
- * encoded into each option's SpellID — the retail client renders the native
- * Blizzard_DelvesDifficultyPicker UI when it sees a SMSG_GOSSIP_MESSAGE whose
- * addon row carries a non-zero LfgDungeonsID.
+ * Three entry flavours were captured (C:\sniff\tcharvest\out\delve_research\REPORT.md 1.1):
+ *   12.0.1 (deatholme)  classic gossip menu 40277, 11 tier options -> CMSG_GOSSIP_SELECT_OPTION   -> OnGossipHello/Select
+ *   12.0.7 (shadowmoon) click -> CMSG_TIERED_ENTRANCE_OPEN -> SMSG_TIERED_ENTRANCE_OPEN_RESPONSE   -> DelvesHandler.cpp
+ *   12.1   (gulf, eversong) NO client request: walking into range makes the server send
+ *          SMSG_NPC_INTERACTION_OPEN_RESULT(entrance guid, type 79) + SMSG_TIERED_ENTRANCE_OPEN_RESPONSE
+ *          (gulf 88718 and again 98205 after a CMSG_CLOSE_INTERACTION at 95751 when the player walked away) -> MoveInLineOfSight
+ * All three end in CMSG_SELECT_DELVE_ENTRANCE_TIER / a gossip option and the same seamless transfer, which is
+ * DelveMgr::EnterDelve (REPORT 1.4 - 1.6).
  *
- * Adapted from stevebone/DoomCore (DelveSystem.cpp:npc_enter_delve, sniff
- * 12.0.1.66527). Naming kept as `npc_delve_entrance` for branch continuity
- * (the legacy custom-list implementation lived under this script name).
+ * The entrance is resolved PER SPAWN (two spawns of 212407 were visible at once in gulf, REPORT 1.2) through
+ * DelveMgr::GetDelveTemplateForEntrance.
  *
- * Set creature_template.ScriptName = 'npc_delve_entrance' on creature 212407.
+ * Set creature_template.ScriptName = 'npc_delve_entrance' on creatures 212407 and 251896.
  */
 
+#include "delves_common.h"
 #include "Creature.h"
 #include "DelveMgr.h"
 #include "DelvesDefines.h"
 #include "DelvesRewards.h"
+#include "GameEventSender.h"
+#include "GameObject.h"
 #include "GameObjectAI.h"
 #include "GossipDef.h"
 #include "Log.h"
 #include "Map.h"
 #include "NPCPackets.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
@@ -52,24 +57,69 @@ using namespace Delves;
 namespace
 {
 
-enum DelveGossipSenders
-{
-    SENDER_DELVE_TIER = 1,
-};
+// REPORT 1.1: the picker opens "by proximity"; the distance itself is not on the wire. Bounded from above by gulf:
+// the character logged in 17.8 yd from the entrance (NEW_WORLD 73023 at 34.17, 799.27 vs the spawn at 16.71, 800.37)
+// and the picker did NOT open until 88718, after walking - so the range is below 17.8 yd. INTERACTION_DISTANCE-like.
+constexpr float ENTRANCE_AUTO_OPEN_RANGE = 15.0f;
+// Hysteresis for "walked away" (gulf 95751 CMSG_CLOSE_INTERACTION; the client closes it itself, this is the fallback)
+constexpr float ENTRANCE_AUTO_CLOSE_RANGE = 20.0f;
+constexpr Milliseconds ENTRANCE_RANGE_CHECK_INTERVAL = 1s;
 
 struct npc_delve_entranceAI : public ScriptedAI
 {
     npc_delve_entranceAI(Creature* creature) : ScriptedAI(creature) { }
 
+    void InitializeAI() override
+    {
+        ScriptedAI::InitializeAI();
+        me->SetReactState(REACT_PASSIVE);
+    }
+
+    // 12.1 proximity auto-open. CreatureAI::MoveInLineOfSight_Safe is invoked for every unit that moves within the
+    // creature's sight; the base implementation only aggroes, which an immune-to-PC gossip NPC never does.
+    void MoveInLineOfSight(Unit* who) override
+    {
+        Player* player = who ? who->ToPlayer() : nullptr;
+        if (!player || !player->IsAlive() || !me->IsWithinDistInMap(player, ENTRANCE_AUTO_OPEN_RANGE))
+            return;
+
+        // once per approach; the set is pruned in UpdateAI when the player leaves ENTRANCE_AUTO_CLOSE_RANGE
+        if (!_playersInRange.insert(player->GetGUID()).second)
+            return;
+
+        // SMSG_NPC_INTERACTION_OPEN_RESULT(type 79) + SMSG_TIERED_ENTRANCE_OPEN_RESPONSE (gulf 88718 / 98205)
+        sDelveMgr->OpenEntranceByProximity(player, me);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        _rangeCheckTimer += Milliseconds(diff);
+        if (_rangeCheckTimer < ENTRANCE_RANGE_CHECK_INTERVAL)
+            return;
+        _rangeCheckTimer = 0ms;
+
+        for (auto itr = _playersInRange.begin(); itr != _playersInRange.end();)
+        {
+            Player* player = ObjectAccessor::GetPlayer(*me, *itr);
+            if (player && me->IsWithinDistInMap(player, ENTRANCE_AUTO_CLOSE_RANGE))
+            {
+                ++itr;
+                continue;
+            }
+
+            if (player)
+                sDelveMgr->CloseEntranceByProximity(player, me);
+            itr = _playersInRange.erase(itr);
+        }
+    }
+
+    // 12.0.1 gossip flavour (deatholme 50489: SMSG_GOSSIP_MESSAGE menu 40277, LfgDungeonsID 3069, 11 options with
+    // the tier spells) - kept for clients that talk to the NPC instead of receiving the tiered picker.
     bool OnGossipHello(Player* player) override
     {
         if (!player || !player->GetSession())
             return true;
 
-        // Shared with WorldSession::HandleTieredEntranceOpen / HandleSelectDelveEntranceTier so all
-        // three entrance paths agree on which delve an NPC opens. The local copy this replaced
-        // started from me->GetGossipMenuId(), which is always 0 (nothing in the core ever calls
-        // SetGossipMenuId), so it silently fell through to the proximity heuristic every time.
         DelveTemplate const* tmpl = sDelveMgr->GetDelveTemplateForEntrance(me);
         if (!tmpl)
         {
@@ -154,39 +204,24 @@ struct npc_delve_entranceAI : public ScriptedAI
         }
 
         TC_LOG_DEBUG("scripts.delves",
-            "npc_delve_entrance: player {} selected tier {} -> teleporting to map {}",
+            "npc_delve_entrance: player {} selected tier {} -> entering map {}",
             player->GetName(), tier, _delveTemplate->MapId);
 
-        // Drive the Blizzard_DelvesDifficultyPicker / in-delve HUD via WorldStates.
-        player->SendUpdateWorldState(WS_DELVE_TIER, tier);
-        player->SendUpdateWorldState(WS_DELVE_IN_DELVE_FLAG, 1);
-        player->SendUpdateWorldState(WS_DELVE_MAP_ID, _delveTemplate->MapId);
-        player->SendUpdateWorldState(WS_DELVE_TIER_SPELL, TIER_SPELL_IDS[gossipListId]);
-        if (_delveTemplate->WorldState26903)
-            player->SendUpdateWorldState(WS_DELVE_UNKNOWN_26903, _delveTemplate->WorldState26903);
-
-        // Persist the selected tier on the player so DelveInstance::OnPlayerEnter
-        // can read it (we already track this from CMSG_SELECT_DELVE_ENTRANCE_TIER —
-        // populating it here covers the gossip-driven entry path too).
-        player->m_delveSelectedMapId = _delveTemplate->MapId;
-        player->m_delveSelectedTier  = tier;
-
-        // Keep the client-side JamDelveData progression mirror's last-selected
-        // delve current for the gossip-driven entry path too.
-        DelvesRewards::PublishProgress(player);
-
-        player->TeleportTo(_delveTemplate->MapId,
-            _delveTemplate->EntryX, _delveTemplate->EntryY,
-            _delveTemplate->EntryZ, _delveTemplate->EntryO,
-            TELE_TO_SEAMLESS);
-
+        // deatholme 53049-54033: GOSSIP_COMPLETE, PHASE_SHIFT x2, PLAYER_CHOICE_CLEAR, NEW_WORLD 2952 - the same
+        // transfer as CMSG_SELECT_DELVE_ENTRANCE_TIER (REPORT 1.5), so the same code path.
+        sDelveMgr->EnterDelve(player, *_delveTemplate, tier);
         return true;
     }
 
 private:
     DelveTemplate const* _delveTemplate = nullptr;
+    GuidUnorderedSet _playersInRange;
+    Milliseconds _rangeCheckTimer = 0ms;
 };
 
+// GO 408227 "Leave Delve" (type 22 spellcaster, spell 460683 dummy, playerCast) - the non-bot exit. REPORT 5.6:
+// eversong used it at 2650933 right before its NEW_WORLD back to map 0; scenario 3424 step 17121 "(Optional) Exit
+// Delve after collecting rewards" is criteria 69831 = GameEvent 93004.
 struct go_leave_delve : public GameObjectAI
 {
     go_leave_delve(GameObject* go) : GameObjectAI(go) { }
@@ -196,37 +231,15 @@ struct go_leave_delve : public GameObjectAI
         if (!player)
             return true;
 
-        DelveTemplate const* tmpl = sDelveMgr->GetDelveTemplate(player->GetMapId());
-
         TC_LOG_DEBUG("scripts.delves",
             "go_leave_delve: player {} using leave portal (map {})",
             player->GetName(), player->GetMapId());
 
-        player->ClearDelveData(int32(player->GetMapId()));
+        GameEvents::Trigger(GAME_EVENT_LEAVE_DELVE_USED, player, me);
 
-        if (tmpl)
-        {
-            player->SendUpdateWorldState(WS_DELVE_TIER, 0);
-            player->SendUpdateWorldState(WS_DELVE_IN_DELVE_FLAG, 0);
-            player->SendUpdateWorldState(WS_DELVE_MAP_ID, 0);
-            player->SendUpdateWorldState(WS_DELVE_TIER_SPELL, 0);
-            player->SendUpdateWorldState(WS_DELVE_UNKNOWN_26903, 0);
-
-            // Seamless teleport to the overworld entrance position. Map 0 is
-            // a placeholder — the DelveTemplate doesn't store the overworld
-            // map id explicitly because every delve in the current data set
-            // exits to the Khaz Algar continent (map 2552). We use the
-            // player's previous outside-instance map as the destination.
-            uint32 destMap = player->GetMap()->Instanceable() ? 2552 : player->GetMapId();
-            player->TeleportTo(destMap, tmpl->ExitX, tmpl->ExitY, tmpl->ExitZ, tmpl->ExitO,
-                TELE_TO_SEAMLESS);
-        }
-        else
-        {
-            // Fallback for delve maps with no template registered — go to bind.
-            player->TeleportTo(player->m_homebind);
-        }
-
+        // Load screen + seamless transfer to the exit coordinates on the map the player came from (the previous
+        // hardcoded map 2552 was wrong for every Midnight delve: 2694 / 0).
+        sDelveMgr->LeaveDelve(player);
         return true;
     }
 };
@@ -236,12 +249,8 @@ struct go_leave_delve : public GameObjectAI
 void AddSC_npc_delve_entrance()
 {
     // RegisterCreatureAI() stringizes the type name, so `RegisterCreatureAI(npc_delve_entranceAI)`
-    // registered this under "npc_delve_entranceAI", while creature_template.ScriptName (set on
-    // creature 212407 by sql/updates/world/master/2026_04_29_01_world.sql) says
-    // "npc_delve_entrance". The two never matched, so the script was never bound to the NPC. The
-    // live realm logged it every boot: "Script 'npc_delve_entrance' is referenced by the database,
-    // but does not exist in the core!" (M:/IntegratedServer/logs/DBErrors.log). Register under the
-    // name the database actually uses.
+    // registered this under "npc_delve_entranceAI", while creature_template.ScriptName says
+    // "npc_delve_entrance". Register under the name the database actually uses.
     new GenericCreatureScript<npc_delve_entranceAI>("npc_delve_entrance");
     RegisterGameObjectAI(go_leave_delve);
 }

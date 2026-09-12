@@ -898,6 +898,10 @@ void WorldSession::HandlePlayerChoiceResponse(WorldPackets::Quest::ChoiceRespons
 
     sScriptMgr->OnPlayerChoiceResponse(ObjectAccessor::GetWorldObject(*_player, _player->PlayerTalkClass->GetInteractionData().SourceGuid), _player,
         playerChoice, playerChoiceResponse, choiceResponse.ResponseIdentifier);
+
+    // retail closes the choice UI explicitly once the response is accepted (12.1 captures)
+    WorldPackets::Quest::PlayerChoiceClear clear;
+    SendPacket(clear.Write());
 }
 
 void WorldSession::HandleCloseQuestChoice(WorldPackets::Quest::CloseQuestChoice& /*closeQuestChoice*/)

@@ -16,12 +16,27 @@
  */
 
 #include "DelveMgr.h"
+#include <algorithm>
 #include "Creature.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
+#include "DelvesPackets.h"
+#include "DelvesRewards.h"
+#include "DelvesSeason.h"
+#include "Duration.h"
 #include "GameTime.h"
+#include "GossipDef.h"
+#include "Item.h"
+#include "ItemEnchantmentMgr.h"
 #include "Log.h"
+#include "Map.h"
+#include "NPCPackets.h"
+#include "ObjectMgr.h"
+#include "Player.h"
+#include "QuestDef.h"
+#include "SpellPackets.h"
 #include "Timer.h"
+#include "WorldSession.h"
 
 namespace Delves
 {
@@ -47,6 +62,7 @@ void DelveMgr::Initialize()
     DetermineActiveSeason();
     LoadDelveTemplates();
     LoadTierRewards();
+    LoadTieredEntranceTiers();
 
     TC_LOG_INFO("server.loading", ">> Loaded {} delve templates and {} tier rewards in {} ms",
         _delveTemplatesList.size(), _tierRewards.size(), GetMSTimeDiffToNow(oldMSTime));
@@ -85,7 +101,8 @@ void DelveMgr::LoadDelveTemplates()
         "gossipMenuId, lfgDungeonsId, broadcastTextId, firstTierGossipOptionId, "
         "entryX, entryY, entryZ, entryO, "
         "exitX, exitY, exitZ, exitO, "
-        "activeScenarioId, rewardScenarioId, worldState26903, finalBossEntry "
+        "activeScenarioId, rewardScenarioId, worldState26903, finalBossEntry, "
+        "tieredEntranceId, tieredEntranceUnknown3, entranceUiWidgetSetId, modifierUiWidgetSetTier1, exitMapId "
         "FROM delve_template");
 
     if (!result)
@@ -125,6 +142,11 @@ void DelveMgr::LoadDelveTemplates()
         tmpl.RewardScenarioId         = fields[23].GetUInt32();
         tmpl.WorldState26903          = fields[24].GetUInt32();
         tmpl.FinalBossEntry           = fields[25].GetUInt32();
+        tmpl.TieredEntranceId         = fields[26].GetUInt32();
+        tmpl.TieredEntranceUnknown3   = fields[27].GetUInt32();
+        tmpl.EntranceUiWidgetSetId    = fields[28].GetUInt32();
+        tmpl.ModifierUiWidgetSetTier1 = fields[29].GetUInt32();
+        tmpl.ExitMapId                = fields[30].GetInt32();
 
         _delveTemplatesByMap[tmpl.MapId] = tmpl;
         _delveTemplatesList.push_back(tmpl);
@@ -141,6 +163,64 @@ void DelveMgr::LoadDelveTemplates()
     for (DelveTemplate const& tmpl : _delveTemplatesList)
         if (tmpl.GossipMenuId != 0)
             _delveTemplatesByGossipMenuId[tmpl.GossipMenuId] = &_delveTemplatesByMap[tmpl.MapId];
+}
+
+void DelveMgr::LoadTieredEntranceTiers()
+{
+    _tieredEntranceTiers.clear();
+
+    QueryResult result = WorldDatabase.Query("SELECT id, tier, suggestedILvl, overrideTooltipSpellId, unlockPlayerConditionId, "
+        "dynamicUnlockPlayerConditionId, description FROM delve_tiered_entrance_tier ORDER BY tier");
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 tiered entrance tiers. DB table `delve_tiered_entrance_tier` is empty.");
+        return;
+    }
+
+    do
+    {
+        Field* fields = result->Fetch();
+        TieredEntranceTierData& tier = _tieredEntranceTiers.emplace_back();
+        tier.Id                             = fields[0].GetUInt32();
+        tier.Tier                           = fields[1].GetUInt8();
+        tier.SuggestedILvl                  = fields[2].GetUInt32();
+        tier.OverrideTooltipSpellId         = fields[3].GetUInt32();
+        tier.UnlockPlayerConditionId        = fields[4].GetUInt32();
+        tier.DynamicUnlockPlayerConditionId = fields[5].GetUInt32();
+        tier.Description                    = fields[6].GetString();
+    }
+    while (result->NextRow());
+
+    if (QueryResult rewards = WorldDatabase.Query("SELECT tierId, rewardType, id, quantity, context FROM delve_tiered_entrance_tier_reward ORDER BY tierId, orderIndex"))
+    {
+        do
+        {
+            Field* fields = rewards->Fetch();
+            uint32 tierId = fields[0].GetUInt32();
+            auto itr = std::find_if(_tieredEntranceTiers.begin(), _tieredEntranceTiers.end(), [tierId](TieredEntranceTierData const& t) { return t.Id == tierId; });
+            if (itr == _tieredEntranceTiers.end())
+            {
+                TC_LOG_ERROR("sql.sql", "Table `delve_tiered_entrance_tier_reward` references unknown tier {}, skipped.", tierId);
+                continue;
+            }
+            TieredEntranceRewardData& reward = itr->Rewards.emplace_back();
+            reward.RewardType = fields[1].GetUInt8();
+            reward.Id         = fields[2].GetUInt32();
+            reward.Quantity   = fields[3].GetUInt32();
+            reward.Context    = fields[4].GetUInt8();
+        }
+        while (rewards->NextRow());
+    }
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} tiered entrance tiers", _tieredEntranceTiers.size());
+}
+
+TieredEntranceTierData const* DelveMgr::GetTieredEntranceTier(uint32 tieredEntranceTierId) const
+{
+    for (TieredEntranceTierData const& tier : _tieredEntranceTiers)
+        if (tier.Id == tieredEntranceTierId)
+            return &tier;
+    return nullptr;
 }
 
 void DelveMgr::LoadTierRewards()
@@ -339,6 +419,318 @@ std::vector<uint32> DelveMgr::GetTodaysBountifulDelves() const
     }
 
     return result;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Retail run flow (12.1.0.69497 captures, C:\sniff\tcharvest\out\delve_research\REPORT.md)
+// ---------------------------------------------------------------------------------------------
+
+void DelveMgr::SendTieredEntranceOpen(Player* player, Creature const* entrance)
+{
+    if (!player || !entrance)
+        return;
+
+    DelveTemplate const* tmpl = GetDelveTemplateForEntrance(entrance);
+    if (!tmpl)
+    {
+        TC_LOG_DEBUG("scripts.delves", "DelveMgr::SendTieredEntranceOpen: could not resolve entrance {} (entry {}, map {}) to a delve template",
+            entrance->GetGUID().ToString(), entrance->GetEntry(), entrance->GetMapId());
+        return;
+    }
+
+    DelveProgress progress;
+    DelvesRewards::LoadProgress(player->GetSession()->GetBattlenetAccountId(), progress);
+    bool const meetsLevel = DelvesSeason::MeetsMinimumLevelRequirement(player);
+
+    // REPORT.md 1.3 (gulf 88718 == 98437, eversong 1842501; 12.0.7 The Darkway agrees): every delve entrance reports
+    // EntranceType 1, field 7 is 234 for every delve, field 6 is 0, fields 3/4/8 and the widget sets are per entrance
+    // (delve_template), the tier rows are season data (delve_tiered_entrance_tier). The client matches the response
+    // by the entrance GUID - two spawns of 212407 can be visible at once (REPORT.md 1.2), so echo this spawn's guid.
+    WorldPackets::Delves::TieredEntranceOpenResponse response;
+    response.EntranceGUID = entrance->GetGUID();
+    response.EntranceType = TIERED_ENTRANCE_TYPE_DELVE;
+    response.MapID = tmpl->MapId;
+    response.Unknown3 = tmpl->TieredEntranceUnknown3;
+    response.Unknown4 = tmpl->EntranceUiWidgetSetId;
+    response.Unknown6 = 0;
+    response.Unknown7 = DELVE_TIERED_ENTRANCE_FIELD7;
+    response.Unknown8 = tmpl->TieredEntranceId;
+
+    if (MapEntry const* mapEntry = sMapStore.LookupEntry(tmpl->MapId))
+        response.EntranceDescription = mapEntry->MapName[player->GetSession()->GetSessionDbcLocale()];
+
+    response.Tiers.reserve(_tieredEntranceTiers.size());
+    for (TieredEntranceTierData const& tierRow : _tieredEntranceTiers)
+    {
+        WorldPackets::Delves::TieredEntranceTier& tierData = response.Tiers.emplace_back();
+        tierData.TieredEntranceTierID = tierRow.Id;
+        tierData.Tier = tierRow.Tier;
+        tierData.SuggestedILvl = tierRow.SuggestedILvl;
+        tierData.OverrideTooltipSpellID = tierRow.OverrideTooltipSpellId;
+        tierData.UnlockPlayerConditionID = tierRow.UnlockPlayerConditionId;
+        tierData.DynamicUnlockPlayerConditionID = tierRow.DynamicUnlockPlayerConditionId;
+        tierData.ModifierUIWidgetSetID = tmpl->ModifierUiWidgetSetTier1 && tierRow.Tier ? tmpl->ModifierUiWidgetSetTier1 - (tierRow.Tier - 1) : 0;
+        tierData.Unlocked = meetsLevel && tierRow.Tier <= progress.HighestTierUnlocked;
+        tierData.TierDescription = tierRow.Description;
+        for (TieredEntranceRewardData const& reward : tierRow.Rewards)
+        {
+            WorldPackets::Delves::TieredEntranceReward& rewardData = tierData.PreviewTreasureList.emplace_back();
+            rewardData.RewardType = reward.RewardType;
+            rewardData.Id = reward.Id;
+            rewardData.Quantity = reward.Quantity;
+            rewardData.Context = reward.Context;
+        }
+    }
+
+    player->SendDirectMessage(response.Write());
+}
+
+void DelveMgr::OpenEntranceByProximity(Player* player, Creature const* entrance)
+{
+    if (!player || !entrance || !player->IsInWorld() || player->IsBeingTeleported())
+        return;
+
+    // an entrance NPC standing inside a delve never opens the picker
+    if (GetDelveTemplate(player->GetMapId()))
+        return;
+
+    // once per approach (REPORT.md 1.1: gulf opened at 88718, CMSG_CLOSE_INTERACTION at 95751 when the player walked
+    // away, opened again at 98205). WorldSession::HandleCloseInteraction resets the interaction for this guid.
+    InteractionData& interaction = player->PlayerTalkClass->GetInteractionData();
+    PlayerInteractionType const interactionType = PlayerInteractionType(DELVE_ENTRANCE_INTERACTION_TYPE);
+    if (interaction.IsInteractingWith(entrance->GetGUID(), interactionType))
+        return;
+
+    if (!GetDelveTemplateForEntrance(entrance))
+        return;
+
+    interaction.StartInteraction(entrance->GetGUID(), interactionType);
+
+    // REPORT.md 1.1, gulf 98205: `PackedGUID(212407) | 4f000000 | 00` = entrance guid + int32 InteractionType 79 + bit Success
+    WorldPackets::NPC::NPCInteractionOpenResult openResult;
+    openResult.Npc = entrance->GetGUID();
+    openResult.InteractionType = interactionType;
+    openResult.Success = true;
+    player->SendDirectMessage(openResult.Write());
+
+    SendTieredEntranceOpen(player, entrance);
+}
+
+void DelveMgr::CloseEntranceByProximity(Player* player, Creature const* entrance)
+{
+    if (!player || !entrance)
+        return;
+
+    InteractionData& interaction = player->PlayerTalkClass->GetInteractionData();
+    if (interaction.IsInteractingWith(entrance->GetGUID(), PlayerInteractionType(DELVE_ENTRANCE_INTERACTION_TYPE)))
+        interaction.Reset();
+}
+
+void DelveMgr::EnterDelve(Player* player, DelveTemplate const& tmpl, uint8 tier)
+{
+    if (!player || !player->IsInWorld() || tier == 0 || tier > MAX_DELVE_TIER)
+        return;
+
+    // eversong sent CMSG_SELECT_DELVE_ENTRANCE_TIER twice (1844955 and 1846555, the second after
+    // CMSG_AUTH_CONTINUED_SESSION); retail had already acted on the first (REPORT.md 1.4)
+    if (player->IsBeingTeleported() || player->GetMapId() == tmpl.MapId)
+        return;
+
+    // Remember where to come back to: retail returns the player to the delve's exit coordinates on the map
+    // they entered from - Harandar 2694 for the Gulf of Memory, map 0 for the Shadow Enclave (REPORT.md 1.5 / 5).
+    if (!GetDelveTemplate(player->GetMapId()))
+    {
+        if (tmpl.ExitX != 0.0f || tmpl.ExitY != 0.0f)
+            player->m_delveReturnLocation = WorldLocation(player->GetMapId(), tmpl.ExitX, tmpl.ExitY, tmpl.ExitZ, tmpl.ExitO);
+        else
+            player->m_delveReturnLocation = player->GetWorldLocation();
+    }
+
+    player->m_delveSelectedMapId = tmpl.MapId;
+    player->m_delveSelectedTier = tier;
+
+    // the picker closes with the selection; the choice-clear that precedes SMSG_NEW_WORLD is sent by Player::TeleportTo
+    player->PlayerTalkClass->GetInteractionData().Reset();
+
+    // Keep the client-side JamDelveData progression mirror's last-selected delve current.
+    DelvesRewards::PublishProgress(player);
+
+    // REPORT.md 1.6: the per-run world states. Retail delivers them with SMSG_INIT_WORLD_STATES of the delve map and
+    // re-sends them as SMSG_UPDATE_WORLD_STATE at the same tick (gulf 101842); OnPlayerEnteredDelve puts them on the
+    // delve Map for that. Sending them ahead of the transfer keeps the picker / HUD consistent while the transfer is
+    // pending (branch behaviour inherited from npc_delve_entrance::OnGossipSelect, not on the wire).
+    player->SendUpdateWorldState(WS_DELVE_TIER, tier);
+    player->SendUpdateWorldState(WS_DELVE_IN_DELVE_FLAG, 1);
+    player->SendUpdateWorldState(WS_DELVE_MAP_ID, tmpl.MapId);
+    player->SendUpdateWorldState(WS_DELVE_TIER_SPELL, GetTierSpellId(tier));
+    if (tmpl.WorldState26903)
+        player->SendUpdateWorldState(WS_DELVE_UNKNOWN_26903, tmpl.WorldState26903);
+
+    TC_LOG_DEBUG("scripts.delves", "DelveMgr::EnterDelve: player {} -> map {} tier {} (return to map {})",
+        player->GetName(), tmpl.MapId, tier, player->m_delveReturnLocation.GetMapId());
+
+    // REPORT.md 1.5: no SMSG_TRANSFER_PENDING, SMSG_NEW_WORLD reason 21 (seamless) ~1.9 s after the select.
+    // Player::TeleportTo keeps TELE_TO_SEAMLESS for delve maps although they are not cosmetic children of the
+    // outdoor map. The map difficulty resolves to 208 through the MapDifficulty downscale fallback (REPORT.md 1.7).
+    player->TeleportTo(tmpl.MapId, tmpl.EntryX, tmpl.EntryY, tmpl.EntryZ, tmpl.EntryO, TELE_TO_SEAMLESS);
+}
+
+namespace
+{
+// REPORT.md 4 / work item 6: the hidden entry quest. Preferred path is the real quest template (so the quest log /
+// criteria side effects match retail); when it is not in the world DB - or cannot be taken again - the same rewards
+// are granted directly with DisplayToastMethod::QuestComplete (16) toasts, as observed in toasts_items.txt.
+void GrantDelveEntryRewards(Player* player)
+{
+    if (Quest const* quest = sObjectMgr->GetQuestTemplate(DELVE_ENTRY_REWARD_QUEST_ID))
+    {
+        if (player->CanTakeQuest(quest, false) && player->CanAddQuest(quest, false))
+        {
+            player->AddQuestAndCheckCompletion(quest, nullptr);
+            if (player->GetQuestStatus(DELVE_ENTRY_REWARD_QUEST_ID) == QUEST_STATUS_COMPLETE && player->CanRewardQuest(quest, false))
+                player->RewardQuest(quest, LootItemType::Item, 0, nullptr, true);
+            return;
+        }
+    }
+
+    player->AddCurrency(CURRENCY_COFFER_KEY_SHARDS, DELVE_ENTRY_REWARD_SHARDS, CurrencyGainSource::QuestReward);
+    player->SendDisplayToast(CURRENCY_COFFER_KEY_SHARDS, DisplayToastType::NewCurrency, false, DELVE_ENTRY_REWARD_SHARDS,
+        DisplayToastMethod::QuestComplete, DELVE_ENTRY_REWARD_QUEST_ID);
+
+    player->AddCurrency(CURRENCY_VOIDLIGHT_MARL, DELVE_ENTRY_REWARD_MARL, CurrencyGainSource::QuestReward);
+    player->SendDisplayToast(CURRENCY_VOIDLIGHT_MARL, DisplayToastType::NewCurrency, false, DELVE_ENTRY_REWARD_MARL,
+        DisplayToastMethod::QuestComplete, DELVE_ENTRY_REWARD_QUEST_ID);
+
+    if (sObjectMgr->GetItemTemplate(DELVE_ENTRY_REWARD_ITEM))
+    {
+        ItemPosCountVec dest;
+        if (player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, DELVE_ENTRY_REWARD_ITEM, 1) == EQUIP_ERR_OK)
+        {
+            if (Item* item = player->StoreNewItem(dest, DELVE_ENTRY_REWARD_ITEM, true, GenerateItemRandomBonusListId(DELVE_ENTRY_REWARD_ITEM), {}, ItemContext::Quest_Reward))
+            {
+                player->SendNewItem(item, 1, true, false);
+                player->SendDisplayToast(0, DisplayToastType::NewItem, false, 1, DisplayToastMethod::QuestComplete, DELVE_ENTRY_REWARD_QUEST_ID, item);
+            }
+        }
+        else
+            player->SendItemRetrievalMail(DELVE_ENTRY_REWARD_ITEM, 1, ItemContext::Quest_Reward);
+    }
+}
+}
+
+void DelveMgr::OnPlayerEnteredDelve(Player* player)
+{
+    if (!player || !player->IsInWorld())
+        return;
+
+    Map* map = player->GetMap();
+    DelveTemplate const* tmpl = GetDelveTemplate(map->GetId());
+    if (!tmpl)
+        return;
+
+    // The run's tier: what the first entrant put on the map, else this player's selection (group members who were
+    // brought in without selecting keep the instance's tier).
+    uint8 tier = uint8(std::clamp<int32>(map->GetWorldStateValue(WS_DELVE_TIER), 0, MAX_DELVE_TIER));
+    if (!tier)
+        tier = std::clamp<uint8>(player->m_delveSelectedTier, 1, MAX_DELVE_TIER);
+    player->m_delveSelectedTier = tier;
+    player->m_delveSelectedMapId = tmpl->MapId;
+
+    // REPORT.md 1.6: SMSG_INIT_WORLD_STATES of the delve map carries these and they are re-sent as
+    // SMSG_UPDATE_WORLD_STATE at the same tick. Setting them on the Map makes INIT carry them for everyone who
+    // enters later and broadcasts the UPDATE on change; an unchanged value is re-sent to this player only.
+    auto publish = [&](uint32 worldStateId, int32 value)
+    {
+        if (!map->GetWorldStateValues().contains(int32(worldStateId)) || map->GetWorldStateValue(int32(worldStateId)) != value)
+            map->SetWorldStateValue(int32(worldStateId), value, false);
+        else
+            player->SendUpdateWorldState(worldStateId, uint32(value));
+    };
+
+    publish(WS_DELVE_TIER, tier);
+    publish(WS_DELVE_IN_DELVE_FLAG, 1);
+    publish(WS_DELVE_MAP_ID, int32(tmpl->MapId));
+    publish(WS_DELVE_TIER_SPELL, int32(GetTierSpellId(tier)));
+    if (tmpl->WorldState26903)
+        publish(WS_DELVE_UNKNOWN_26903, int32(tmpl->WorldState26903));
+    if (tmpl->LfgDungeonsId)
+        publish(WS_DELVE_LFG_DUNGEONS_ID, int32(tmpl->LfgDungeonsId));
+    publish(WS_DELVE_COMPLETE, 0);
+    publish(WS_DELVE_ENCOUNTER_IN_PROGRESS, 0);
+
+    // REPORT.md 4 (work item 6): the hidden entry quest completes ~6.6 s after SMSG_NEW_WORLD (gulf: NEW_WORLD 101829,
+    // quest credit + toasts ~108400). Once per run: keyed on the instance id so a relog into the same run does not
+    // grant twice. The event lives on the player's own processor and dies with the player.
+    if (player->m_delveEntryRewardInstanceId == map->GetInstanceId())
+        return;
+
+    player->m_delveEntryRewardInstanceId = map->GetInstanceId();
+
+    uint32 const mapId = map->GetId();
+    uint32 const instanceId = map->GetInstanceId();
+    player->m_Events.AddEventAtOffset([player, mapId, instanceId]()
+    {
+        if (!player->IsInWorld() || player->GetMapId() != mapId || player->GetInstanceId() != instanceId)
+            return;
+
+        GrantDelveEntryRewards(player);
+    }, Milliseconds(DELVE_ENTRY_REWARD_DELAY_MS));
+}
+
+void DelveMgr::LeaveDelve(Player* player)
+{
+    if (!player || !player->IsInWorld() || player->IsBeingTeleported())
+        return;
+
+    DelveTemplate const* tmpl = GetDelveTemplate(player->GetMapId());
+    if (!tmpl)
+        return;
+
+    // Destination: the map the player entered from at the exit coordinates (REPORT.md 5 step 6: gulf back to 2694
+    // (46.226, 810.912, 1109.843), eversong back to 0 (4780.455, -4118.306, 32.133)), else the template's exit map,
+    // else homebind. Never another delve.
+    WorldLocation destination = player->m_delveReturnLocation;
+    if (destination.GetMapId() == MAPID_INVALID || GetDelveTemplate(destination.GetMapId()))
+    {
+        if (tmpl->ExitMapId >= 0 && (tmpl->ExitX != 0.0f || tmpl->ExitY != 0.0f))
+            destination = WorldLocation(uint32(tmpl->ExitMapId), tmpl->ExitX, tmpl->ExitY, tmpl->ExitZ, tmpl->ExitO);
+        else
+            destination = player->m_homebind;
+    }
+
+    // REPORT.md 5 step 6: SMSG_SPELL_VISUAL_LOAD_SCREEN (kit 79917, 1500 ms) right after the spell-click on the
+    // Leave-O-Bot - a seamless SMSG_NEW_WORLD shows no loading screen of its own, this kit covers the swap.
+    WorldPackets::Spells::SpellVisualLoadScreen loadScreen{ int32(DELVE_EXIT_LOAD_SCREEN_KIT_ID), Milliseconds(DELVE_EXIT_LOAD_SCREEN_DURATION_MS) };
+    player->SendDirectMessage(loadScreen.Write());
+
+    // Branch behaviour kept from go_leave_delve (not on the wire: retail only sends SMSG_INIT_WORLD_STATES of the
+    // outdoor map after the transfer): zero the per-run states so the HUD drops out of delve mode.
+    player->SendUpdateWorldState(WS_DELVE_TIER, 0);
+    player->SendUpdateWorldState(WS_DELVE_IN_DELVE_FLAG, 0);
+    player->SendUpdateWorldState(WS_DELVE_MAP_ID, 0);
+    player->SendUpdateWorldState(WS_DELVE_TIER_SPELL, 0);
+    player->SendUpdateWorldState(WS_DELVE_UNKNOWN_26903, 0);
+
+    player->ClearDelveData(int32(tmpl->MapId));
+    player->m_delveReturnLocation = WorldLocation();
+    player->m_delveSelectedTier = 0;
+    player->m_delveSelectedMapId = 0;
+
+    TC_LOG_DEBUG("scripts.delves", "DelveMgr::LeaveDelve: player {} leaves map {} -> map {} ({:.1f} {:.1f} {:.1f})",
+        player->GetName(), tmpl->MapId, destination.GetMapId(), destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ());
+
+    // REPORT.md 5: the transfer back is seamless as well (SMSG_NEW_WORLD, no SMSG_TRANSFER_PENDING). Retail's
+    // NEW_WORLD followed the load screen by several seconds (phase / object despawns and a server hop); here the
+    // transfer runs once the load-screen kit has faded in, on the player's own event processor.
+    uint32 const mapId = player->GetMapId();
+    uint32 const instanceId = player->GetInstanceId();
+    player->m_Events.AddEventAtOffset([player, mapId, instanceId, destination]()
+    {
+        if (!player->IsInWorld() || player->IsBeingTeleported() || player->GetMapId() != mapId || player->GetInstanceId() != instanceId)
+            return;
+
+        player->TeleportTo(destination, TELE_TO_SEAMLESS);
+    }, Milliseconds(DELVE_EXIT_LOAD_SCREEN_DURATION_MS));
 }
 
 } // namespace Delves

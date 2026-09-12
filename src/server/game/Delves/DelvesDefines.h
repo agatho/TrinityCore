@@ -40,6 +40,7 @@ static constexpr uint8  DELVE_SCENARIO_TYPE = 8;                // ScenarioType 
 // (TieredEntrance/TieredEntranceTier DB2 via C_DelvesUI.GetDelveEntranceTiers()).
 // 11 is the sniff-observed live TWW value and remains our server-side cap.
 static constexpr uint8 MAX_DELVE_TIER = 11;
+static constexpr uint32 DELVE_TIERED_ENTRANCE_FIELD7 = 234; // SMSG_TIERED_ENTRANCE_OPEN_RESPONSE field 7 for every delve entrance (12.0.7 and 12.1 captures)
 static constexpr uint8 DELVE_TIER_UNLIMITED_REVIVES_MAX = 3;   // Tiers 1-3 have no death limit
 static constexpr uint8 DELVE_TIER_ENDGAME_START = 4;           // Tier 4+ requires max level
 
@@ -117,15 +118,45 @@ static constexpr char const* TIER_NAMES[MAX_DELVE_TIER] =
 // These are sent to the client around delve entry/exit to drive the
 // Blizzard_DelvesDifficultyPicker UI's active-tier display, the in-delve HUD
 // banner, and the "you're in a delve" persistent flag.
+// 12.1.0.69497 (REPORT.md 1.6): all of these arrive in SMSG_INIT_WORLD_STATES of the delve map and are re-sent as
+// SMSG_UPDATE_WORLD_STATE at the same tick (gulf 101842: 24430=1, 26345=1, 26423=2964, 26931=1260940, 26903=1277243,
+// 5029=3070, 25316=0, 24836=0). They are per instance, so DelveMgr::OnPlayerEnteredDelve sets them on the delve Map.
 enum DelveWorldStates : uint32
 {
-    WS_DELVE_TIER             = 24430,    // Selected tier (1..11)
-    WS_DELVE_IN_DELVE_FLAG    = 26345,    // 0 = outside, 1 = inside (68974 Darkway capture; older 66527 notes said 2)
-    WS_DELVE_MAP_ID           = 26423,    // Active delve MapID
-    WS_DELVE_TIER_SPELL       = 26931,    // The TIER_SPELL_IDS[] value cast for this run
-    WS_DELVE_UNKNOWN_26903    = 26903,    // Per-delve, controls center spell display in tier picker
-    WS_DELVE_LFG_DUNGEONS_ID  = 5029,     // Sent inside the instance (OnPlayerEnter)
+    WS_DELVE_TIER                  = 24430,    // Selected tier (1..11)
+    WS_DELVE_IN_DELVE_FLAG         = 26345,    // 0 = outside, 1 = inside (68974 Darkway capture; older 66527 notes said 2)
+    WS_DELVE_MAP_ID                = 26423,    // Active delve MapID
+    WS_DELVE_TIER_SPELL            = 26931,    // The TIER_SPELL_IDS[] value cast for this run
+    WS_DELVE_UNKNOWN_26903         = 26903,    // Per-delve, controls center spell display in tier picker
+    WS_DELVE_LFG_DUNGEONS_ID       = 5029,     // LFGDungeons id of the delve (3069/3070/3083, DifficultyID 208)
+    WS_DELVE_COMPLETE              = 25316,    // 0 -> 1 with SMSG_SCENARIO_COMPLETED (REPORT.md 5 step 2)
+    WS_DELVE_ENCOUNTER_IN_PROGRESS = 24836,    // 1 at SMSG_ENCOUNTER_START, 0 at SMSG_ENCOUNTER_END (REPORT.md 1.6)
 };
+
+// ---------------------------------------------------------------------------
+// Entry / exit flow (12.1.0.69497 captures, C:\sniff\tcharvest\out\delve_research\REPORT.md)
+// ---------------------------------------------------------------------------
+
+// REPORT.md 1.1 / 6.1: the delve entrance auto-opens by proximity - the server sends SMSG_NPC_INTERACTION_OPEN_RESULT
+// (guid of the entrance creature 212407, InteractionType 79, Success) and immediately after it
+// SMSG_TIERED_ENTRANCE_OPEN_RESPONSE (gulf 88718 and 98205; a CMSG_CLOSE_INTERACTION for the entrance guid at 95751
+// when the player walked away). DBCEnums.h only knows the value as PlaceholderType79.
+static constexpr uint32 DELVE_ENTRANCE_INTERACTION_TYPE = 79;
+
+// REPORT.md 4 / 6.2 (work item 6): ~6.6 s after SMSG_NEW_WORLD retail completes a hidden quest that grants
+// 25x currency 3310 (Coffer Key Shards) + 100x currency 3316 (Voidlight Marl) + item 263488 with quest-complete toasts.
+// 12.1 quest id 96612 (12.0.1 deatholme: 93943).
+static constexpr uint32 DELVE_ENTRY_REWARD_QUEST_ID   = 96612;
+static constexpr uint32 CURRENCY_VOIDLIGHT_MARL       = 3316;
+static constexpr uint32 DELVE_ENTRY_REWARD_SHARDS     = 25;
+static constexpr uint32 DELVE_ENTRY_REWARD_MARL       = 100;
+static constexpr uint32 DELVE_ENTRY_REWARD_ITEM       = 263488;
+static constexpr uint32 DELVE_ENTRY_REWARD_DELAY_MS   = 6600;
+
+// REPORT.md 5 step 6: CMSG_SPELL_CLICK on the Leave-O-Bot (gulf 1118881) -> SMSG_SPELL_VISUAL_LOAD_SCREEN
+// (kit 79917, 1500 ms) -> ... -> SMSG_NEW_WORLD back to the originating map at the exit coordinates.
+static constexpr uint32 DELVE_EXIT_LOAD_SCREEN_KIT_ID      = 79917;
+static constexpr uint32 DELVE_EXIT_LOAD_SCREEN_DURATION_MS = 1500;
 
 // ---------------------------------------------------------------------------
 // Bountiful Delves
@@ -277,10 +308,40 @@ enum class DelveState : uint8
 // Data Structs
 // ---------------------------------------------------------------------------
 
+// One tier row of the delve tier picker (SMSG_TIERED_ENTRANCE_OPEN_RESPONSE). Retail keeps these in
+// the server-only TieredEntranceTier.db2 (not shipped to clients); the 12.1 delve season rows are
+// ids 75..85 and identical for every delve entrance, so they are world data (delve_tiered_entrance_tier).
+struct TieredEntranceRewardData
+{
+    uint8 RewardType = 0;   // 0 item, 1 currency
+    uint32 Id = 0;
+    uint32 Quantity = 1;
+    uint8 Context = 0;      // ItemContext
+};
+
+struct TieredEntranceTierData
+{
+    uint32 Id = 0;                             // TieredEntranceTierID, echoed back in CMSG_SELECT_DELVE_ENTRANCE_TIER
+    uint8 Tier = 0;                            // 1-based
+    uint32 SuggestedILvl = 0;
+    uint32 OverrideTooltipSpellId = 0;         // spell whose tooltip the picker shows (1260939 "Tier 1" ...)
+    uint32 UnlockPlayerConditionId = 0;
+    uint32 DynamicUnlockPlayerConditionId = 0;
+    std::string Description;                   // "Tier 1" ...
+    std::vector<TieredEntranceRewardData> Rewards;
+};
+
 struct DelveTemplate
 {
     uint32 Id = 0;
     uint32 MapId = 0;
+
+    // Tier picker header, per entrance (12.1 captures: Gulf of Memory 26 / 80 / 1779 / 1778,
+    // Shadow Enclave 27 / 78 / 1756 / 1767, The Darkway 29 / 83 / 1828 / 1827)
+    uint32 TieredEntranceId = 0;               // TieredEntrance.db2 row id (packet field 8)
+    uint32 TieredEntranceUnknown3 = 0;         // packet field 3, meaning open
+    uint32 EntranceUiWidgetSetId = 0;          // packet field 4 (UiWidgetSet id space)
+    uint32 ModifierUiWidgetSetTier1 = 0;       // tier N gets ModifierUiWidgetSetTier1 - (N - 1)
     uint32 ScenarioId = 0;
     uint32 MapChallengeModeId = 0;
     uint32 ZoneId = 0;
@@ -313,6 +374,10 @@ struct DelveTemplate
     float ExitY = 0.0f;
     float ExitZ = 0.0f;
     float ExitO = 0.0f;
+    // Overworld map the exit coordinates belong to (-1 = unknown). REPORT.md 1.5: the Gulf of Memory returns to
+    // Harandar 2694, the Shadow Enclave and the Darkway to map 0. DelveMgr::LeaveDelve prefers the map the player
+    // actually came from (stored at entry) and falls back to this.
+    int32 ExitMapId = -1;
 
     // Per-delve scenario IDs. ActiveScenarioId is the in-progress scenario;
     // RewardScenarioId is the completion scenario (often shared across delves —

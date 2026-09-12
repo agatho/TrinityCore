@@ -44,6 +44,7 @@
 #include "CombatPackets.h"
 #include "CovenantPackets.h"
 #include "CraftingOrderPackets.h"
+#include "DelvesPackets.h"
 #include "DuelPackets.h"
 #include "EquipmentSetPackets.h"
 #include "GameObjectPackets.h"

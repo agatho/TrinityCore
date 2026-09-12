@@ -2709,6 +2709,12 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         bool HasActiveDelve() const { return !m_activePlayerData->DelveData.empty(); }
         uint32 m_delveSelectedMapId = 0;
         uint8 m_delveSelectedTier = 0;
+        // Where DelveMgr::LeaveDelve sends the player back: the map they entered the delve from, at the
+        // delve_template exit coordinates (12.1 captures: gulf 2694, eversong/deatholme 0 - REPORT.md 1.5/5).
+        // MAPID_INVALID when no entry was seen (relog inside the delve).
+        WorldLocation m_delveReturnLocation;
+        // Instance id that already received the hidden entry quest reward (DelveMgr::OnPlayerEnteredDelve, once per run)
+        uint32 m_delveEntryRewardInstanceId = 0;
         void SendDirectMessage(WorldPacket const* data) const;
         std::vector<Housing const*> GetAllHousings() const;
         Housing* GetHousing() const;

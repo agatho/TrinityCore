@@ -30,6 +30,14 @@ enum ShadowEnclaveData
     MAX_ENCOUNTER
 };
 
+// DungeonEncounter.db2 3368 "Antenorian", MapID 2952 - SMSG_ENCOUNTER_START 2493067 / SMSG_BOSS_KILL 3368 2611872
+// (eversong 12.1.0.69497; deatholme 698731 / 742616). Binding it here is what makes SetBossState(DONE) send
+// SMSG_BOSS_KILL and the encounter frames.
+DungeonEncounterData const encounters[] =
+{
+    { BOSS_LORD_ANTENORIAN, {{ 3368 }} }
+};
+
 class instance_shadow_enclave_delve : public InstanceMapScript
 {
 public:
@@ -41,6 +49,7 @@ public:
             : DelveInstanceScript(map, 1 /* tier resolved at OnPlayerEnter from m_delveSelectedTier */)
         {
             SetBossNumber(MAX_ENCOUNTER);
+            LoadDungeonEncounterData(encounters);
         }
     };
 

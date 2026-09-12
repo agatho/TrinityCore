@@ -48,6 +48,43 @@ struct AchievementEntry
     int32 LegacyAfterTimeEvent;                                     // category changes clientside to Legacy after this TimeEvent is passed
 };
 
+struct DelvesSeasonXSpellEntry
+{
+    uint32 ID;
+    int32 SpellID;
+    uint32 DelvesSeasonID;
+};
+
+struct PlayerCompanionInfoEntry
+{
+    // 69404 (12.1.0) client meta = "ssiiiiiiiiiiiiiii" (WoWDBDefs layout 55DA5E60, builds 68209-69587):
+    // adds a second localized string (Field_12_1_0_68209_001) and a new FlavorNodeID field;
+    // Field_12_0_0_64499_011 is confirmed = PlayerDataElementCharacterID.
+    LocalizedString UnlockDescription;
+    LocalizedString Field_12_1_0_68209_001;                                           // NEW in 12.1.0
+    uint32 ID;
+    int32 DelvesSeasonID;
+    int32 TraitTreeID;
+    int32 TraitNodeID_DPS;
+    int32 TraitNodeID_Heal;
+    int32 TraitSubTreeID_DPS;
+    int32 TraitSubTreeID_Heal;
+    int32 TraitSubTreeID_Tank;
+    int32 FactionID;
+    int32 CreatureDisplayInfoID;
+    int32 UiModelSceneID;
+    int32 PlayerDataElementCharacterID;                                               // was Field_12_0_0_64499_011
+    int32 Field_12_0_0_64499_012;
+    int32 FlavorNodeID;                                                               // NEW in 12.1.0
+    int32 ParentID;                                                                   // Field_12_0_1_64889_014, parent relation
+};
+
+struct DelvesSeasonEntry
+{
+    uint32 ID;
+    int32 FactionID;                                                                  // Faction.ID FK
+};
+
 struct Achievement_CategoryEntry
 {
     LocalizedString Name;
@@ -5392,19 +5429,6 @@ struct DecorXDecorSubcategoryEntry
     int32 DecorSubcategoryID;                   // WoWDBDefs field 2: references DecorSubcategory
 };
 
-struct DelvesSeasonEntry
-{
-    uint32 ID;
-    int32 FactionID;                                                                  // Faction.ID FK
-};
-
-struct DelvesSeasonXSpellEntry
-{
-    uint32 ID;
-    int32 SpellID;
-    uint32 DelvesSeasonID;
-};
-
 struct DriveCapabilityEntry
 {
     uint32 ID;
@@ -6351,25 +6375,6 @@ struct PerksVendorItemXIntervalEntry
     uint32 ID;
     int32 PerksVendorItemID;
     int32 PerksActivityThresholdID;
-};
-
-struct PlayerCompanionInfoEntry
-{
-    LocalizedString UnlockDescription;
-    uint32 ID;
-    int32 DelvesSeasonID;
-    int32 TraitTreeID;
-    int32 TraitNodeID_DPS;
-    int32 TraitNodeID_Heal;
-    int32 TraitSubTreeID_DPS;
-    int32 TraitSubTreeID_Heal;
-    int32 TraitSubTreeID_Tank;
-    int32 FactionID;
-    int32 CreatureDisplayInfoID;
-    int32 UiModelSceneID;
-    int32 Field_12_0_0_64499_011;
-    int32 Field_12_0_0_64499_012;
-    int32 ParentID;                                                                   // Field_12_0_1_64889_014, parent relation
 };
 
 struct QuestLineEntry
