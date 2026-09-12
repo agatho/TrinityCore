@@ -150,34 +150,28 @@ void MapUpdater::deactivate()
 
 void MapUpdater::wait()
 {
-    using namespace std::chrono_literals;
-    // Bounded wait. The freeze detector aborts the process if the world
-    // thread doesn't advance for 60s. Under heavy load (PlayerbotV2 mass
-    // population) we observed pending_requests stuck at 1 with all map
-    // workers idle - a TC core race we couldn't pin down precisely (likely
-    // ProducerConsumerQueue's notification interacting with a queue Push
-    // under heavy concurrency). Without this timeout, that race kills the
-    // server.
+    // Block until every scheduled map update for this tick has actually
+    // finished. This barrier is load-bearing: TC's whole map model assumes
+    // one thread touches a given Map at a time, and MapManager::Update relies
+    // on this wait to guarantee no worker is still inside Map::Update before
+    // the world thread proceeds to DelayedUpdate / the next tick.
     //
-    // 30s is half the freeze-detector budget, gives the workers ample time
-    // for a legitimate slow tick (e.g. cold navmesh load on a fresh zone)
-    // while ensuring we never get stuck for the full 60s. If the timeout
-    // hits, we log + force-reset pending_requests so the next tick can
-    // re-schedule all maps cleanly. World state stays consistent because
-    // each tick re-queues every map; missing one tick of updates for the
-    // stuck map is recoverable next tick.
+    // A previous version used a 30s bounded wait_for() that, on timeout,
+    // force-reset pending_requests and returned WHILE a worker was still
+    // running. AddressSanitizer proved that this is what caused the random
+    // server crashes: the still-running worker and the next tick's main
+    // thread (e.g. a PlayerbotV2 login doing AddPlayerToMap -> terrain query)
+    // both entered DynamicMapTree::balance() on the same map, double-freeing
+    // the BIH's internal vector and corrupting the heap. The corruption then
+    // surfaced later as unrelated-looking crashes (std::any / std::string
+    // move ctors in boss scripts and SmartAI). The "stuck counter" that
+    // motivated the timeout was itself a symptom: a worker whose Map::Update
+    // hit the corruption crashed without calling update_finished().
+    //
+    // So we wait unconditionally. DynamicTree access is additionally guarded
+    // by a mutex (see DynamicTree.cpp) as defense in depth.
     std::unique_lock lock(_lock);
-    bool drained = _condition.wait_for(lock, 30s,
-        [&] { return pending_requests == 0; });
-    if (!drained)
-    {
-        TC_LOG_ERROR("maps",
-            "MapUpdater::wait timed out after 30s with pending_requests={} - "
-            "force-clearing to break suspected counter desync. Map updates "
-            "for any in-flight request will be retried next world tick.",
-            pending_requests);
-        pending_requests = 0;
-    }
+    _condition.wait(lock, [&] { return pending_requests == 0; });
 }
 
 void MapUpdater::schedule_update(Map& map, uint32 diff)
