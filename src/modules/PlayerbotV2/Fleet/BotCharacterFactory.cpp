@@ -9,8 +9,10 @@
 #include "CharacterCache.h"
 #include "CharacterPackets.h"
 #include "DatabaseEnv.h"
+#include "DBCEnums.h"
 #include "DB2Stores.h"
 #include "DB2Structure.h"
+#include "RaceMask.h"
 #include <random>
 #include "Log.h"
 #include "MotionMaster.h"
@@ -40,6 +42,38 @@ bool IsRacePlayable(uint8 race)
 bool IsClassPlayable(uint8 cls)
 {
     return sChrClassesStore.LookupEntry(cls) != nullptr;
+}
+
+// Session-free evaluation of a ChrCustomizationReq for a bot of (race, class).
+// The full WorldSession::MeetsChrCustomizationReq needs a live player/collection for its
+// achievement/appearance/quest/dependent-choice gates; at bot-creation time we only have the
+// race/class, so we evaluate the session-independent class- and race-mask gates and treat any
+// account/character-scoped gate as unavailable. Every ChrCustomizationChoice in the 12.1 data
+// carries a non-zero ChrCustomizationReqID, so a blanket "ReqID != 0 -> skip" filter rejected
+// ALL choices and produced empty (client-crashing) appearances.
+bool BotMeetsCustomizationReq(uint32 reqId, uint8 race, uint8 cls)
+{
+    if (!reqId)
+        return true;
+
+    ChrCustomizationReqEntry const* req = sChrCustomizationReqStore.LookupEntry(reqId);
+    if (!req)
+        return true;
+
+    if (!req->GetFlags().HasFlag(ChrCustomizationReqFlag::HasRequirements))
+        return true;
+
+    if (req->ClassMask && !(req->ClassMask & (1 << (cls - 1))))
+        return false;
+
+    if (race != RACE_NONE && !req->RaceMask.IsEmpty()
+        && req->RaceMask != RACEMASK_ALL_v<int32, 2> && !req->RaceMask.HasRace(Races(race)))
+        return false;
+
+    if (req->AchievementID || req->ItemModifiedAppearanceID || req->QuestID)
+        return false;
+
+    return true;
 }
 
 } // anonymous
@@ -130,19 +164,24 @@ BotCharacterFactory::Result BotCharacterFactory::Create(
         for (ChrCustomizationOptionEntry const* opt : *options)
         {
             if (!opt) continue;
+
+            // Skip options this race/class cannot use (e.g. class-specific options).
+            if (!BotMeetsCustomizationReq(opt->ChrCustomizationReqID, race, charClass))
+                continue;
+
             auto const* choices = sDB2Manager.GetCustomiztionChoices(opt->ID);
             if (!choices || choices->empty()) continue;
 
-            // Collect choices that don't carry a CustomizationReq the
-            // race/sex/class wouldn't satisfy. The simplest safe-list:
-            // require ChrCustomizationReqID == 0 (no special unlock).
-            // Catches "Allied Race only" / "Class quest only" choices.
+            // Keep every Choice whose CustomizationReq the bot's race/class actually
+            // satisfies (not just the ReqID == 0 ones - in 12.1 data every Choice has a
+            // ReqID, so requiring 0 discarded them all and left bots with no appearance).
             std::vector<ChrCustomizationChoiceEntry const*> candidates;
             candidates.reserve(choices->size());
             for (ChrCustomizationChoiceEntry const* c : *choices)
             {
                 if (!c) continue;
-                if (c->ChrCustomizationReqID != 0) continue;
+                if (!BotMeetsCustomizationReq(c->ChrCustomizationReqID, race, charClass))
+                    continue;
                 candidates.push_back(c);
             }
             if (candidates.empty()) continue;
