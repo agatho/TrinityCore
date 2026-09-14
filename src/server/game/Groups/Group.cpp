@@ -816,6 +816,11 @@ Group* Group::CreateNpcParty(Player* player)
     Group* group = new Group();
     group->SetNpcParty(true);
 
+    // 12.1 captures (gulf 102157): the companion party of a delve runs on PartyIndex 1, the instance
+    // category, while a companion picked up in the open world belongs to the home party.
+    if (Map const* map = player->FindMap(); map && map->IsDungeon())
+        group->m_groupCategory = GROUP_CATEGORY_INSTANCE;
+
     if (!group->Create(player))
     {
         delete group;
@@ -840,17 +845,16 @@ bool Group::AddNpcMember(Creature* creature)
     slot.guid = creature->GetGUID();
     slot.name = creature->GetName();
     slot._class = creature->GetClass();
-    slot.factionGroup = 0;
-    if (FactionTemplateEntry const* factionTemplate = creature->GetFactionTemplateEntry())
-        slot.factionGroup = factionTemplate->FactionGroup;
+    slot.factionGroup = 0;                  // 0 for every creature member in the captures
     slot.subGroup = 0;
-    slot.flags = 0;
-    slot.roles = 0;
+    slot.flags = MEMBER_FLAG_COMPANION;
+    slot.roles = lfg::PLAYER_ROLE_DAMAGE;   // gulf 103996: Valeera joins as damage
 
     creature->SetPartyGroupGUID(m_guid);
 
+    // retail sends no SMSG_PARTY_MEMBER_FULL_STATE for a creature member (none in any of the four
+    // captures): the client fills the frame from the unit's own object update.
     SendUpdate();
-    SendNpcMemberFullState(creature);
     return true;
 }
 
@@ -865,7 +869,13 @@ bool Group::RemoveNpcMember(ObjectGuid guid)
     // an NPC party only exists for its creatures - the last one leaving takes the party frame with it
     if (IsNpcParty() && m_npcMemberSlots.empty())
     {
-        Disband();
+        // gulf 1129673: the client is told with SMSG_GROUP_UNINVITE and an empty party update, not
+        // with the SMSG_GROUP_DESTROYED that ending a player group sends
+        for (MemberSlot const& memberSlot : m_memberSlots)
+            if (Player* player = ObjectAccessor::FindConnectedPlayer(memberSlot.guid))
+                player->SendDirectMessage(WorldPackets::Party::GroupUninvite().Write());
+
+        Disband(true);
         return false;
     }
 
@@ -876,17 +886,6 @@ bool Group::RemoveNpcMember(ObjectGuid guid)
 bool Group::IsNpcMember(ObjectGuid guid) const
 {
     return std::ranges::find(m_npcMemberSlots, guid, &NpcMemberSlot::guid) != m_npcMemberSlots.end();
-}
-
-void Group::SendNpcMemberFullState(Creature const* creature) const
-{
-    WorldPackets::Party::PartyMemberFullState memberState;
-    memberState.Initialize(creature);
-    WorldPacket const* packet = memberState.Write();
-
-    for (MemberSlot const& memberSlot : m_memberSlots)
-        if (Player* player = ObjectAccessor::FindConnectedPlayer(memberSlot.guid))
-            player->SendDirectMessage(packet);
 }
 
 void Group::SendUpdate() const

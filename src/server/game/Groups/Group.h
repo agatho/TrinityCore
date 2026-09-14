@@ -75,7 +75,8 @@ enum GroupMemberFlags
 {
     MEMBER_FLAG_ASSISTANT   = 0x01,
     MEMBER_FLAG_MAINTANK    = 0x02,
-    MEMBER_FLAG_MAINASSIST  = 0x04
+    MEMBER_FLAG_MAINASSIST  = 0x04,
+    MEMBER_FLAG_COMPANION   = 0x10      // NPC party member (12.1 captures: every creature member carries it)
 };
 
 enum GroupMemberAssignment
@@ -286,7 +287,6 @@ class TC_GAME_API Group
         uint32 GetNpcMembersCount() const { return uint32(m_npcMemberSlots.size()); }
         bool IsNpcParty() const { return m_npcParty; }
         void SetNpcParty(bool npcParty) { m_npcParty = npcParty; }
-        void SendNpcMemberFullState(Creature const* creature) const;
         bool RemoveMember(ObjectGuid guid, RemoveMethod method = GROUP_REMOVEMETHOD_DEFAULT, ObjectGuid kicker = ObjectGuid::Empty, const char* reason = nullptr);
         void ChangeLeader(ObjectGuid guid);
         void SetLootMethod(LootMethod method);
