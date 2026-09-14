@@ -177,11 +177,6 @@ void BattlePetDeletePet::Read()
     _worldPacket >> PetGuid;
 }
 
-void BattlePetDeletePetCheat::Read()
-{
-    _worldPacket >> PetGuid;
-}
-
 void BattlePetSetFlags::Read()
 {
     _worldPacket >> PetGuid;
@@ -423,16 +418,18 @@ static void WriteRoundResult(ByteBuffer& data, uint32 curRound, int8 nextPetBatt
 
     data << uint32(cooldowns.size());
 
-    // V12 wire order: Cooldowns, PetXDied count (3 bits), Effects, PetXDied data
-    // (V6 had Effects before Cooldowns, but V12 client expects this order)
+    // 12.1.0.69587 wire order (three retail captures, 61 round packets byte-exact, six of them
+    // with non-empty cooldown lists): Effects, Cooldowns, PetXDied count (3 bits) + flush, PetXDied.
+    // Both the cooldowns and the PetXDied count used to be written BEFORE the effects; every
+    // round in which an ability went on cooldown mis-parsed on the client.
+    for (PetBattleEffectInfo const& effect : effects)
+        data << effect;
+
     for (PetBattleCooldownInfo const& cd : cooldowns)
         data << cd;
 
     data << Bits<3>(petXDied.size());
     data.FlushBits();
-
-    for (PetBattleEffectInfo const& effect : effects)
-        data << effect;
 
     for (int8 pboid : petXDied)
         data << int8(pboid);
@@ -622,12 +619,14 @@ WorldPacket const* PetBattleFinalRound::Write()
     // flags_byte = MSB-first bitfield{4}: bit7=Abandoned, bit6=PvpBattle, bit5=Winners[0] (team0), bit4=Winners[1] (team1).
     _worldPacket << Bits<1>(Abandoned);
     _worldPacket << Bits<1>(PvpBattle);
-    _worldPacket << Bits<1>(Winners[0]);    // bit5 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ team0 won (0 in every captured win/loss unless that team won)
-    _worldPacket << Bits<1>(Winners[1]);    // bit4 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ team1 won
+    _worldPacket << Bits<1>(Winners[0]);    // bit5 — team0 won (0 in every captured win/loss unless that team won)
+    _worldPacket << Bits<1>(Winners[1]);    // bit4 — team1 won
     _worldPacket.FlushBits();
 
-    _worldPacket << uint32(0);              // flat field #1: 0 in every captured battle; role unknown, NOT winners
-    _worldPacket << uint32(NpcCreatureID);  // 0 for wild battles (no trainer); trainer entry for NPC battles
+    // 69587 client reader (0x7FF7CD50FC10) stores these two into one array indexed by team: team0 is the
+    // player (always 0), team1 the trainer entry, or 0 when the opponent is a wild pet.
+    for (uint32 creatureId : NpcCreatureID)
+        _worldPacket << uint32(creatureId);
 
     _worldPacket << uint32(Pets.size());
 
@@ -663,17 +662,25 @@ WorldPacket const* PetBattlePVPChallenge::Write()
 
 WorldPacket const* PetBattleQueueStatus::Write()
 {
+    // 12.1.0.69587 client reader (Handler_SMSG_PET_BATTLE_QUEUE_STATUS): status, the slot-result
+    // count, the ride ticket, and only then the slot results themselves. Both captured frames had an
+    // empty slot-result list, which is why the wrong order still decoded byte for byte.
     _worldPacket << uint32(Status);
-    _worldPacket << uint32(SlotResult[0]);
-    _worldPacket << uint32(SlotResult[1]);
+    _worldPacket << Size<uint32>(SlotResult);
+
+    _worldPacket << Ticket;
+
+    for (uint32 result : SlotResult)
+        _worldPacket << uint32(result);
+
     _worldPacket << OptionalInit(ClientWaitTime);
     _worldPacket << OptionalInit(AvgWaitTime);
     _worldPacket.FlushBits();
 
     if (ClientWaitTime)
-        _worldPacket << uint32(*ClientWaitTime);
+        _worldPacket << uint64(*ClientWaitTime);
     if (AvgWaitTime)
-        _worldPacket << uint32(*AvgWaitTime);
+        _worldPacket << uint64(*AvgWaitTime);
 
     return &_worldPacket;
 }

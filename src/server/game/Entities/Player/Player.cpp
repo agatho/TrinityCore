@@ -100,6 +100,7 @@
 #include "Neighborhood.h"
 #include "NeighborhoodMgr.h"
 #include "GossipDef.h"
+#include "GridDefines.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
@@ -144,6 +145,7 @@
 #include "PhasingHandler.h"
 #include "PlayerChoice.h"
 #include "PlayerChoicePackets.h"
+#include "QuaternionData.h"
 #include "QueryCallback.h"
 #include "QueryHolder.h"
 #include "QueryResultStructured.h"
@@ -191,6 +193,7 @@
 #include "WowLabsMatchMgr.h"
 #include <boost/dynamic_bitset.hpp>
 #include <G3D/g3dmath.h>
+#include <cmath>
 #include <sstream>
 
 // corpse reclaim times
@@ -16054,6 +16057,7 @@ bool Player::CanRewardQuest(Quest const* quest, LootItemType rewardType, uint32 
             return false;
         }
     }
+
     return true;
 }
 
@@ -16465,6 +16469,28 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
         }
         default:
             break;
+    }
+
+    // TreasurePicker (server-authoritative picker contents; independent of the classic RewardItemId[])
+    for (int32 treasurePickerId : quest->GetTreasurePickerId())
+    {
+        TreasurePickerTemplate const* treasurePicker = sObjectMgr->GetTreasurePicker(uint32(treasurePickerId));
+        TreasurePickerItem const* pickerItem = sObjectMgr->SelectTreasurePickerItem(treasurePicker, this, rewardId);
+        if (!pickerItem)
+            continue;
+
+        ItemPosCountVec dest;
+        if (CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, pickerItem->ItemID, pickerItem->Quantity) != EQUIP_ERR_OK)
+            continue;
+
+        std::vector<int32> bonusListIDs;
+        if (pickerItem->BonusListID)
+            bonusListIDs.push_back(pickerItem->BonusListID);
+
+        ItemContext context = ItemContext(pickerItem->Context);
+        Item* item = StoreNewItem(dest, pickerItem->ItemID, true, 0, {}, context, bonusListIDs.empty() ? nullptr : &bonusListIDs);
+        if (item)
+            SendNewItem(item, pickerItem->Quantity, true, false);
     }
 
     for (uint8 i = 0; i < QUEST_REWARD_CURRENCY_COUNT; ++i)
@@ -18930,6 +18956,7 @@ void Player::SendQuestReward(Quest const* quest, Creature const* questGiver, uin
             break;
         }
     }
+
     SendDirectMessage(packet.Write());
 }
 
@@ -22374,6 +22401,10 @@ bool Player::CheckInstanceValidity(bool /*isLogin*/)
         return true;
 
     Group* group = GetGroup();
+    // a party that exists only to hold NPC companions never owns an instance and must not invalidate one
+    if (group && group->IsNpcParty())
+        group = nullptr;
+
     // raid instances require the player to be in a raid group to be valid
     if (map->IsRaid() && !sWorld->getBoolConfig(CONFIG_INSTANCE_IGNORE_RAID) && (map->GetEntry()->Expansion() >= sWorld->getIntConfig(CONFIG_EXPANSION)))
         if (!group || !group->isRaidGroup())
@@ -31999,7 +32030,7 @@ void Player::HandleArchaeologySurvey()
                 float const facing = GetOrientation();
                 if (GameObject* find = SummonGameObject(findGameObjectId, Position(fx, fy, fz, facing),
                     QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f), ARCHAEOLOGY_FIND_DURATION,
-                    GO_SUMMON_TIMED_OR_CORPSE_DESPAWN)) /* personal-owner GUID overload is a fork WorldObject ext; base 5-arg used */
+                    GO_SUMMON_TIMED_OR_CORPSE_DESPAWN, GetGUID()))
                 {
                     _pendingArchaeologyFind = PendingArchaeologyFind
                     {
@@ -37939,7 +37970,7 @@ void Player::ExecutePendingSpellCastRequest()
         // Fail closed unless this exact solve script is enabled and the player's current state permits it;
         // otherwise the spell's CREATE_ITEM effect could run without the bookkeeping script.
         if (plrCaster->CanCastResearchProjectSpell(spellInfo->Id) &&
-            true /* spell_archaeology_solve grafted; spell-proc enable-gate not present standalone */)
+            sObjectMgr->HasEnabledSpellScript(spellInfo->Id, "spell_archaeology_solve"))
             allow = true;
 
         if (!allow)
@@ -38000,6 +38031,8 @@ void Player::ExecutePendingSpellCastRequest()
 
     spell->m_fromClient = true;
     std::ranges::copy(_pendingSpellCastRequest->CastRequest.Misc, std::ranges::begin(spell->m_misc.Raw.Data));
+    if (!_pendingSpellCastRequest->CastRequest.Weight.empty())
+        spell->m_customArg = std::move(_pendingSpellCastRequest->CastRequest.Weight);
     spell->prepare(targets);
 
     _pendingSpellCastRequest = nullptr;

@@ -222,6 +222,13 @@ namespace WorldPackets
             std::string Name;
         };
 
+        // Reason 5 is what the delve captures carry when a companion party ends (gulf 1129673,
+        // eversong 2651548, deatholme 816681); the other values are unobserved.
+        enum GroupUninviteReason : uint8
+        {
+            GROUP_UNINVITE_REASON_COMPANION_PARTY_ENDED = 5
+        };
+
         class GroupUninvite final : public ServerPacket
         {
         public:

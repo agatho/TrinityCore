@@ -37,6 +37,12 @@ static constexpr uint16 PET_BATTLE_PVP_NORMALIZED_LEVEL = 25; // PvP boosts ever
 static constexpr uint32 MAX_PET_BATTLE_AURAS = 10;            // max auras on a single pet
 static constexpr uint32 MAX_PET_BATTLE_ENVIRONMENTS = 3;      // Pad0(0), Pad1(1), Weather(2)
 static constexpr uint32 PBOID_ENVIRONMENT_BASE = MAX_PET_BATTLE_PLAYERS * MAX_PET_BATTLE_TEAM_SIZE; // PBOID 6 = environment slot 0
+
+// BattlePetState.Flags bit that marks a state the server sends to the client as a SET_STATE effect.
+// 12.1.0.69587 wire: Blizzard (aura 205) applied on PBOID 8 sends SET_STATE 52 Mechanic_IsChilled and
+// 58 Weather_Blizzard (both Flags 0x8) but not 87 Mod_PetTypeDamageDealtPercent (Flags 0); every
+// state ever seen on the wire (18/19/20/25/40/42..51/1/302) carries 0x8.
+static constexpr int32 BATTLE_PET_STATE_FLAG_CLIENT_VISIBLE = 0x8;
 static constexpr uint32 PET_BATTLE_WEATHER_ENV_SLOT = 2;      // PetbattleEnviros::Weather = 2 (PBOID 8)
 static constexpr float  PASSIVE_HUMANOID_HEAL_PCT = 0.04f;    // 4% max HP each round
 static constexpr float  PASSIVE_DRAGONKIN_DAMAGE_BONUS = 0.50f;
@@ -337,6 +343,11 @@ enum PetBattleQueueStatus : uint8
 // Crit hit constants
 static constexpr float PET_BATTLE_BASE_CRIT_CHANCE = 0.05f;
 static constexpr float PET_BATTLE_CRIT_MULTIPLIER  = 1.5f;
+
+// Battle XP (12.1.0.69587 wire, seven awards): xp(petLevel) * 3 * (1 + 0.2 * levelDiff) / participants, half if dead
+static constexpr float PET_BATTLE_XP_WIN_MULTIPLIER  = 3.0f;
+static constexpr float PET_BATTLE_XP_LEVEL_DIFF_STEP = 0.2f;
+static constexpr float PET_BATTLE_XP_DEATH_FACTOR    = 0.5f;
 
 // Capture success chance based on target HP percentage, quality, and cumulative fail bonus
 // Quality modifiers: Poor(0)=+20%, Common(1)=+10%, Uncommon(2)=0%, Rare(3)=-10%, Epic(4)=-20%, Legendary(5)=-30%

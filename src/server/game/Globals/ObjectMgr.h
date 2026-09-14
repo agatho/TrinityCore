@@ -49,6 +49,7 @@
 #include <vector>
 
 class Item;
+class Player;
 class Unit;
 class Vehicle;
 class Map;
@@ -168,6 +169,7 @@ struct TreasurePickerItem
     int32 BonusListID = 0;
     uint8 Context = 0;
 };
+
 struct TreasurePickerTemplate
 {
     uint32 ID = 0;
@@ -176,7 +178,9 @@ struct TreasurePickerTemplate
     uint64 Gold = 0;
     std::vector<TreasurePickerItem> Items;
 };
+
 typedef std::unordered_map<uint32, TreasurePickerTemplate> TreasurePickerContainer;
+
 struct InstanceTemplate
 {
     uint32 Parent;
@@ -1193,6 +1197,7 @@ class TC_GAME_API ObjectMgr
         uint32 GetAreaTriggerScriptId(uint32 trigger_id) const;
         uint32 GetEventScriptId(uint32 eventId) const;
         SpellScriptsBounds GetSpellScriptsBounds(uint32 spellId);
+        bool HasEnabledSpellScript(uint32 spellId, std::string_view scriptName);
 
         RepRewardRate const* GetRepRewardRate(uint32 factionId) const
         {
@@ -1249,6 +1254,7 @@ class TC_GAME_API ObjectMgr
         bool IsTreasurePickerItemEligibleForPlayer(Player const* player, uint32 itemId) const;
         /// Non-choice: first eligible offer row. Choice: matching ItemID if eligible.
         TreasurePickerItem const* SelectTreasurePickerItem(TreasurePickerTemplate const* treasurePicker, Player const* player, uint32 choiceItemId = 0) const;
+
         QuestRelations* GetGOQuestRelationMapHACK() { return &_goQuestRelations; }
         QuestRelationResult GetGOQuestRelations(uint32 entry) const { return GetQuestRelationsFrom(_goQuestRelations, entry, true); }
         QuestRelationResult GetGOQuestInvolvedRelations(uint32 entry) const { return GetQuestRelationsFrom(_goQuestInvolvedRelations, entry, false); }

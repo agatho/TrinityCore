@@ -66,10 +66,16 @@ TC_GAME_API extern DB2Storage<BankTabEntry>                         sBankTabStor
 TC_GAME_API extern DB2Storage<BannedAddonsEntry>                    sBannedAddonsStore;
 TC_GAME_API extern DB2Storage<BarberShopStyleEntry>                 sBarberShopStyleStore;
 TC_GAME_API extern DB2Storage<BattlePetAbilityEntry>                sBattlePetAbilityStore;
+TC_GAME_API extern DB2Storage<BattlePetAbilityEffectEntry>          sBattlePetAbilityEffectStore;
+TC_GAME_API extern DB2Storage<BattlePetAbilityStateEntry>           sBattlePetAbilityStateStore;
+TC_GAME_API extern DB2Storage<BattlePetAbilityTurnEntry>            sBattlePetAbilityTurnStore;
 TC_GAME_API extern DB2Storage<BattlePetBreedQualityEntry>           sBattlePetBreedQualityStore;
 TC_GAME_API extern DB2Storage<BattlePetBreedStateEntry>             sBattlePetBreedStateStore;
+TC_GAME_API extern DB2Storage<BattlePetEffectPropertiesEntry>       sBattlePetEffectPropertiesStore;
 TC_GAME_API extern DB2Storage<BattlePetSpeciesEntry>                sBattlePetSpeciesStore;
 TC_GAME_API extern DB2Storage<BattlePetSpeciesStateEntry>           sBattlePetSpeciesStateStore;
+TC_GAME_API extern DB2Storage<BattlePetSpeciesXAbilityEntry>        sBattlePetSpeciesXAbilityStore;
+TC_GAME_API extern DB2Storage<BattlePetStateEntry>                  sBattlePetStateStore;
 TC_GAME_API extern DB2Storage<BattlemasterListEntry>                sBattlemasterListStore;
 TC_GAME_API extern DB2Storage<BattlemasterListXMapEntry>            sBattlemasterListXMapStore;
 TC_GAME_API extern DB2Storage<BountyEntry>                          sBountyStore;
@@ -272,6 +278,10 @@ TC_GAME_API extern DB2Storage<QuestSortEntry>                       sQuestSortSt
 TC_GAME_API extern DB2Storage<QuestV2Entry>                         sQuestV2Store;
 TC_GAME_API extern DB2Storage<QuestXPEntry>                         sQuestXPStore;
 TC_GAME_API extern DB2Storage<RandPropPointsEntry>                  sRandPropPointsStore;
+TC_GAME_API extern DB2Storage<ResearchBranchEntry>                  sResearchBranchStore;
+TC_GAME_API extern DB2Storage<ResearchFieldEntry>                   sResearchFieldStore;
+TC_GAME_API extern DB2Storage<ResearchProjectEntry>                 sResearchProjectStore;
+TC_GAME_API extern DB2Storage<ResearchSiteEntry>                    sResearchSiteStore;
 TC_GAME_API extern DB2Storage<RewardPackEntry>                      sRewardPackStore;
 TC_GAME_API extern DB2Storage<RoomComponentEntry>                   sRoomComponentStore;
 TC_GAME_API extern DB2Storage<RoomComponentOptionEntry>             sRoomComponentOptionStore;
@@ -492,11 +502,6 @@ TC_GAME_API extern DB2Storage<WarbandSceneSourceInfoEntry>          sWarbandScen
 TC_GAME_API extern DB2Storage<ResearchSiteEntry>                    sResearchSiteStore;
 TC_GAME_API extern DB2Storage<ResearchProjectEntry>                 sResearchProjectStore;
 TC_GAME_API extern DB2Storage<ResearchBranchEntry>                  sResearchBranchStore;
-TC_GAME_API extern DB2Storage<BattlePetSpeciesXAbilityEntry>        sBattlePetSpeciesXAbilityStore;
-TC_GAME_API extern DB2Storage<BattlePetEffectPropertiesEntry>       sBattlePetEffectPropertiesStore;
-TC_GAME_API extern DB2Storage<BattlePetAbilityTurnEntry>            sBattlePetAbilityTurnStore;
-TC_GAME_API extern DB2Storage<BattlePetAbilityStateEntry>           sBattlePetAbilityStateStore;
-TC_GAME_API extern DB2Storage<BattlePetAbilityEffectEntry>          sBattlePetAbilityEffectStore;
 
 struct ClassPowerTypes
 {

@@ -788,6 +788,55 @@ struct BattlePetAbilityLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 8, &BattlePetAbilityMeta::Instance, HOTFIX_SEL_BATTLE_PET_ABILITY };
 };
 
+struct BattlePetAbilityEffectLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[12] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetAbilityTurnID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "OrderIndex" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetEffectPropertiesID" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "AuraBattlePetAbilityID" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetVisualID" },
+        { .IsSigned = true, .Type = FT_SHORT, .Name = "Param1" },
+        { .IsSigned = true, .Type = FT_SHORT, .Name = "Param2" },
+        { .IsSigned = true, .Type = FT_SHORT, .Name = "Param3" },
+        { .IsSigned = true, .Type = FT_SHORT, .Name = "Param4" },
+        { .IsSigned = true, .Type = FT_SHORT, .Name = "Param5" },
+        { .IsSigned = true, .Type = FT_SHORT, .Name = "Param6" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 12, &BattlePetAbilityEffectMeta::Instance, HOTFIX_SEL_BATTLE_PET_ABILITY_EFFECT };
+};
+
+struct BattlePetAbilityStateLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[4] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "BattlePetStateID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Value" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "BattlePetAbilityID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 4, &BattlePetAbilityStateMeta::Instance, HOTFIX_SEL_BATTLE_PET_ABILITY_STATE };
+};
+
+struct BattlePetAbilityTurnLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[6] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetAbilityID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "OrderIndex" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "TurnTypeEnum" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "EventTypeEnum" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetVisualID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 6, &BattlePetAbilityTurnMeta::Instance, HOTFIX_SEL_BATTLE_PET_ABILITY_TURN };
+};
+
 struct BattlePetBreedQualityLoadInfo
 {
     static constexpr DB2FieldMeta Fields[4] =
@@ -812,6 +861,29 @@ struct BattlePetBreedStateLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 4, &BattlePetBreedStateMeta::Instance, HOTFIX_SEL_BATTLE_PET_BREED_STATE };
+};
+
+struct BattlePetEffectPropertiesLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[14] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "ParamLabel1" },
+        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "ParamLabel2" },
+        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "ParamLabel3" },
+        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "ParamLabel4" },
+        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "ParamLabel5" },
+        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "ParamLabel6" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetVisualID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "ParamTypeEnum1" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "ParamTypeEnum2" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "ParamTypeEnum3" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "ParamTypeEnum4" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "ParamTypeEnum5" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "ParamTypeEnum6" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 14, &BattlePetEffectPropertiesMeta::Instance, HOTFIX_SEL_BATTLE_PET_EFFECT_PROPERTIES };
 };
 
 struct BattlePetSpeciesLoadInfo
@@ -846,6 +918,33 @@ struct BattlePetSpeciesStateLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 4, &BattlePetSpeciesStateMeta::Instance, HOTFIX_SEL_BATTLE_PET_SPECIES_STATE };
+};
+
+struct BattlePetSpeciesXAbilityLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[5] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetAbilityID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "RequiredLevel" },
+        { .IsSigned = true, .Type = FT_BYTE, .Name = "SlotEnum" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "BattlePetSpeciesID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &BattlePetSpeciesXAbilityMeta::Instance, HOTFIX_SEL_BATTLE_PET_SPECIES_X_ABILITY };
+};
+
+struct BattlePetStateLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[4] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "LuaName" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Flags" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetVisualID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 4, &BattlePetStateMeta::Instance, HOTFIX_SEL_BATTLE_PET_STATE };
 };
 
 struct BattlemasterListLoadInfo
@@ -5367,6 +5466,66 @@ struct RandPropPointsLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 35, &RandPropPointsMeta::Instance, HOTFIX_SEL_RAND_PROP_POINTS };
 };
 
+struct ResearchBranchLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[7] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "ResearchFieldID" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "CurrencyID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TextureFileID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "BigTextureFileID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ItemID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 7, &ResearchBranchMeta::Instance, HOTFIX_SEL_RESEARCH_BRANCH };
+};
+
+struct ResearchFieldLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[3] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "Slot" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 3, &ResearchFieldMeta::Instance, HOTFIX_SEL_RESEARCH_FIELD };
+};
+
+struct ResearchProjectLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[9] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "Rarity" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
+        { .IsSigned = false, .Type = FT_SHORT, .Name = "ResearchBranchID" },
+        { .IsSigned = false, .Type = FT_BYTE, .Name = "NumSockets" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "TextureFileID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "RequiredWeight" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 9, &ResearchProjectMeta::Instance, HOTFIX_SEL_RESEARCH_PROJECT };
+};
+
+struct ResearchSiteLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[5] =
+    {
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = true, .Type = FT_SHORT, .Name = "MapID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "QuestPOIBlobID" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "AreaPOIIconEnum" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 5, &ResearchSiteMeta::Instance, HOTFIX_SEL_RESEARCH_SITE };
+};
+
 struct RewardPackLoadInfo
 {
     static constexpr DB2FieldMeta Fields[7] =
@@ -9413,92 +9572,6 @@ struct ResearchBranchLoadInfo
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 7, &ResearchBranchMeta::Instance, HOTFIX_SEL_RESEARCH_BRANCH };
-};
-
-struct BattlePetSpeciesXAbilityLoadInfo
-{
-    static constexpr DB2FieldMeta Fields[5] =
-    {
-        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetAbilityID" },
-        { .IsSigned = false, .Type = FT_BYTE, .Name = "RequiredLevel" },
-        { .IsSigned = true, .Type = FT_BYTE, .Name = "SlotEnum" },
-        { .IsSigned = false, .Type = FT_INT, .Name = "BattlePetSpeciesID" },
-    };
-
-    static constexpr DB2LoadInfo Instance{ Fields, 5, &BattlePetSpeciesXAbilityMeta::Instance, HOTFIX_SEL_BATTLE_PET_SPECIES_X_ABILITY };
-};
-
-struct BattlePetEffectPropertiesLoadInfo
-{
-    static constexpr DB2FieldMeta Fields[14] =
-    {
-        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "ParamLabel1" },
-        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "ParamLabel2" },
-        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "ParamLabel3" },
-        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "ParamLabel4" },
-        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "ParamLabel5" },
-        { .IsSigned = false, .Type = FT_STRING_NOT_LOCALIZED, .Name = "ParamLabel6" },
-        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetVisualID" },
-        { .IsSigned = false, .Type = FT_BYTE, .Name = "ParamTypeEnum1" },
-        { .IsSigned = false, .Type = FT_BYTE, .Name = "ParamTypeEnum2" },
-        { .IsSigned = false, .Type = FT_BYTE, .Name = "ParamTypeEnum3" },
-        { .IsSigned = false, .Type = FT_BYTE, .Name = "ParamTypeEnum4" },
-        { .IsSigned = false, .Type = FT_BYTE, .Name = "ParamTypeEnum5" },
-        { .IsSigned = false, .Type = FT_BYTE, .Name = "ParamTypeEnum6" },
-    };
-
-    static constexpr DB2LoadInfo Instance{ Fields, 14, &BattlePetEffectPropertiesMeta::Instance, HOTFIX_SEL_BATTLE_PET_EFFECT_PROPERTIES };
-};
-
-struct BattlePetAbilityTurnLoadInfo
-{
-    static constexpr DB2FieldMeta Fields[6] =
-    {
-        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetAbilityID" },
-        { .IsSigned = false, .Type = FT_BYTE, .Name = "OrderIndex" },
-        { .IsSigned = false, .Type = FT_BYTE, .Name = "TurnTypeEnum" },
-        { .IsSigned = false, .Type = FT_BYTE, .Name = "EventTypeEnum" },
-        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetVisualID" },
-    };
-
-    static constexpr DB2LoadInfo Instance{ Fields, 6, &BattlePetAbilityTurnMeta::Instance, HOTFIX_SEL_BATTLE_PET_ABILITY_TURN };
-};
-
-struct BattlePetAbilityStateLoadInfo
-{
-    static constexpr DB2FieldMeta Fields[4] =
-    {
-        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = false, .Type = FT_INT, .Name = "BattlePetStateID" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "Value" },
-        { .IsSigned = false, .Type = FT_INT, .Name = "BattlePetAbilityID" },
-    };
-
-    static constexpr DB2LoadInfo Instance{ Fields, 4, &BattlePetAbilityStateMeta::Instance, HOTFIX_SEL_BATTLE_PET_ABILITY_STATE };
-};
-
-struct BattlePetAbilityEffectLoadInfo
-{
-    static constexpr DB2FieldMeta Fields[12] =
-    {
-        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetAbilityTurnID" },
-        { .IsSigned = false, .Type = FT_BYTE, .Name = "OrderIndex" },
-        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetEffectPropertiesID" },
-        { .IsSigned = false, .Type = FT_SHORT, .Name = "AuraBattlePetAbilityID" },
-        { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetVisualID" },
-        { .IsSigned = true, .Type = FT_SHORT, .Name = "Param1" },
-        { .IsSigned = true, .Type = FT_SHORT, .Name = "Param2" },
-        { .IsSigned = true, .Type = FT_SHORT, .Name = "Param3" },
-        { .IsSigned = true, .Type = FT_SHORT, .Name = "Param4" },
-        { .IsSigned = true, .Type = FT_SHORT, .Name = "Param5" },
-        { .IsSigned = true, .Type = FT_SHORT, .Name = "Param6" },
-    };
-
-    static constexpr DB2LoadInfo Instance{ Fields, 12, &BattlePetAbilityEffectMeta::Instance, HOTFIX_SEL_BATTLE_PET_ABILITY_EFFECT };
 };
 
 #endif // TRINITYCORE_DB2_LOAD_INFO_H

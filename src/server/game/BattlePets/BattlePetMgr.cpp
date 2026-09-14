@@ -52,9 +52,11 @@ void BattlePet::CalculateStats()
     if (breedState == _battlePetBreedStates.end()) // non existing breed id
         return;
 
-    float health = breedState->second[STATE_STAT_STAMINA];
-    float power = breedState->second[STATE_STAT_POWER];
-    float speed = breedState->second[STATE_STAT_SPEED];
+    // double: the float32 DB2 quality multiplier (0.65f = 0.6499999761) must not be re-rounded
+    // (retail: species 1959 breed 16 q3 L1 = 171 HP, float locals give 172)
+    double health = breedState->second[STATE_STAT_STAMINA];
+    double power = breedState->second[STATE_STAT_POWER];
+    double speed = breedState->second[STATE_STAT_SPEED];
 
     // modify stats depending on species - not all pets have this
     auto speciesState = _battlePetSpeciesStates.find(PacketInfo.Species);
@@ -573,7 +575,7 @@ void BattlePetMgr::ModifyName(ObjectGuid guid, std::string const& name, std::uni
         return;
 
     // Server-authoritative name-length cap. Client BATTLE_PET_RENAME maxLetters = 16 (12.0.7 RE,
-    // HIGH conf; zhCN uses 8 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ locale not known here, so 16 is the safe upper bound). A modified
+    // HIGH conf; zhCN uses 8 — locale not known here, so 16 is the safe upper bound). A modified
     // client could bypass the UI limit, so reject over-long names rather than store them.
     std::string checkName = name;
     if (utf8length(checkName) > 16)
@@ -800,7 +802,7 @@ void BattlePetMgr::GrantBattlePetExperience(ObjectGuid guid, uint16 xp, BattlePe
 
         xpEntry = sBattlePetXPGameTable.GetRow(++level);
         if (!xpEntry)
-            break; // Partial level-up ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ still save what we have
+            break; // Partial level-up — still save what we have
 
         nextLevelXp = uint16(GetBattlePetXPPerLevel(xpEntry));
 
@@ -918,7 +920,7 @@ void BattlePetMgr::HealBattlePetsPct(uint8 pct)
     // Marcus Jensen / "On The Mend" (MoP quest 31309) credits a virtual creature
     // kill the first time the player heals battle pets (typically via spell
     // "Revive Battle Pets" 125439). Only fire if at least one pet was actually
-    // restored ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ pressing the spell with full-HP pets shouldn't credit.
+    // restored — pressing the spell with full-HP pets shouldn't credit.
     if (!updates.empty())
     {
         if (Player* player = _owner->GetPlayer())

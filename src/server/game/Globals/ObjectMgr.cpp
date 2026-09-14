@@ -5422,10 +5422,12 @@ void ObjectMgr::LoadTreasurePickerTemplates()
 
     TC_LOG_INFO("server.loading", ">> Loaded {} treasure pickers in {} ms", _treasurePickerStore.size(), GetMSTimeDiffToNow(oldMSTime));
 }
+
 TreasurePickerTemplate const* ObjectMgr::GetTreasurePicker(uint32 treasurePickerId) const
 {
     return Trinity::Containers::MapGetValuePtr(_treasurePickerStore, treasurePickerId);
 }
+
 bool ObjectMgr::IsTreasurePickerItemEligibleForPlayer(Player const* player, uint32 itemId) const
 {
     if (!player)
@@ -5468,6 +5470,7 @@ bool ObjectMgr::IsTreasurePickerItemEligibleForPlayer(Player const* player, uint
 
     return true;
 }
+
 TreasurePickerItem const* ObjectMgr::SelectTreasurePickerItem(TreasurePickerTemplate const* treasurePicker, Player const* player, uint32 choiceItemId /*= 0*/) const
 {
     if (!treasurePicker || !player || treasurePicker->Items.empty())
@@ -5496,6 +5499,7 @@ TreasurePickerItem const* ObjectMgr::SelectTreasurePickerItem(TreasurePickerTemp
 
     return nullptr;
 }
+
 void ObjectMgr::LoadQuestStartersAndEnders()
 {
     TC_LOG_INFO("server.loading", "Loading GO Start Quest Data...");
@@ -9364,6 +9368,15 @@ uint32 ObjectMgr::GetAreaTriggerScriptId(uint32 trigger_id) const
 SpellScriptsBounds ObjectMgr::GetSpellScriptsBounds(uint32 spellId)
 {
     return SpellScriptsBounds(_spellScriptsStore.equal_range(spellId));
+}
+
+bool ObjectMgr::HasEnabledSpellScript(uint32 spellId, std::string_view scriptName)
+{
+    auto [begin, end] = GetSpellScriptsBounds(spellId);
+    return std::any_of(begin, end, [this, scriptName](SpellScriptsContainer::value_type const& script)
+    {
+        return script.second.second && GetScriptName(script.second.first) == scriptName;
+    });
 }
 
 uint32 ObjectMgr::GetEventScriptId(uint32 eventId) const

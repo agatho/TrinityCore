@@ -34,9 +34,6 @@
  *   - 249057 "Valeera Sanguinar" (same display) is created 44 times in gulf: transient combat copies. Not implemented.
  *
  * Not implemented, on purpose:
- *   - 1249690 "Npc Join Player Party" is SpellEffect 190 SPELL_EFFECT_CHANGE_PARTY_MEMBERS, which the core maps to
- *     EffectNULL (SpellEffects.cpp), so casting it would do nothing; Group members are players only. The party
- *     membership seen in SMSG_PARTY_UPDATE therefore has no server-side equivalent yet.
  *   - The exact rotation. Only the observed spell ids are used; the cadence below is derived from the per-run cast
  *     counts over the ~16 minutes of combat in gulf, not from a decoded priority list.
  *
@@ -63,6 +60,7 @@ namespace
 
 enum CompanionSpells : uint32
 {
+    SPELL_JOIN_PLAYER_PARTY     = 1249690,  // SPELL_EFFECT_CHANGE_PARTY_MEMBERS: puts her in the party frame
     SPELL_STEALTH               = 1252003,  // aura 16 MOD_STEALTH, cast at spawn and after every fight
     SPELL_BLOODCRYPT_TOXIN      = 1251111,  // self, at spawn (gulf 103996) and periodically
     SPELL_AFRAID_OF_THE_DARK    = 1266682,  // self; cast by nearly every creature in the delve
@@ -114,6 +112,10 @@ struct npc_delve_companion : public ScriptedAI
 
         _ownerGuid = owner->GetGUID();
         me->SetFaction(owner->GetFaction());
+
+        // gulf 103996: she joins the party frame, and the party update arrives with the same tick as her
+        // first self-buff
+        CastIfKnown(owner, SPELL_JOIN_PLAYER_PARTY);
 
         // gulf 103987: Stealth is the first thing she casts; 103996: Bloodcrypt Toxin on herself
         CastIfKnown(me, SPELL_STEALTH);

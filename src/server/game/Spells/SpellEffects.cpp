@@ -49,6 +49,8 @@
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
+#include "GroupMgr.h"
+#include "LFG.h"
 #include "Guild.h"
 #include "Housing.h"
 #include "HousingMgr.h"
@@ -290,7 +292,7 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectNULL,                                     //187 SPELL_EFFECT_RANDOMIZE_ARCHAEOLOGY_DIGSITES
     &Spell::EffectNULL,                                     //188 SPELL_EFFECT_SUMMON_STABLED_PET_AS_GUARDIAN
     &Spell::EffectNULL,                                     //189 SPELL_EFFECT_LOOT
-    &Spell::EffectNULL,                                     //190 SPELL_EFFECT_CHANGE_PARTY_MEMBERS
+    &Spell::EffectChangePartyMembers,                       //190 SPELL_EFFECT_CHANGE_PARTY_MEMBERS
     &Spell::EffectNULL,                                     //191 SPELL_EFFECT_TELEPORT_TO_DIGSITE
     &Spell::EffectUncageBattlePet,                          //192 SPELL_EFFECT_UNCAGE_BATTLEPET
     &Spell::EffectNULL,                                     //193 SPELL_EFFECT_START_PET_BATTLE
@@ -5771,6 +5773,60 @@ void Spell::EffectLaunchQuestChoice()
         return;
 
     unitTarget->ToPlayer()->SendPlayerChoice(GetCaster()->GetGUID(), effectInfo->MiscValue);
+}
+
+// SPELL_EFFECT_CHANGE_PARTY_MEMBERS: a creature joins or leaves a player's party frame. MiscValue 0 leaves
+// and anything else joins; every "leave" spell of the 39 that use this effect carries 0 and every "join" one
+// carries 1, apart from two Legion spells that carry 2 and 3 for reasons the client data does not explain.
+// The caster is the creature and the target the player - "Npc Join Player Party" 1249690 is cast by the delve
+// companion on its summoner right before it appears in SMSG_PARTY_UPDATE (gulf 103987 -> 103996).
+void Spell::EffectChangePartyMembers()
+{
+    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
+        return;
+
+    Creature* companion = m_caster->ToCreature();
+    if (!companion && unitTarget)
+        companion = unitTarget->ToCreature();
+
+    Player* player = unitTarget ? unitTarget->ToPlayer() : nullptr;
+    if (!player)
+        player = m_caster->ToPlayer();
+
+    if (!player)
+        return;
+
+    if (!effectInfo->MiscValue)
+    {
+        // leave: the casting creature, or every companion of the player when a player casts it
+        if (companion)
+        {
+            if (Group* group = sGroupMgr->GetGroupByGUID(companion->GetPartyGroupGUID()))
+                group->RemoveNpcMember(companion->GetGUID());
+        }
+        else if (Group* group = player->GetGroup())
+        {
+            std::vector<ObjectGuid> npcMembers;
+            for (Group::NpcMemberSlot const& npcSlot : group->GetNpcMemberSlots())
+                npcMembers.push_back(npcSlot.guid);
+
+            for (ObjectGuid const& npcMember : npcMembers)
+                if (!group->RemoveNpcMember(npcMember))
+                    break;              // the group disbanded itself with its last creature
+        }
+
+        return;
+    }
+
+    if (!companion)
+        return;
+
+    Group* group = player->GetGroup();
+    if (!group)
+        group = Group::CreateNpcParty(player);
+
+    if (group)
+        group->AddNpcMember(companion, lfg::PLAYER_ROLE_DAMAGE);    // the role a lone companion joins with
 }
 
 void Spell::EffectUncageBattlePet()

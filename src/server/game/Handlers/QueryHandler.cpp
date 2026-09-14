@@ -22,6 +22,7 @@
 #include "Corpse.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
+#include "DBCEnums.h"
 #include "GameTime.h"
 #include "Item.h"
 #include "Log.h"
