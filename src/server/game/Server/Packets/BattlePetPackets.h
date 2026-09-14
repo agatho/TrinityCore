@@ -638,10 +638,11 @@ namespace WorldPackets
             bool PvpBattle = false;
             // 12.0.7 (68275) JamPetBattleFinalRound (sniff-verified vs b_pets, 5 battles): the winner is the
             // per-team flag pair in the flag byte — bit5=Winners[0] (team0), bit4=Winners[1] (team1). The two
-            // flat uint32s after the flush are field#1 (0 in every capture, role unknown, NOT winners) and
-            // NpcCreatureID (0 for wild battles, the trainer entry for NPC battles).
+            // flat uint32s after the flush are one creature id PER TEAM (69587 client reader 0x7FF7CD50FC10
+            // stores them into a two-element array); team0 is the player, so its entry is always 0 and team1
+            // carries the trainer entry, or 0 for a wild battle.
             std::array<bool, 2> Winners = {};
-            uint32 NpcCreatureID = 0;
+            std::array<uint32, 2> NpcCreatureID = {};
             std::vector<PetBattleFinalPet> Pets;
         };
 

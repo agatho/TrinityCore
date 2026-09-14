@@ -589,8 +589,10 @@ WorldPacket const* PetBattleFinalRound::Write()
     _worldPacket << Bits<1>(Winners[1]);    // bit4 — team1 won
     _worldPacket.FlushBits();
 
-    _worldPacket << uint32(0);              // flat field #1: 0 in every captured battle; role unknown, NOT winners
-    _worldPacket << uint32(NpcCreatureID);  // 0 for wild battles (no trainer); trainer entry for NPC battles
+    // 69587 client reader (0x7FF7CD50FC10) stores these two into one array indexed by team: team0 is the
+    // player (always 0), team1 the trainer entry, or 0 when the opponent is a wild pet.
+    for (uint32 creatureId : NpcCreatureID)
+        _worldPacket << uint32(creatureId);
 
     _worldPacket << uint32(Pets.size());
 
@@ -617,12 +619,16 @@ WorldPacket const* PetBattlePVPChallenge::Write()
 
 WorldPacket const* PetBattleQueueStatus::Write()
 {
+    // 12.1.0.69587 client reader (Handler_SMSG_PET_BATTLE_QUEUE_STATUS): status, the slot-result
+    // count, the ride ticket, and only then the slot results themselves. Both captured frames had an
+    // empty slot-result list, which is why the wrong order still decoded byte for byte.
     _worldPacket << uint32(Status);
     _worldPacket << Size<uint32>(SlotResult);
-    for (uint32 result : SlotResult)
-        _worldPacket << uint32(result);
 
     _worldPacket << Ticket;
+
+    for (uint32 result : SlotResult)
+        _worldPacket << uint32(result);
 
     _worldPacket << OptionalInit(ClientWaitTime);
     _worldPacket << OptionalInit(AvgWaitTime);
