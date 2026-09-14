@@ -31,13 +31,20 @@ EndScriptData */
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "Log.h"
+#include "Containers.h"
+#include "DBCEnums.h"
+#include "DB2Structure.h"
+#include "ObjectAccessor.h"
+#include "RaceMask.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerDump.h"
 #include "ReputationMgr.h"
 #include "World.h"
 #include "WorldSession.h"
+#include <random>
 #include <sstream>
+#include <vector>
 
 using namespace Trinity::ChatCommands;
 
@@ -65,6 +72,7 @@ public:
         static ChatCommandTable characterCommandTable =
         {
             { "customize",     HandleCharacterCustomizeCommand,      rbac::RBAC_PERM_COMMAND_CHARACTER_CUSTOMIZE,       Console::Yes },
+            { "repaircustomizations", HandleCharacterRepairCustomizationsCommand, rbac::RBAC_PERM_COMMAND_CHARACTER_CUSTOMIZE, Console::Yes },
             { "changefaction", HandleCharacterChangeFactionCommand,  rbac::RBAC_PERM_COMMAND_CHARACTER_CHANGEFACTION,   Console::Yes },
             { "changerace",    HandleCharacterChangeRaceCommand,     rbac::RBAC_PERM_COMMAND_CHARACTER_CHANGERACE,      Console::Yes },
             { "changeaccount", HandleCharacterChangeAccountCommand,  rbac::RBAC_PERM_COMMAND_CHARACTER_CHANGEACCOUNT,   Console::Yes },
@@ -413,6 +421,142 @@ public:
             CharacterDatabase.Execute(stmt);
         }
 
+        return true;
+    }
+
+    // Session-free evaluation of a ChrCustomizationReq for a bot of the given (race, class).
+    // MeetsChrCustomizationReq() (CharacterHandler.cpp) needs a live WorldSession (_player,
+    // GetCollectionMgr()) for its achievement/appearance/quest/dependent-choice gates, which
+    // we do not have for an offline character. We evaluate the session-independent gates -
+    // class mask and race mask - and treat any account/character-scoped gate as unavailable,
+    // so a bot only ever receives the race/class-appropriate BASE appearance the client can
+    // always render. In this 12.1 dataset every ChrCustomizationChoice carries a non-zero
+    // ChrCustomizationReqID (the old "ReqID != 0 -> skip" filter discarded ALL of them, which
+    // is why every bot ended up with an empty, crash-inducing customization set).
+    static bool BotMeetsCustomizationReq(uint32 reqId, uint8 race, uint8 cls)
+    {
+        if (!reqId)
+            return true;
+
+        ChrCustomizationReqEntry const* req = sChrCustomizationReqStore.LookupEntry(reqId);
+        if (!req)
+            return true;                                            // dangling ReqID -> treat as no requirement
+
+        if (!req->GetFlags().HasFlag(ChrCustomizationReqFlag::HasRequirements))
+            return true;
+
+        if (req->ClassMask && !(req->ClassMask & (1 << (cls - 1))))
+            return false;
+
+        if (race != RACE_NONE && !req->RaceMask.IsEmpty()
+            && req->RaceMask != RACEMASK_ALL_v<int32, 2> && !req->RaceMask.HasRace(Races(race)))
+            return false;
+
+        // Account/character-scoped gates cannot be evaluated offline -> not available to a bot.
+        if (req->AchievementID || req->ItemModifiedAppearanceID || req->QuestID)
+            return false;
+
+        return true;
+    }
+
+    // Backfill valid customizations for every character that has none.
+    //
+    // Retail 12.x clients build a character model from its ChrCustomizationChoice set. A player
+    // object with an EMPTY set has no default for require-customization races (Dracthyr, Earthen,
+    // several allied races) and the client dereferences a null geoset handler while rendering it
+    // -> ACCESS_VIOLATION executing 0x0. The WCDB import shipped ~2200 bot characters with zero
+    // character_customizations rows, so any client that came into visual range of one crashed.
+    // New bots from the PlayerbotV2 factory now get customizations too; this repairs the legacy
+    // imports. Idempotent: only characters with no rows are touched. Offline characters are
+    // written straight to the DB; online ones are updated live (and persist on their next save).
+    static bool HandleCharacterRepairCustomizationsCommand(ChatHandler* handler)
+    {
+        QueryResult result = CharacterDatabase.Query(
+            "SELECT c.guid, c.race, c.gender, c.class FROM characters c "
+            "LEFT JOIN character_customizations cc ON cc.guid = c.guid "
+            "WHERE cc.guid IS NULL");
+
+        if (!result)
+        {
+            handler->SendSysMessage("No characters need customization repair.");
+            return true;
+        }
+
+        static std::mt19937 rng{ std::random_device{}() };
+        uint32 fixed = 0, online = 0, skipped = 0;
+        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
+        do
+        {
+            Field* f = result->Fetch();
+            ObjectGuid::LowType guidLow = f[0].GetUInt64();
+            uint8 race   = f[1].GetUInt8();
+            uint8 gender = f[2].GetUInt8();
+            uint8 cls    = f[3].GetUInt8();
+
+            std::vector<UF::ChrCustomizationChoice> choices;
+            if (std::vector<ChrCustomizationOptionEntry const*> const* options = sDB2Manager.GetCustomiztionOptions(race, gender))
+            {
+                for (ChrCustomizationOptionEntry const* opt : *options)
+                {
+                    if (!opt)
+                        continue;
+
+                    // Option itself may be gated (e.g. a class-specific option).
+                    if (!BotMeetsCustomizationReq(opt->ChrCustomizationReqID, race, cls))
+                        continue;
+
+                    std::vector<ChrCustomizationChoiceEntry const*> const* optChoices = sDB2Manager.GetCustomiztionChoices(opt->ID);
+                    if (!optChoices || optChoices->empty())
+                        continue;
+
+                    std::vector<ChrCustomizationChoiceEntry const*> candidates;
+                    candidates.reserve(optChoices->size());
+                    for (ChrCustomizationChoiceEntry const* c : *optChoices)
+                        if (c && BotMeetsCustomizationReq(c->ChrCustomizationReqID, race, cls))
+                            candidates.push_back(c);
+
+                    if (candidates.empty())
+                        continue;
+
+                    std::uniform_int_distribution<size_t> pick(0, candidates.size() - 1);
+                    UF::ChrCustomizationChoice entry;
+                    entry.ChrCustomizationOptionID = opt->ID;
+                    entry.ChrCustomizationChoiceID = candidates[pick(rng)]->ID;
+                    choices.push_back(entry);
+                }
+            }
+
+            if (choices.empty())
+            {
+                ++skipped;
+                continue;
+            }
+
+            UF::ChrCustomizationChoice const* begin = choices.data();
+            UF::ChrCustomizationChoice const* end = choices.data() + choices.size();
+
+            if (Player* p = ObjectAccessor::FindConnectedPlayer(ObjectGuid::Create<HighGuid::Player>(guidLow)))
+            {
+                // Live update: sets the dynamic UF, which propagates to nearby clients
+                // via the next SMSG_UPDATE_OBJECT, and marks the row dirty so the value
+                // persists on the player's next save.
+                p->SetCustomizations(Trinity::Containers::MakeIteratorPair(begin, end));
+                ++online;
+            }
+            else
+            {
+                Player::SaveCustomizations(trans, guidLow, Trinity::Containers::MakeIteratorPair(begin, end));
+            }
+
+            ++fixed;
+        }
+        while (result->NextRow());
+
+        CharacterDatabase.CommitTransaction(trans);
+
+        TC_LOG_INFO("server.loading", "[repaircustomizations] complete: {} fixed ({} online live), {} skipped", fixed, online, skipped);
+        handler->PSendSysMessage("Customization repair complete: %u fixed (%u online, updated live), %u skipped (no DB2 options for race/sex).", fixed, online, skipped);
         return true;
     }
 
