@@ -31,6 +31,7 @@
 #include "GameTime.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
+#include "GroupMgr.h"
 #include "ItemTemplate.h"
 #include "Log.h"
 #include "Loot.h"
@@ -370,6 +371,15 @@ void Creature::RemoveFromWorld()
 
         if (m_formation)
             FormationMgr::RemoveCreatureFromGroup(m_formation, this);
+
+        // a party member that leaves the world leaves the party frame with it
+        if (!m_partyGroupGuid.IsEmpty())
+        {
+            if (Group* group = sGroupMgr->GetGroupByGUID(m_partyGroupGuid))
+                group->RemoveNpcMember(GetGUID());
+
+            m_partyGroupGuid.Clear();
+        }
 
         Unit::RemoveFromWorld();
 
