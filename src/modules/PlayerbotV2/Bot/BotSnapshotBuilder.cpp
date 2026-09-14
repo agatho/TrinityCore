@@ -5100,31 +5100,6 @@ std::shared_ptr<BotSnapshot const> BotSnapshotBuilder::Build(Player* p, BotAI* b
             snap->quest_log.current_quest_id  = best_any_quest;
         }
 
-        // [picker_dump] TEMP (2026-06-20) — definitive selector ground truth:
-        // logs ALL candidate slots + the final choice every Build, throttled 3s/bot.
-        // Shows whether best_same_map (near objective) is even set, its distance, and
-        // whether best_breadcrumb_sm (a same-map turn-in) outranks it. REMOVE after
-        // the Durnan picker root is fixed + verified.
-        {
-            static thread_local std::unordered_map<uint64, uint32> s_pd_last;
-            const uint64 pdkey = p->GetGUID().GetCounter();
-            auto it = s_pd_last.find(pdkey);
-            if (it == s_pd_last.end() || now_ms - it->second > 3000u)
-            {
-                s_pd_last[pdkey] = now_ms;
-                TC_LOG_INFO("playerbot.v2",
-                    "[picker_dump] bot={} chosen_quest={} obj_type={} | same_map(set={} q={} dist={}) "
-                    "bc_sm(set={} q={}) bc(set={} q={}) any(set={} q={})",
-                    snap->identity.name, snap->quest_log.current_quest_id,
-                    uint32(snap->quest_log.current_objective.type),
-                    best_same_map_set ? 1 : 0, best_same_map_quest,
-                    best_same_map_set ? best_same_map_dist : -1.f,
-                    best_breadcrumb_sm_set ? 1 : 0, best_breadcrumb_sm_quest,
-                    best_breadcrumb_set ? 1 : 0, best_breadcrumb_quest,
-                    best_any_set ? 1 : 0, best_any_quest);
-            }
-        }
-
         // DIAG [picker_choice]: a same-map objective was chosen WHILE a cross-map
         // breadcrumb (a completed quest's turn-in) was ALSO available — the exact
         // conflict that parks a bot whose real goal is across a zeppelin (Somi:
