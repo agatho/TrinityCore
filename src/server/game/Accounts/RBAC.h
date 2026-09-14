@@ -779,6 +779,10 @@ enum RBACPermissions
     // RBAC_PERM_CHAT_MUTED_PARENTAL_CONTROLS - all three already inserted by other features'
     // auth updates. See sql/updates/auth/master/2026_08_09_00_auth.sql.
     RBAC_PERM_COMMAND_SHOP                                   = 1002,
+    // .clubfinder list/info/flag/unflag - declared on feature/club-finder, whose command script
+    // has always referenced it. 1003; 1002/1004 are feature/commerce's.
+    RBAC_PERM_COMMAND_CLUB_FINDER                            = 1003,
+
     RBAC_PERM_MAX
 };
 
