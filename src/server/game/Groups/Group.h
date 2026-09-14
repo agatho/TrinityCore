@@ -89,7 +89,8 @@ enum GroupType
 {
     GROUP_TYPE_NONE         = 0,
     GROUP_TYPE_NORMAL       = 1,
-    GROUP_TYPE_WORLD_PVP    = 4
+    GROUP_TYPE_WORLD_PVP    = 4,
+    GROUP_TYPE_COMPANION    = 5     // party holding NPC companions (all four delve captures; LFG groups send 3)
 };
 
 enum GroupFlags : uint16
@@ -280,7 +281,7 @@ class TC_GAME_API Group
         // Non-player party members. A group created by CreateNpcParty exists only to give a player a party
         // frame for its companions; it holds a single player and disbands with its last creature.
         static Group* CreateNpcParty(Player* player);
-        bool AddNpcMember(Creature* creature);
+        bool AddNpcMember(Creature* creature, uint8 roles = 0);
         bool RemoveNpcMember(ObjectGuid guid);              // false when the group disbanded itself
         bool IsNpcMember(ObjectGuid guid) const;
         std::vector<NpcMemberSlot> const& GetNpcMemberSlots() const { return m_npcMemberSlots; }
