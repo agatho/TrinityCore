@@ -77,6 +77,12 @@ public:
     // Marker count of bots whose RunFor returned true since process start.
     size_t setup_done_cache_size() const { return setup_done_cache_.size(); }
 
+    // Drop a guid from both pipeline caches. Call this wherever a bot character
+    // stops existing (hygiene delete, corpse sweep): every other use of these
+    // two containers inserts or looks up, so without an erase they only ever
+    // grow, and a recycled guid would be served a stale pipeline row.
+    void forget_pipeline_caches(uint64 guid);
+
     // Run the per-bot setup pipeline for any in-world bot whose
     // distribution_level > 0 but setup_pipeline_state != AllDone. Cheap
     // when nothing pending. Called every tick alongside reconcile.

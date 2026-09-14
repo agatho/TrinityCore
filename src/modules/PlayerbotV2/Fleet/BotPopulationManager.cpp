@@ -416,6 +416,7 @@ void BotPopulationManager::SweepFailedJitCorpses()
         const uint32 account = f[1].GetUInt32();
         BotNamePool::Release(f[2].GetString());
         Services::Lifecycle().unmark_as_bot(guid);
+        forget_pipeline_caches(guid);
         Services::Accounts().note_character_removed(account);
         if (!in_list.empty()) in_list += ',';
         in_list += std::to_string(guid);
@@ -795,6 +796,12 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
     });
 }
 
+void BotPopulationManager::forget_pipeline_caches(uint64 guid)
+{
+    pipeline_row_cache_.erase(guid);
+    setup_done_cache_.erase(guid);
+}
+
 void BotPopulationManager::RunHygiene(uint32 now_ms)
 {
     if (last_hygiene_ms_ && (now_ms - last_hygiene_ms_) < kHygieneIntervalMs)
@@ -844,6 +851,15 @@ void BotPopulationManager::RunHygiene(uint32 now_ms)
                 "DELETE FROM playerbot_v2_character WHERE character_guid_low={}", guid);
             CharacterDatabase.PExecute(
                 "DELETE FROM characters WHERE guid={}", guid);
+            // The rows are gone, so the in-memory state mirroring them has to go
+            // too. The corpse sweep above already does this; hygiene did not, so
+            // the Lifecycle registry kept reporting a deleted guid as a bot and
+            // both pipeline caches kept a row for a character that no longer
+            // exists. Every other reference to these two containers is an insert
+            // or a lookup - this is their only erase - so anything left here
+            // drifts upward for the lifetime of the process.
+            Services::Lifecycle().unmark_as_bot(guid);
+            forget_pipeline_caches(guid);
             // Free the pool-account slot so BotAccountMgr knows there's
             // capacity to spawn a fresh bot on this account next time.
             Services::Accounts().note_character_removed(account);
