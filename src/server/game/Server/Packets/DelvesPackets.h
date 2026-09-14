@@ -74,7 +74,9 @@ public:
 };
 
 // SMSG_SHOW_DELVES_DISPLAY_UI (0x420359 @ 12.0.7.68275)
-// 68275 binary (read ctor 0x7FF7290BB840): empty body (remaining-span, 0-length in practice).
+// 68275 binary (read ctor 0x7FF7290BB840) and the 69587 client (0x7FF7CD3E0440) both read the body
+// as an opaque remaining-span - the client parses NO fields from this packet. The 12.1 captures
+// carry one uint32, which Write() sends so the byte count matches retail; the value is inert.
 class ShowDelvesDisplayUI final : public ServerPacket
 {
 public:
