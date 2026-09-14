@@ -14,10 +14,11 @@
 --
 -- Idempotent, and scoped strictly to 1002/1004 so it cannot touch anyone else's permission.
 --
--- 2026-09-14: moved off 887/888 again. On the 12.1 integration line those ids are already taken
--- by RBAC_PERM_CHANGE_TURN_RATE and RBAC_PERM_COMMAND_CHEAT_DIMINISHINGRETURNS, and 2026_08_26_02
--- inserts 888 = 'Command: cheat diminishingreturns'. Whichever update ran last won, and the other
--- feature's permission silently became the wrong thing. 1002/1003 are free on both lines.
+-- 2026-09-14: moved off 887/888 for the third and last time. The two earlier moves picked ids
+-- that were free on THIS branch and occupied on the integration line, which is why the clash
+-- kept coming back. Checked against the 12.1 line before choosing: 887, 888, 889, 890, 1000 and
+-- 1001 are all inserted there by other features' auth updates, and 1003 is feature/club-finder's
+-- 'Command: clubfinder'. 1002 and 1004 are free on every line.
 
 DELETE FROM `rbac_permissions` WHERE `id` IN (1002,1004);
 INSERT INTO `rbac_permissions` (`id`,`name`) VALUES
