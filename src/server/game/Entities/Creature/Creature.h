@@ -298,6 +298,11 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         void SetCanHaveLoot(bool canHaveLoot) { _staticFlags.ApplyFlag(CREATURE_STATIC_FLAG_NO_LOOT, !canHaveLoot); }
         uint32 GetLootId() const;
         void SetLootId(Optional<uint32> lootId);
+
+        // Party frame membership granted by SPELL_EFFECT_CHANGE_PARTY_MEMBERS (empty when the
+        // creature is not a party member)
+        ObjectGuid GetPartyGroupGUID() const { return m_partyGroupGuid; }
+        void SetPartyGroupGUID(ObjectGuid const& guid) { m_partyGroupGuid = guid; }
         std::unique_ptr<Loot> m_loot;
         std::unordered_map<ObjectGuid, std::unique_ptr<Loot>> m_personalLoot;
         void StartPickPocketRefillTimer();
@@ -566,6 +571,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         Optional<std::string> m_scriptStringId;
 
         Optional<uint32> m_lootId;
+        ObjectGuid m_partyGroupGuid;                        // group whose party frame this creature is shown in
         uint16 m_LootMode;                                  // Bitmask (default: LOOT_MODE_DEFAULT) that determines what loot will be lootable
 
         CreatureStaticFlagsHolder _staticFlags;

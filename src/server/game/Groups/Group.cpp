@@ -21,6 +21,7 @@
 #include "CharacterCache.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
+#include "Creature.h"
 #include "Formulas.h"
 #include "GameObject.h"
 #include "GameTime.h"
@@ -215,7 +216,7 @@ bool Group::Create(Player* leader)
     m_raidDifficulty = DIFFICULTY_NORMAL_RAID;
     m_legacyRaidDifficulty = DIFFICULTY_10_N;
 
-    if (!isBGGroup() && !isBFGroup())
+    if (!isBGGroup() && !isBFGroup() && !IsNpcParty())
     {
         m_dungeonDifficulty = leader->GetDungeonDifficultyID();
         m_raidDifficulty = leader->GetRaidDifficultyID();
@@ -520,7 +521,7 @@ bool Group::AddMember(Player* player)
     }
 
     // insert into the table if we're not a battleground group
-    if (!isBGGroup() && !isBFGroup())
+    if (!isBGGroup() && !isBFGroup() && !IsNpcParty())
     {
         CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_GROUP_MEMBER);
 
@@ -710,7 +711,7 @@ bool Group::RemoveMember(ObjectGuid guid, RemoveMethod method /*= GROUP_REMOVEME
         }
 
         // Remove player from group in DB
-        if (!isBGGroup() && !isBFGroup())
+        if (!isBGGroup() && !isBFGroup() && !IsNpcParty())
         {
             CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_GROUP_MEMBER);
             stmt->setUInt64(0, guid.GetCounter());
@@ -874,10 +875,11 @@ void Group::Disband(bool hideDestroy /* = false */)
     }
 
     m_memberSlots.clear();
+    m_npcMemberSlots.clear();
 
     RemoveAllInvites();
 
-    if (!isBGGroup() && !isBFGroup())
+    if (!isBGGroup() && !isBFGroup() && !IsNpcParty())
     {
         CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
 
@@ -934,6 +936,86 @@ void Group::SendTargetIconList(WorldSession* session) const
         updateAll.TargetIcons.emplace_back(i, m_targetIcons[i]);
 
     session->SendPacket(updateAll.Write());
+}
+
+// A player without a group casting/receiving "Npc Join Player Party" still has to see a party frame, so a
+// real group is created for them. It is flagged as an NPC party: nothing about it is written to the
+// database and it disbands as soon as its last creature is gone.
+Group* Group::CreateNpcParty(Player* player)
+{
+    Group* group = new Group();
+    group->SetNpcParty(true);
+
+    // 12.1 captures (gulf 102157): the companion party of a delve runs on PartyIndex 1, the instance
+    // category, while a companion picked up in the open world belongs to the home party.
+    if (Map const* map = player->FindMap(); map && map->IsDungeon())
+        group->m_groupCategory = GROUP_CATEGORY_INSTANCE;
+
+    if (!group->Create(player))
+    {
+        delete group;
+        return nullptr;
+    }
+
+    sGroupMgr->AddGroup(group);
+    return group;
+}
+
+bool Group::AddNpcMember(Creature* creature)
+{
+    if (!creature || IsNpcMember(creature->GetGUID()))
+        return false;
+
+    // a creature can only sit in one party frame at a time
+    if (Group* previous = sGroupMgr->GetGroupByGUID(creature->GetPartyGroupGUID()))
+        if (previous != this)
+            previous->RemoveNpcMember(creature->GetGUID());
+
+    NpcMemberSlot& slot = m_npcMemberSlots.emplace_back();
+    slot.guid = creature->GetGUID();
+    slot.name = creature->GetName();
+    slot._class = creature->GetClass();
+    slot.factionGroup = 0;                  // 0 for every creature member in the captures
+    slot.subGroup = 0;
+    slot.flags = MEMBER_FLAG_COMPANION;
+    slot.roles = lfg::PLAYER_ROLE_DAMAGE;   // gulf 103996: Valeera joins as damage
+
+    creature->SetPartyGroupGUID(m_guid);
+
+    // retail sends no SMSG_PARTY_MEMBER_FULL_STATE for a creature member (none in any of the four
+    // captures): the client fills the frame from the unit's own object update.
+    SendUpdate();
+    return true;
+}
+
+bool Group::RemoveNpcMember(ObjectGuid guid)
+{
+    auto slot = std::ranges::find(m_npcMemberSlots, guid, &NpcMemberSlot::guid);
+    if (slot == m_npcMemberSlots.end())
+        return true;
+
+    m_npcMemberSlots.erase(slot);
+
+    // an NPC party only exists for its creatures - the last one leaving takes the party frame with it
+    if (IsNpcParty() && m_npcMemberSlots.empty())
+    {
+        // gulf 1129673: the client is told with SMSG_GROUP_UNINVITE and an empty party update, not
+        // with the SMSG_GROUP_DESTROYED that ending a player group sends
+        for (MemberSlot const& memberSlot : m_memberSlots)
+            if (Player* player = ObjectAccessor::FindConnectedPlayer(memberSlot.guid))
+                player->SendDirectMessage(WorldPackets::Party::GroupUninvite().Write());
+
+        Disband(true);
+        return false;
+    }
+
+    SendUpdate();
+    return true;
+}
+
+bool Group::IsNpcMember(ObjectGuid guid) const
+{
+    return std::ranges::find(m_npcMemberSlots, guid, &NpcMemberSlot::guid) != m_npcMemberSlots.end();
 }
 
 void Group::SendUpdate() const
@@ -1002,7 +1084,21 @@ void Group::SendUpdateToPlayer(Player* player, MemberSlot const* slot /*= nullpt
         playerInfos.RolesAssigned = citr->roles;    // Lfg Roles
     }
 
-    if (GetMembersCount() > 1)
+    for (NpcMemberSlot const& npcSlot : m_npcMemberSlots)
+    {
+        WorldPackets::Party::PartyPlayerInfo& npcInfos = partyUpdate.PlayerList.emplace_back();
+
+        npcInfos.GUID = npcSlot.guid;
+        npcInfos.Name = npcSlot.name;
+        npcInfos.Class = npcSlot._class;
+        npcInfos.FactionGroup = npcSlot.factionGroup;
+        npcInfos.Connected = true;
+        npcInfos.Subgroup = npcSlot.subGroup;
+        npcInfos.Flags = npcSlot.flags;
+        npcInfos.RolesAssigned = npcSlot.roles;
+    }
+
+    if (partyUpdate.PlayerList.size() > 1)
     {
         // LootSettings
         partyUpdate.LootSettings.emplace();
@@ -1551,6 +1647,10 @@ void Group::LinkOwnedInstance(GroupInstanceReference* ref)
 
 void Group::_homebindIfInstance(Player* player)
 {
+    // leaving a party of NPC companions is not leaving the group that owns the instance
+    if (IsNpcParty())
+        return;
+
     if (player && !player->IsGameMaster() && sMapStore.LookupEntry(player->GetMapId())->IsDungeon())
         player->m_InstanceValid = false;
 }
