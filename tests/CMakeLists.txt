@@ -12,6 +12,11 @@ GroupSources(${CMAKE_CURRENT_SOURCE_DIR})
 
 add_executable(tests)
 
+# Recursively globs every .c/.cc/.cpp and every .h/.hh/.hpp/.inl below this
+# directory, so new test files (for example tests/game/CmsgWireLayout.cpp and its
+# tests/game/PacketLayoutFixture.h) are picked up without editing this file.
+# The game target exports its headers with PUBLIC visibility, which is what puts
+# src/server/game/Server/Packets on the include path for the packet layout tests.
 CollectAndAddSourceFiles(
   tests
   ${CMAKE_CURRENT_SOURCE_DIR})
