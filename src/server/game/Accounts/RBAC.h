@@ -757,6 +757,11 @@ enum RBACPermissions
     // IF YOU ADD NEW PERMISSIONS, ADD THEM IN 3.3.5 BRANCH AS WELL!
     //
     // custom permissions 1000+
+    // .clubfinder list/info/flag/unflag. 1003, checked against the 12.1 integration line:
+    // 886-890, 1000 and 1001 are taken there by other features, and feature/commerce holds
+    // 1002/1004. Duplicate enum values are legal C++, so a clash here would not fail a build.
+    RBAC_PERM_COMMAND_CLUB_FINDER                            = 1003,
+
     RBAC_PERM_MAX
 };
 
