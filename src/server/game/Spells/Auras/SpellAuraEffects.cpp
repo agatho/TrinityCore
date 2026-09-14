@@ -1296,7 +1296,7 @@ void AuraEffect::ChangeAmount(SpellEffectValue newAmount, bool mark, bool onStac
                     continue;
 
                 WorldPackets::Spells::AuraPointsDepleted auraPointsDepleted;
-                auraPointsDepleted.UnitGUID = aurApp->GetTarget()->GetGUID();
+                auraPointsDepleted.Unit = aurApp->GetTarget()->GetGUID();
                 auraPointsDepleted.Slot = aurApp->GetSlot();
                 auraPointsDepleted.EffectIndex = GetEffIndex();
                 aurApp->GetTarget()->SendMessageToSet(auraPointsDepleted.Write(), true);
