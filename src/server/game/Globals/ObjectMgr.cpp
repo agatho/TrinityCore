@@ -9370,6 +9370,15 @@ SpellScriptsBounds ObjectMgr::GetSpellScriptsBounds(uint32 spellId)
     return SpellScriptsBounds(_spellScriptsStore.equal_range(spellId));
 }
 
+bool ObjectMgr::HasEnabledSpellScript(uint32 spellId, std::string_view scriptName)
+{
+    auto [begin, end] = GetSpellScriptsBounds(spellId);
+    return std::any_of(begin, end, [this, scriptName](SpellScriptsContainer::value_type const& script)
+    {
+        return script.second.second && GetScriptName(script.second.first) == scriptName;
+    });
+}
+
 uint32 ObjectMgr::GetEventScriptId(uint32 eventId) const
 {
     EventScriptContainer::const_iterator i = _eventScriptStore.find(eventId);

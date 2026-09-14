@@ -100,6 +100,7 @@
 #include "Neighborhood.h"
 #include "NeighborhoodMgr.h"
 #include "GossipDef.h"
+#include "GridDefines.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
@@ -144,6 +145,7 @@
 #include "PhasingHandler.h"
 #include "PlayerChoice.h"
 #include "PlayerChoicePackets.h"
+#include "QuaternionData.h"
 #include "QueryCallback.h"
 #include "QueryHolder.h"
 #include "QueryResultStructured.h"
@@ -191,6 +193,7 @@
 #include "WowLabsMatchMgr.h"
 #include <boost/dynamic_bitset.hpp>
 #include <G3D/g3dmath.h>
+#include <cmath>
 #include <sstream>
 
 // corpse reclaim times
@@ -31850,7 +31853,7 @@ void Player::HandleArchaeologySurvey()
                 float const facing = GetOrientation();
                 if (GameObject* find = SummonGameObject(findGameObjectId, Position(fx, fy, fz, facing),
                     QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f), ARCHAEOLOGY_FIND_DURATION,
-                    GO_SUMMON_TIMED_OR_CORPSE_DESPAWN)) /* personal-owner GUID overload is a fork WorldObject ext; base 5-arg used */
+                    GO_SUMMON_TIMED_OR_CORPSE_DESPAWN, GetGUID()))
                 {
                     _pendingArchaeologyFind = PendingArchaeologyFind
                     {
@@ -37753,7 +37756,7 @@ void Player::ExecutePendingSpellCastRequest()
         // Fail closed unless this exact solve script is enabled and the player's current state permits it;
         // otherwise the spell's CREATE_ITEM effect could run without the bookkeeping script.
         if (plrCaster->CanCastResearchProjectSpell(spellInfo->Id) &&
-            true /* spell_archaeology_solve grafted; spell-proc enable-gate not present standalone */)
+            sObjectMgr->HasEnabledSpellScript(spellInfo->Id, "spell_archaeology_solve"))
             allow = true;
 
         if (!allow)
@@ -37814,6 +37817,8 @@ void Player::ExecutePendingSpellCastRequest()
 
     spell->m_fromClient = true;
     std::ranges::copy(_pendingSpellCastRequest->CastRequest.Misc, std::ranges::begin(spell->m_misc.Raw.Data));
+    if (!_pendingSpellCastRequest->CastRequest.Weight.empty())
+        spell->m_customArg = std::move(_pendingSpellCastRequest->CastRequest.Weight);
     spell->prepare(targets);
 
     _pendingSpellCastRequest = nullptr;
