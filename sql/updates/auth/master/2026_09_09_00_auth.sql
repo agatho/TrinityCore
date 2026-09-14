@@ -1,14 +1,19 @@
--- 2026-09-09: feature/commerce RBAC_PERM_COMMAND_SHOP renumbered 1000 -> 1002 at integration
--- (1000/1001 are taken by parental-controls chat mute / reload chat_spam_record).
-INSERT INTO `rbac_permissions` (`id`, `name`) VALUES
-(1002, 'Command: shop')
-  ON DUPLICATE KEY UPDATE `name` = 'Command: shop';
+--
+-- Club Finder GM command permission.
+--
+-- cs_clubfinder.cpp has always referenced rbac::RBAC_PERM_COMMAND_CLUB_FINDER, but this branch never
+-- declared it and never shipped the row, so the branch did not build standalone. Both halves were
+-- being added by hand in the integration branches instead, which is why the same build break kept
+-- reappearing on every integration line that merged this branch. Declared here now, on the owning
+-- branch, together with the row that makes it grantable.
+--
+-- Id 1003, checked against the 12.1 integration line before choosing: 886-890, 1000 and 1001 are
+-- taken there by other features' auth updates, and feature/commerce holds 1002 (Command: shop) and
+-- 1004 (Command: reload shop_catalog).
+--
+-- Linked into group 196, the reload / GM command group, like the neighbouring command permissions.
+-- Idempotent, and scoped strictly to 1003 so it cannot touch anyone else's permission.
 
-DELETE FROM `rbac_linked_permissions` WHERE `linkedId` = 1002;
-INSERT INTO `rbac_linked_permissions` (`id`, `linkedId`) VALUES
-(196, 1002);
-
--- feature/club-finder: cs_clubfinder.cpp references RBAC_PERM_COMMAND_CLUB_FINDER which the branch never declared.
 INSERT INTO `rbac_permissions` (`id`, `name`) VALUES
 (1003, 'Command: clubfinder')
   ON DUPLICATE KEY UPDATE `name` = 'Command: clubfinder';
