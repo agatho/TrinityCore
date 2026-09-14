@@ -4,6 +4,7 @@
 #include "ObjectMgr.h"
 #include "ItemTemplate.h"
 #include "Player.h"
+#include "TransmogMgr.h"   // GetDefaultItemModifiedAppearance — the renderability gate
 #include "Log.h"
 #include <algorithm>
 #include <array>
@@ -47,7 +48,13 @@ ItemSubclassArmor PreferredArmorForClass(uint8 cls, uint8 level)
         case CLASS_WARRIOR:
         case CLASS_PALADIN:
         case CLASS_DEATH_KNIGHT:
-            return ITEM_SUBCLASS_ARMOR_PLATE;
+            // Plate unlocks at 40, exactly like the Hunter/Shaman mail step
+            // below — before that these classes wear mail. This used to return
+            // PLATE unconditionally, and because the only other level guard is
+            // RequiredLevel, any plate piece whose template reports
+            // RequiredLevel 0 was equippable by a level-16 Warrior (observed
+            // live 2026-09-14 on bot Sellarino, a full plate set at L16).
+            return level >= 40 ? ITEM_SUBCLASS_ARMOR_PLATE : ITEM_SUBCLASS_ARMOR_MAIL;
         case CLASS_HUNTER:
         case CLASS_SHAMAN:
             return level >= 40 ? ITEM_SUBCLASS_ARMOR_MAIL : ITEM_SUBCLASS_ARMOR_LEATHER;
@@ -79,6 +86,24 @@ bool IsArmorSlot(uint8 slot)
             return true;
         default:
             return false;
+    }
+}
+
+// Is this slot drawn on the 3D character model?
+//
+// Neck, fingers and trinkets occupy VisibleItems entries like every other slot
+// but have no geoset — nothing about them ever reaches the model builder. Only
+// the slots that do are subject to the renderability gate in Initialize().
+bool IsRenderedOnModel(uint8 slot)
+{
+    switch (slot)
+    {
+        case EQUIPMENT_SLOT_NECK:
+        case EQUIPMENT_SLOT_FINGER1: case EQUIPMENT_SLOT_FINGER2:
+        case EQUIPMENT_SLOT_TRINKET1: case EQUIPMENT_SLOT_TRINKET2:
+            return false;
+        default:
+            return true;
     }
 }
 
@@ -156,11 +181,37 @@ void Initialize()
     g_initialized = true;
 
     auto const& store = sObjectMgr->GetItemTemplateStore();
-    uint32 examined = 0, indexed = 0;
+    uint32 examined = 0, indexed = 0, skipped_unrenderable = 0;
 
     for (auto const& [entry, tpl] : store)
     {
         ++examined;
+
+        // The item must be RENDERABLE by the client, not merely equippable by
+        // the server. The client builds the 3D paperdoll from
+        // ItemModifiedAppearance -> ItemAppearance -> ItemDisplayInfo; an item
+        // with no ItemModifiedAppearance row has nothing to resolve and the
+        // client null-derefs while drawing the model (ERROR #132). It is
+        // intermittent in a way that hides the cause: the crash needs a COLD
+        // model load, so the same inspect succeeds once the asset is cached,
+        // and packet captures show some inspects of the same bot completing.
+        //
+        // Observed live 2026-09-14: bot Sellarino (Dwarf Warrior, L16) was
+        // wearing items 251573-251580 — a full sequential plate set across all
+        // eight armor slots, present in Item.db2 and ItemSparse.db2 but with no
+        // ItemModifiedAppearance — and inspecting it crashed the retail client.
+        //
+        // This is exactly the condition Item::GetItemModifiedAppearance()
+        // resolves when the core builds the visible-equipment data, so it is
+        // the authoritative "can the client draw this" test rather than a proxy
+        // for it. Checked with appearanceModId 0 because the generator equips
+        // plain items with no bonus/appearance modifier.
+        //
+        // Applied ONLY to slots that are drawn on the character model — see
+        // IsRenderedOnModel(). Gating neck/finger/trinket too would risk
+        // emptying those pools outright if the data simply does not carry
+        // appearances for non-transmoggable slots, which would trade a crash
+        // for bots with no rings, necks or trinkets at all.
         // Allow NoBind, BoE, and BoP for Rare+ (Blue) and Epic. BoP common /
         // uncommon are usually quest items or vendor trash, not equippable
         // upgrades. BoP Rare+ matches what real players loot from dungeons,
@@ -204,6 +255,15 @@ void Initialize()
             case INVTYPE_SHIELD:
             case INVTYPE_HOLDABLE:    target_slot = EQUIPMENT_SLOT_OFFHAND; break;
             default:                  continue;  // unsupported slot
+        }
+
+        // Renderability gate (see the note at the top of the loop). Evaluated
+        // here rather than there because it needs target_slot.
+        if (IsRenderedOnModel(target_slot) &&
+            !TransmogMgr::GetDefaultItemModifiedAppearance(entry))
+        {
+            ++skipped_unrenderable;
+            continue;
         }
 
         // Class weapon-proficiency mask, bit = ItemSubclassWeapon value.
@@ -292,8 +352,14 @@ void Initialize()
                     return a->GetBaseItemLevel() < b->GetBaseItemLevel();
                 });
 
-    TC_LOG_INFO("playerbot.v2", "[BotGearGenerator] indexed {} items (of {} examined) into per-class pools",
-                indexed, examined);
+    // skipped_unrenderable is reported separately because it is the count that
+    // matters after a data import: a sudden jump means a batch of items landed
+    // in Item/ItemSparse without appearances, which is precisely what made the
+    // client crash on inspect before this gate existed.
+    TC_LOG_INFO("playerbot.v2",
+                "[BotGearGenerator] indexed {} items (of {} examined) into per-class pools; "
+                "rejected {} with no ItemModifiedAppearance (not client-renderable)",
+                indexed, examined, skipped_unrenderable);
 }
 
 std::vector<GearItem> GenerateGearFor(GearGenerationContext const& ctx)
@@ -341,6 +407,31 @@ std::vector<GearItem> GenerateGearFor(GearGenerationContext const& ctx)
         for (auto const* tpl : candidates)
         {
             if (tpl->GetBaseRequiredLevel() > ctx.level) continue;
+            // Armor proficiency is LEVEL-dependent, and the pool cannot express
+            // that: Initialize() builds it once, per class, with no wearer, so
+            // it necessarily indexes with PreferredArmorForClass(cls,
+            // MaxPlayerLevel()) and a Warrior's pool legitimately contains
+            // plate. The cap therefore has to be applied HERE, where ctx.level
+            // is known.
+            //
+            // Without this the only level guard on armor is RequiredLevel
+            // above, which is whatever the item template happens to report —
+            // and a plate piece reporting 0 slipped straight onto a level-16
+            // Warrior. Gate on the tier the class may actually wear at this
+            // level instead of trusting the item to declare it.
+            if (IsArmorSlot(slot) && tpl->GetClass() == ITEM_CLASS_ARMOR)
+            {
+                ItemSubclassArmor const allowed =
+                    PreferredArmorForClass(ctx.cls, ctx.level);
+                ItemSubclassArmor const item_armor =
+                    ItemSubclassArmor(tpl->GetSubClass());
+                // MISCELLANEOUS / COSMETIC carry no proficiency requirement
+                // (tabards, shirts, trinket-like armor) — they stay eligible.
+                if (item_armor != ITEM_SUBCLASS_ARMOR_MISCELLANEOUS &&
+                    item_armor != ITEM_SUBCLASS_ARMOR_COSMETIC &&
+                    item_armor > allowed)
+                    continue;
+            }
             // Shield-tank mainhand: never a 2H (see shield_tank note above).
             if (shield_tank && slot == EQUIPMENT_SLOT_MAINHAND &&
                 tpl->GetInventoryType() == INVTYPE_2HWEAPON)

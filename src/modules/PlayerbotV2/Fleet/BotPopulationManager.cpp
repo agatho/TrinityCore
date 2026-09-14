@@ -22,6 +22,7 @@
 #include "Item.h"   // re-gear hygiene: StoreNewItem/EquipItem need the full type
 #include "Bag.h"   // FreeOneJunkBagSlot: GetBagByPos/GetBagSize need the full type
 #include "ObjectMgr.h"   // re-gear hygiene: sObjectMgr->GetItemTemplate for ilvl guard
+#include "TransmogMgr.h"   // re-gear hygiene: renderability test for already-worn gear
 #include "BattlegroundMgr.h"
 #include "DungeonFinding/LFGMgr.h"   // LFG-state guard on overflow/hygiene kicks
 #include "OwnerRegistry.h"           // altbot (owner-bound) kick exemption
@@ -696,7 +697,31 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
             // slot when the generated piece actually wears BETTER. Protects
             // already-good gear (incl. owner-curated alt gear) from a
             // downgrade toward the coarse linear target ramp.
-            if (cur)
+            // An item the CLIENT CANNOT RENDER is a crash, not a downgrade risk,
+            // so neither guard below may stand in the way of replacing it. The
+            // generator no longer hands these out, but bots geared before that
+            // fix are still wearing them, and both guards would happily keep
+            // them: a piece with no ItemModifiedAppearance can still report a
+            // respectable quality and effective ilvl, so "never downgrade" and
+            // "must be a strict upgrade" both resolve in favour of the item that
+            // crashes anyone who inspects the bot (live 2026-09-14, Sellarino
+            // wearing 251573-251580). Any renderable replacement beats it.
+            //
+            // Same predicate as the generator's index-time gate, deliberately:
+            // one definition of "renderable", applied both when choosing gear
+            // and when healing gear already worn.
+            // Restricted to model-drawn slots for the same reason the generator
+            // restricts its gate: neck/finger/trinket never reach the model
+            // builder, so a missing appearance there is not a crash and must not
+            // trigger a forced swap.
+            const bool slot_on_model =
+                (g.slot != EQUIPMENT_SLOT_NECK &&
+                 g.slot != EQUIPMENT_SLOT_FINGER1 && g.slot != EQUIPMENT_SLOT_FINGER2 &&
+                 g.slot != EQUIPMENT_SLOT_TRINKET1 && g.slot != EQUIPMENT_SLOT_TRINKET2);
+            const bool cur_unrenderable =
+                cur && slot_on_model &&
+                !TransmogMgr::GetDefaultItemModifiedAppearance(cur->GetEntry());
+            if (cur && !cur_unrenderable)
             {
                 // Quality guard (operator-reported downgrade): a generated
                 // COMMON/white must NEVER replace an equipped UNCOMMON+ (quest
