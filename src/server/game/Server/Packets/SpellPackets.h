@@ -1572,18 +1572,6 @@ namespace WorldPackets
         // Konsument 0x1EF8DF0: Slot indiziert die Aurenliste der Einheit (Schranke unit[0x5F8],
         // Schrittweite 0x108), EffectIndex indiziert deren Points-Array und wird auf 0 gesetzt.
         // Draht: 190 Pakete, 12..19 B; Beispiel `0fe0 407fab09 441608 0e00 00` = 9 + 2 + 1.
-        class AuraPointsDepleted final : public ServerPacket
-        {
-        public:
-            explicit AuraPointsDepleted() : ServerPacket(SMSG_AURA_POINTS_DEPLETED, 18 + 2 + 1) { }
-
-            WorldPacket const* Write() override;
-
-            ObjectGuid UnitGUID;
-            uint16 Slot = 0;                                ///< Aurenslot wie in SMSG_AURA_UPDATE
-            uint8 EffectIndex = 0;                          ///< Index in AuraDataInfo::Points
-        };
-
         // SMSG_RESUME_CAST (0x67002E)
         // Beleg: Case 0x75052F - RGUID 0x750565 (msg+0x20), Unterleser 0x6BF980 (2x R32 =
         // SpellCastVisual, msg+0x30), RGUID 0x75057D (msg+0x38), RGUID 0x750589 (msg+0x48),

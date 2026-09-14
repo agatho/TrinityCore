@@ -1391,15 +1391,6 @@ WorldPacket const* NotifyDestLocSpellCast::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* AuraPointsDepleted::Write()
-{
-    _worldPacket << UnitGUID;
-    _worldPacket << uint16(Slot);
-    _worldPacket << uint8(EffectIndex);
-
-    return &_worldPacket;
-}
-
 void RequestCrowdControlSpell::Read()
 {
     _worldPacket >> Target;
