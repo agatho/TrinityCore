@@ -2462,7 +2462,7 @@ void PetBattle::SendFinalRoundPacket(bool abandoned)
         {
             if (Player* p = GetPlayerForTeam(PET_BATTLE_TEAM_1))
                 if (Creature* trainer = ObjectAccessor::GetCreature(*p, _npcTrainerGUID))
-                    finalRound.NpcCreatureID = trainer->GetEntry();
+                    finalRound.NpcCreatureID[t] = trainer->GetEntry();
         }
 
         for (uint8 i = 0; i < team.PetCount; ++i)
