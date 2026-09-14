@@ -819,7 +819,10 @@ Group* Group::CreateNpcParty(Player* player)
     // 12.1 captures (gulf 102157): the companion party of a delve runs on PartyIndex 1, the instance
     // category, while a companion picked up in the open world belongs to the home party.
     if (Map const* map = player->FindMap(); map && map->IsDungeon())
+    {
         group->m_groupCategory = GROUP_CATEGORY_INSTANCE;
+        group->m_dungeonDifficulty = map->GetDifficultyID();    // gulf 102157: 208, the delve difficulty
+    }
 
     if (!group->Create(player))
     {
@@ -831,7 +834,7 @@ Group* Group::CreateNpcParty(Player* player)
     return group;
 }
 
-bool Group::AddNpcMember(Creature* creature)
+bool Group::AddNpcMember(Creature* creature, uint8 roles /*= 0*/)
 {
     if (!creature || IsNpcMember(creature->GetGUID()))
         return false;
@@ -848,7 +851,10 @@ bool Group::AddNpcMember(Creature* creature)
     slot.factionGroup = 0;                  // 0 for every creature member in the captures
     slot.subGroup = 0;
     slot.flags = MEMBER_FLAG_COMPANION;
-    slot.roles = lfg::PLAYER_ROLE_DAMAGE;   // gulf 103996: Valeera joins as damage
+    // the captures disagree on the role, so it belongs to the companion rather than to this code:
+    // damage in the two Gulf/Deatholme runs, tank in the Darkway one, 4/8/8/8 for the four NPCs of
+    // a follower dungeon, and 0 in the first frame of the Shadow Enclave run
+    slot.roles = roles;
 
     creature->SetPartyGroupGUID(m_guid);
 
@@ -873,7 +879,11 @@ bool Group::RemoveNpcMember(ObjectGuid guid)
         // with the SMSG_GROUP_DESTROYED that ending a player group sends
         for (MemberSlot const& memberSlot : m_memberSlots)
             if (Player* player = ObjectAccessor::FindConnectedPlayer(memberSlot.guid))
-                player->SendDirectMessage(WorldPackets::Party::GroupUninvite().Write());
+            {
+                WorldPackets::Party::GroupUninvite uninvite;
+                uninvite.Reason = WorldPackets::Party::GROUP_UNINVITE_REASON_COMPANION_PARTY_ENDED;
+                player->SendDirectMessage(uninvite.Write());
+            }
 
         Disband(true);
         return false;
@@ -920,7 +930,7 @@ void Group::SendUpdateToPlayer(Player* player, MemberSlot const* slot /*= nullpt
 
     partyUpdate.PartyFlags = m_groupFlags;
     partyUpdate.PartyIndex = m_groupCategory;
-    partyUpdate.PartyType = IsCreated() ? GROUP_TYPE_NORMAL : GROUP_TYPE_NONE;
+    partyUpdate.PartyType = IsCreated() ? (IsNpcParty() ? GROUP_TYPE_COMPANION : GROUP_TYPE_NORMAL) : GROUP_TYPE_NONE;
 
     partyUpdate.PartyGUID = m_guid;
     partyUpdate.LeaderGUID = m_leaderGuid;

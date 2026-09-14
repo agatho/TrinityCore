@@ -46,6 +46,7 @@
 #include "GridNotifiersImpl.h"
 #include "Group.h"
 #include "GroupMgr.h"
+#include "LFG.h"
 #include "Guild.h"
 #include "InstanceScript.h"
 #include "Item.h"
@@ -5663,11 +5664,11 @@ void Spell::EffectLaunchQuestChoice()
     unitTarget->ToPlayer()->SendPlayerChoice(GetCaster()->GetGUID(), effectInfo->MiscValue);
 }
 
-// SPELL_EFFECT_CHANGE_PARTY_MEMBERS: a creature joins or leaves a player's party frame. MiscValue 0 leaves,
-// any other value joins (the 12.1 client data uses 1 for every join and 2/3 for the second and third
-// companion of a scripted trio). The caster is the creature and the target the player in every one of the
-// 39 spells that use this effect - "Npc Join Player Party" 1249690 is cast by the delve companion on its
-// summoner right before it appears in SMSG_PARTY_UPDATE.
+// SPELL_EFFECT_CHANGE_PARTY_MEMBERS: a creature joins or leaves a player's party frame. MiscValue 0 leaves
+// and anything else joins; every "leave" spell of the 39 that use this effect carries 0 and every "join" one
+// carries 1, apart from two Legion spells that carry 2 and 3 for reasons the client data does not explain.
+// The caster is the creature and the target the player - "Npc Join Player Party" 1249690 is cast by the delve
+// companion on its summoner right before it appears in SMSG_PARTY_UPDATE (gulf 103987 -> 103996).
 void Spell::EffectChangePartyMembers()
 {
     if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
@@ -5714,7 +5715,7 @@ void Spell::EffectChangePartyMembers()
         group = Group::CreateNpcParty(player);
 
     if (group)
-        group->AddNpcMember(companion);
+        group->AddNpcMember(companion, lfg::PLAYER_ROLE_DAMAGE);    // the role a lone companion joins with
 }
 
 void Spell::EffectUncageBattlePet()
