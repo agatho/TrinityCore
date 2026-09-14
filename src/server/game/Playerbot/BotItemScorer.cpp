@@ -20,7 +20,7 @@ int32 EffectiveItemLevelForLevel(ItemTemplate const* tpl, uint8 level)
     bonus.Initialize(tpl);
     return int32(Item::GetItemLevel(tpl, bonus, level, /*fixedLevel*/ 0,
         /*minItemLevel*/ 0, /*minItemLevelCutoff*/ 0, /*maxItemLevel*/ 0,
-        /*pvpBonus*/ false, /*azeriteLevel*/ 0));
+        /*pvpBonus*/ false, /*azeriteLevel*/ 0, /*overrideContentTuningId*/ 0));
 }
 
 namespace {
