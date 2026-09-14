@@ -757,7 +757,11 @@ enum RBACPermissions
     // IF YOU ADD NEW PERMISSIONS, ADD THEM IN 3.3.5 BRANCH AS WELL!
     //
     // custom permissions 1000+
-    RBAC_PERM_COMMAND_SHOP                                   = 1000,
+    // 1002/1003, NOT 887/888 and NOT 1000. Every integration line this branch meets already uses
+    // those: 887 = RBAC_PERM_CHANGE_TURN_RATE, 888 = RBAC_PERM_COMMAND_CHEAT_DIMINISHINGRETURNS,
+    // 1000 = RBAC_PERM_CHAT_MUTED_PARENTAL_CONTROLS. Duplicate enum values are legal C++, so a
+    // collision here does not fail the build - it silently grants the wrong permission.
+    RBAC_PERM_COMMAND_SHOP                                   = 1002,
     RBAC_PERM_MAX
 };
 
