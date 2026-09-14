@@ -367,4 +367,170 @@ WorldPacket const* CharacterUpgradeAborted::Write()
 
     return &_worldPacket;
 }
+
+void CharacterUpgradeManualUnrevokeRequest::Read()
+{
+    _worldPacket >> CharacterGUID;
+}
+
+void GetVasAccountCharacterList::Read()
+{
+    _worldPacket >> Field1;
+    _worldPacket >> Field2;
+}
+
+void GetVasTransferTargetRealmList::Read()
+{
+    _worldPacket >> Field1;
+    _worldPacket >> Field2;
+}
+
+void VasGetQueueMinutes::Read()
+{
+    // The response echoes a uint64 correlation handle; the request carries it. Read it as a uint64 when the
+    // body is wide enough, else zero-extend a uint32 - robust against either request width without throwing.
+    if (_worldPacket.size() - _worldPacket.rpos() >= sizeof(uint64))
+        _worldPacket >> Handle;
+    else
+    {
+        uint32 low = 0;
+        _worldPacket >> low;
+        Handle = low;
+    }
+}
+
+void VasCheckTransferOk::Read()
+{
+    _worldPacket >> Field1;
+}
+
+void BattlePayStartVasPurchase::Read()
+{
+    // Full wire (serializer sub_7FF72907C390): 4x uint32 + 4x packed guid, then a 5-byte bit block of five
+    // string-length prefixes (6,7,7,6,12 bits) followed by the single IsValidationOnly bool bit, then the
+    // string bodies. Read through the bool; the string bodies are not needed, so rfinish afterwards.
+    _worldPacket >> SequenceId;
+    _worldPacket >> ServiceType;
+    _worldPacket >> Guid1;
+    _worldPacket >> Context;
+    _worldPacket >> TargetRealmAddress;
+    _worldPacket >> Guid2;
+    _worldPacket >> Guid3;
+    _worldPacket >> Guid4;
+
+    _worldPacket.ReadBits(6);    // len(string1)
+    _worldPacket.ReadBits(7);    // len(string2)
+    _worldPacket.ReadBits(7);    // len(string3)
+    _worldPacket.ReadBits(6);    // len(string4)
+    _worldPacket.ReadBits(12);   // len(string5)
+    IsValidationOnly = _worldPacket.ReadBit();
+
+    _worldPacket.rfinish();      // string bodies not needed
+}
+
+void BattlePayDistributionAssignVas::Read()
+{
+    _worldPacket >> Token;
+    _worldPacket.rfinish();   // the remaining fields are not modelled (see header); consume them
+}
+
+WorldPacket const* VasGetQueueMinutesResponse::Write()
+{
+    _worldPacket << uint64(Handle);
+    _worldPacket << uint32(QueueMinutes);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CharacterUpgradeManualUnrevokeResult::Write()
+{
+    _worldPacket << uint32(Result);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* BattlePayDistributionAssignVasResponse::Write()
+{
+    _worldPacket << uint32(Field1);
+    _worldPacket << uint32(Field2);
+    _worldPacket << uint32(Result);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* GetVasAccountCharacterListResult::Write()
+{
+    // Outer header: 4 uint32 (both dump versions agree), then a uint32-counted vector of characters. The
+    // per-entry string pair shares one bit-packed length block exactly as the client reads it: the 6-bit
+    // name length then the 9-bit realm length (WriteBits 6 then 9, FlushBits), then the two raw bodies -
+    // this reproduces the verified nameLen = A>>2, realmLen = ((A&3)<<7)|(B>>1).
+    _worldPacket << uint32(Field1);
+    _worldPacket << uint32(Field2);
+    _worldPacket << uint32(Field3);
+    _worldPacket << uint32(Characters.size());
+
+    for (VasAccountCharacterInfo const& c : Characters)
+    {
+        _worldPacket << c.CharacterGUID;
+        _worldPacket << c.AccountGUID;
+        _worldPacket << uint32(c.VirtualRealmAddress);
+        _worldPacket << uint8(c.Flags1);
+        _worldPacket << uint8(c.Flags2);
+        _worldPacket << uint8(c.Flags3);
+        _worldPacket << uint8(c.Flags4);
+        _worldPacket << uint64(c.HousingData);
+        _worldPacket << uint32(c.Field9);
+        _worldPacket.WriteBits(c.CharacterName.length(), 6);
+        _worldPacket.WriteBits(c.RealmName.length(), 9);
+        _worldPacket.FlushBits();
+        _worldPacket.append(c.CharacterName.data(), c.CharacterName.length());
+        _worldPacket.append(c.RealmName.data(), c.RealmName.length());
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* VasCheckTransferOkResponse::Write()
+{
+    _worldPacket << uint32(Field1);
+    _worldPacket << uint32(Field2);
+    _worldPacket << CharacterGUID;
+    _worldPacket << uint32(Accounts.size());
+
+    for (VasTransferWowAccount const& a : Accounts)
+    {
+        _worldPacket << a.AccountGUID;
+        _worldPacket.WriteBits(a.AccountName.length(), 11);
+        _worldPacket.FlushBits();
+        _worldPacket.append(a.AccountName.data(), a.AccountName.length());
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* GetVasTransferTargetRealmListResult::Write()
+{
+    // Outer = 3 uint32 header + a flat uint32 count + the realm vector (VERIFIED, same shape as the account
+    // list). Header fields have no proven offline meaning and stay 0; the 6 uint32 per realm entry are an
+    // unlabeled reflected type populated best-effort - live-test-pending.
+    _worldPacket << uint32(Field1);
+    _worldPacket << uint32(Field2);
+    _worldPacket << uint32(Field3);
+    _worldPacket << uint32(Realms.size());
+
+    for (VasTargetRealmInfo const& r : Realms)
+    {
+        _worldPacket << uint32(r.WowRealmAddress);
+        _worldPacket << uint32(r.RealmId);
+        _worldPacket << uint32(r.Flags);
+        _worldPacket << uint32(r.PopulationState);
+        _worldPacket << uint32(r.CategoryId);
+        _worldPacket << uint32(r.ConfigId);
+        _worldPacket.WriteBits(r.RealmName.length(), 9);
+        _worldPacket.FlushBits();
+        _worldPacket.append(r.RealmName.data(), r.RealmName.length());
+    }
+
+    return &_worldPacket;
+}
 }

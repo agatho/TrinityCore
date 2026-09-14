@@ -774,6 +774,11 @@ enum RBACPermissions
     RBAC_PERM_CHAT_MUTED_PARENTAL_CONTROLS                   = 1000,
     RBAC_PERM_COMMAND_RELOAD_CHAT_SPAM_RECORD                = 1001,
 
+    // 1002/1003, NOT 887/888 and NOT 1000. On the 12.1 integration line 887 is
+    // RBAC_PERM_CHANGE_TURN_RATE, 888 is RBAC_PERM_COMMAND_CHEAT_DIMINISHINGRETURNS and 1000 is
+    // RBAC_PERM_CHAT_MUTED_PARENTAL_CONTROLS - all three already inserted by other features'
+    // auth updates. See sql/updates/auth/master/2026_08_09_00_auth.sql.
+    RBAC_PERM_COMMAND_SHOP                                   = 1002,
     RBAC_PERM_MAX
 };
 
