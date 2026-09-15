@@ -847,12 +847,12 @@ namespace WorldPackets
         // uint16 FactionIndex (confirmed independently via WowPacketParser's CMSG_SET_FACTION_AT_WAR parser
         // across V3_4/V4_4/V5_5, all ReadUInt16) - CMSG and SMSG evidently use different wire widths for the
         // same logical field, which the reflection-based JAM serializer allows.
-        // UNVERIFIED: the trailing u16 ("Flags"). No sniff exists for this opcode (0 hits) and WowPacketParser
-        // has no SMSG_SET_FACTION_AT_WAR parser at all in any build, so there is no independent cross-check.
-        // Leading hypothesis: it mirrors the resulting ReputationFlags bitmask (ReputationMgr.h) - that enum's
-        // underlying type is uint16, an exact width match with this field - but no bitfield/bit-order evidence
-        // confirms it, so it is populated best-effort from FactionState::Flags and must be re-verified against
-        // a real sniff before being treated as ground truth.
+        // Flags is the faction's ReputationFlags. 12.1.0.69587 client: reader Handler_SMSG_SET_FACTION_AT_WAR
+        // (0x7FF7CD3C5FD0) reads uint32 then uint16, and the consumer (0x7FF7CF337190) treats FactionIndex as an
+        // index (< 1000) into its 16-byte faction records and copies exactly bit 0x2 of Flags - ReputationFlags::AtWar
+        // - into that record's flag word, setting or clearing it. No other bit is read. Retail was never captured
+        // toggling a faction's at-war state (53 genuine 12.1 captures), so whether retail also sends this after
+        // CMSG_SET_FACTION_AT_WAR is unconfirmed; sending the resulting state keeps the client's flag in sync.
         class SetFactionAtWarResult final : public ServerPacket
         {
         public:
@@ -861,7 +861,7 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             uint32 FactionIndex = 0; // RepListID, see comment above
-            uint16 Flags = 0;        // UNVERIFIED, see comment above
+            uint16 Flags = 0;        // ReputationFlags; the client reads only AtWar (0x2)
         };
 
         class SetFactionInactive final : public ClientPacket
