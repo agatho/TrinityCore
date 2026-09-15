@@ -586,6 +586,71 @@ namespace WorldPackets
 
             Optional<uint8> PartyIndex;
             bool Accept = false;
+        // The realm-wide half of an encounter pull, sent in the same tick as SMSG_INSTANCE_ENCOUNTER_START.
+        // 12.1.0.69587 client reader 0x7FF7CD3CD380: uint32, uint16, uint32, then a counted array of 720-byte
+        // per-member records (reader 0x7FF7CD42E5A0). The count is 0 in all 36 captured frames across ten
+        // Midnight dungeon captures, so the record layout is unverified and is written as an empty list.
+        class EncounterStart final : public ServerPacket
+        {
+        public:
+            explicit EncounterStart() : ServerPacket(SMSG_ENCOUNTER_START, 4 + 2 + 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 DungeonEncounterID = 0;
+            uint16 DifficultyID = 0;
+            uint32 GroupSize = 0;
+        };
+
+        // 12.1.0.69587 client reader 0x7FF7CD3CD4A0: uint32, uint16, uint32, uint32, one bit. DurationMS is the
+        // fight length: it equals the capture's own START -> END tick delta to within 5 ms on every pull, and
+        // Success is set exactly on the pulls that are followed by SMSG_BOSS_KILL.
+        class EncounterEnd final : public ServerPacket
+        {
+        public:
+            explicit EncounterEnd() : ServerPacket(SMSG_ENCOUNTER_END, 4 + 2 + 4 + 4 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 DungeonEncounterID = 0;
+            uint16 DifficultyID = 0;
+            uint32 GroupSize = 0;
+            uint32 DurationMS = 0;
+            bool Success = false;
+        };
+
+        // Retail sends AllowRelease = false immediately before every SMSG_ENCOUNTER_START.
+        class InstanceEncounterUpdateAllowReleaseInProgress final : public ServerPacket
+        {
+        public:
+            explicit InstanceEncounterUpdateAllowReleaseInProgress() : ServerPacket(SMSG_INSTANCE_ENCOUNTER_UPDATE_ALLOW_RELEASE_IN_PROGRESS, 1) { }
+
+            WorldPacket const* Write() override;
+
+            bool AllowRelease = false;
+        };
+
+        // Encounter-specific: set by the boss at the pull and cleared at the kill (Maisara Caverns), never sent
+        // by bosses that do not suppress release.
+        class InstanceEncounterUpdateSuppressRelease final : public ServerPacket
+        {
+        public:
+            explicit InstanceEncounterUpdateSuppressRelease() : ServerPacket(SMSG_INSTANCE_ENCOUNTER_UPDATE_SUPPRESS_RELEASE, 1) { }
+
+            WorldPacket const* Write() override;
+
+            bool SuppressRelease = false;
+        };
+
+        // 56 frames in eleven captures, LegacyRulesActive = 0 in every one; sent on map entry.
+        class LegacyLootRules final : public ServerPacket
+        {
+        public:
+            explicit LegacyLootRules() : ServerPacket(SMSG_LEGACY_LOOT_RULES, 1) { }
+
+            WorldPacket const* Write() override;
+
+            bool LegacyRulesActive = false;
         };
     }
 }

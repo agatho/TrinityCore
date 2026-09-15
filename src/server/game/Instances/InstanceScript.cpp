@@ -403,6 +403,14 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
             {
                 case IN_PROGRESS:
                 {
+                    // 12.1 order, same tick: ALLOW_RELEASE_IN_PROGRESS(false), ENCOUNTER_START, INSTANCE_ENCOUNTER_START
+                    dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
+                    if (dungeonEncounter)
+                    {
+                        SendUpdateAllowReleaseInProgress(false);
+                        SendRealmEncounterStart(dungeonEncounter->ID);
+                    }
+
                     if (!activeChallengeMode)
                     {
                         uint32 resInterval = GetCombatResurrectionChargeInterval();
@@ -420,6 +428,10 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 }
                 case FAIL:
                 {
+                    dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
+                    if (dungeonEncounter)
+                        SendRealmEncounterEnd(dungeonEncounter->ID, false);
+
                     if (!activeChallengeMode)
                         ResetCombatResurrections();
                     SendEncounterEnd();
@@ -435,15 +447,17 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 }
                 case DONE:
                 {
+                    // 12.1 order, same tick: ENCOUNTER_END(true), BOSS_KILL, INSTANCE_ENCOUNTER_END
                     if (!activeChallengeMode)
                         ResetCombatResurrections();
-                    SendEncounterEnd();
                     dungeonEncounter = bossInfo->GetDungeonEncounterForDifficulty(instance->GetDifficultyID());
                     if (dungeonEncounter)
                         ClearEncounterTimeline(dungeonEncounter->ID);
 
                     if (dungeonEncounter)
                     {
+                        SendRealmEncounterEnd(dungeonEncounter->ID, true);
+
                         bool const isRaidEncounter = instance->IsRaid();
                         instance->DoOnPlayers([&](Player* player)
                         {
@@ -464,6 +478,8 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
 
                         UpdateLfgEncounterState(bossInfo);
                     }
+
+                    SendEncounterEnd();
 
                     // SMSG_FLUSH_COMBAT_LOG_FILE (0x670010) - leere Nachricht.
                     // Am Ende einer Begegnung schreibt der Client sein WoWCombatLog.txt sofort
@@ -1306,6 +1322,52 @@ void InstanceScript::SendEncounterTimelineTo(Player* player) const
         return;
 
     player->SendDirectMessage(sync.Write());
+void InstanceScript::SendRealmEncounterStart(uint32 dungeonEncounterId)
+{
+    _encounterStartTimes[dungeonEncounterId] = GameTime::GetGameTimeMS();
+
+    WorldPackets::Instance::EncounterStart encounterStart;
+    encounterStart.DungeonEncounterID = dungeonEncounterId;
+    encounterStart.DifficultyID = uint16(instance->GetDifficultyID());
+    encounterStart.GroupSize = instance->GetPlayersCountExceptGMs();
+
+    instance->SendToPlayers(encounterStart.Write());
+}
+
+void InstanceScript::SendRealmEncounterEnd(uint32 dungeonEncounterId, bool success)
+{
+    WorldPackets::Instance::EncounterEnd encounterEnd;
+    encounterEnd.DungeonEncounterID = dungeonEncounterId;
+    encounterEnd.DifficultyID = uint16(instance->GetDifficultyID());
+    encounterEnd.GroupSize = instance->GetPlayersCountExceptGMs();
+    encounterEnd.Success = success;
+
+    // Measured, not assumed: the elapsed time since this encounter's START. 0 when the start was never seen
+    // (e.g. a script that calls DONE without IN_PROGRESS) rather than an invented value.
+    auto itr = _encounterStartTimes.find(dungeonEncounterId);
+    if (itr != _encounterStartTimes.end())
+    {
+        encounterEnd.DurationMS = GameTime::GetGameTimeMS() - itr->second;
+        _encounterStartTimes.erase(itr);
+    }
+
+    instance->SendToPlayers(encounterEnd.Write());
+}
+
+void InstanceScript::SendUpdateAllowReleaseInProgress(bool allowRelease)
+{
+    WorldPackets::Instance::InstanceEncounterUpdateAllowReleaseInProgress packet;
+    packet.AllowRelease = allowRelease;
+
+    instance->SendToPlayers(packet.Write());
+}
+
+void InstanceScript::SendUpdateSuppressRelease(bool suppressRelease)
+{
+    WorldPackets::Instance::InstanceEncounterUpdateSuppressRelease packet;
+    packet.SuppressRelease = suppressRelease;
+
+    instance->SendToPlayers(packet.Write());
 }
 
 void InstanceScript::UpdateLfgEncounterState(BossInfo const* bossInfo)

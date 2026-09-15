@@ -29252,6 +29252,11 @@ void Player::SendInitialPacketsBeforeAddToMap()
 
 void Player::SendInitialPacketsAfterAddToMap()
 {
+    // 56 of 56 captured frames across eleven 12.1 captures carry LegacyRulesActive = 0, one per map entry.
+    WorldPackets::Instance::LegacyLootRules legacyLootRules;
+    legacyLootRules.LegacyRulesActive = false;
+    SendDirectMessage(legacyLootRules.Write());
+
     UpdateVisibilityForPlayer();
 
     // Re-apply any managed-world-state stage buffs (war-effort rewards) this character is currently eligible for.
