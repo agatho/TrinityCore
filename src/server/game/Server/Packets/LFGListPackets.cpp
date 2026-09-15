@@ -379,7 +379,7 @@ WorldPacket const* LFGListSearchStatus::Write()
     return &_worldPacket;
 }
 
-// One member record. Client reader 0x7580F0 + tail 0x6E7EA0; the head flag byte comes AFTER the tail.
+// One member record, reader 0x7FF7CD528140 (see SearchResultMember).
 static void WriteSearchResultMember(ByteBuffer& data, SearchResultMember const& member)
 {
     data << member.Guid;
@@ -387,31 +387,37 @@ static void WriteSearchResultMember(ByteBuffer& data, SearchResultMember const& 
     data << uint8(member.ClassID);
     data << uint8(member.Role);
     data << uint32(member.SpecID);
-    data << uint8(0);                          // +24, zero-filled (no consumer evidence)
+    data << uint8(member.LfgRoles);
 
-    // tail block (0x6E7EA0)
-    data << member.Guid;
-    data << uint32(0);                         // +20
-    data << uint32(0);                         // +24
-    data << uint32(0);                         // +28
-    data << uint32(0);                         // +32
-    data << uint32(0);                         // +36
-    data << uint64(0);                         // +40
-    data << uint64(0);                         // +48
-    data << uint32(0);                         // +56
-    data << Bits<1>(false);                    // tail flag (+16)
+    // tail block (RVA 0x6E7EA0): leaver bookkeeping keyed by the Battle.net account
+    data << member.BnetAccountGuid;
+    data << uint32(0);
+    data << uint32(0);
+    data << uint32(0);
+    data << uint32(0);
+    data << uint32(0);
+    data << uint64(0);
+    data << uint64(0);
+    data << uint32(0);
+    data << Bits<1>(member.IsLeaver);
     data.FlushBits();
 
-    // 12.1: the head flag byte is written here, behind the tail. Emitting it before the tail (the 68275
-    // order) shifted every one of the tail's 45 bytes.
     data << Bits<1>(member.IsLeader);
     data.FlushBits();
 }
 
-// One SMSG_LFG_LIST_SEARCH_RESULTS row, client reader 0x758320. Order per the header comment.
+// The descriptor as a search row carries it: the leader's score rides in the row (+2056), the embedded copy is empty in
+// every retail row.
+static ListingDescriptor RowDescriptor(SearchResultListing const& row)
+{
+    ListingDescriptor descriptor = row.Listing;
+    descriptor.LeaderScore = { };
+    return descriptor;
+}
+
+// One SMSG_LFG_LIST_SEARCH_RESULTS row, reader 0x7FF7CD528370 (see SearchResultListing).
 static ByteBuffer& operator<<(ByteBuffer& data, SearchResultListing const& row)
 {
-    // The row header is a RideTicket in disguise: guid, id, type 4, time, one bit.
     data << row.GroupGuid;
     data << uint32(row.ListingId);
     data << uint32(4);                              // RideType::LfgListListing
@@ -419,57 +425,46 @@ static ByteBuffer& operator<<(ByteBuffer& data, SearchResultListing const& row)
     data << Bits<1>(false);                         // IsCrossFaction
     data.FlushBits();
 
-    data << uint32(row.Age);                        // +40
-    data << row.Listing;                            // +48, 12.1: position 3, was position 15 in 68275
-    // UNVERIFIED: constant taken from observation, not from a decoded consumer - 68974 carried 3 here,
-    // 68275 carried 5, and no 12.1 capture of this message exists. Its meaning is unknown.
-    data << uint8(3);                               // +1816
-    data << row.LeaderGuid;                         // +1824
-    data << row.LeaderGuid;                         // +1840
-    data << row.LeaderGuid;                         // +1856
-    data << row.LeaderGuid;                         // +1872
-    data << row.LeaderGuid;                         // +1888
-    data << uint32(0);                              // +1904
-    data << uint32(0);                              // +1908
-    data << uint32(0);                              // +1912
-    data << uint32(0);                              // GuidList1 count
-    data << uint32(0);                              // GuidList2 count
-    data << uint32(0);                              // GuidList3 count
-    data << uint32(uint32(row.Members.size()));     // MemberCount
-    data << uint32(0);                              // +2016
-    data << uint64(row.PostTime);                   // +2024
-    data << uint8(0);                               // +2032
-    data << row.GroupGuid;                          // +2040
-    data << row.Listing.LeaderScore;                // +2056, 12.1: before the 9-entry table, was after it
-
-    // Source for the VALUES, not just the shape - it was dropped when this block was rewritten for 12.1 and
-    // is restored here verbatim: the 12.0.7.68974 capture carries every entry as {u32 0, u8 index}. An
-    // earlier writer emitted {u32 index, u8 0}, which has the same byte count and put the running index into
-    // the wrong client field. 68974 remains the only measurement of these values. The three 12.1 recordings
-    // of this opcode that DO exist (c:\dumps\wpp_work\lfg_ref\69273_s69273_a_5A0002_0/1/2.bin) cannot
-    // confirm them: each body is 6 bytes, 00 00 00 00 00 00, i.e. the empty form - u16 row count 0 followed
-    // by the trailing u32 - so not one of them reaches a row, let alone this table. (An earlier version of
-    // this note cited "0x3D0259" for the missing capture. That is CMSG_LFG_LOREWALKING_UPDATE_REQUEST, a
-    // different opcode of this same unit; the message being written here is SMSG_LFG_LIST_SEARCH_RESULTS =
-    // 0x5A0002.)
-    // What 12.1 changed is the POSITION of the table relative to LeaderScore, and that is read from the
-    // reader at RVA 0x740020, not from any capture.
-    for (uint32 i = 0; i < 9; ++i)                  // +2088, fixed 9-entry {u32,u8} table (reader 0x740020)
+    data << uint32(row.Revision);
+    data << RowDescriptor(row);
+    // Not read by any 12.1 consumer of the row; 7 in all 105 retail 12.1 rows.
+    data << uint8(7);
+    data << row.LeaderGuid;
+    data << row.LastEditorGuid;
+    data << row.NameEditorGuid;
+    data << row.CommentEditorGuid;
+    data << row.VoiceChatEditorGuid;
+    data << uint32(row.LeaderVirtualRealmAddress);
+    data << uint32(row.LeaderAreaID);
+    data << uint32(0);                              // +1912: only ever set by an update record's flag bit
+    data << uint32(row.BNetFriendGuids.size());
+    data << uint32(row.CharacterFriendGuids.size());
+    data << uint32(row.GuildMateGuids.size());
+    data << uint32(row.Members.size());
+    data << uint32(0);                              // +2016: only ever set by an update record
+    data << uint64(row.PostTime);
+    data << uint8(0);                               // +2032: no 12.1 consumer; 0 in 93 of 105 retail rows
+    data << row.GroupGuid;
+    data << row.LeaderScore;
+    for (uint32 bracket = 0; bracket < row.LeaderPvpRatings.size(); ++bracket)
     {
-        data << uint32(0);
-        data << uint8(i);
+        data << uint32(row.LeaderPvpRatings[bracket]);
+        data << uint8(bracket);
     }
-    // UNVERIFIED: same class as +1816 - 68974 carried 3, meaning unknown, no 12.1 capture to confirm it.
-    data << uint8(3);                               // +2160
-    data << uint8(0);                               // +2161
+    data << uint8(row.LeaderFactionMask);
+    data << uint8(row.CensorFlags);
 
-    // the three PackedGuid lists are empty (counts written as 0 above) -> nothing to emit
+    for (ObjectGuid const& guid : row.BNetFriendGuids)
+        data << guid;
+    for (ObjectGuid const& guid : row.CharacterFriendGuids)
+        data << guid;
+    for (ObjectGuid const& guid : row.GuildMateGuids)
+        data << guid;
 
     for (SearchResultMember const& member : row.Members)
         WriteSearchResultMember(data, member);
 
-    // 12.1: the trailing bit belongs at the very end, behind the members.
-    data << Bits<1>(false);                         // +1916
+    data << Bits<1>(row.HasSelf);
     data.FlushBits();
 
     return data;
@@ -485,12 +480,12 @@ WorldPacket const* LFGListSearchResults::Write()
     return &_worldPacket;
 }
 
+// One update record, reader 0x7FF7CD528690 (see LFGListSearchResultsUpdate).
 WorldPacket const* LFGListSearchResultsUpdate::Write()
 {
     _worldPacket << uint32(Listings.size());
     for (SearchResultListing const& row : Listings)
     {
-        // header block: again a RideTicket in disguise
         _worldPacket << row.GroupGuid;
         _worldPacket << uint32(row.ListingId);
         _worldPacket << uint32(4);                  // RideType::LfgListListing
@@ -498,24 +493,54 @@ WorldPacket const* LFGListSearchResultsUpdate::Write()
         _worldPacket << Bits<1>(false);
         _worldPacket.FlushBits();
 
-        _worldPacket << uint32(row.Age);            // +40
-        _worldPacket << uint32(row.Members.size()); // member count
-        _worldPacket << row.Listing;                // +224
-        _worldPacket << uint8(0);                   // +2002
+        _worldPacket << uint32(row.Revision);
+        _worldPacket << uint32(row.Members.size());
+        _worldPacket << RowDescriptor(row);
+        _worldPacket << uint8(0);
 
         for (SearchResultMember const& member : row.Members)
             WriteSearchResultMember(_worldPacket, member);
 
-        // 21 bits across three bytes (+3 padding): 7 presence flags for the seven trailing optionals,
-        // 12 plain bools, and a presence/value pair for one in-band bool - the per-bit map is in the header.
-        // Every presence flag stays 0, so no optionals follow. Bit 4 is the one bool with a decoded meaning
-        // and a producer: it is the sticky half of the client's isDelisted (applier RVA 0x24DCDD0 ->
-        // stored +2196, read by the Lua filler RVA 0x24E95D0 as `+2196 || +2197`), and it is what makes a
-        // delisted row grey out in a browser that is still open. The remaining ten bools are documented as
-        // UNVERIFIED in the header and go out as zero.
-        for (uint32 i = 0; i < 21; ++i)
-            _worldPacket << Bits<1>(i == 4 && row.Delisted);
+        uint32 const changes = row.Changes;
+        bool const leader = (changes & SEARCH_RESULT_CHANGE_LEADER) != 0;
+        bool const name = (changes & SEARCH_RESULT_CHANGE_NAME) != 0;
+        bool const comment = (changes & SEARCH_RESULT_CHANGE_COMMENT) != 0;
+        bool const voiceChat = (changes & SEARCH_RESULT_CHANGE_VOICE_CHAT) != 0;
+
+        _worldPacket << Bits<1>(leader);
+        _worldPacket << Bits<1>(leader);
+        _worldPacket << Bits<1>(false);             // flag +1912 present
+        _worldPacket << Bits<1>(false);             // u32 +2016 present
+        _worldPacket << Bits<1>(row.Delisted);
+        _worldPacket << Bits<1>(row.Delisted);
+        _worldPacket << Bits<1>(false);             // guid the applier does not read
+        _worldPacket << Bits<1>(name);
+        _worldPacket << Bits<1>(comment);
+        _worldPacket << Bits<1>(voiceChat);
+        _worldPacket << Bits<1>((changes & SEARCH_RESULT_CHANGE_REQUIRED_ITEM_LEVEL) != 0);
+        _worldPacket << Bits<1>((changes & SEARCH_RESULT_CHANGE_AUTO_ACCEPT) != 0);
+        _worldPacket << Bits<1>((changes & SEARCH_RESULT_CHANGE_PRIVATE) != 0);
+        _worldPacket << Bits<1>((changes & SEARCH_RESULT_CHANGE_REQUIRED_DUNGEON_SCORE) != 0);
+        _worldPacket << Bits<1>((changes & SEARCH_RESULT_CHANGE_REQUIRED_PVP_RATING) != 0);
+        _worldPacket << Bits<1>((changes & SEARCH_RESULT_CHANGE_PLAYSTYLE) != 0);
+        _worldPacket << Bits<1>(false);             // not read by the applier
+        _worldPacket << Bits<1>((changes & SEARCH_RESULT_CHANGE_CROSS_FACTION) != 0);
+        _worldPacket << Bits<1>((changes & SEARCH_RESULT_CHANGE_ACTIVITIES) != 0);
+        _worldPacket << Bits<1>((changes & SEARCH_RESULT_CHANGE_NEW_PLAYER_FRIENDLY) != 0);
+        _worldPacket << Bits<1>(false);             // flag +1912 value
         _worldPacket.FlushBits();
+
+        if (leader)
+        {
+            _worldPacket << row.LeaderGuid;
+            _worldPacket << uint32(row.LeaderVirtualRealmAddress);
+        }
+        if (name)
+            _worldPacket << row.NameEditorGuid;
+        if (comment)
+            _worldPacket << row.CommentEditorGuid;
+        if (voiceChat)
+            _worldPacket << row.VoiceChatEditorGuid;
     }
 
     return &_worldPacket;

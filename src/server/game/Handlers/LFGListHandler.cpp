@@ -187,7 +187,7 @@ namespace
         result.StateBits = stateBits;
 
         if (listing)
-            sLFGListMgr.FillSearchRow(result.Row, *listing);
+            sLFGListMgr.FillSearchRow(result.Row, *listing, player);
         else
         {
             // The listing is gone, so there is no row to send. The consumer assigns whatever row arrives
@@ -568,7 +568,7 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     for (LFGList::Listing const* listing : matches)
     {
         WorldPackets::LFGList::SearchResultListing row;
-        sLFGListMgr.FillSearchRow(row, *listing);
+        sLFGListMgr.FillSearchRow(row, *listing, GetPlayer());
         results.Listings.push_back(std::move(row));
     }
     SendPacket(results.Write());
@@ -653,7 +653,7 @@ void WorldSession::HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApply
     FillApplicationTicket(result.Ticket, *app);
     result.ApplicationExpiration = LFGListMgr::GetApplicationExpiration(*app);
     FillListingTicket(result.ListingTicket, *listing);
-    sLFGListMgr.FillSearchRow(result.Row, *listing);
+    sLFGListMgr.FillSearchRow(result.Row, *listing, player);
     SendPacket(result.Write());
 
     SendApplicationStatus(*listing, *app);

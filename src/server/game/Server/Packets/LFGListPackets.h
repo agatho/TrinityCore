@@ -625,13 +625,16 @@ namespace WorldPackets
             bool Complete = true;           // on the wire, read by nobody in the 12.1 client
         };
 
-        // One member record of a search-result row. Client 12.1.0.69382 reader @ RVA 0x7580F0
-        // (in-memory stride 96), tail block reader @ RVA 0x6E7EA0.
-        //   PackedGuid ; u8 Level ; u8 ClassID ; u8 Role ; u32 SpecID ; u8 ;
-        //   tail { PackedGuid ; u32 x5 ; u64 ; u64 ; u32 ; one byte bit7 } ;
-        //   one byte bit7 IsLeader
-        // 12.1 drift: the head flag byte moved from BEFORE the tail block to AFTER it. Emitting it early
-        // shifted the whole 45-byte tail by one byte.
+        // One member record of a search-result row, 96 bytes in the client. Reader 0x7FF7CD528140 at 12.1.0.69587, tail
+        // block reader RVA 0x6E7EA0; what each byte becomes is read off C_LFGList.GetSearchResultPlayerInfo's builder
+        // (0x7FF7CF2AFD50) and GetSearchResultMemberCounts (0x7FF7CF2AFF00):
+        //   PackedGuid Guid(+0) ; u8 Level(+17) ; u8 ClassID(+18) ; u8 Role(+19, counted per role) ; u32 SpecID(+20) ;
+        //   u8 LfgRoles(+24, bits 2/4/8 = lfgRoles.tank/healer/dps) ;
+        //   tail(+32) { PackedGuid BnetAccountGuid ; u32 x5 ; u64 x2 ; u32 ; bit IsLeaver(+48) } ;
+        //   bit IsLeader(+16)
+        // The client shows isLeaver only for a Mythic+ activity (DifficultyID 8, 0x7FF7CF2AD920). In 105 retail 12.1 rows
+        // (housindandpremadegroup.pkt) LfgRoles is 0 in all 250 members and the tail guid is the member's Battle.net
+        // account guid (HighGuid 30) in all 250; the tail's other scalars are leaver bookkeeping this server does not keep.
         struct SearchResultMember
         {
             ObjectGuid Guid;
@@ -639,37 +642,75 @@ namespace WorldPackets
             uint8 ClassID = 0;
             uint8 Role = 0;                       // 0 tank / 1 healer / 2 dps
             uint32 SpecID = 0;
+            uint8 LfgRoles = 0;
+            ObjectGuid BnetAccountGuid;
+            bool IsLeaver = false;
             bool IsLeader = false;
         };
 
-        // One row of SMSG_LFG_LIST_SEARCH_RESULTS. Client 12.1.0.69382 reader @ RVA 0x758320,
-        // in-memory stride 2168. Read order:
-        //   RideTicket ; u32 Age(+40) ; ListingDescriptor(+48) ; u8(+1816) ; 5x PackedGuid(+1824..+1888) ;
-        //   u32(+1904) u32(+1908) u32(+1912) ;
-        //   u32 Count1 ; u32 Count2 ; u32 Count3 ; u32 MemberCount ;
-        //   u32(+2016) ; u64 PostTime(+2024) ; u8(+2032) ; PackedGuid(+2040) ;
-        //   DungeonScoreSummary(+2056) ; 9 x { u32, u8 } (+2088, reader 0x740020) ; u8(+2160) ; u8(+2161) ;
-        //   Count1 x PackedGuid ; Count2 x PackedGuid ; Count3 x PackedGuid ; MemberCount x member ;
-        //   one byte with bit7(+1916)
-        // 12.1 drift, and the second dangerous one: in 68275 the descriptor sat at position 15, the score
-        // block at 17 and the trailing bit before the members. With the old order the client reads
-        // Count1..MemberCount out of descriptor bytes - four unchecked uint32 that go straight into vector
-        // resizes. Practical effect ranges from an empty group browser to a client crash.
+        // Which parts of a listing a SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE record carries. The client applies a record to
+        // the row it holds field by field (0x7FF7CF2AF730) and only where the record says a field is present, so an
+        // edit that is not flagged never reaches an open browser. Members always travel.
+        enum SearchResultChange : uint32
+        {
+            SEARCH_RESULT_CHANGE_NONE                    = 0x0000,
+            SEARCH_RESULT_CHANGE_LEADER                  = 0x0001,   // leader guid + realm address
+            SEARCH_RESULT_CHANGE_NAME                    = 0x0002,
+            SEARCH_RESULT_CHANGE_COMMENT                 = 0x0004,
+            SEARCH_RESULT_CHANGE_VOICE_CHAT              = 0x0008,
+            SEARCH_RESULT_CHANGE_REQUIRED_ITEM_LEVEL     = 0x0010,
+            SEARCH_RESULT_CHANGE_AUTO_ACCEPT             = 0x0020,
+            SEARCH_RESULT_CHANGE_PRIVATE                 = 0x0040,
+            SEARCH_RESULT_CHANGE_REQUIRED_DUNGEON_SCORE  = 0x0080,
+            SEARCH_RESULT_CHANGE_REQUIRED_PVP_RATING     = 0x0100,
+            SEARCH_RESULT_CHANGE_PLAYSTYLE               = 0x0200,
+            SEARCH_RESULT_CHANGE_CROSS_FACTION           = 0x0400,
+            SEARCH_RESULT_CHANGE_ACTIVITIES              = 0x0800,
+            SEARCH_RESULT_CHANGE_NEW_PLAYER_FRIENDLY     = 0x1000,
+
+            SEARCH_RESULT_CHANGE_DESCRIPTOR              = 0x1FFE,
+        };
+
+        // One row of SMSG_LFG_LIST_SEARCH_RESULTS, 2168 bytes in the client. Reader 0x7FF7CD528370 at 12.1.0.69587; field
+        // meanings from C_LFGList.GetSearchResultInfo's builder (0x7FF7CF2BBF30), the player-info builder, the update
+        // applier (0x7FF7CF2AF730) and the PvP rating lookup (0x7FF7CF2BCAA0):
+        //   RideTicket ; u32 Revision(+40) ; ListingDescriptor(+48, its DungeonScoreSummary empty) ; u8 (+1816) ;
+        //   PackedGuid Leader(+1824) LastEditor(+1840) NameEditor(+1856) CommentEditor(+1872) VoiceChatEditor(+1888) ;
+        //   u32 LeaderVirtualRealmAddress(+1904) ; u32 LeaderAreaID(+1908, areaName) ; u32 (+1912) ;
+        //   u32 Size(BNetFriends) ; u32 Size(CharacterFriends) ; u32 Size(GuildMates) ; u32 Size(Members) ;
+        //   u32 (+2016) ; u64 PostTime(+2024, age = now - PostTime) ; u8 (+2032) ; PackedGuid PartyGuid(+2040) ;
+        //   DungeonScoreSummary LeaderScore(+2056) ; 9 x { u32 Rating, u8 Bracket } LeaderPvpRatings(+2088) ;
+        //   u8 LeaderFactionMask(+2160, 2 Alliance / 4 Horde / 1 player) ; u8 CensorFlags(+2161, 1 name, 2 comment) ;
+        //   guids x3 lists ; members ; bit HasSelf(+1916)
+        // Revision: the applier only takes an update whose revision is not older than the row's. Every fresh 12.1 row
+        // carries 3 and it grows with every change of the listing.
         struct SearchResultListing
         {
-            ObjectGuid GroupGuid;                 // party/group guid (also echoed as the trailing guid)
-            uint32 ListingId = 0;                 // stable id the client sends back in APPLY_TO_GROUP
-            uint64 PostTime = 0;                  // listing creation unix seconds (emitted twice)
-            uint32 Age = 0;                       // slow refresh/age counter
-            ObjectGuid LeaderGuid;                // fills the five-guid block
+            ObjectGuid GroupGuid;                 // the ticket guid, echoed as partyGUID
+            uint32 ListingId = 0;
+            uint64 PostTime = 0;
+            uint32 Revision = 0;
+            ObjectGuid LeaderGuid;
+            uint32 LeaderVirtualRealmAddress = 0;
+            uint32 LeaderAreaID = 0;
+            uint8 LeaderFactionMask = 0;
+            ObjectGuid LastEditorGuid;
+            ObjectGuid NameEditorGuid;
+            ObjectGuid CommentEditorGuid;
+            ObjectGuid VoiceChatEditorGuid;
+            MythicPlus::DungeonScoreSummary LeaderScore;
+            std::array<uint32, 9> LeaderPvpRatings = { };
+            uint8 CensorFlags = 0;
+            // Relative to the player the row is written for (numBNetFriends / numCharFriends / numGuildMates, hasSelf).
+            std::vector<ObjectGuid> BNetFriendGuids;
+            std::vector<ObjectGuid> CharacterFriendGuids;
+            std::vector<ObjectGuid> GuildMateGuids;
+            bool HasSelf = false;
             std::vector<SearchResultMember> Members;
             ListingDescriptor Listing;
-            // The row describes a listing that is GONE. Carried only by
-            // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE - a listing that no longer exists is simply absent from a
-            // fresh SMSG_LFG_LIST_SEARCH_RESULTS, so the full-results writer has nowhere to put it and does
-            // not try. See the bit map on LFGListSearchResultsUpdate for where it rides and how it was
-            // measured; LFGListMgr sets it on exactly one path, the delist push.
+            // Update records only: the listing is gone, and which fields the record carries.
             bool Delisted = false;
+            uint32 Changes = SEARCH_RESULT_CHANGE_NONE;
         };
 
         class LFGListSearchResults final : public ServerPacket
@@ -723,6 +764,15 @@ namespace WorldPackets
         // We emit the 21 bits as zero except bit 4 (see above) and therefore no optionals. The 0x08 bit the 68275 writer carried is
         // NOT reproduced: in 12.1 that bit position belongs to a different field of a re-laid-out struct, so
         // copying it forward would assert something we cannot support.
+        // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE. Record reader 0x7FF7CD528690 at 12.1.0.69587, applied by 0x7FF7CF2AF730:
+        //   RideTicket ; u32 Revision ; u32 Size(Members) ; ListingDescriptor ; u8 ; members ;
+        //   byte A: Leader, LeaderRealm, HasFlag1912, Has2016, Delisted, DelistedNow, HasGuid128, NameEditor
+        //   byte B: CommentEditor, VoiceChatEditor, RequiredItemLevel, AutoAccept, Private, RequiredDungeonScore,
+        //           RequiredPvpRating, Playstyle
+        //   byte C (5 bits): unused by the applier, CrossFaction, Activities, NewPlayerFriendly, Flag1912 value
+        //   [guid Leader] [u32 LeaderRealm] [u32 2016] [guid] [guid NameEditor] [guid CommentEditor] [guid VoiceChatEditor]
+        // Name, comment and voice-chat text are taken from the record's descriptor exactly when their editor guid is
+        // present; the other flagged descriptor fields likewise. Delisted is sticky on the client, DelistedNow is not.
         class LFGListSearchResultsUpdate final : public ServerPacket
         {
         public:
@@ -732,24 +782,6 @@ namespace WorldPackets
             std::vector<SearchResultListing> Listings;
         };
 
-        // SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE (0x5A0022) - 12.1 newcomer.
-        // Client 12.1.0.69382, dispatcher case @ RVA 0x75699F, consumer @ RVA 0x24DEAA0 (registered by the
-        // LFG-list registrar pair 0x2086FB0 / 0x24DF000, which owns every LFG_LIST slot and no classic one -
-        // that is what places this opcode in the premade group finder rather than in Mythic+ scoring).
-        //   ListingDescriptor Listing ; one byte with bit7 has(CensorCode) ; [u8 CensorCode]
-        // Structurally this is SMSG_LFG_LIST_UPDATE_STATUS without the ticket and without the status tail:
-        // both cases call the same descriptor reader.
-        // Effect: the consumer stores {CensorCode, HasCensorCode} into the LFG-list manager at +0x13C1/+0x13C2,
-        // sets the resolution state at +0x13E0 to (HasCensorCode && CensorCode != 0) and fires
-        // LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE(isCensored) with that bool. The state is tri-valued:
-        // 1 = flagged and unresolved (C_LFGList.IsCensoredActiveEntryUnresolved, 0x1194870),
-        // 2 = the player confirmed it (C_LFGList.ConfirmCensoredActiveEntry),
-        // 0 = revealed/cleared (C_LFGList.RevealCensoredActiveEntry).
-        // So marking a listing as flagged needs BOTH the presence bit AND a non-zero code.
-        // Note what that bool implies: this message can only ever drive the state to 0 or 1. The 2 is written
-        // by the client alone, and any server-sent update after a confirmation would silently revoke it. The
-        // senders therefore never repeat this message for a listing the player has already confirmed.
-        // UNVERIFIED: the value range of CensorCode. The client only ever tests it against zero.
         class LFGListCensoredActiveEntryUpdate final : public ServerPacket
         {
         public:

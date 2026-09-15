@@ -152,6 +152,15 @@ namespace LFGList
         // GroupGuid stays live on purpose - it is what enumerates the current members.
         ObjectGuid TicketGuid;
         WorldPackets::LFGList::ListingDescriptor Descriptor;
+        // SMSG_LFG_LIST_SEARCH_RESULTS(+_UPDATE) row revision. The client applies an update record only when its revision
+        // is not older than the row it holds (0x7FF7CF2AF730), so it has to grow with every change. Every fresh 12.1
+        // retail row carries 3.
+        uint32 Revision = 3;
+        // Who last changed the listing, and its name / comment / voice-chat text (row guids +1840..+1888).
+        ObjectGuid LastEditorGuid;
+        ObjectGuid NameEditorGuid;
+        ObjectGuid CommentEditorGuid;
+        ObjectGuid VoiceChatEditorGuid;
         uint32 CreatedTime = 0;
         uint32 ExpireTime = 0;
         std::vector<Application> Applications;
@@ -164,7 +173,8 @@ namespace LFGList
         // WorldSession::SendLFGListUpdateStatus, which is the only producer of a Listed payload.
         std::unordered_set<ObjectGuid> StatusRecipients;
         CensorState Censor = CensorState::None;
-        uint8 CensorCode = 0;               // non-zero is what makes the client treat the entry as flagged
+        uint8 CensorCode = 0;
+        uint8 CensorFieldFlags = 0;         // search row +2161: 1 = the name is flagged, 2 = the comment               // non-zero is what makes the client treat the entry as flagged
 
         uint32 GetCategoryID() const { return Descriptor.CategoryID; }
         // Flagged at all - this is what the wire carries, and what decides whether
@@ -284,8 +294,10 @@ public:
     // that is not negotiable: LFGGroupScript::OnRemoveMember fires from the FIRST statement of
     // Group::RemoveMember (Group.cpp:551), long before the member slot is erased, so a row built from the
     // live group at that moment still advertises the player who is leaving.
+    // `viewer` is the player the row is written for (the friend / guild-mate lists and hasSelf are relative to them);
+    // null for an update record, which carries none of those.
     void FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing,
-        ObjectGuid excludeMember = ObjectGuid::Empty) const;
+        Player const* viewer, ObjectGuid excludeMember = ObjectGuid::Empty) const;
 
     // The two RideTickets of the listing system. These MUST be built in exactly one place: the client keys
     // its stored active entry on the whole 32-byte ticket and compares it field by field before it accepts a
@@ -357,7 +369,8 @@ public:
     // here; listing mutations then push the affected row to every subscriber whose filters still match.
     void RegisterSearch(ObjectGuid player, LFGList::SearchFilter filter);
     void UnregisterSearch(ObjectGuid player);
-    void NotifyListingChanged(uint32 listingId, ObjectGuid excludeMember = ObjectGuid::Empty);
+    // `changes` (WorldPackets::LFGList::SearchResultChange) names the listing fields the update record carries.
+    void NotifyListingChanged(uint32 listingId, ObjectGuid excludeMember = ObjectGuid::Empty, uint32 changes = 0);
 
     // Applications. An application gets a globally-unique id the client keys on via a RideTicket.
     LFGList::Application* AddApplication(uint32 listingId, ObjectGuid applicant, uint8 roleMask, uint32 specId, uint32 itemLevel, std::string const& comment);
@@ -382,7 +395,8 @@ private:
     // isDelisted bit - see LFGListSearchResultsUpdate in LFGListPackets.h). The second occasion is why this
     // takes the listing by reference rather than an id: it is called from inside DelistAndNotify, where the
     // row has to be built while the listing is still there.
-    void PushSearchRow(LFGList::Listing const& listing, bool delisted, ObjectGuid excludeMember);
+    // Every push is a change of the listing, so it advances the listing's revision.
+    void PushSearchRow(LFGList::Listing& listing, bool delisted, ObjectGuid excludeMember, uint32 changes);
 
     // The delist form of SMSG_LFG_LIST_UPDATE_STATUS - Listed = 0, no expiry, no descriptor - built from the
     // LIVE listing. THE one builder, for the same reason the two ticket builders are: the client compares

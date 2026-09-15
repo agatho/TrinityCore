@@ -25,7 +25,10 @@
 #include "Player.h"
 #include "Group.h"
 #include "GroupMgr.h"
+#include "CharacterCache.h"
 #include "LFG.h"
+#include "SocialMgr.h"
+#include "World.h"
 #include "Util.h"
 #include "WorldSession.h"      // TransferListingLeadership re-announces the entry to the new owner
 #include <cctype>
@@ -167,12 +170,17 @@ uint32 LFGListMgr::CreateListing(Player* leader, WorldPackets::LFGList::ListingD
     listing.Descriptor = descriptor;
     listing.CreatedTime = GameTime::GetGameTime();
     listing.ExpireTime = expireMinutes ? listing.CreatedTime + expireMinutes * MINUTE : 0;
+    listing.LastEditorGuid = listing.LeaderGuid;
+    listing.NameEditorGuid = listing.LeaderGuid;
+    listing.CommentEditorGuid = listing.LeaderGuid;
+    listing.VoiceChatEditorGuid = listing.LeaderGuid;
     EvaluateCensorship(listing);
 
     _listingByLeader[leader->GetGUID()] = id;
 
-    // A newly published listing must appear in every open browser it matches.
-    NotifyListingChanged(id);
+    // A newly published listing must appear in every open browser it matches, with everything it carries.
+    NotifyListingChanged(id, ObjectGuid::Empty, WorldPackets::LFGList::SEARCH_RESULT_CHANGE_LEADER
+        | WorldPackets::LFGList::SEARCH_RESULT_CHANGE_DESCRIPTOR);
     return id;
 }
 
@@ -182,13 +190,49 @@ bool LFGListMgr::UpdateListing(uint32 listingId, ObjectGuid leader, WorldPackets
     if (!listing || listing->LeaderGuid != leader)
         return false;
 
+    using namespace WorldPackets::LFGList;
+    ListingDescriptor const& before = listing->Descriptor;
+    uint32 changes = SEARCH_RESULT_CHANGE_NONE;
+    if (before.Name != descriptor.Name)
+        changes |= SEARCH_RESULT_CHANGE_NAME;
+    if (before.Comment != descriptor.Comment)
+        changes |= SEARCH_RESULT_CHANGE_COMMENT;
+    if (before.VoiceChat != descriptor.VoiceChat)
+        changes |= SEARCH_RESULT_CHANGE_VOICE_CHAT;
+    if (before.RequiredItemLevel != descriptor.RequiredItemLevel)
+        changes |= SEARCH_RESULT_CHANGE_REQUIRED_ITEM_LEVEL;
+    if (before.IsAutoAccept != descriptor.IsAutoAccept)
+        changes |= SEARCH_RESULT_CHANGE_AUTO_ACCEPT;
+    if (before.IsPrivateGroup != descriptor.IsPrivateGroup)
+        changes |= SEARCH_RESULT_CHANGE_PRIVATE;
+    if (before.RequiredDungeonScore != descriptor.RequiredDungeonScore)
+        changes |= SEARCH_RESULT_CHANGE_REQUIRED_DUNGEON_SCORE;
+    if (before.RequiredPvpRating != descriptor.RequiredPvpRating)
+        changes |= SEARCH_RESULT_CHANGE_REQUIRED_PVP_RATING;
+    if (before.Playstyle != descriptor.Playstyle)
+        changes |= SEARCH_RESULT_CHANGE_PLAYSTYLE;
+    if (before.IsCrossFactionListing != descriptor.IsCrossFactionListing)
+        changes |= SEARCH_RESULT_CHANGE_CROSS_FACTION;
+    if (before.ActivityIDs != descriptor.ActivityIDs)
+        changes |= SEARCH_RESULT_CHANGE_ACTIVITIES;
+    if (before.NewPlayerFriendly != descriptor.NewPlayerFriendly)
+        changes |= SEARCH_RESULT_CHANGE_NEW_PLAYER_FRIENDLY;
+
+    listing->LastEditorGuid = leader;
+    if (changes & SEARCH_RESULT_CHANGE_NAME)
+        listing->NameEditorGuid = leader;
+    if (changes & SEARCH_RESULT_CHANGE_COMMENT)
+        listing->CommentEditorGuid = leader;
+    if (changes & SEARCH_RESULT_CHANGE_VOICE_CHAT)
+        listing->VoiceChatEditorGuid = leader;
+
     listing->Descriptor = descriptor;
     // Editing is exactly how a player clears a flag: re-run the check on the new text.
     EvaluateCensorship(*listing);
     TouchListing(*listing);
 
     // Edited listings are pushed so open browsers show the new title/activity without re-searching.
-    NotifyListingChanged(listingId);
+    NotifyListingChanged(listingId, ObjectGuid::Empty, changes);
     return true;
 }
 
@@ -242,7 +286,7 @@ void LFGListMgr::BuildDelistPacket(WorldPackets::LFGList::LFGListUpdateStatus& p
 // Three separate paths used to assemble that ticket by hand; two of them got it wrong.
 void LFGListMgr::DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 status)
 {
-    LFGList::Listing const* listing = GetListing(listingId);
+    LFGList::Listing* listing = GetListing(listingId);
     if (!listing || listing->LeaderGuid != leader)
         return;
 
@@ -268,7 +312,7 @@ void LFGListMgr::DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 stat
     // :4552). This unit already knew the gap - the choice of "declined_delisted" over the other three
     // refusals in HandleLFGListApplyToGroup is argued from "an open browser is not refreshed when a listing
     // disappears" - and that argument is what this line retires.
-    PushSearchRow(*listing, true, ObjectGuid::Empty);
+    PushSearchRow(*listing, true, ObjectGuid::Empty, WorldPackets::LFGList::SEARCH_RESULT_CHANGE_NONE);
 
     // The addressees above are the holders of an ACTIVE ENTRY. A player whose application is still pending
     // never received a Listed payload and is not among them, yet its application dies here with the listing -
@@ -386,8 +430,8 @@ void LFGListMgr::TransferListingLeadership(ObjectGuid groupGuid, ObjectGuid newL
         leader->GetSession()->SendLFGListUpdateStatus(listingId);
 
     // The row changed: FillSearchRow marks the leader among the members (SearchResultMember::IsLeader), so
-    // an open browser is showing the wrong player as leader until this arrives.
-    NotifyListingChanged(listingId);
+    // an open browser is showing the wrong player as leader until this arrives. The record names the new leader.
+    NotifyListingChanged(listingId, ObjectGuid::Empty, WorldPackets::LFGList::SEARCH_RESULT_CHANGE_LEADER);
 }
 
 void LFGListMgr::RemoveListingsByGroup(ObjectGuid groupGuid)
@@ -408,8 +452,8 @@ void LFGListMgr::RemoveListingsByGroup(ObjectGuid groupGuid)
 
 void LFGListMgr::NotifyGroupMemberJoined(ObjectGuid groupGuid)
 {
-    if (LFGList::Listing const* listing = GetListingByGroup(groupGuid))
-        PushSearchRow(*listing, false, ObjectGuid::Empty);
+    if (LFGList::Listing* listing = GetListingByGroup(groupGuid))
+        PushSearchRow(*listing, false, ObjectGuid::Empty, WorldPackets::LFGList::SEARCH_RESULT_CHANGE_NONE);
 }
 
 void LFGListMgr::NotifyGroupMemberLeft(ObjectGuid groupGuid, ObjectGuid member)
@@ -1018,7 +1062,7 @@ void LFGListMgr::SendApplicationStatusBits(LFGList::Listing const& listing, LFGL
 }
 
 void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing,
-    ObjectGuid excludeMember /*= ObjectGuid::Empty*/) const
+    Player const* viewer, ObjectGuid excludeMember /*= ObjectGuid::Empty*/) const
 {
     // The frozen ticket guid, not the live GroupGuid: the row header IS a RideTicket (see operator<<
     // SearchResultListing), so a browser identifies the row by it. Same freeze, same reason as
@@ -1027,22 +1071,49 @@ void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, 
     row.ListingId = listing.Id;
     row.PostTime = listing.CreatedTime;
     row.LeaderGuid = listing.LeaderGuid;
-    // UNVERIFIED: the row's Age field is served as a constant. 3 is what every row of the 12.0.7.68974
-    // capture carried (some carried 4); there is no 12.1 recording of SMSG_LFG_LIST_SEARCH_RESULTS to
-    // check it against, and no client consumer was found that distinguishes its values, so neither the
-    // meaning of the field nor the right way to compute it is established. It is not a real age -
-    // listing.CreatedTime already rides in PostTime one field earlier.
-    row.Age = 3;
-    row.Listing = GetPublicDescriptor(listing);
+    row.Revision = listing.Revision;
+    row.LastEditorGuid = listing.LastEditorGuid;
+    row.NameEditorGuid = listing.NameEditorGuid;
+    row.CommentEditorGuid = listing.CommentEditorGuid;
+    row.VoiceChatEditorGuid = listing.VoiceChatEditorGuid;
+    // The row carries the text, flagged: the client shows CENSORED_LFG_GROUP_NAME until the player reveals it
+    // (LFGListSearchEntry_OnLoad -> C_LFGList.RevealCensoredSearchResult), which only works if the text is there.
+    row.Listing = listing.Descriptor;
+    if (listing.IsCensored())
+        row.CensorFlags = listing.CensorFieldFlags;
+
+    if (Player const* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
+    {
+        row.LeaderVirtualRealmAddress = GetVirtualRealmAddress();
+        row.LeaderAreaID = leader->GetZoneId();
+        row.LeaderFactionMask = FACTION_MASK_PLAYER | (leader->GetTeam() == ALLIANCE ? FACTION_MASK_ALLIANCE : FACTION_MASK_HORDE);
+        row.LeaderScore = *leader->m_playerData->DungeonScore;
+        for (uint32 bracket = 0; bracket < row.LeaderPvpRatings.size(); ++bracket)
+            if (UF::PVPInfo const* pvp = leader->GetPvpInfoForBracket(int8(bracket)))
+                row.LeaderPvpRatings[bracket] = pvp->Rating;
+    }
 
     row.Members.clear();
-    auto addMember = [&row, &listing](ObjectGuid guid)
+    auto addMember = [&row, &listing, viewer](ObjectGuid guid)
     {
         WorldPackets::LFGList::SearchResultMember& member = row.Members.emplace_back();
         member.Guid = guid;
         member.IsLeader = guid == listing.LeaderGuid;   // 68974: the head flag bit is set on the leader
+        if (viewer)
+        {
+            if (guid == viewer->GetGUID())
+                row.HasSelf = true;
+            else
+            {
+                if (viewer->GetSocial() && viewer->GetSocial()->HasFriend(guid))
+                    row.CharacterFriendGuids.push_back(guid);
+                if (viewer->GetGuildId() && sCharacterCache->GetCharacterGuildIdByGuid(guid) == viewer->GetGuildId())
+                    row.GuildMateGuids.push_back(guid);
+            }
+        }
         if (Player const* player = ObjectAccessor::FindConnectedPlayer(guid))
         {
+            member.BnetAccountGuid = player->GetSession()->GetBattlenetAccountGUID();
             member.Level = uint8(player->GetLevel());
             member.ClassID = uint8(player->GetClass());
             member.SpecID = uint32(player->GetPrimarySpecialization());
@@ -1178,8 +1249,9 @@ bool LFGListMgr::EvaluateCensorship(LFGList::Listing& listing)
     // recorded as such: SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE and
     // CMSG_LFG_LIST_CONFIRM_CENSORED_ACTIVE_ENTRY are carried as D2 "teil" in the unit status file for
     // exactly this reason, the same grade SMSG_SET_DF_FAST_LAUNCH_RESULT carries for the same situation.
-    bool const flagged = ContainsCensoredWord(listing.Descriptor.Name)
-        || ContainsCensoredWord(listing.Descriptor.Comment);
+    listing.CensorFieldFlags = (ContainsCensoredWord(listing.Descriptor.Name) ? 1 : 0)
+        | (ContainsCensoredWord(listing.Descriptor.Comment) ? 2 : 0);
+    bool const flagged = listing.CensorFieldFlags != 0;
 
     if (flagged)
     {
@@ -1225,15 +1297,17 @@ void LFGListMgr::UnregisterSearch(ObjectGuid player)
     _searchSubscriptions.erase(player);
 }
 
-void LFGListMgr::NotifyListingChanged(uint32 listingId, ObjectGuid excludeMember /*= ObjectGuid::Empty*/)
+void LFGListMgr::NotifyListingChanged(uint32 listingId, ObjectGuid excludeMember /*= ObjectGuid::Empty*/, uint32 changes /*= 0*/)
 {
-    if (LFGList::Listing const* listing = GetListing(listingId))
-        PushSearchRow(*listing, false, excludeMember);
+    if (LFGList::Listing* listing = GetListing(listingId))
+        PushSearchRow(*listing, false, excludeMember, changes);
 }
 
 // See the contract on the declaration.
-void LFGListMgr::PushSearchRow(LFGList::Listing const& listing, bool delisted, ObjectGuid excludeMember)
+void LFGListMgr::PushSearchRow(LFGList::Listing& listing, bool delisted, ObjectGuid excludeMember, uint32 changes)
 {
+    ++listing.Revision;
+
     if (_searchSubscriptions.empty())
         return;
 
@@ -1242,8 +1316,9 @@ void LFGListMgr::PushSearchRow(LFGList::Listing const& listing, bool delisted, O
     // search reply. Keeping the two in step by hand is exactly what this used to get wrong.
     WorldPackets::LFGList::LFGListSearchResultsUpdate update;
     WorldPackets::LFGList::SearchResultListing row;
-    FillSearchRow(row, listing, excludeMember);
+    FillSearchRow(row, listing, nullptr, excludeMember);
     row.Delisted = delisted;
+    row.Changes = changes;
     update.Listings.push_back(std::move(row));
     WorldPacket const* packet = update.Write();
 
