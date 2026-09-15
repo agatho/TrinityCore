@@ -213,6 +213,11 @@ public:
                 {
                     garrison->SendInfo();           // GetGarrisonInfoResult (+ mission/troop refresh) - the login snapshot
                     garrison->SendMapData(_player);  // GarrisonMapDataResponse - drives the plot-building WMO rendering
+                    // Retroactively credit building-based quest objectives (e.g. "Building for Professions")
+                    // for buildings the player already owned before accepting the quest - the Place/Activate
+                    // criteria are not retroactive, so without this a pre-built profession building leaves the
+                    // quest permanently stuck. Idempotent; see Garrison::ReapplyBuildingCriteria.
+                    garrison->ReapplyBuildingCriteria();
                     break;
                 }
             }
@@ -229,8 +234,24 @@ class garrison_render_on_enter : public PlayerScript
 public:
     garrison_render_on_enter() : PlayerScript("garrison_render_on_enter") { }
 
+    void OnLogin(Player* player, bool /*firstLogin*/) override
+    {
+        // The shipyard's coastal spawns are revealed by a personal phase (Garrison::UpdateShipyardPhase). A personal
+        // phase is not persisted, so it must be re-asserted on every login for owners who already built the shipyard,
+        // otherwise the Fleet Command Table / foreman / dock guards would be visible only in the session they were built.
+        if (Garrison* garrison = player->GetGarrison())
+            garrison->UpdateShipyardPhase();
+    }
+
     void OnMapChanged(Player* player) override
     {
+        // Re-assert the shipyard phase on every map change too. The seamless garrison enter/leave transfers recompute
+        // the player's phase shift (PhasingHandler::OnConditionChange) and can drop a manually-added personal phase;
+        // this puts it back. Idempotent - AddPhase of an already-present phase is a no-op. The shipyard lives on the
+        // Draenor parent map (1116), not the garrison child map, so this must run regardless of IsGarrison().
+        if (Garrison* garrison = player->GetGarrison())
+            garrison->UpdateShipyardPhase();
+
         if (!player->GetMap()->IsGarrison())
             return;
 
