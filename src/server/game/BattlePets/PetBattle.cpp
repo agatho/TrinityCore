@@ -28,6 +28,7 @@
 #include "PetBattleMgr.h"
 #include "Player.h"
 #include "Random.h"
+#include "SceneObject.h"
 #include "Util.h"
 #include "WorldSession.h"
 #include <algorithm>
@@ -2447,6 +2448,7 @@ void PetBattle::FinishBattle(PetBattleResult result)
 void PetBattle::SendFinalRoundPacket(bool abandoned)
 {
     WorldPackets::BattlePet::PetBattleFinalRound finalRound;
+    finalRound.SceneObjectGUID = _sceneObjectGUID;
     finalRound.Abandoned = abandoned;
     finalRound.PvpBattle = (_battleType == PET_BATTLE_TYPE_PVP || _battleType == PET_BATTLE_TYPE_LFPB);
     // 12.0.7 (sniff-verified vs b_pets, 5 battles): the winner is the per-team flag pair in the FinalRound
@@ -2538,6 +2540,7 @@ void PetBattle::CompleteBattle()
 
     // Send finished notification and sync pet health to journal
     WorldPackets::BattlePet::PetBattleFinished finished;
+    finished.SceneObjectGUID = _sceneObjectGUID;
     for (uint8 t = 0; t < MAX_PET_BATTLE_PLAYERS; ++t)
     {
         Player* teamPlayer = GetPlayerForTeam(t);
@@ -2764,6 +2767,24 @@ bool PetBattle::NeedsFrontPetSwap(uint8 teamIdx) const
 Player* PetBattle::GetPlayerForTeam(uint8 teamIdx) const
 {
     return ObjectAccessor::FindPlayer(_teams[teamIdx].PlayerGUID);
+}
+
+void PetBattle::DespawnSceneObject()
+{
+    if (_sceneObjectGUID.IsEmpty())
+        return;
+
+    for (uint8 t = 0; t < MAX_PET_BATTLE_PLAYERS; ++t)
+    {
+        if (Player* player = GetPlayerForTeam(t))
+        {
+            if (SceneObject* sceneObject = ObjectAccessor::GetSceneObject(*player, _sceneObjectGUID))
+                sceneObject->Remove();
+            break;
+        }
+    }
+
+    _sceneObjectGUID.Clear();
 }
 
 uint32 PetBattle::GetOpponentCreatureID(uint8 teamIdx) const
