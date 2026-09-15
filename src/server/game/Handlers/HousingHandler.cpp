@@ -2161,9 +2161,11 @@ void WorldSession::HandleHousingFixtureSetCoreFixture(WorldPackets::Housing::Hou
             uint8 plotIndex = housing->GetPlotIndex();
             auto fixtureOverrides = housing->GetFixtureOverrideMap();
             auto rootOverrides = housing->GetRootComponentOverrides();
+            // A house the owner moved stays where they put it, as HousingMap::SpawnPlotGameObjects spawns it.
+            Position const housePos = housing->GetHousePosition();
             housingMap->DespawnAllDecorForPlot(plotIndex);
             housingMap->DespawnHouseForPlot(plotIndex);
-            housingMap->SpawnHouseForPlot(plotIndex, nullptr,
+            housingMap->SpawnHouseForPlot(plotIndex, housing->HasCustomPosition() ? &housePos : nullptr,
                 static_cast<int32>(housing->GetCoreExteriorComponentID()),
                 static_cast<int32>(housing->GetHouseType()),
                 fixtureOverrides.empty() ? nullptr : &fixtureOverrides,
@@ -2493,9 +2495,11 @@ void WorldSession::HandleHousingFixtureSetHouseSize(WorldPackets::Housing::Housi
         uint8 plotIndex = housing->GetPlotIndex();
         auto fixtureOverrides = housing->GetFixtureOverrideMap();
         auto rootOverrides = housing->GetRootComponentOverrides();
+        // A house the owner moved stays where they put it, as HousingMap::SpawnPlotGameObjects spawns it.
+        Position const housePos = housing->GetHousePosition();
         housingMap->DespawnAllDecorForPlot(plotIndex);
         housingMap->DespawnHouseForPlot(plotIndex);
-        housingMap->SpawnHouseForPlot(plotIndex, nullptr,
+        housingMap->SpawnHouseForPlot(plotIndex, housing->HasCustomPosition() ? &housePos : nullptr,
             static_cast<int32>(housing->GetCoreExteriorComponentID()),
             static_cast<int32>(housing->GetHouseType()),
             fixtureOverrides.empty() ? nullptr : &fixtureOverrides,
@@ -2575,9 +2579,11 @@ void WorldSession::HandleHousingFixtureSetHouseType(WorldPackets::Housing::Housi
         uint8 plotIndex = housing->GetPlotIndex();
         auto fixtureOverrides = housing->GetFixtureOverrideMap();
         auto rootOverrides = housing->GetRootComponentOverrides();
+        // A house the owner moved stays where they put it, as HousingMap::SpawnPlotGameObjects spawns it.
+        Position const housePos = housing->GetHousePosition();
         housingMap->DespawnAllDecorForPlot(plotIndex);
         housingMap->DespawnHouseForPlot(plotIndex);
-        housingMap->SpawnHouseForPlot(plotIndex, nullptr,
+        housingMap->SpawnHouseForPlot(plotIndex, housing->HasCustomPosition() ? &housePos : nullptr,
             static_cast<int32>(housing->GetCoreExteriorComponentID()),
             static_cast<int32>(wmoDataID),
             fixtureOverrides.empty() ? nullptr : &fixtureOverrides,
