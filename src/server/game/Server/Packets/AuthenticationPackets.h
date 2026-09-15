@@ -23,6 +23,7 @@
 #include "Optional.h"
 #include "PacketUtilities.h"
 #include <array>
+#include <vector>
 
 struct CharacterTemplate;
 struct RaceClassAvailability;
@@ -604,6 +605,34 @@ namespace WorldPackets
             Array<LatencyReportEntry, MaxEntries> Entries;
         };
 
+        // SMSG_LATENCY_REPORT_PING (12.1 0x450314) - reader 0x65B6FD -> 0x7FF7815DC610 -> 0x7FF7815DC450
+        // (PLAN_A1 2.3, implementierungsplan_69382/12_1_all_neu/plans/PLAN_A1.md).
+        // Cross-confirmed against LatencyReportEntry above, not independently reverse engineered: the reader's
+        // per-entry call order (ReadU32, ReadU32, ReadU8, then ReadU64, ReadU32) is the exact same sequence as
+        // CMSG_LATENCY_REPORT's writer, and the packet length rule 8 + 21*Count holds without exception over
+        // the sniff corpus (50..218 bytes observed, decoding to Count 2..10, 0 remainder every time). Both facts
+        // hold regardless of which struct definition is used, which is why this reuses LatencyReportEntry
+        // instead of declaring a byte-identical twin.
+        // UNVERIFIED: (1) the meaning of the leading Kind field - named by analogy to CMSG_LATENCY_REPORT's own
+        // Kind field, not proven for this, the opposite, direction; (2) whether Entries is ever meant to be
+        // populated by the server at all, or whether this is a pure Count=0 prompt that only tells the client
+        // to start (or continue) its own measurement cycle - conn_44_4C's notes on the CMSG side already
+        // establish "no reply and no Lua surface" for this exchange, so nothing in the client's public surface
+        // constrains the answer; (3) the real send interval/trigger - see WorldSession::SendLatencyReportPing.
+        // Sent with Count=0 by that function, which PLAN_A1 argues is the behaviour-preserving first cut for
+        // exactly the reason in (2): a client that never inspects Entries cannot tell that choice apart from
+        // any other.
+        class LatencyReportPing final : public ServerPacket
+        {
+        public:
+            explicit LatencyReportPing() : ServerPacket(SMSG_LATENCY_REPORT_PING, 4 + 4) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 Kind = 0;
+            std::vector<LatencyReportEntry> Entries;
+        };
+
         // CMSG_LOG_STREAMING_ERROR (12.1 0x44000B) - writer 0x5D5B20, object size 544.
         //   bits<9> MessageLen, then MessageLen bytes without NUL.
         // 9 bits because the client's buffer is 512 bytes (N = ceil(log2(512))); the writer splits the 9 bits into
@@ -641,6 +670,7 @@ namespace WorldPackets
         ByteBuffer& operator<<(ByteBuffer& data, VirtualRealmInfo const& realmInfo);
         ByteBuffer& operator<<(ByteBuffer& data, VirtualRealmNameInfo const& realmInfo);
         ByteBuffer& operator>>(ByteBuffer& data, LatencyReportEntry& entry);
+        ByteBuffer& operator<<(ByteBuffer& data, LatencyReportEntry const& entry);
     }
 }
 

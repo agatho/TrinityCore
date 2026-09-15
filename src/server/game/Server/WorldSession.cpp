@@ -162,6 +162,7 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _movementForceRepairWindowStart(TimePoint()), // not TimePoint::min(): now - min() overflows the int64 nanosecond duration
     _movementForceRepairCount(0),
     _movementForceRepairThrottleLogged(false),
+    _latencyReportPingTimer(0),
     _calendarEventCreationCooldown(0),
     _battlePetMgr(std::make_unique<BattlePets::BattlePetMgr>(this)),
     _collectionMgr(std::make_unique<CollectionMgr>(this)),
@@ -610,6 +611,16 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
                 SendTimeSync();
             else
                 _timeSyncTimer -= diff;
+        }
+
+        // SMSG_LATENCY_REPORT_PING heartbeat (PLAN_A1 2.3) - 0 until SendLatencyReportPing() has run once
+        // (Player::SendInitialPacketsBeforeAddToMap), same start-gate as _timeSyncTimer above.
+        if (_latencyReportPingTimer > 0)
+        {
+            if (diff >= _latencyReportPingTimer)
+                SendLatencyReportPing();
+            else
+                _latencyReportPingTimer -= diff;
         }
     }
 
@@ -2179,6 +2190,25 @@ void WorldSession::SendTimeSync()
 void WorldSession::RegisterTimeSync(uint32 counter)
 {
     _pendingTimeSyncRequests[counter] = getMSTime();
+}
+
+// SMSG_LATENCY_REPORT_PING (PLAN_A1 2.3, implementierungsplan_69382/12_1_all_neu/plans/PLAN_A1.md). The wire
+// and its cross-confirmation against CMSG_LATENCY_REPORT are documented on
+// WorldPackets::Auth::LatencyReportPing (AuthenticationPackets.h); this function only decides WHEN to send it,
+// which the client binary does not answer - conn_44_4C's own notes establish that the consumer of this
+// exchange never replies and has no Lua surface, so no interval is observable from outside the client.
+// UNVERIFIED: the interval below (30s) is not measured. It is modeled on the one periodic per-session
+// heartbeat TC already runs, _timeSyncTimer/SendTimeSync() above, both in shape (a self-reloading countdown
+// serviced from WorldSession::Update()) and in being kicked off from Player::SendInitialPacketsBeforeAddToMap.
+// Sent with Kind=0 and an empty Entries: PLAN_A1 argues that is the behaviour-preserving first cut, because a
+// client whose own consumer has no Lua surface cannot be shown to react differently to Count=0 than to any
+// other value - see the UNVERIFIED list on LatencyReportPing for what would have to be recorded to do better.
+void WorldSession::SendLatencyReportPing()
+{
+    WorldPackets::Auth::LatencyReportPing latencyReportPing;
+    SendPacket(latencyReportPing.Write());
+
+    _latencyReportPingTimer = 30000;
 }
 
 // Sending half of SMSG_SUSPEND_COMMS / CMSG_SUSPEND_COMMS_ACK. Everything the client requires of the moment this
