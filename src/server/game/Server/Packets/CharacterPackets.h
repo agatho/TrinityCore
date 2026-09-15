@@ -732,15 +732,18 @@ namespace WorldPackets
             void Read() override { }
         };
 
-        // CMSG_LOGOUT_INSTANT (0x3E0074): empty payload. Requests an immediate logout that skips the
-        // camera zoom-out / LOGOUT_TIME timer of CMSG_LOGOUT_REQUEST (client sender RVA 0x6D8D44 writes
-        // only the opcode header, no field).
+        // CMSG_LOGOUT_INSTANT (0x3E0074): Lua ForceLogout. Asks for a logout that skips the LOGOUT_TIME
+        // timer of CMSG_LOGOUT_REQUEST; the server still decides (HandleLogoutInstant). The 12.1.0.69587
+        // client serializer (RVA 0x6D8D80) writes one packed ObjectGuid after the opcode. What it holds is
+        // unconfirmed and the handler does not use it.
         class LogoutInstant final : public ClientPacket
         {
         public:
             explicit LogoutInstant(WorldPacket&& packet) : ClientPacket(CMSG_LOGOUT_INSTANT, std::move(packet)) { }
 
-            void Read() override { }
+            void Read() override;
+
+            ObjectGuid Guid;
         };
 
         class LogoutCancelAck final : public ServerPacket
