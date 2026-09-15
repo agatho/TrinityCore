@@ -880,6 +880,44 @@ void InitiativeManager::SendInitiativeServiceStatus(WorldSession* session, bool 
     TC_LOG_DEBUG("housing", "InitiativeManager: Sent InitiativeServiceStatus (enabled={})", enabled);
 }
 
+void InitiativeManager::SendRewardsAvailable(Player* player) const
+{
+    // Retail answers the login's CMSG_NEIGHBORHOOD_INITIATIVE_SERVICE_STATUS_CHECK with SMSG_INITIATIVE_REWARD_AVAILABLE for
+    // every house whose neighborhood has a reached milestone this player has not claimed yet.
+    WorldPackets::Housing::InitiativeRewardAvailable packet;
+    uint64 const playerCounter = player->GetGUID().GetCounter();
+    for (Housing const* housing : player->GetAllHousings())
+    {
+        auto itr = _activeInitiatives.find(housing->GetNeighborhoodGuid().GetCounter());
+        if (itr == _activeInitiatives.end())
+            continue;
+
+        bool unclaimed = false;
+        for (auto const& initiative : itr->second)
+        {
+            for (auto const& [index, reached] : initiative->MilestonesReached)
+            {
+                if (!reached)
+                    continue;
+                auto claims = initiative->RewardClaims.find(index);
+                if (claims == initiative->RewardClaims.end() || !claims->second.count(playerCounter))
+                {
+                    unclaimed = true;
+                    break;
+                }
+            }
+            if (unclaimed)
+                break;
+        }
+
+        if (unclaimed)
+            packet.RewardGuids.push_back(housing->GetHouseGuid());
+    }
+
+    if (!packet.RewardGuids.empty())
+        player->GetSession()->SendPacket(packet.Write());
+}
+
 void InitiativeManager::SendPlayerInitiativeInfo(WorldSession* session, ObjectGuid const& neighborhoodGuid, uint64 neighborhoodLowGuid) const
 {
     WorldPackets::Housing::GetPlayerInitiativeInfoResult result;
@@ -1087,17 +1125,23 @@ void InitiativeManager::BroadcastRewardAvailable(Neighborhood* neighborhood, uin
     if (!neighborhood)
         return;
 
-    WorldPackets::Housing::InitiativeRewardAvailable packet;
-    packet.InitiativeID = initiativeID;
-    packet.MilestoneIndex = milestoneIndex;
-    WorldPacket const* data = packet.Write();
-
+    // The payload is the recipient's own house in this neighborhood: every retail frame (43, 12.1 logins) carries exactly
+    // one guid and it is the player's HouseGUID. So each member gets their own packet.
     for (auto const& member : neighborhood->GetMembers())
     {
+        if (member.HouseGuid.IsEmpty())
+            continue;
+
         if (Player* player = ObjectAccessor::FindPlayer(member.PlayerGuid))
         {
-            if (player->GetSession())
-                player->GetSession()->SendPacket(data);
+            if (!player->GetSession())
+                continue;
+
+            WorldPackets::Housing::InitiativeRewardAvailable packet;
+            packet.InitiativeID = initiativeID;
+            packet.MilestoneIndex = milestoneIndex;
+            packet.RewardGuids.push_back(member.HouseGuid);
+            player->GetSession()->SendPacket(packet.Write());
         }
     }
 

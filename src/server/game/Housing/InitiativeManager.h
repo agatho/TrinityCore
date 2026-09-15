@@ -145,6 +145,8 @@ public:
     void BroadcastTaskComplete(Neighborhood* neighborhood, uint32 initiativeID, uint32 taskID) const;
     void BroadcastInitiativeComplete(Neighborhood* neighborhood, uint32 initiativeID) const;
     void BroadcastRewardAvailable(Neighborhood* neighborhood, uint32 initiativeID, uint32 milestoneIndex) const;
+    // Login: SMSG_INITIATIVE_REWARD_AVAILABLE for the player's houses with an unclaimed reached milestone.
+    void SendRewardsAvailable(Player* player) const;
     // SMSG_CLEAR_INITIATIVE_TASK_CRITERIA_PROGRESS (0x420367) — tells the client to zero its
     // cached progress for the given leaf CriteriaIDs. Sent whenever server-side task progress
     // is reset to zero, otherwise the client keeps rendering the pre-reset bars.

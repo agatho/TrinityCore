@@ -266,12 +266,13 @@ void HousingRoomAdd::Read()
 {
     _worldPacket >> SourceRoomGuid;
     _worldPacket >> TargetDoorComponentID;
+    // 12.1.0.69587 sender 0x7FF7CD4F6320: guid, u32, u32, bit - no floor index (the server derives the floor from the
+    // source room and door).
     _worldPacket >> HouseRoomID;
-    _worldPacket >> FloorIndex;
     _worldPacket >> Bits<1>(AutoFurnish);
 
-    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_ADD SourceRoomGuid: {} DoorComponentID: {} HouseRoomID: {} FloorIndex: {} AutoFurnish: {}",
-        SourceRoomGuid.ToString(), TargetDoorComponentID, HouseRoomID, FloorIndex, AutoFurnish);
+    TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_ROOM_ADD SourceRoomGuid: {} DoorComponentID: {} HouseRoomID: {} AutoFurnish: {}",
+        SourceRoomGuid.ToString(), TargetDoorComponentID, HouseRoomID, AutoFurnish);
 }
 
 void HousingRoomRemove::Read()
@@ -1610,7 +1611,8 @@ void HousingResetHouse::Read()
 
 WorldPacket const* HousingResetHouseResponse::Write()
 {
-    _worldPacket << uint32(Result);
+    // u8 HousingResult, 0 = success (reader: dispatcher 0x7FF7CD536260 case 0x590007)
+    _worldPacket << uint8(Result);
 
     TC_LOG_DEBUG("network.opcode", "SMSG_HOUSING_RESET_HOUSE_RESPONSE Result: {}", Result);
 
@@ -1862,7 +1864,9 @@ WorldPacket const* GetInitiativeActivityLogResult::Write()
 
 WorldPacket const* InitiativeTaskComplete::Write()
 {
-    _worldPacket << uint32(InitiativeID);
+    // 12.1.0.69587: the client takes the whole body as one blob (Handler_SMSG_INITIATIVE_TASK_COMPLETE 0x7FF7CD3E0FD0) and
+    // hands it to a hook that is unset in the retail image; retail sends a single u32, the task (203 in the one captured
+    // frame, gulfofmemorydelve 69497).
     _worldPacket << uint32(TaskID);
 
     TC_LOG_DEBUG("network.opcode", "SMSG_INITIATIVE_TASK_COMPLETE InitiativeID: {} TaskID: {}", InitiativeID, TaskID);
@@ -2474,88 +2478,73 @@ WorldPacket const* NeighborhoodOfferOwnershipResponse::Write()
 
 WorldPacket const* NeighborhoodGetRosterResponse::Write()
 {
-    // Wire format verified against retail sniff + IDA client handler analysis
-    // Structure: Result(1) + CountA(4) + ArrayB{CountB(4) + GroupEntry{...}} + Flags(1) + ArrayA{...}
-
-    // Step 1: Result (uint8, NOT uint32)
+    // 12.1.0.69587 dispatcher 0x7FF7CD51B490 case 0x60000F (UPDATE_BULLETIN_BOARD_ROSTER):
+    //   u8 Result ;
+    //   u32 count, count x neighborhood (reader 0x7FF7CD4F71D0) { guid, guid, u64, u64, u32 houses, houses x JamCliHouse,
+    //                                                           u8 nameLen (counts the NUL), u8 flags, name } ;
+    //   u32 count, count x NeighborhoodRosterMemberUpdateInfo { guid, u8 residentType, bit isOnline } ;
+    //   bit HasGuid, [guid]
+    // The houses give the client each resident's plot (NeighborhoodRosterMemberInfo.plotID), the second list their
+    // type and online state.
     _worldPacket << uint8(Result);
 
-    // Step 2: Count A Ã¢â‚¬â€� number of entries in the flat player-GUID array at the end
-    _worldPacket << uint32(Members.size());
-
-    // Step 3: Array B Ã¢â‚¬â€� "groups" (always 1 group = the neighborhood)
-    _worldPacket << uint32(1); // Count B = 1 group
-
-    // Step 3b: Single group entry (sub_7FF6A8B3A570)
-    // These GUIDs populate the HousingNeighborhoodState singleton (sub_7FF6F69ECCD0):
-    //   offset 352 = NeighborhoodGUID, offset 292 = ownerType (computed from OwnerGUID)
-    _worldPacket << GroupNeighborhoodGuid;  // PackedGUID Ã¢â‚¬â€� Neighborhood GUID
-    _worldPacket << GroupOwnerGuid;         // PackedGUID Ã¢â‚¬â€� Neighborhood owner GUID
-    _worldPacket << uint64(0);             // Value 1 (timestamp or flags, 0 in sniff)
-    _worldPacket << uint64(0);             // Value 2 (timestamp or flags, 0 in sniff)
-
-    // Sub-array count within this group = number of residents
-    _worldPacket << uint32(Members.size());
-
-    // Neighborhood name length (read before sub-entries, string data written after).
-    // Client stores at singleton offset 296 via sub_7FF6F97E62B0.
-    // When length <= 1, client treats as empty string and reads no bytes.
-    uint8 nameLen = NeighborhoodName.empty() ? 0 : static_cast<uint8>(NeighborhoodName.size() + 1); // +1 for null terminator
-    _worldPacket << uint8(nameLen);
-
-    // Group flags (bit 7 unused for now)
-    _worldPacket << uint8(0);
-
-    // Step 3b-viii: Sub-entries Ã¢â‚¬â€� per-resident data (sub_7FF6A8B3A420)
-    for (auto const& member : Members)
+    bool const hasNeighborhood = !GroupNeighborhoodGuid.IsEmpty();
+    _worldPacket << uint32(hasNeighborhood ? 1 : 0);
+    if (hasNeighborhood)
     {
-        _worldPacket << member.HouseGuid;        // PackedGUID Ã¢â‚¬â€� house GUID
-        _worldPacket << member.PlayerGuid;       // PackedGUID Ã¢â‚¬â€� player GUID
-        _worldPacket << member.BnetAccountGuid;  // PackedGUID Ã¢â‚¬â€� bnet account GUID (usually empty)
-        _worldPacket << uint8(member.PlotIndex); // Plot index
-        _worldPacket << uint32(member.JoinTime); // Join timestamp
-        _worldPacket << uint8(0);                // Entry flags (bit 7 = has optional uint64)
+        _worldPacket << GroupNeighborhoodGuid;
+        _worldPacket << GroupOwnerGuid;
+        _worldPacket << uint64(0);
+        _worldPacket << uint64(0);
+
+        uint32 houseCount = 0;
+        for (RosterMemberData const& member : Members)
+            if (!member.HouseGuid.IsEmpty())
+                ++houseCount;
+        _worldPacket << uint32(houseCount);
+        for (RosterMemberData const& member : Members)
+        {
+            if (member.HouseGuid.IsEmpty())
+                continue;
+            Housing::JamCliHouse house;
+            house.HouseGUID = member.HouseGuid;
+            house.OwnerGUID = member.PlayerGuid;
+            house.NeighborhoodGUID = GroupNeighborhoodGuid;
+            house.HouseLevel = member.HouseLevel;
+            house.PlotIndex = member.PlotIndex;
+            Housing::WriteJamCliHouse(_worldPacket, house);
+        }
+
+        uint8 const nameLen = NeighborhoodName.empty() ? 0 : static_cast<uint8>(std::min<size_t>(NeighborhoodName.size() + 1, 255));
+        _worldPacket << uint8(nameLen);
+        _worldPacket << uint8(0);
+        if (nameLen)
+            _worldPacket.append(reinterpret_cast<uint8 const*>(NeighborhoodName.c_str()), nameLen);
     }
 
-    // Step 3b-ix: Neighborhood name string (nameLen bytes including null terminator)
-    if (nameLen > 1)
-        _worldPacket.append(reinterpret_cast<uint8 const*>(NeighborhoodName.c_str()), nameLen);
-
-    // Step 4: Main flags byte (bit 7 = has optional trailing GUID)
-    _worldPacket << uint8(0);
-
-    // Step 5: Array A Ã¢â‚¬â€� flat player GUID list with 2 status bytes each (sub_7FF6A8B3A780)
-    for (auto const& member : Members)
+    _worldPacket << uint32(Members.size());
+    for (RosterMemberData const& member : Members)
     {
-        _worldPacket << member.PlayerGuid; // PackedGUID
-        _worldPacket << uint8(0);          // Status field 1
-        // Status field 2: bit 7 (0x80) = online flag, checked by client UI for roster display
+        _worldPacket << member.PlayerGuid;
+        _worldPacket << uint8(member.ResidentType);
         _worldPacket << uint8(member.IsOnline ? 0x80 : 0x00);
     }
 
-    // Step 6: Optional trailing GUID (skipped since MainFlags.bit7 = 0)
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE Result: {} MemberCount: {} NeighborhoodGuid: {} Name: '{}'",
-        Result, Members.size(), GroupNeighborhoodGuid.ToString(), NeighborhoodName);
-    for (size_t i = 0; i < Members.size(); ++i)
-        TC_LOG_DEBUG("network.opcode", "  Member[{}]: PlayerGuid={} HouseGuid={} PlotIndex={} Online={}",
-            i, Members[i].PlayerGuid.ToString(), Members[i].HouseGuid.ToString(), Members[i].PlotIndex, Members[i].IsOnline);
+    _worldPacket << uint8(0);                       // no trailing guid
 
     return &_worldPacket;
 }
 
 WorldPacket const* NeighborhoodRosterResidentUpdate::Write()
 {
+    // 12.1.0.69587 dispatcher 0x7FF7CD51B490 case 0x600010: u32 count, count x { guid, u8 residentType, bit isOnline }.
     _worldPacket << uint32(Residents.size());
-    for (auto const& resident : Residents)
+    for (ResidentEntry const& resident : Residents)
     {
         _worldPacket << resident.PlayerGuid;
-        _worldPacket << uint8(resident.UpdateType);
-        // IDA: client deserializer does v6 >> 7 Ã¢â‚¬â€� only bit 7 is kept as bool
-        _worldPacket << uint8(resident.IsPrivileged ? 0x80 : 0x00);
+        _worldPacket << uint8(resident.ResidentType);
+        _worldPacket << uint8(resident.IsOnline ? 0x80 : 0x00);
     }
-
-    TC_LOG_DEBUG("network.opcode", "SMSG_NEIGHBORHOOD_ROSTER_RESIDENT_UPDATE ResidentCount: {}", Residents.size());
 
     return &_worldPacket;
 }

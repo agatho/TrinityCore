@@ -692,16 +692,8 @@ HousingResult Neighborhood::AcceptInvitation(ObjectGuid playerGuid)
     TC_LOG_DEBUG("housing", "Neighborhood::AcceptInvitation: Player {} joined neighborhood '{}' as resident",
         playerGuid.ToString(), _name);
 
-    // Push roster update to all online members
-    {
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate update;
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate::ResidentEntry entry;
-        entry.PlayerGuid = playerGuid;
-        entry.UpdateType = 0; // Added
-        entry.IsPrivileged = false; // Resident = not privileged
-        update.Residents.push_back(entry);
-        BroadcastPacket(update.Write());
-    }
+    // A new resident: every online member's bulletin board gets the whole roster again.
+    BroadcastRoster();
 
     return HOUSING_RESULT_SUCCESS;
 }
@@ -752,16 +744,8 @@ HousingResult Neighborhood::AddResident(ObjectGuid playerGuid)
     TC_LOG_DEBUG("housing", "Neighborhood::AddResident: Player {} joined neighborhood '{}' as resident",
         playerGuid.ToString(), _name);
 
-    // Push roster update to all online members
-    {
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate update;
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate::ResidentEntry entry;
-        entry.PlayerGuid = playerGuid;
-        entry.UpdateType = 0; // Added
-        entry.IsPrivileged = false; // Resident = not privileged
-        update.Residents.push_back(entry);
-        BroadcastPacket(update.Write());
-    }
+    // A new resident: every online member's bulletin board gets the whole roster again.
+    BroadcastRoster();
 
     return HOUSING_RESULT_SUCCESS;
 }
@@ -835,16 +819,8 @@ HousingResult Neighborhood::EvictPlayer(ObjectGuid playerGuid)
     TC_LOG_DEBUG("housing", "Neighborhood::EvictPlayer: Player {} evicted from neighborhood '{}'",
         playerGuid.ToString(), _name);
 
-    // Push roster update to all online members
-    {
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate update;
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate::ResidentEntry entry;
-        entry.PlayerGuid = playerGuid;
-        entry.UpdateType = 2; // Removed
-        entry.IsPrivileged = false;
-        update.Residents.push_back(entry);
-        BroadcastPacket(update.Write());
-    }
+    // The evicted player is gone from the roster: every remaining member gets it again.
+    BroadcastRoster();
 
     return HOUSING_RESULT_SUCCESS;
 }
@@ -946,24 +922,9 @@ HousingResult Neighborhood::TransferOwnership(ObjectGuid newOwnerGuid)
     TC_LOG_DEBUG("housing", "Neighborhood::TransferOwnership: Ownership of neighborhood '{}' transferred from {} to {}",
         _name, previousOwnerGuid.ToString(), newOwnerGuid.ToString());
 
-    // Push roster update for both role changes
-    {
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate update;
-
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate::ResidentEntry oldOwnerEntry;
-        oldOwnerEntry.PlayerGuid = previousOwnerGuid;
-        oldOwnerEntry.UpdateType = 1; // RoleChanged
-        oldOwnerEntry.IsPrivileged = true; // Demoted to manager, still privileged
-        update.Residents.push_back(oldOwnerEntry);
-
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate::ResidentEntry newOwnerEntry;
-        newOwnerEntry.PlayerGuid = newOwnerGuid;
-        newOwnerEntry.UpdateType = 1; // RoleChanged
-        newOwnerEntry.IsPrivileged = true; // New owner = privileged
-        update.Residents.push_back(newOwnerEntry);
-
-        BroadcastPacket(update.Write());
-    }
+    // Both resident types changed.
+    BroadcastMemberStatus(previousOwnerGuid);
+    BroadcastMemberStatus(newOwnerGuid);
 
     return HOUSING_RESULT_SUCCESS;
 }
@@ -1268,6 +1229,56 @@ void Neighborhood::BroadcastPacket(WorldPacket const* packet, ObjectGuid exclude
         if (Player* player = ObjectAccessor::FindPlayer(member.PlayerGuid))
             player->SendDirectMessage(packet);
     }
+}
+
+void Neighborhood::BuildRosterResponse(WorldPackets::Neighborhood::NeighborhoodGetRosterResponse& response) const
+{
+    response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
+    response.GroupNeighborhoodGuid = GetGuid();
+    response.GroupOwnerGuid = GetOwnerGuid();
+    response.NeighborhoodName = GetName();
+    response.Members.reserve(_members.size());
+    for (Member const& member : _members)
+    {
+        WorldPackets::Neighborhood::NeighborhoodGetRosterResponse::RosterMemberData& data = response.Members.emplace_back();
+        data.PlayerGuid = member.PlayerGuid;
+        data.PlotIndex = member.PlotIndex;
+        data.JoinTime = member.JoinTime;
+        data.ResidentType = member.Role;
+        data.IsOnline = ObjectAccessor::FindPlayer(member.PlayerGuid) != nullptr;
+        // PlotInfo mirrors character_housing, so offline residents' houses are listed too.
+        if (member.PlotIndex != INVALID_PLOT_INDEX)
+        {
+            if (PlotInfo const* plotInfo = GetPlotInfo(member.PlotIndex))
+            {
+                data.HouseGuid = plotInfo->HouseGuid;
+                data.HouseLevel = plotInfo->HouseLevel;
+            }
+        }
+    }
+}
+
+void Neighborhood::BroadcastRoster(ObjectGuid excludeGuid /*= ObjectGuid::Empty*/) const
+{
+    WorldPackets::Neighborhood::NeighborhoodGetRosterResponse response;
+    BuildRosterResponse(response);
+    BroadcastPacket(response.Write(), excludeGuid);
+}
+
+void Neighborhood::BroadcastMemberStatus(ObjectGuid playerGuid, bool isOnline) const
+{
+    Member const* member = GetMember(playerGuid);
+    if (!member)
+        return;
+
+    WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate update;
+    update.Residents.push_back({ playerGuid, member->Role, isOnline });
+    BroadcastPacket(update.Write());
+}
+
+void Neighborhood::BroadcastMemberStatus(ObjectGuid playerGuid) const
+{
+    BroadcastMemberStatus(playerGuid, ObjectAccessor::FindPlayer(playerGuid) != nullptr);
 }
 
 void Neighborhood::RefreshMirrorDataForOnlineMembers() const

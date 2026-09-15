@@ -47,6 +47,8 @@
 #include "Map.h"
 #include "Metric.h"
 #include "MiscPackets.h"
+#include "Neighborhood.h"
+#include "NeighborhoodMgr.h"
 #include "ObjectMgr.h"
 #include "OutdoorPvPMgr.h"
 #include "PetBattleMgr.h"
@@ -849,6 +851,10 @@ void WorldSession::LogoutPlayer(bool save)
         sScriptMgr->OnPlayerLogout(_player);
 
         Playerbot::Hooks::OnPlayerLogout(_player);
+
+        // ... and offline again.
+        for (Neighborhood const* neighborhood : sNeighborhoodMgr.GetNeighborhoodsForPlayer(_player->GetGUID()))
+            neighborhood->BroadcastMemberStatus(_player->GetGUID(), false);
 
         TC_METRIC_EVENT("player_events", "Logout", _player->GetName());
 

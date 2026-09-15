@@ -807,9 +807,7 @@ void WorldSession::HandleNeighborhoodAddSecondaryOwner(WorldPackets::Neighborhoo
     // Broadcast roster update and refresh mirror data for all online members
     if (result == HOUSING_RESULT_SUCCESS)
     {
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-        rosterUpdate.Residents.push_back({ neighborhoodAddSecondaryOwner.PlayerGuid, 1 /*RoleChanged*/, true /*promoted to manager = privileged*/ });
-        neighborhood->BroadcastPacket(rosterUpdate.Write(), player->GetGUID());
+        neighborhood->BroadcastMemberStatus(neighborhoodAddSecondaryOwner.PlayerGuid);
 
         neighborhood->RefreshMirrorDataForOnlineMembers();
     }
@@ -873,9 +871,7 @@ void WorldSession::HandleNeighborhoodRemoveSecondaryOwner(WorldPackets::Neighbor
     // Broadcast roster update and refresh mirror data for all online members
     if (result == HOUSING_RESULT_SUCCESS)
     {
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-        rosterUpdate.Residents.push_back({ neighborhoodRemoveSecondaryOwner.PlayerGuid, 1 /*RoleChanged*/, false /*demoted to resident = not privileged*/ });
-        neighborhood->BroadcastPacket(rosterUpdate.Write(), player->GetGUID());
+        neighborhood->BroadcastMemberStatus(neighborhoodRemoveSecondaryOwner.PlayerGuid);
 
         neighborhood->RefreshMirrorDataForOnlineMembers();
     }
@@ -1444,18 +1440,8 @@ void WorldSession::HandleNeighborhoodBuyHouse(WorldPackets::Neighborhood::Neighb
             }
         }
 
-        // Broadcast roster update to other neighborhood members
-        for (auto const& member : neighborhood->GetMembers())
-        {
-            if (member.PlayerGuid == player->GetGUID())
-                continue;
-            if (Player* memberPlayer = ObjectAccessor::FindPlayer(member.PlayerGuid))
-            {
-                WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-                rosterUpdate.Residents.push_back({ player->GetGUID(), 0 /*Added*/, false /*resident = not privileged*/ });
-                memberPlayer->SendDirectMessage(rosterUpdate.Write());
-            }
-        }
+        // The buyer now has a house on a plot: the other members' rosters need it.
+        neighborhood->BroadcastRoster(player->GetGUID());
 
         // Send guild notification for house addition
         if (Housing const* housing = player->GetHousing())
@@ -1740,10 +1726,8 @@ void WorldSession::HandleNeighborhoodMoveHouse(WorldPackets::Neighborhood::Neigh
             response.House.HouseLevel = static_cast<uint8>(housing->GetLevel()); // JamCliHouse carries level, not settings flags (RE 0x5c0006)
         }
 
-        // Broadcast roster update to other members
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-        rosterUpdate.Residents.push_back({ player->GetGUID(), 1 /*RoleChanged*/, false /*resident = not privileged*/ });
-        neighborhood->BroadcastPacket(rosterUpdate.Write(), player->GetGUID());
+        // The house moved to another plot: the other members' rosters need the new plot.
+        neighborhood->BroadcastRoster(player->GetGUID());
 
         // Refresh NeighborhoodMirrorData (Houses[] changed — plot moved)
         neighborhood->RefreshMirrorDataForOnlineMembers();
@@ -2061,27 +2045,8 @@ void WorldSession::HandleNeighborhoodGetRoster(WorldPackets::Neighborhood::Neigh
         return;
     }
 
-    std::vector<Neighborhood::Member> const& members = neighborhood->GetMembers();
-
     WorldPackets::Neighborhood::NeighborhoodGetRosterResponse response;
-    response.Result = static_cast<uint8>(HOUSING_RESULT_SUCCESS);
-    response.GroupNeighborhoodGuid = neighborhood->GetGuid();
-    response.GroupOwnerGuid = neighborhood->GetOwnerGuid();
-    response.NeighborhoodName = neighborhood->GetName();
-    response.Members.reserve(members.size());
-    for (auto const& member : members)
-    {
-        WorldPackets::Neighborhood::NeighborhoodGetRosterResponse::RosterMemberData data;
-        data.PlayerGuid = member.PlayerGuid;
-        data.PlotIndex = member.PlotIndex;
-        data.JoinTime = member.JoinTime;
-        data.ResidentType = member.Role;
-        data.IsOnline = ObjectAccessor::FindPlayer(member.PlayerGuid) != nullptr;
-        if (member.PlotIndex != INVALID_PLOT_INDEX)
-            if (Neighborhood::PlotInfo const* plotInfo = neighborhood->GetPlotInfo(member.PlotIndex))
-                data.HouseGuid = plotInfo->HouseGuid;
-        response.Members.push_back(data);
-    }
+    neighborhood->BuildRosterResponse(response);
 
     // Pre-send neighborhood name response to populate JamCliNeighborhoodName DataCache.
     // The roster UI resolves the neighborhood name via GroupNeighborhoodGuid cache lookup.
@@ -2261,10 +2226,7 @@ void WorldSession::HandleNeighborhoodEvictPlot(WorldPackets::Neighborhood::Neigh
             }
         }
 
-        // Broadcast roster update to remaining members using helper
-        WorldPackets::Neighborhood::NeighborhoodRosterResidentUpdate rosterUpdate;
-        rosterUpdate.Residents.push_back({ evictedPlayerGuid, 2 /*Removed*/, false });
-        neighborhood->BroadcastPacket(rosterUpdate.Write(), player->GetGUID());
+        // Neighborhood::EvictPlayer already sent the remaining members the new roster.
 
         // SMSG_NEIGHBORHOOD_EVICT_PLAYER (0x5C0000). The 12.0.7 client handler (case 6029312)
         // does not decode any field — it consumes the remaining bytes as a blob and then fires
