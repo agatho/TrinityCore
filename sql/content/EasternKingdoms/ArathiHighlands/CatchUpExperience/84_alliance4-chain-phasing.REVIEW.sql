@@ -1,0 +1,78 @@
+-- ========================================================================================
+-- CONTENT SLICE -- Waking Shores (map 2927) :: Dragonflight intro chain -- PHASE GRAPH (REVIEW)
+-- ========================================================================================
+-- Generated 2026-09-09 by TCHarvest tools/author_chain_slice.py
+-- Sources: rpe_a4_proj: dump_12.1.0.69587_2026-09-09_22-24-58.pkt + TCHarvest.lua + combat log; wpp_alliance; wpp_alliance2; wpp_alliance3; wpp_horde; rpe_h2_proj
+--
+-- ALL ROWS COMMENTED. SMSG_PHASE_SHIFT_CHANGE gives the player's phase set per tick; a phase
+-- renders in TC only through phase_area(AreaId, PhaseId) + a loadable condition (SourceEntry = AreaId).
+-- AreaId here is INFERRED: the player's addon-sampled position nearest to the push tick, mapped to
+-- the areaId of the closest realm spawn. Conditions are proposed from the quest event nearest to
+-- the push (accept -> QUESTTAKEN 9, reward -> QUESTREWARDED 8, complete -> QUESTSTATE 47 mask 2).
+-- NOTE: none of the captured phase ids exist on the realm (phase_area, creature, gameobject) -- the
+-- TDB phases this zone with a different id set. Reconciling the two is a human decision.
+-- ========================================================================================
+
+
+-- ----------------------------------------------------------------------------------------
+-- phase pushes after arriving on the map (login/arrival baseline sets listed first)
+-- ----------------------------------------------------------------------------------------
+-- tick 66774: BASELINE set of 27 phases pushed (login / map arrival): [2560, 2641, 2877, 2884, 2988, 3054, 3055, 3122, 3184, 3238, 3244, 3253, 3290, 3435, 3695, 3926, 3932, 3934, 4023, 4086, 4116, 4176, 4178, 4179, 4352, 4479, 4651]
+-- tick 208580: phase 26596 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 208580: phase 26618 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 208580: phase 27217 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 208580: phase 2560 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 2641 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 2877 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 2884 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 2988 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 3054 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 3055 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 3122 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 3184 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 3238 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 3244 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 3253 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 3290 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 3435 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 3695 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 3926 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 3932 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 3934 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 4023 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 4086 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 4116 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 4176 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 4178 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 4179 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 4352 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 4479 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 208580: phase 4651 REMOVED -- no quest event within 5s; was active since tick 66774 (142s)
+-- tick 1325306: phase 26618 REMOVED -- no quest event within 5s; was active since tick 208580 (1117s)
+-- tick 1462613: phase 26596 REMOVED -- nearest quest event: reward 90882 at tick 1461485 (+1.1s); was active since tick 208580 (1254s)
+-- tick 1498735: phase 26588 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1498735: phase 26599 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 1524013: phase 26588 REMOVED -- nearest quest event: accept 90885 at tick 1524013 (+0.0s); was active since tick 1498735 (25s)
+-- tick 1793520: phase 26604 ADDED (1 flags) -- nearest quest event: reward 90887 at tick 1792136 (+1.4s); no addon position sample within 90s -> AreaId unknown
+-- tick 1793520: phase 26615 ADDED (1 flags) -- nearest quest event: reward 90887 at tick 1792136 (+1.4s); no addon position sample within 90s -> AreaId unknown
+-- tick 1793520: phase 27245 ADDED (1 flags) -- nearest quest event: reward 90887 at tick 1792136 (+1.4s); no addon position sample within 90s -> AreaId unknown
+-- tick 1793520: phase 26599 REMOVED -- nearest quest event: reward 90887 at tick 1792136 (+1.4s); was active since tick 1498735 (295s)
+-- tick 1917371: phase 27239 ADDED (1 flags) -- nearest quest event: accept 92028 at tick 1917371 (+0.0s); no addon position sample within 90s -> AreaId unknown
+-- tick 1920600: phase 26607 ADDED (1 flags) -- nearest quest event: accept 90895 at tick 1920600 (+0.0s); no addon position sample within 90s -> AreaId unknown
+-- tick 1920600: phase 26615 REMOVED -- nearest quest event: accept 90895 at tick 1920600 (+0.0s); was active since tick 1793520 (127s)
+-- tick 1924560: phase 26608 ADDED (1 flags) -- nearest quest event: accept 90893 at tick 1924560 (+0.0s); no addon position sample within 90s -> AreaId unknown
+-- tick 1924560: phase 26604 REMOVED -- nearest quest event: accept 90893 at tick 1924560 (+0.0s); was active since tick 1793520 (131s)
+-- tick 1962850: phase 27239 REMOVED -- nearest quest event: progress 92028 at tick 1962850 (+0.0s); was active since tick 1917371 (45s)
+-- tick 1998569: phase 27239 ADDED (1 flags) -- nearest quest event: complete 92028 at tick 1999430 (-0.9s); no addon position sample within 90s -> AreaId unknown
+-- tick 2535401: phase 26612 ADDED (0 flags) -- nearest quest event: reward 90896 at tick 2535438 (-0.0s); no addon position sample within 90s -> AreaId unknown
+-- tick 2565804: phase 26609 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 2565804: phase 26607 REMOVED -- no quest event within 5s; was active since tick 1920600 (645s)
+-- tick 2565804: phase 26608 REMOVED -- no quest event within 5s; was active since tick 1924560 (641s)
+-- tick 2668748: BASELINE set of 19 phases pushed (login / map arrival): [1139, 1231, 1706, 4064, 4070, 6481, 7510, 8389, 8658, 10368, 16013, 16785, 20045, 21820, 22154, 23766, 24825, 27177, 27732]
+-- tick 2668748: phase 14750 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 2668748: phase 19122 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 2668748: phase 19123 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 2668748: phase 19125 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 2668748: phase 19168 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 2668748: phase 19258 ADDED (1 flags) -- no quest event within 5s; no addon position sample within 90s -> AreaId unknown
+-- tick 2668748: phase 16785 REMOVED -- no quest event within 5s; was active since tick 2668748 (0s)

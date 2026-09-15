@@ -1,0 +1,66 @@
+-- ============================================================================
+-- CANDIDATE: three map-2927 vendors carry inventory but NO VENDOR npcflag,
+-- so their goods are unreachable in game. 37 item rows affected.
+-- ============================================================================
+-- HOW THIS WAS FOUND, and why it needed a HORDE capture specifically.
+--
+-- The Arathi RPE is FACTION-HUBBED. Win'sa (245026) stands 15 yards from the
+-- arrival point, so every capture sees her; the other five vendors ring Thrall
+-- (244715) at 26-84 yards, and an Alliance run walks to Jaina -- ~2100 yards
+-- the other way -- and never passes them. Four Alliance captures plus the
+-- owner's own recollection ("i can only remember 1 vendor in the rpe") all
+-- agreed on one vendor, and all six are nonetheless genuinely on map 2927
+-- (every create-block GUID structurally encodes 2927, not an adjacent map).
+--
+-- Realm state before this file (integ_world, map 2927):
+--
+--   entry   name        npcflag   npc_vendor rows   vendor window opens?
+--   232030  Tharlidun         0                13   NO
+--   232035  Keena             0                19   NO
+--   232038  Uttnar            0                 5   NO
+--   232033  Jun'ha          128                22   yes
+--   232037  Mu'uta          128                 3   yes
+--   245026  Win'sa          129                 5   yes
+--
+-- EVIDENCE that the three ARE vendors on retail (capture
+-- ArathiCatchupExperienceHorde2, 2026-09-02, build 69587): the TCHarvest addon
+-- recorded npc_vendor rows for all three -- 3 items from Tharlidun, 19 from
+-- Keena, 5 from Uttnar. Those rows are written ONLY from a live MERCHANT_SHOW
+-- event, and MERCHANT_SHOW cannot fire on an NPC the server has not flagged as
+-- a vendor. Keena's 19 and Uttnar's 5 match the realm's own row counts exactly.
+--
+-- Ruled out before calling this a defect, not after:
+--   * per-spawn override  -- creature.npcflag is NULL for all six spawns
+--   * per-difficulty      -- creature_template_difficulty has no npcflag column
+--   * runtime SmartAI     -- no smart_scripts rows on these entries set it
+-- So the template value is what the server uses, and it is 0.
+--
+-- WHY `| 128` AND NOT `= 128`. The two working siblings are exactly 128, which
+-- is the obvious value to copy. But an absolute assignment would silently drop
+-- any other flag a future TDB import gives these NPCs. OR-ing the VENDOR bit
+-- states the actual finding -- "these are vendors" -- and nothing else.
+--
+-- NOT included: a GOSSIP bit. Win'sa carries 129 (GOSSIP|VENDOR) and the addon
+-- did record a gossip_menu_id for Tharlidun and Keena, but that field is the
+-- addon's SURROGATE key (it equals the entry id -- the real Blizzard MenuID is
+-- not Lua-exposed), so it is not evidence of a gossip menu. If a reviewer
+-- confirms these NPCs greet before trading, add 1.
+--
+-- REVIEW BEFORE APPLYING; golden-source rule: this belongs on
+-- feature/arathi-rpe, not on integration.
+-- ============================================================================
+
+UPDATE `creature_template`
+   SET `npcflag` = `npcflag` | 128        -- UNIT_NPC_FLAG_VENDOR
+ WHERE `entry` IN (232030, 232035, 232038)
+   AND (`npcflag` & 128) = 0;             -- idempotent: re-running changes nothing
+
+-- Verification after apply -- all three must report 1:
+--   SELECT entry, name, npcflag, (npcflag & 128) > 0 AS can_trade
+--     FROM creature_template WHERE entry IN (232030, 232035, 232038);
+--
+-- SEPARATE QUESTION, deliberately not answered here: the capture saw only 3 of
+-- Tharlidun's 13 authored items. That is not evidence the other 10 are wrong --
+-- one session shows one player's view of a vendor list, and conditional
+-- inventory is normal -- but it is the kind of gap a second Horde capture that
+-- scrolls the full list would close.
