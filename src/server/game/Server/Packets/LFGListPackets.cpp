@@ -566,9 +566,39 @@ WorldPacket const* LFGListApplicantListUpdate::Write()
     {
         _worldPacket << applicant.Ticket;
         _worldPacket << applicant.PlayerGuid;
-        // Member snapshot list. Kept empty: the full form carries a 248-byte record per member whose
-        // scalars are not resolved, and the client renders the status-only form fine.
-        _worldPacket << uint32(0);
+        _worldPacket << uint32(applicant.Members.size());
+        for (ApplicantMember const& member : applicant.Members)
+        {
+            _worldPacket << member.Guid;
+            _worldPacket << uint32(member.VirtualRealmAddress);
+            _worldPacket << uint32(member.Level);
+            _worldPacket << uint32(member.HonorLevel);
+            _worldPacket << uint8(member.RoleMask);
+            _worldPacket << uint8(member.AssignedRole);
+            _worldPacket << uint32(0);          // {u32, u32} pairs: no consumer among the applicant getters
+            _worldPacket << member.DungeonScore;
+            for (uint32 bracket = 0; bracket < member.PvpRatings.size(); ++bracket)
+            {
+                _worldPacket << uint32(member.PvpRatings[bracket]);
+                _worldPacket << uint8(bracket);
+            }
+            _worldPacket << uint8(member.RaceID);
+            _worldPacket << uint8(member.FactionMask);
+            _worldPacket << member.BnetAccountGuid;
+            _worldPacket << uint32(0);
+            _worldPacket << uint32(0);
+            _worldPacket << uint32(0);
+            _worldPacket << uint32(0);
+            _worldPacket << uint32(0);
+            _worldPacket << uint64(0);
+            _worldPacket << uint64(0);
+            _worldPacket << uint32(0);
+            _worldPacket << Bits<1>(member.IsLeaver);
+            _worldPacket.FlushBits();
+            _worldPacket << float(member.ItemLevel);
+            _worldPacket << float(member.PvpItemLevel);
+            _worldPacket << uint32(member.SpecID);
+        }
         // 12.1: the 13-bit block sits behind the member array. Written out bit by bit rather than as two
         // hand-packed bytes so it stays correct if the member list is ever filled.
         _worldPacket.WriteBits(applicant.StateBits >> 4, 4);

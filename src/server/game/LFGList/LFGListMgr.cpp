@@ -1003,6 +1003,49 @@ void LFGListMgr::FillApplicantInfo(WorldPackets::LFGList::ApplicantInfo& info, L
     FillApplicationTicket(info.Ticket, app);
     info.PlayerGuid = app.ApplicantGuid;
     info.StateBits = ApplicationStateToBits(app.State);
+
+    // The applicant's party as the leader sees it (C_LFGList.GetApplicantMemberInfo): the applicant alone, or every
+    // member of the group they applied with. The applicant's own roles are the ones they applied for; a party member's
+    // are the roles their group assigned, else their specialization role.
+    auto roleBit = [](uint8 role) -> uint8 { return role == 0 ? lfg::PLAYER_ROLE_TANK : role == 1 ? lfg::PLAYER_ROLE_HEALER : lfg::PLAYER_ROLE_DAMAGE; };
+    auto addMember = [&](Player const* player, Group const* group)
+    {
+        WorldPackets::LFGList::ApplicantMember& member = info.Members.emplace_back();
+        member.Guid = player->GetGUID();
+        member.VirtualRealmAddress = GetVirtualRealmAddress();
+        member.Level = player->GetLevel();
+        member.HonorLevel = player->GetHonorLevel();
+        if (player->GetGUID() == app.ApplicantGuid)
+        {
+            member.RoleMask = app.RoleMask & (lfg::PLAYER_ROLE_TANK | lfg::PLAYER_ROLE_HEALER | lfg::PLAYER_ROLE_DAMAGE);
+            member.AssignedRole = app.GrantedRoleMask;
+        }
+        else
+            member.RoleMask = roleBit(GetMemberRole(player, group));
+        member.DungeonScore = *player->m_playerData->DungeonScore;
+        for (uint32 bracket = 0; bracket < member.PvpRatings.size(); ++bracket)
+            if (UF::PVPInfo const* pvp = player->GetPvpInfoForBracket(int8(bracket)))
+                member.PvpRatings[bracket] = pvp->Rating;
+        member.RaceID = player->GetRace();
+        member.FactionMask = FACTION_MASK_PLAYER | (player->GetTeam() == ALLIANCE ? FACTION_MASK_ALLIANCE : FACTION_MASK_HORDE);
+        member.BnetAccountGuid = player->GetSession()->GetBattlenetAccountGUID();
+        member.ItemLevel = player->m_playerData->AvgItemLevel[AsUnderlyingType(AvgItemLevelCategory::EquippedBase)];
+        member.PvpItemLevel = player->m_playerData->AvgItemLevel[AsUnderlyingType(AvgItemLevelCategory::Pvp)];
+        member.SpecID = AsUnderlyingType(player->GetPrimarySpecialization());
+    };
+
+    if (Player const* applicant = ObjectAccessor::FindConnectedPlayer(app.ApplicantGuid))
+    {
+        Group const* group = applicant->GetGroup();
+        if (group)
+        {
+            for (Group::MemberSlot const& slot : group->GetMemberSlots())
+                if (Player const* member = ObjectAccessor::FindConnectedPlayer(slot.guid))
+                    addMember(member, group);
+        }
+        else
+            addMember(applicant, nullptr);
+    }
     info.Comment = app.Comment;
     // Said explicitly rather than left to the default: this record carries the authoritative comment, and
     // the bit is what tells the client to take it instead of keeping whatever it already had. See

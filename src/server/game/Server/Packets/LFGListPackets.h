@@ -835,10 +835,38 @@ namespace WorldPackets
         // send MemberCount == 0, so the two orders coincide and the wire is identical today. It stops being
         // identical the moment anyone fills the member array - which is why the bits are now written
         // explicitly instead of as two hand-packed bytes.
+        // One member of an applicant party, 248 bytes in the client (reader 0x7FF7CD524D40 at 12.1.0.69587). What the
+        // leader sees in the applicant list is C_LFGList.GetApplicantMemberInfo (filler 0x7FF7CF2ADFD0), and every value
+        // it returns comes from here:
+        //   PackedGuid ; u32 VirtualRealmAddress ; u32 level ; u32 honorLevel ; u8 lfgRoles(tank 2 / healer 4 / damage 8) ;
+        //   u8 assignedRole (same bits, 0 = none yet) ; u32 Size(pairs) ; DungeonScoreSummary (dungeonScore = overall) ;
+        //   9 x { u32 rating, u8 bracket } ; u8 raceID ; u8 factionGroup mask (2 Alliance / 4 Horde / 1 player) ;
+        //   leaver block { PackedGuid BnetAccount ; u32 x5 ; u64 x2 ; u32 ; bit isLeaver } ; pairs x { u32, u32 } ;
+        //   float itemLevel ; float pvpItemLevel ; u32 specID
+        struct ApplicantMember
+        {
+            ObjectGuid Guid;
+            uint32 VirtualRealmAddress = 0;
+            uint32 Level = 0;
+            uint32 HonorLevel = 0;
+            uint8 RoleMask = 0;
+            uint8 AssignedRole = 0;
+            MythicPlus::DungeonScoreSummary DungeonScore;
+            std::array<uint32, 9> PvpRatings = { };
+            uint8 RaceID = 0;
+            uint8 FactionMask = 0;
+            ObjectGuid BnetAccountGuid;
+            bool IsLeaver = false;
+            float ItemLevel = 0.0f;
+            float PvpItemLevel = 0.0f;
+            uint32 SpecID = 0;
+        };
+
         struct ApplicantInfo
         {
             LFG::RideTicket Ticket;             // application ticket (type 6, Id = ApplicationId)
             ObjectGuid PlayerGuid;
+            std::vector<ApplicantMember> Members;
             uint8 StateBits = 0;                // occupies the top 4 bits of the wire; ApplicationStateBits
             // "The Comment in THIS record is the current one." The single bit behind StateBits, and it is
             // not decoration: the consumer chain of this opcode reads it and branches on it twice.
