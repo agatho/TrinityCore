@@ -15,6 +15,7 @@
 #include "Dungeon/PveGroupCoordinator.h"
 #include "Dungeon/DungeonScript.h"      // DungeonScriptMgr::GetScriptFor + event_summoned_bosses()
 #include "Player.h"
+#include "PlayerbotAPI.h"         // IsItemRenderableInSlot (auto-equip candidate gate)
 #include "Formulas.h"                 // Trinity::XP::GetGrayLevel (Fix 2 trivial-quest gate)
 #include "Corpse.h"
 #include "Pet.h"
@@ -2496,6 +2497,16 @@ std::shared_ptr<BotSnapshot const> BotSnapshotBuilder::Build(Player* p, BotAI* b
         // swaps need their own non-empty-bag transfer flow; they are NOT
         // auto-equip candidates.
         if (ii.equip_slot != 0xFF && ii.equip_slot >= EQUIPMENT_SLOT_END)
+            ii.equip_slot = 0xFF;
+        // An item the client cannot draw is not an equip candidate either. Every
+        // auto-equip consumer (MaintainAutoEquipUpgrades, dungeon_auto_equip,
+        // EquipUpgradeFire, /upgrades, upgrades_pending) keys off equip_slot, so
+        // clearing it here keeps them all from wearing one. Without this the
+        // gear heal would be undone on the next idle tick: the displaced piece
+        // lands in the bag and usually out-scores its renderable replacement.
+        // Enchanter bots then disenchant it like any other unwearable green.
+        if (ii.equip_slot != 0xFF &&
+            !::Playerbot::IsItemRenderableInSlot(item, p, ii.equip_slot))
             ii.equip_slot = 0xFF;
         ii.quality    = item->GetTemplate() ? static_cast<uint8>(item->GetTemplate()->GetQuality()) : 0u;
         ii.item_class    = item->GetTemplate() ? static_cast<uint8>(item->GetTemplate()->GetClass())    : 0u;

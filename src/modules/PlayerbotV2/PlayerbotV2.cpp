@@ -2047,6 +2047,11 @@ void Module::OnPlayerLogin(Player* p)
     // for sessionless bots.)
     p->SetPlayerLocalFlag(PLAYER_LOCAL_FLAG_OVERRIDE_TRANSPORT_SERVER_TIME);
 
+    // Take off anything the client cannot draw BEFORE other players get a
+    // chance to inspect this bot. Without it a bot that logs in wearing such an
+    // item stays a client-crash hazard until the next 5-min gear-backfill pass.
+    Services::Population().HealUnrenderableGear(p);
+
     // Cross-map travel on-ramp (2026-06-16): ensure the bot KNOWS its faction's
     // flight paths. The travel graph prunes every taxi edge to a flight master
     // NOT in the bot's taximask (UnifiedTravelGraph EdgeUsable → IsTaximaskNodeKnown),
