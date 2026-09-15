@@ -5211,8 +5211,16 @@ class spell_pri_vampiric_embrace : public AuraScript
 
     static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
     {
+        // Vampiric Embrace only leeches from spell damage, so a proc event with no
+        // DamageInfo (e.g. a cast-phase proc) has nothing to heal from -> don't proc.
+        // Without this guard a null DamageInfo crashes the whole server; it was hit
+        // live 2026-09-15 when a bot's spell_proc row for 15286 fired on cast phase.
+        DamageInfo const* damageInfo = eventInfo.GetDamageInfo();
+        if (!damageInfo || !damageInfo->GetSpellInfo())
+            return false;
+
         // Not proc from Mind Sear
-        return !(eventInfo.GetDamageInfo()->GetSpellInfo()->SpellFamilyFlags[1] & 0x80000);
+        return !(damageInfo->GetSpellInfo()->SpellFamilyFlags[1] & 0x80000);
     }
 
     void HandleEffectProc(AuraEffect const* aurEff, ProcEventInfo const& eventInfo)

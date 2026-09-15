@@ -3448,7 +3448,16 @@ class spell_dh_soulmonger : public AuraScript
 
     static bool CheckProc(AuraScript const&, ProcEventInfo const& eventInfo)
     {
-        return eventInfo.GetActionTarget()->HealthAbovePctHealed(100, eventInfo.GetHealInfo()->GetHeal());
+        // Soulmonger tops up its absorb from healing done, so an event with no HealInfo
+        // (or no action target) has nothing to measure -> don't proc. Guards the null
+        // derefs that would otherwise crash the server, matching the class fix applied
+        // to the other unguarded proc-check scripts on 2026-09-15.
+        Unit const* actionTarget = eventInfo.GetActionTarget();
+        HealInfo const* healInfo = eventInfo.GetHealInfo();
+        if (!actionTarget || !healInfo)
+            return false;
+
+        return actionTarget->HealthAbovePctHealed(100, healInfo->GetHeal());
     }
 
     static void HandleEffectProc(AuraScript const&, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
