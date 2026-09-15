@@ -359,6 +359,28 @@ WorldPacket const* InstanceEncounterEventCastUpdate::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* EncounterStart::Write()
+{
+    _worldPacket << uint32(DungeonEncounterID);
+    _worldPacket << uint16(DifficultyID);
+    _worldPacket << uint32(GroupSize);
+    _worldPacket << uint32(0);                              // per-member record count, see the header
+
+    return &_worldPacket;
+}
+
+WorldPacket const* EncounterEnd::Write()
+{
+    _worldPacket << uint32(DungeonEncounterID);
+    _worldPacket << uint16(DifficultyID);
+    _worldPacket << uint32(GroupSize);
+    _worldPacket << uint32(DurationMS);
+    _worldPacket << Bits<1>(Success);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
 void StartInstanceAbandonVote::Read()
 {
     _worldPacket >> OptionalInit(PartyIndex);
@@ -372,5 +394,29 @@ void InstanceAbandonVoteResponse::Read()
     _worldPacket >> Bits<1>(Accept);
     if (PartyIndex)
         _worldPacket >> *PartyIndex;
+}
+
+WorldPacket const* InstanceEncounterUpdateAllowReleaseInProgress::Write()
+{
+    _worldPacket << Bits<1>(AllowRelease);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* InstanceEncounterUpdateSuppressRelease::Write()
+{
+    _worldPacket << Bits<1>(SuppressRelease);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
+WorldPacket const* LegacyLootRules::Write()
+{
+    _worldPacket << Bits<1>(LegacyRulesActive);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
 }
 }

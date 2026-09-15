@@ -31,6 +31,7 @@
 
 #ifdef TRINITY_API_USE_DYNAMIC_LINKING
 #include <memory>
+#include <unordered_map>
 #endif
 
 #define OUT_SAVE_INST_DATA             TC_LOG_DEBUG("scripts", "Saving Instance Data for Instance {} (Map {}, Instance Id {})", instance->GetMapName(), instance->GetId(), instance->GetInstanceId())
@@ -327,6 +328,14 @@ class TC_GAME_API InstanceScript : public ZoneScript
         // InstanceMap::Update, not from InstanceScript::Update - a script override must not be able to
         // silence the timeline by not calling its base.
         void UpdateEncounterTimeline(uint32 diff);
+        // The realm-wide SMSG_ENCOUNTER_START / _END pair. SetBossState sends them around every pull in the order
+        // the 12.1 captures show; they are public so scripts that drive an encounter without BossAI can use them.
+        void SendRealmEncounterStart(uint32 dungeonEncounterId);
+        void SendRealmEncounterEnd(uint32 dungeonEncounterId, bool success);
+
+        void SendUpdateAllowReleaseInProgress(bool allowRelease);
+        // Encounter-specific: call with true at the pull and false at the end for bosses that suppress release.
+        void SendUpdateSuppressRelease(bool suppressRelease);
 
         // ReCheck PhaseTemplate related conditions
         void UpdatePhasing();
@@ -390,6 +399,7 @@ class TC_GAME_API InstanceScript : public ZoneScript
         uint32 _entranceId;
         uint32 _temporaryEntranceId;
         uint32 _combatResurrectionTimer;
+        std::unordered_map<uint32 /*dungeonEncounterId*/, uint32 /*GameTime::GetGameTimeMS at the pull*/> _encounterStartTimes;
         uint8 _combatResurrectionCharges; // the counter for available battle resurrections
         bool _combatResurrectionTimerStarted;
 
