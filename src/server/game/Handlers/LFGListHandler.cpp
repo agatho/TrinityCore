@@ -187,7 +187,7 @@ namespace
         result.StateBits = stateBits;
 
         if (listing)
-            sLFGListMgr.FillSearchRow(result.Row, *listing);
+            sLFGListMgr.FillSearchRow(result.Row, *listing, player);
         else
         {
             // The listing is gone, so there is no row to send. The consumer assigns whatever row arrives
@@ -540,12 +540,13 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     filter.ActivityIds = packet.ActivityIDs;
     filter.ActivityGroupIds = packet.ActivityGroupIDs;
     filter.Keywords = packet.GetKeywords();
-    // Deliberately NOT acted on, each for a reason recorded at its declaration: Filter (already consumed
-    // client-side before ResolvedActivityIDs was built), PreferredFilters and FilterByte2 (meaning
-    // undecided), LanguageMask (no per-listing locale exists here), AdvancedFilterMask and MinimumRating
-    // (the listing model carries neither role slots nor a per-activity difficulty), CrossFaction (nothing
-    // to relax - every listing is already visible to both factions), FilterByte1 (a client constant) and
-    // Guids (no client path fills it).
+    filter.AdvancedFilterMask = packet.AdvancedFilterMask;
+    filter.MinimumRating = packet.MinimumRating;
+    filter.LanguageMask = packet.LanguageMask;
+    filter.SearcherClass = GetPlayer()->GetClass();
+    // Not acted on, each for a reason recorded at its declaration: Filter (already consumed client-side before
+    // ResolvedActivityIDs was built), PreferredFilters and FilterByte2, CrossFaction (every listing is already
+    // visible to both factions), FilterByte1 (a client constant) and Guids (no client path fills it).
 
     // Keep this browser subscribed so listings published/edited from now on are pushed live via
     // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE instead of the player having to re-search. It records the SAME
@@ -567,7 +568,7 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     for (LFGList::Listing const* listing : matches)
     {
         WorldPackets::LFGList::SearchResultListing row;
-        sLFGListMgr.FillSearchRow(row, *listing);
+        sLFGListMgr.FillSearchRow(row, *listing, GetPlayer());
         results.Listings.push_back(std::move(row));
     }
     SendPacket(results.Write());
@@ -652,7 +653,7 @@ void WorldSession::HandleLFGListApplyToGroup(WorldPackets::LFGList::LFGListApply
     FillApplicationTicket(result.Ticket, *app);
     result.ApplicationExpiration = LFGListMgr::GetApplicationExpiration(*app);
     FillListingTicket(result.ListingTicket, *listing);
-    sLFGListMgr.FillSearchRow(result.Row, *listing);
+    sLFGListMgr.FillSearchRow(result.Row, *listing, player);
     SendPacket(result.Write());
 
     SendApplicationStatus(*listing, *app);

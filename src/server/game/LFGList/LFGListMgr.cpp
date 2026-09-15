@@ -25,6 +25,10 @@
 #include "Player.h"
 #include "Group.h"
 #include "GroupMgr.h"
+#include "CharacterCache.h"
+#include "LFG.h"
+#include "SocialMgr.h"
+#include "World.h"
 #include "Util.h"
 #include "WorldSession.h"      // TransferListingLeadership re-announces the entry to the new owner
 #include <cctype>
@@ -166,12 +170,17 @@ uint32 LFGListMgr::CreateListing(Player* leader, WorldPackets::LFGList::ListingD
     listing.Descriptor = descriptor;
     listing.CreatedTime = GameTime::GetGameTime();
     listing.ExpireTime = expireMinutes ? listing.CreatedTime + expireMinutes * MINUTE : 0;
+    listing.LastEditorGuid = listing.LeaderGuid;
+    listing.NameEditorGuid = listing.LeaderGuid;
+    listing.CommentEditorGuid = listing.LeaderGuid;
+    listing.VoiceChatEditorGuid = listing.LeaderGuid;
     EvaluateCensorship(listing);
 
     _listingByLeader[leader->GetGUID()] = id;
 
-    // A newly published listing must appear in every open browser it matches.
-    NotifyListingChanged(id);
+    // A newly published listing must appear in every open browser it matches, with everything it carries.
+    NotifyListingChanged(id, ObjectGuid::Empty, WorldPackets::LFGList::SEARCH_RESULT_CHANGE_LEADER
+        | WorldPackets::LFGList::SEARCH_RESULT_CHANGE_DESCRIPTOR);
     return id;
 }
 
@@ -181,13 +190,49 @@ bool LFGListMgr::UpdateListing(uint32 listingId, ObjectGuid leader, WorldPackets
     if (!listing || listing->LeaderGuid != leader)
         return false;
 
+    using namespace WorldPackets::LFGList;
+    ListingDescriptor const& before = listing->Descriptor;
+    uint32 changes = SEARCH_RESULT_CHANGE_NONE;
+    if (before.Name != descriptor.Name)
+        changes |= SEARCH_RESULT_CHANGE_NAME;
+    if (before.Comment != descriptor.Comment)
+        changes |= SEARCH_RESULT_CHANGE_COMMENT;
+    if (before.VoiceChat != descriptor.VoiceChat)
+        changes |= SEARCH_RESULT_CHANGE_VOICE_CHAT;
+    if (before.RequiredItemLevel != descriptor.RequiredItemLevel)
+        changes |= SEARCH_RESULT_CHANGE_REQUIRED_ITEM_LEVEL;
+    if (before.IsAutoAccept != descriptor.IsAutoAccept)
+        changes |= SEARCH_RESULT_CHANGE_AUTO_ACCEPT;
+    if (before.IsPrivateGroup != descriptor.IsPrivateGroup)
+        changes |= SEARCH_RESULT_CHANGE_PRIVATE;
+    if (before.RequiredDungeonScore != descriptor.RequiredDungeonScore)
+        changes |= SEARCH_RESULT_CHANGE_REQUIRED_DUNGEON_SCORE;
+    if (before.RequiredPvpRating != descriptor.RequiredPvpRating)
+        changes |= SEARCH_RESULT_CHANGE_REQUIRED_PVP_RATING;
+    if (before.Playstyle != descriptor.Playstyle)
+        changes |= SEARCH_RESULT_CHANGE_PLAYSTYLE;
+    if (before.IsCrossFactionListing != descriptor.IsCrossFactionListing)
+        changes |= SEARCH_RESULT_CHANGE_CROSS_FACTION;
+    if (before.ActivityIDs != descriptor.ActivityIDs)
+        changes |= SEARCH_RESULT_CHANGE_ACTIVITIES;
+    if (before.NewPlayerFriendly != descriptor.NewPlayerFriendly)
+        changes |= SEARCH_RESULT_CHANGE_NEW_PLAYER_FRIENDLY;
+
+    listing->LastEditorGuid = leader;
+    if (changes & SEARCH_RESULT_CHANGE_NAME)
+        listing->NameEditorGuid = leader;
+    if (changes & SEARCH_RESULT_CHANGE_COMMENT)
+        listing->CommentEditorGuid = leader;
+    if (changes & SEARCH_RESULT_CHANGE_VOICE_CHAT)
+        listing->VoiceChatEditorGuid = leader;
+
     listing->Descriptor = descriptor;
     // Editing is exactly how a player clears a flag: re-run the check on the new text.
     EvaluateCensorship(*listing);
     TouchListing(*listing);
 
     // Edited listings are pushed so open browsers show the new title/activity without re-searching.
-    NotifyListingChanged(listingId);
+    NotifyListingChanged(listingId, ObjectGuid::Empty, changes);
     return true;
 }
 
@@ -241,7 +286,7 @@ void LFGListMgr::BuildDelistPacket(WorldPackets::LFGList::LFGListUpdateStatus& p
 // Three separate paths used to assemble that ticket by hand; two of them got it wrong.
 void LFGListMgr::DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 status)
 {
-    LFGList::Listing const* listing = GetListing(listingId);
+    LFGList::Listing* listing = GetListing(listingId);
     if (!listing || listing->LeaderGuid != leader)
         return;
 
@@ -267,7 +312,7 @@ void LFGListMgr::DelistAndNotify(uint32 listingId, ObjectGuid leader, uint8 stat
     // :4552). This unit already knew the gap - the choice of "declined_delisted" over the other three
     // refusals in HandleLFGListApplyToGroup is argued from "an open browser is not refreshed when a listing
     // disappears" - and that argument is what this line retires.
-    PushSearchRow(*listing, true, ObjectGuid::Empty);
+    PushSearchRow(*listing, true, ObjectGuid::Empty, WorldPackets::LFGList::SEARCH_RESULT_CHANGE_NONE);
 
     // The addressees above are the holders of an ACTIVE ENTRY. A player whose application is still pending
     // never received a Listed payload and is not among them, yet its application dies here with the listing -
@@ -385,8 +430,8 @@ void LFGListMgr::TransferListingLeadership(ObjectGuid groupGuid, ObjectGuid newL
         leader->GetSession()->SendLFGListUpdateStatus(listingId);
 
     // The row changed: FillSearchRow marks the leader among the members (SearchResultMember::IsLeader), so
-    // an open browser is showing the wrong player as leader until this arrives.
-    NotifyListingChanged(listingId);
+    // an open browser is showing the wrong player as leader until this arrives. The record names the new leader.
+    NotifyListingChanged(listingId, ObjectGuid::Empty, WorldPackets::LFGList::SEARCH_RESULT_CHANGE_LEADER);
 }
 
 void LFGListMgr::RemoveListingsByGroup(ObjectGuid groupGuid)
@@ -407,8 +452,8 @@ void LFGListMgr::RemoveListingsByGroup(ObjectGuid groupGuid)
 
 void LFGListMgr::NotifyGroupMemberJoined(ObjectGuid groupGuid)
 {
-    if (LFGList::Listing const* listing = GetListingByGroup(groupGuid))
-        PushSearchRow(*listing, false, ObjectGuid::Empty);
+    if (LFGList::Listing* listing = GetListingByGroup(groupGuid))
+        PushSearchRow(*listing, false, ObjectGuid::Empty, WorldPackets::LFGList::SEARCH_RESULT_CHANGE_NONE);
 }
 
 void LFGListMgr::NotifyGroupMemberLeft(ObjectGuid groupGuid, ObjectGuid member)
@@ -631,6 +676,144 @@ static bool OffersAnyActivity(std::vector<uint32> const& listedActivities, std::
     return false;
 }
 
+uint8 LFGListMgr::GetMemberRole(Player const* player, Group const* group)
+{
+    if (group)
+    {
+        uint8 const assigned = group->GetLfgRoles(player->GetGUID());
+        if (assigned & lfg::PLAYER_ROLE_TANK)
+            return 0;
+        if (assigned & lfg::PLAYER_ROLE_HEALER)
+            return 1;
+        if (assigned & lfg::PLAYER_ROLE_DAMAGE)
+            return 2;
+    }
+
+    if (ChrSpecializationEntry const* spec = player->GetPrimarySpecializationEntry())
+        return uint8(spec->Role);
+    return 2;
+}
+
+LFGList::MemberComposition LFGListMgr::GetMemberComposition(LFGList::Listing const& listing, ObjectGuid excludeMember /*= ObjectGuid::Empty*/)
+{
+    LFGList::MemberComposition composition;
+    Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid);
+    auto count = [&](ObjectGuid guid)
+    {
+        Player const* player = ObjectAccessor::FindConnectedPlayer(guid);
+        if (!player)
+            return;
+        switch (GetMemberRole(player, group))
+        {
+            case 0: ++composition.Tanks; break;
+            case 1: ++composition.Healers; break;
+            default: ++composition.Damagers; break;
+        }
+        if (player->GetClass() < MAX_CLASSES)
+            ++composition.Classes[player->GetClass()];
+    };
+
+    if (group)
+    {
+        for (Group::MemberSlot const& slot : group->GetMemberSlots())
+            if (slot.guid != excludeMember)
+                count(slot.guid);
+    }
+    else
+        count(listing.LeaderGuid);
+    return composition;
+}
+
+float LFGListMgr::GetLeaderDungeonScore(LFGList::Listing const& listing)
+{
+    if (Player const* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
+        return leader->m_playerData->DungeonScore->OverallScoreCurrentSeason;
+    return 0.0f;
+}
+
+// C_LFGList.GetActivityInfoTable's difficulty flags, as the 12.1.0.69587 client builds them (0x7FF7CF2B9F50) from
+// GroupFinderActivity.DifficultyID after remapping 233 -> 16 and 250 -> 17: isNormalActivity == 1, isHeroicActivity == 2,
+// isMythicActivity == 23, isMythicPlusActivity == 8. Everything else - raid difficulties 14-16 included - is in no band
+// and passes, exactly like the Lua, which only rejects an activity that IS in a band the player left unticked.
+bool LFGListMgr::MatchesDifficultyBand(LFGList::Listing const& listing, uint32 advancedFilterMask)
+{
+    using namespace LFGList;
+    if (listing.Descriptor.ActivityIDs.empty())
+        return true;
+
+    GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(listing.Descriptor.ActivityIDs.front());
+    if (!activity)
+        return true;
+
+    uint32 difficulty = activity->DifficultyID;
+    if (difficulty == 233)
+        difficulty = 16;
+    else if (difficulty == 250)
+        difficulty = 17;
+
+    switch (difficulty)
+    {
+        case 1:  return (advancedFilterMask & ADVANCED_FILTER_DIFFICULTY_NORMAL) != 0;
+        case 2:  return (advancedFilterMask & ADVANCED_FILTER_DIFFICULTY_HEROIC) != 0;
+        case 23: return (advancedFilterMask & ADVANCED_FILTER_DIFFICULTY_MYTHIC) != 0;
+        case 8:  return (advancedFilterMask & ADVANCED_FILTER_DIFFICULTY_MYTHIC_PLUS) != 0;
+        default: return true;
+    }
+}
+
+// The advanced filter, applied exactly as LFGList.lua (12.1.0.69587) EntryStillSatisfiesFilters re-applies it to a row
+// the client already holds: role / class needs against GetSearchResultMemberCounts, minimumRating against
+// leaderOverallDungeonScore, the difficulty band of the listed activity, and the listing's general playstyle. The
+// client only RE-checks rows the server sent; deciding which rows to send in the first place is this function.
+static bool MatchesAdvancedFilter(LFGList::Listing const& listing, LFGList::SearchFilter const& filter)
+{
+    using namespace LFGList;
+    uint32 const mask = filter.AdvancedFilterMask;
+
+    if (mask & (ADVANCED_FILTER_NEEDS_TANK | ADVANCED_FILTER_NEEDS_HEALER | ADVANCED_FILTER_NEEDS_DAMAGE
+        | ADVANCED_FILTER_NEEDS_MY_CLASS | ADVANCED_FILTER_HAS_TANK | ADVANCED_FILTER_HAS_HEALER))
+    {
+        MemberComposition const composition = LFGListMgr::GetMemberComposition(listing);
+        if ((mask & ADVANCED_FILTER_NEEDS_TANK) && composition.Tanks != 0)
+            return false;
+        if ((mask & ADVANCED_FILTER_NEEDS_HEALER) && composition.Healers != 0)
+            return false;
+        if ((mask & ADVANCED_FILTER_NEEDS_DAMAGE) && composition.Damagers >= 3)
+            return false;
+        if ((mask & ADVANCED_FILTER_NEEDS_MY_CLASS) && filter.SearcherClass < MAX_CLASSES && composition.Classes[filter.SearcherClass] > 0)
+            return false;
+        if ((mask & ADVANCED_FILTER_HAS_TANK) && composition.Tanks == 0)
+            return false;
+        if ((mask & ADVANCED_FILTER_HAS_HEALER) && composition.Healers == 0)
+            return false;
+    }
+
+    if (filter.MinimumRating && float(filter.MinimumRating) > LFGListMgr::GetLeaderDungeonScore(listing))
+        return false;
+
+    if ((mask & ADVANCED_FILTER_DIFFICULTY_ANY) && !LFGListMgr::MatchesDifficultyBand(listing, mask))
+        return false;
+
+    // A listing without a general playstyle (None) passes, exactly like the Lua, which only rejects the four named ones.
+    if (mask & ADVANCED_FILTER_GENERAL_PLAYSTYLE_ANY)
+    {
+        static constexpr uint32 PlaystyleFlag[5] = { 0, ADVANCED_FILTER_GENERAL_PLAYSTYLE_1, ADVANCED_FILTER_GENERAL_PLAYSTYLE_2,
+            ADVANCED_FILTER_GENERAL_PLAYSTYLE_3, ADVANCED_FILTER_GENERAL_PLAYSTYLE_4 };
+        uint8 const playstyle = listing.Descriptor.GeneralPlaystyle;
+        if (playstyle >= 1 && playstyle <= 4 && !(mask & PlaystyleFlag[playstyle]))
+            return false;
+    }
+
+    // The language filter: a listing speaks its leader's client locale. The client always ORs its own locale bit in
+    // (RVA 0x24E1030), so a full mask (0xFFF, every capture) passes everything.
+    if (filter.LanguageMask)
+        if (Player const* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
+            if (!(filter.LanguageMask & (1u << leader->GetSession()->GetSessionDbcLocale())))
+                return false;
+
+    return true;
+}
+
 bool LFGListMgr::Matches(LFGList::Listing const& listing, LFGList::SearchFilter const& filter)
 {
     WorldPackets::LFGList::ListingDescriptor const& d = listing.Descriptor;
@@ -700,6 +883,9 @@ bool LFGListMgr::Matches(LFGList::Listing const& listing, LFGList::SearchFilter 
     // half only counts when it was actually asked for. That is the fix for Runde 12's second finding: a
     // request carrying resolved activities and no keywords now filters by them instead of riding in an OR
     // that an empty keyword set satisfies on its own.
+    if (!MatchesAdvancedFilter(listing, filter))
+        return false;
+
     if (filter.Keywords.empty() && filter.ResolvedActivityIds.empty())
         return true;
 
@@ -817,6 +1003,49 @@ void LFGListMgr::FillApplicantInfo(WorldPackets::LFGList::ApplicantInfo& info, L
     FillApplicationTicket(info.Ticket, app);
     info.PlayerGuid = app.ApplicantGuid;
     info.StateBits = ApplicationStateToBits(app.State);
+
+    // The applicant's party as the leader sees it (C_LFGList.GetApplicantMemberInfo): the applicant alone, or every
+    // member of the group they applied with. The applicant's own roles are the ones they applied for; a party member's
+    // are the roles their group assigned, else their specialization role.
+    auto roleBit = [](uint8 role) -> uint8 { return role == 0 ? lfg::PLAYER_ROLE_TANK : role == 1 ? lfg::PLAYER_ROLE_HEALER : lfg::PLAYER_ROLE_DAMAGE; };
+    auto addMember = [&](Player const* player, Group const* group)
+    {
+        WorldPackets::LFGList::ApplicantMember& member = info.Members.emplace_back();
+        member.Guid = player->GetGUID();
+        member.VirtualRealmAddress = GetVirtualRealmAddress();
+        member.Level = player->GetLevel();
+        member.HonorLevel = player->GetHonorLevel();
+        if (player->GetGUID() == app.ApplicantGuid)
+        {
+            member.RoleMask = app.RoleMask & (lfg::PLAYER_ROLE_TANK | lfg::PLAYER_ROLE_HEALER | lfg::PLAYER_ROLE_DAMAGE);
+            member.AssignedRole = app.GrantedRoleMask;
+        }
+        else
+            member.RoleMask = roleBit(GetMemberRole(player, group));
+        member.DungeonScore = *player->m_playerData->DungeonScore;
+        for (uint32 bracket = 0; bracket < member.PvpRatings.size(); ++bracket)
+            if (UF::PVPInfo const* pvp = player->GetPvpInfoForBracket(int8(bracket)))
+                member.PvpRatings[bracket] = pvp->Rating;
+        member.RaceID = player->GetRace();
+        member.FactionMask = FACTION_MASK_PLAYER | (player->GetTeam() == ALLIANCE ? FACTION_MASK_ALLIANCE : FACTION_MASK_HORDE);
+        member.BnetAccountGuid = player->GetSession()->GetBattlenetAccountGUID();
+        member.ItemLevel = player->m_playerData->AvgItemLevel[AsUnderlyingType(AvgItemLevelCategory::EquippedBase)];
+        member.PvpItemLevel = player->m_playerData->AvgItemLevel[AsUnderlyingType(AvgItemLevelCategory::Pvp)];
+        member.SpecID = AsUnderlyingType(player->GetPrimarySpecialization());
+    };
+
+    if (Player const* applicant = ObjectAccessor::FindConnectedPlayer(app.ApplicantGuid))
+    {
+        Group const* group = applicant->GetGroup();
+        if (group)
+        {
+            for (Group::MemberSlot const& slot : group->GetMemberSlots())
+                if (Player const* member = ObjectAccessor::FindConnectedPlayer(slot.guid))
+                    addMember(member, group);
+        }
+        else
+            addMember(applicant, nullptr);
+    }
     info.Comment = app.Comment;
     // Said explicitly rather than left to the default: this record carries the authoritative comment, and
     // the bit is what tells the client to take it instead of keeping whatever it already had. See
@@ -876,7 +1105,7 @@ void LFGListMgr::SendApplicationStatusBits(LFGList::Listing const& listing, LFGL
 }
 
 void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, LFGList::Listing const& listing,
-    ObjectGuid excludeMember /*= ObjectGuid::Empty*/) const
+    Player const* viewer, ObjectGuid excludeMember /*= ObjectGuid::Empty*/) const
 {
     // The frozen ticket guid, not the live GroupGuid: the row header IS a RideTicket (see operator<<
     // SearchResultListing), so a browser identifies the row by it. Same freeze, same reason as
@@ -885,28 +1114,55 @@ void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, 
     row.ListingId = listing.Id;
     row.PostTime = listing.CreatedTime;
     row.LeaderGuid = listing.LeaderGuid;
-    // UNVERIFIED: the row's Age field is served as a constant. 3 is what every row of the 12.0.7.68974
-    // capture carried (some carried 4); there is no 12.1 recording of SMSG_LFG_LIST_SEARCH_RESULTS to
-    // check it against, and no client consumer was found that distinguishes its values, so neither the
-    // meaning of the field nor the right way to compute it is established. It is not a real age -
-    // listing.CreatedTime already rides in PostTime one field earlier.
-    row.Age = 3;
-    row.Listing = GetPublicDescriptor(listing);
+    row.Revision = listing.Revision;
+    row.LastEditorGuid = listing.LastEditorGuid;
+    row.NameEditorGuid = listing.NameEditorGuid;
+    row.CommentEditorGuid = listing.CommentEditorGuid;
+    row.VoiceChatEditorGuid = listing.VoiceChatEditorGuid;
+    // The row carries the text, flagged: the client shows CENSORED_LFG_GROUP_NAME until the player reveals it
+    // (LFGListSearchEntry_OnLoad -> C_LFGList.RevealCensoredSearchResult), which only works if the text is there.
+    row.Listing = listing.Descriptor;
+    if (listing.IsCensored())
+        row.CensorFlags = listing.CensorFieldFlags;
+
+    if (Player const* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
+    {
+        row.LeaderVirtualRealmAddress = GetVirtualRealmAddress();
+        row.LeaderAreaID = leader->GetZoneId();
+        row.LeaderFactionMask = FACTION_MASK_PLAYER | (leader->GetTeam() == ALLIANCE ? FACTION_MASK_ALLIANCE : FACTION_MASK_HORDE);
+        row.LeaderScore = *leader->m_playerData->DungeonScore;
+        for (uint32 bracket = 0; bracket < row.LeaderPvpRatings.size(); ++bracket)
+            if (UF::PVPInfo const* pvp = leader->GetPvpInfoForBracket(int8(bracket)))
+                row.LeaderPvpRatings[bracket] = pvp->Rating;
+    }
 
     row.Members.clear();
-    auto addMember = [&row, &listing](ObjectGuid guid)
+    auto addMember = [&row, &listing, viewer](ObjectGuid guid)
     {
         WorldPackets::LFGList::SearchResultMember& member = row.Members.emplace_back();
         member.Guid = guid;
         member.IsLeader = guid == listing.LeaderGuid;   // 68974: the head flag bit is set on the leader
+        if (viewer)
+        {
+            if (guid == viewer->GetGUID())
+                row.HasSelf = true;
+            else
+            {
+                if (viewer->GetSocial() && viewer->GetSocial()->HasFriend(guid))
+                    row.CharacterFriendGuids.push_back(guid);
+                if (viewer->GetGuildId() && sCharacterCache->GetCharacterGuildIdByGuid(guid) == viewer->GetGuildId())
+                    row.GuildMateGuids.push_back(guid);
+            }
+        }
         if (Player const* player = ObjectAccessor::FindConnectedPlayer(guid))
         {
+            member.BnetAccountGuid = player->GetSession()->GetBattlenetAccountGUID();
             member.Level = uint8(player->GetLevel());
             member.ClassID = uint8(player->GetClass());
             member.SpecID = uint32(player->GetPrimarySpecialization());
-            // 68974: third head byte is the spec role (Outlaw rogue = 2 dps, Brewmaster monk = 0 tank).
-            if (ChrSpecializationEntry const* spec = player->GetPrimarySpecializationEntry())
-                member.Role = uint8(spec->Role);
+            // 68974: third head byte is the role (Outlaw rogue = 2 dps, Brewmaster monk = 0 tank). The same helper
+            // feeds the advanced filter's role counts.
+            member.Role = GetMemberRole(player, sGroupMgr->GetGroupByGUID(listing.GroupGuid));
         }
     };
     if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))
@@ -1036,8 +1292,9 @@ bool LFGListMgr::EvaluateCensorship(LFGList::Listing& listing)
     // recorded as such: SMSG_LFG_LIST_CENSORED_ACTIVE_ENTRY_UPDATE and
     // CMSG_LFG_LIST_CONFIRM_CENSORED_ACTIVE_ENTRY are carried as D2 "teil" in the unit status file for
     // exactly this reason, the same grade SMSG_SET_DF_FAST_LAUNCH_RESULT carries for the same situation.
-    bool const flagged = ContainsCensoredWord(listing.Descriptor.Name)
-        || ContainsCensoredWord(listing.Descriptor.Comment);
+    listing.CensorFieldFlags = (ContainsCensoredWord(listing.Descriptor.Name) ? 1 : 0)
+        | (ContainsCensoredWord(listing.Descriptor.Comment) ? 2 : 0);
+    bool const flagged = listing.CensorFieldFlags != 0;
 
     if (flagged)
     {
@@ -1083,15 +1340,17 @@ void LFGListMgr::UnregisterSearch(ObjectGuid player)
     _searchSubscriptions.erase(player);
 }
 
-void LFGListMgr::NotifyListingChanged(uint32 listingId, ObjectGuid excludeMember /*= ObjectGuid::Empty*/)
+void LFGListMgr::NotifyListingChanged(uint32 listingId, ObjectGuid excludeMember /*= ObjectGuid::Empty*/, uint32 changes /*= 0*/)
 {
-    if (LFGList::Listing const* listing = GetListing(listingId))
-        PushSearchRow(*listing, false, excludeMember);
+    if (LFGList::Listing* listing = GetListing(listingId))
+        PushSearchRow(*listing, false, excludeMember, changes);
 }
 
 // See the contract on the declaration.
-void LFGListMgr::PushSearchRow(LFGList::Listing const& listing, bool delisted, ObjectGuid excludeMember)
+void LFGListMgr::PushSearchRow(LFGList::Listing& listing, bool delisted, ObjectGuid excludeMember, uint32 changes)
 {
+    ++listing.Revision;
+
     if (_searchSubscriptions.empty())
         return;
 
@@ -1100,8 +1359,9 @@ void LFGListMgr::PushSearchRow(LFGList::Listing const& listing, bool delisted, O
     // search reply. Keeping the two in step by hand is exactly what this used to get wrong.
     WorldPackets::LFGList::LFGListSearchResultsUpdate update;
     WorldPackets::LFGList::SearchResultListing row;
-    FillSearchRow(row, listing, excludeMember);
+    FillSearchRow(row, listing, nullptr, excludeMember);
     row.Delisted = delisted;
+    row.Changes = changes;
     update.Listings.push_back(std::move(row));
     WorldPacket const* packet = update.Write();
 
