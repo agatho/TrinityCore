@@ -1,6 +1,3 @@
--- Relocated from 2026_09_09_00_auth.sql: upstream TrinityCore claimed that filename for TDB
--- 1210.26091 housekeeping in this merge, so the fork's club-finder RBAC moves to _01.
-
 --
 -- Club Finder GM command permission.
 --
