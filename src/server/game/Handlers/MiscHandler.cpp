@@ -313,12 +313,17 @@ void WorldSession::HandleLogoutCancelOpcode(WorldPackets::Character::LogoutCance
 
 void WorldSession::HandleLogoutInstant(WorldPackets::Character::LogoutInstant& /*logoutInstant*/)
 {
-    // CMSG_LOGOUT_INSTANT is the client asking to skip the LOGOUT_TIME timer / camera zoom-out of
-    // CMSG_LOGOUT_REQUEST. It is still server-authoritative: the same conditions that block an instant
-    // logout in HandleLogoutRequestOpcode (combat, falling, dueling/frozen) block it here, so it cannot
-    // be used to escape combat. When permitted, log out immediately.
+    // CMSG_LOGOUT_INSTANT (Lua ForceLogout: class/expansion trial expiry, end of match, spectate) asks to
+    // skip the LOGOUT_TIME timer of CMSG_LOGOUT_REQUEST. The client's wish is not a permission: a modified
+    // client can send it from anywhere. Apply exactly the rules of HandleLogoutRequestOpcode (instant only
+    // in flight, resting out of combat, or with RBAC_PERM_INSTANT_LOGOUT; otherwise the normal timed
+    // logout), so this opcode never grants more than CMSG_LOGOUT_REQUEST would.
     if (!GetPlayer()->GetLootGUID().IsEmpty())
         GetPlayer()->SendLootReleaseAll();
+
+    bool instantLogout = GetPlayer()->IsInFlight()
+        || (GetPlayer()->HasPlayerFlag(PLAYER_FLAGS_RESTING) && !GetPlayer()->IsInCombat())
+        || HasPermission(rbac::RBAC_PERM_INSTANT_LOGOUT);
 
     bool canLogoutInCombat = GetPlayer()->HasPlayerFlag(PLAYER_FLAGS_RESTING);
 
@@ -330,17 +335,33 @@ void WorldSession::HandleLogoutInstant(WorldPackets::Character::LogoutInstant& /
     else if (GetPlayer()->duel || GetPlayer()->HasAura(9454)) // is dueling or frozen by GM via freeze command
         reason = 2;
 
+    WorldPackets::Character::LogoutResponse logoutResponse;
+    logoutResponse.LogoutResult = reason;
+    logoutResponse.Instant = instantLogout;
+    SendPacket(logoutResponse.Write());
+
     if (reason)
     {
-        WorldPackets::Character::LogoutResponse logoutResponse;
-        logoutResponse.LogoutResult = reason;
-        logoutResponse.Instant = false;
-        SendPacket(logoutResponse.Write());
         SetLogoutStartTime(0);
         return;
     }
 
-    LogoutPlayer(true);
+    if (instantLogout)
+    {
+        LogoutPlayer(true);
+        return;
+    }
+
+    // same timed logout as HandleLogoutRequestOpcode
+    if (GetPlayer()->CanFreeMove())
+    {
+        if (GetPlayer()->GetStandState() == UNIT_STAND_STATE_STAND)
+            GetPlayer()->SetStandState(UNIT_STAND_STATE_SIT);
+        GetPlayer()->SetRooted(true);
+        GetPlayer()->SetUnitFlag(UNIT_FLAG_STUNNED);
+    }
+
+    SetLogoutStartTime(GameTime::GetGameTime());
 }
 
 void WorldSession::HandleTogglePvP(WorldPackets::Misc::TogglePvP& /*packet*/)

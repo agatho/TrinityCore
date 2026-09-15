@@ -712,6 +712,11 @@ void LogoutRequest::Read()
     _worldPacket >> Bits<1>(IdleLogout);
 }
 
+void LogoutInstant::Read()
+{
+    _worldPacket >> Guid;
+}
+
 WorldPacket const* LogoutResponse::Write()
 {
     _worldPacket << int32(LogoutResult);
