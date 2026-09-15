@@ -926,6 +926,29 @@ namespace WorldPackets
             uint16 FactionIndex = 0;
         };
 
+        // SMSG_SET_FACTION_AT_WAR (12.1 0x4501AB) - client deserializer read order is u32, u16 (RdSz 107;
+        // implementierungsplan_69382/12_1_all_neu/plans/PLAN_A4.md). FactionIndex is written as a full u32
+        // here even though it plays the same RepListID role as CMSG_SET_FACTION_AT_WAR/CMSG_SET_FACTION_NOT_AT_WAR's
+        // uint16 FactionIndex (confirmed independently via WowPacketParser's CMSG_SET_FACTION_AT_WAR parser
+        // across V3_4/V4_4/V5_5, all ReadUInt16) - CMSG and SMSG evidently use different wire widths for the
+        // same logical field, which the reflection-based JAM serializer allows.
+        // Flags is the faction's ReputationFlags. 12.1.0.69587 client: reader Handler_SMSG_SET_FACTION_AT_WAR
+        // (0x7FF7CD3C5FD0) reads uint32 then uint16, and the consumer (0x7FF7CF337190) treats FactionIndex as an
+        // index (< 1000) into its 16-byte faction records and copies exactly bit 0x2 of Flags - ReputationFlags::AtWar
+        // - into that record's flag word, setting or clearing it. No other bit is read. Retail was never captured
+        // toggling a faction's at-war state (53 genuine 12.1 captures), so whether retail also sends this after
+        // CMSG_SET_FACTION_AT_WAR is unconfirmed; sending the resulting state keeps the client's flag in sync.
+        class SetFactionAtWarResult final : public ServerPacket
+        {
+        public:
+            explicit SetFactionAtWarResult() : ServerPacket(SMSG_SET_FACTION_AT_WAR, 4 + 2) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 FactionIndex = 0; // RepListID, see comment above
+            uint16 Flags = 0;        // ReputationFlags; the client reads only AtWar (0x2)
+        };
+
         class SetFactionInactive final : public ClientPacket
         {
         public:
