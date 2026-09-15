@@ -189,6 +189,19 @@ namespace WorldPackets
             ObjectGuid LootObj;
         };
 
+        // 0x450040. UNVERIFIED: the read-sequence extraction found only a single guid field
+        // (RdSz 151, no sniff). Sent to the group when a RollVote::Disenchant winner is decided,
+        // alongside LootRollWon - see LootRoll::Finish.
+        class DisenchantCredit final : public ServerPacket
+        {
+        public:
+            explicit DisenchantCredit() : ServerPacket(SMSG_DISENCHANT_CREDIT, 16) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Winner;
+        };
+
         class LootRoll final : public ClientPacket
         {
         public:

@@ -608,6 +608,21 @@ namespace WorldPackets
             ObjectGuid PlayerGUID;
         };
 
+        // opcode-unit-notify, PLAN_A3 §2.1 (0x450180). Wire: empty (0 bytes) - modeled on the
+        // historical reference core, which sends this as a body-less "NullSMsg". No client reader
+        // could be recovered here (opcode_handler_recovery: all 16 SMSG of this family resolve to
+        // the same degraded collector dispatcher, no per-opcode deserializer). Forces the client
+        // into the death/release state; TC already computes this exact transition in
+        // Player::BuildPlayerRepop (Player.cpp) - dead, corpse created, DEAD state set.
+        // UNVERIFIED: that 12.1 kept the body empty (no capture exists to confirm byte-for-byte).
+        class ForcedDeathUpdate final : public ServerPacket
+        {
+        public:
+            explicit ForcedDeathUpdate() : ServerPacket(SMSG_FORCED_DEATH_UPDATE, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
         class ReclaimCorpse final : public ClientPacket
         {
         public:
@@ -1586,6 +1601,21 @@ namespace WorldPackets
             bool BonusRoll = false;
             bool ForceToast = false;    ///< Ignores ITEM_FLAG3_DO_NOT_TOAST
             uint32 CurrencyID = 0;
+        };
+
+        // Byte-exact from a 69382 sniff (wpp_work/in/s69273_a_parsed.txt:437635, Length 8, u64 Money).
+        // UNVERIFIED which Player::ModifyMoney gain sources should trigger this vs. rely solely on
+        // the existing SMSG_LOOT_MONEY_NOTIFY / field-sync push (see PLAN_A4.md Cluster D) - built at
+        // the corpse/chest money-loot path (WorldSession::HandleLootMoneyOpcode), which is the one
+        // observed candidate that is not already covered by its own confirmation packet.
+        class NotifyMoney final : public ServerPacket
+        {
+        public:
+            explicit NotifyMoney() : ServerPacket(SMSG_NOTIFY_MONEY, 8) { }
+
+            WorldPacket const* Write() override;
+
+            uint64 Money = 0;
         };
 
         class AccountWarbandSceneUpdate final : public ServerPacket

@@ -160,6 +160,27 @@ namespace WorldPackets
             WorldPacket const* Write() override { return &_worldPacket; }
         };
 
+        // opcode-unit-notify, PLAN_A3 §3.2 (0x4501EE). Wire: empty (0 bytes), per the plan's
+        // "classic WotLK: body-less to the hunter" reference (the feigning unit, not a payload
+        // describing the resisting attacker). No client reader recovered (degraded collector
+        // dispatcher) and no sniff. TC-computed trigger: AuraEffect::HandleFeignDeath's apply
+        // branch (SpellAuraEffects.cpp) already partitions nearby attackers via the
+        // isAffectedByFeignDeath predicate - Creature attackers where IsIgnoringFeignDeath() is
+        // true are excluded from ScaleThreat(0) and from the CombatStop() removal set, i.e. TC has
+        // already decided, per attacker, that this feign death did not fool them.
+        // UNVERIFIED: whether Retail sends one packet total per feign-death cast (implemented
+        // here) or one per resisting attacker; whether the body is truly empty vs. carrying the
+        // resisting unit's guid. aufnahme_noetig: Feign Death against a creature flagged
+        // CREATURE_FLAG_EXTRA_IGNORE_FEIGN_DEATH (CreatureData.h) while another creature that is
+        // NOT flagged is also in combat, to see whether the client differentiates.
+        class FeignDeathResisted final : public ServerPacket
+        {
+        public:
+            explicit FeignDeathResisted() : ServerPacket(SMSG_FEIGN_DEATH_RESISTED, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
+        };
+
         struct PowerUpdatePower
         {
             PowerUpdatePower(int32 power, uint8 powerType) : Power(power), PowerType(powerType) { }

@@ -31,6 +31,7 @@
 #include "LootItemStorage.h"
 #include "LootPackets.h"
 #include "MapUtils.h"
+#include "MiscPackets.h"
 #include "Object.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
@@ -179,6 +180,14 @@ void WorldSession::HandleLootMoneyOpcode(WorldPackets::Loot::LootMoney& /*packet
                 packet.MoneyMod = goldMod;
                 packet.SoleLooter = playersNear.size() <= 1;
                 (*i)->SendDirectMessage(packet.Write());
+
+                // SMSG_NOTIFY_MONEY (0x450031): UNVERIFIED trigger scope - the single available 69382
+                // sniff hit is not conclusively tied to this exact call site (see PLAN_A4.md Cluster
+                // D), but corpse/chest money-loot is the one candidate not already covered by its own
+                // confirmation packet.
+                WorldPackets::Misc::NotifyMoney notifyMoney;
+                notifyMoney.Money = goldPerPlayer + goldMod;
+                (*i)->SendDirectMessage(notifyMoney.Write());
             }
         }
         else
@@ -193,6 +202,11 @@ void WorldSession::HandleLootMoneyOpcode(WorldPackets::Loot::LootMoney& /*packet
             packet.MoneyMod = goldMod;
             packet.SoleLooter = true; // "You loot..."
             SendPacket(packet.Write());
+
+            // SMSG_NOTIFY_MONEY (0x450031): see UNVERIFIED note above.
+            WorldPackets::Misc::NotifyMoney notifyMoney;
+            notifyMoney.Money = loot->gold + goldMod;
+            SendPacket(notifyMoney.Write());
         }
 
         loot->LootMoney();
