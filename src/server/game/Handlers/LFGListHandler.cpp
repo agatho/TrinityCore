@@ -540,12 +540,13 @@ void WorldSession::HandleLFGListSearch(WorldPackets::LFGList::LFGListSearch& pac
     filter.ActivityIds = packet.ActivityIDs;
     filter.ActivityGroupIds = packet.ActivityGroupIDs;
     filter.Keywords = packet.GetKeywords();
-    // Deliberately NOT acted on, each for a reason recorded at its declaration: Filter (already consumed
-    // client-side before ResolvedActivityIDs was built), PreferredFilters and FilterByte2 (meaning
-    // undecided), LanguageMask (no per-listing locale exists here), AdvancedFilterMask and MinimumRating
-    // (the listing model carries neither role slots nor a per-activity difficulty), CrossFaction (nothing
-    // to relax - every listing is already visible to both factions), FilterByte1 (a client constant) and
-    // Guids (no client path fills it).
+    filter.AdvancedFilterMask = packet.AdvancedFilterMask;
+    filter.MinimumRating = packet.MinimumRating;
+    filter.LanguageMask = packet.LanguageMask;
+    filter.SearcherClass = GetPlayer()->GetClass();
+    // Not acted on, each for a reason recorded at its declaration: Filter (already consumed client-side before
+    // ResolvedActivityIDs was built), PreferredFilters and FilterByte2, CrossFaction (every listing is already
+    // visible to both factions), FilterByte1 (a client constant) and Guids (no client path fills it).
 
     // Keep this browser subscribed so listings published/edited from now on are pushed live via
     // SMSG_LFG_LIST_SEARCH_RESULTS_UPDATE instead of the player having to re-search. It records the SAME

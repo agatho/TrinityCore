@@ -25,6 +25,7 @@
 #include "Player.h"
 #include "Group.h"
 #include "GroupMgr.h"
+#include "LFG.h"
 #include "Util.h"
 #include "WorldSession.h"      // TransferListingLeadership re-announces the entry to the new owner
 #include <cctype>
@@ -631,6 +632,144 @@ static bool OffersAnyActivity(std::vector<uint32> const& listedActivities, std::
     return false;
 }
 
+uint8 LFGListMgr::GetMemberRole(Player const* player, Group const* group)
+{
+    if (group)
+    {
+        uint8 const assigned = group->GetLfgRoles(player->GetGUID());
+        if (assigned & lfg::PLAYER_ROLE_TANK)
+            return 0;
+        if (assigned & lfg::PLAYER_ROLE_HEALER)
+            return 1;
+        if (assigned & lfg::PLAYER_ROLE_DAMAGE)
+            return 2;
+    }
+
+    if (ChrSpecializationEntry const* spec = player->GetPrimarySpecializationEntry())
+        return uint8(spec->Role);
+    return 2;
+}
+
+LFGList::MemberComposition LFGListMgr::GetMemberComposition(LFGList::Listing const& listing, ObjectGuid excludeMember /*= ObjectGuid::Empty*/)
+{
+    LFGList::MemberComposition composition;
+    Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid);
+    auto count = [&](ObjectGuid guid)
+    {
+        Player const* player = ObjectAccessor::FindConnectedPlayer(guid);
+        if (!player)
+            return;
+        switch (GetMemberRole(player, group))
+        {
+            case 0: ++composition.Tanks; break;
+            case 1: ++composition.Healers; break;
+            default: ++composition.Damagers; break;
+        }
+        if (player->GetClass() < MAX_CLASSES)
+            ++composition.Classes[player->GetClass()];
+    };
+
+    if (group)
+    {
+        for (Group::MemberSlot const& slot : group->GetMemberSlots())
+            if (slot.guid != excludeMember)
+                count(slot.guid);
+    }
+    else
+        count(listing.LeaderGuid);
+    return composition;
+}
+
+float LFGListMgr::GetLeaderDungeonScore(LFGList::Listing const& listing)
+{
+    if (Player const* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
+        return leader->m_playerData->DungeonScore->OverallScoreCurrentSeason;
+    return 0.0f;
+}
+
+// C_LFGList.GetActivityInfoTable's difficulty flags, as the 12.1.0.69587 client builds them (0x7FF7CF2B9F50) from
+// GroupFinderActivity.DifficultyID after remapping 233 -> 16 and 250 -> 17: isNormalActivity == 1, isHeroicActivity == 2,
+// isMythicActivity == 23, isMythicPlusActivity == 8. Everything else - raid difficulties 14-16 included - is in no band
+// and passes, exactly like the Lua, which only rejects an activity that IS in a band the player left unticked.
+bool LFGListMgr::MatchesDifficultyBand(LFGList::Listing const& listing, uint32 advancedFilterMask)
+{
+    using namespace LFGList;
+    if (listing.Descriptor.ActivityIDs.empty())
+        return true;
+
+    GroupFinderActivityEntry const* activity = sGroupFinderActivityStore.LookupEntry(listing.Descriptor.ActivityIDs.front());
+    if (!activity)
+        return true;
+
+    uint32 difficulty = activity->DifficultyID;
+    if (difficulty == 233)
+        difficulty = 16;
+    else if (difficulty == 250)
+        difficulty = 17;
+
+    switch (difficulty)
+    {
+        case 1:  return (advancedFilterMask & ADVANCED_FILTER_DIFFICULTY_NORMAL) != 0;
+        case 2:  return (advancedFilterMask & ADVANCED_FILTER_DIFFICULTY_HEROIC) != 0;
+        case 23: return (advancedFilterMask & ADVANCED_FILTER_DIFFICULTY_MYTHIC) != 0;
+        case 8:  return (advancedFilterMask & ADVANCED_FILTER_DIFFICULTY_MYTHIC_PLUS) != 0;
+        default: return true;
+    }
+}
+
+// The advanced filter, applied exactly as LFGList.lua (12.1.0.69587) EntryStillSatisfiesFilters re-applies it to a row
+// the client already holds: role / class needs against GetSearchResultMemberCounts, minimumRating against
+// leaderOverallDungeonScore, the difficulty band of the listed activity, and the listing's general playstyle. The
+// client only RE-checks rows the server sent; deciding which rows to send in the first place is this function.
+static bool MatchesAdvancedFilter(LFGList::Listing const& listing, LFGList::SearchFilter const& filter)
+{
+    using namespace LFGList;
+    uint32 const mask = filter.AdvancedFilterMask;
+
+    if (mask & (ADVANCED_FILTER_NEEDS_TANK | ADVANCED_FILTER_NEEDS_HEALER | ADVANCED_FILTER_NEEDS_DAMAGE
+        | ADVANCED_FILTER_NEEDS_MY_CLASS | ADVANCED_FILTER_HAS_TANK | ADVANCED_FILTER_HAS_HEALER))
+    {
+        MemberComposition const composition = LFGListMgr::GetMemberComposition(listing);
+        if ((mask & ADVANCED_FILTER_NEEDS_TANK) && composition.Tanks != 0)
+            return false;
+        if ((mask & ADVANCED_FILTER_NEEDS_HEALER) && composition.Healers != 0)
+            return false;
+        if ((mask & ADVANCED_FILTER_NEEDS_DAMAGE) && composition.Damagers >= 3)
+            return false;
+        if ((mask & ADVANCED_FILTER_NEEDS_MY_CLASS) && filter.SearcherClass < MAX_CLASSES && composition.Classes[filter.SearcherClass] > 0)
+            return false;
+        if ((mask & ADVANCED_FILTER_HAS_TANK) && composition.Tanks == 0)
+            return false;
+        if ((mask & ADVANCED_FILTER_HAS_HEALER) && composition.Healers == 0)
+            return false;
+    }
+
+    if (filter.MinimumRating && float(filter.MinimumRating) > LFGListMgr::GetLeaderDungeonScore(listing))
+        return false;
+
+    if ((mask & ADVANCED_FILTER_DIFFICULTY_ANY) && !LFGListMgr::MatchesDifficultyBand(listing, mask))
+        return false;
+
+    // A listing without a general playstyle (None) passes, exactly like the Lua, which only rejects the four named ones.
+    if (mask & ADVANCED_FILTER_GENERAL_PLAYSTYLE_ANY)
+    {
+        static constexpr uint32 PlaystyleFlag[5] = { 0, ADVANCED_FILTER_GENERAL_PLAYSTYLE_1, ADVANCED_FILTER_GENERAL_PLAYSTYLE_2,
+            ADVANCED_FILTER_GENERAL_PLAYSTYLE_3, ADVANCED_FILTER_GENERAL_PLAYSTYLE_4 };
+        uint8 const playstyle = listing.Descriptor.GeneralPlaystyle;
+        if (playstyle >= 1 && playstyle <= 4 && !(mask & PlaystyleFlag[playstyle]))
+            return false;
+    }
+
+    // The language filter: a listing speaks its leader's client locale. The client always ORs its own locale bit in
+    // (RVA 0x24E1030), so a full mask (0xFFF, every capture) passes everything.
+    if (filter.LanguageMask)
+        if (Player const* leader = ObjectAccessor::FindConnectedPlayer(listing.LeaderGuid))
+            if (!(filter.LanguageMask & (1u << leader->GetSession()->GetSessionDbcLocale())))
+                return false;
+
+    return true;
+}
+
 bool LFGListMgr::Matches(LFGList::Listing const& listing, LFGList::SearchFilter const& filter)
 {
     WorldPackets::LFGList::ListingDescriptor const& d = listing.Descriptor;
@@ -700,6 +839,9 @@ bool LFGListMgr::Matches(LFGList::Listing const& listing, LFGList::SearchFilter 
     // half only counts when it was actually asked for. That is the fix for Runde 12's second finding: a
     // request carrying resolved activities and no keywords now filters by them instead of riding in an OR
     // that an empty keyword set satisfies on its own.
+    if (!MatchesAdvancedFilter(listing, filter))
+        return false;
+
     if (filter.Keywords.empty() && filter.ResolvedActivityIds.empty())
         return true;
 
@@ -904,9 +1046,9 @@ void LFGListMgr::FillSearchRow(WorldPackets::LFGList::SearchResultListing& row, 
             member.Level = uint8(player->GetLevel());
             member.ClassID = uint8(player->GetClass());
             member.SpecID = uint32(player->GetPrimarySpecialization());
-            // 68974: third head byte is the spec role (Outlaw rogue = 2 dps, Brewmaster monk = 0 tank).
-            if (ChrSpecializationEntry const* spec = player->GetPrimarySpecializationEntry())
-                member.Role = uint8(spec->Role);
+            // 68974: third head byte is the role (Outlaw rogue = 2 dps, Brewmaster monk = 0 tank). The same helper
+            // feeds the advanced filter's role counts.
+            member.Role = GetMemberRole(player, sGroupMgr->GetGroupByGUID(listing.GroupGuid));
         }
     };
     if (Group const* group = sGroupMgr->GetGroupByGUID(listing.GroupGuid))

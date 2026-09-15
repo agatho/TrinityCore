@@ -300,8 +300,8 @@ namespace WorldPackets
             uint32 LanguageMask = 0;            // 12-bit WowLocale mask, built at RVA 0x24E1030 from the
                                                 // languageFilter argument (one bool per locale) OR'ed with
                                                 // the client's own locale bit. Measured 0xFFF = all.
-                                                // UNVERIFIED: not acted on. TrinityCore carries no
-                                                // per-listing locale, so there is nothing to filter on.
+                                                // Acted on in LFGListMgr: a listing speaks its leader's
+                                                // session locale (one bit per LocaleConstant).
             uint32 AdvancedFilterMask = 0;      // The 14 bools of AdvancedFilterOptions, LSB first in the
                                                 // order the UI-Lua structure declares them:
                                                 //   0 needsTank       1 needsHealer   2 needsDamage
@@ -313,12 +313,14 @@ namespace WorldPackets
                                                 // over the struct bytes +0..+5 and +36..+43), and left 0
                                                 // when no advanced filter is saved - hence 0 in all three
                                                 // captures.
-                                                // UNVERIFIED: not acted on. Honouring it needs per-listing
-                                                // role slots and a difficulty per activity, neither of
-                                                // which this unit's listing model carries.
+                                                // Acted on in LFGListMgr::Matches with LFGList.lua's own
+                                                // EntryStillSatisfiesFilters predicate: role counts from the
+                                                // row's role bytes, the searcher's class, the difficulty band
+                                                // the client derives from GroupFinderActivity.DifficultyID
+                                                // (0x7FF7CF2B9F50) and the listing's general playstyle.
             uint32 MinimumRating = 0;           // AdvancedFilterOptions.minimumRating (struct +32).
-                                                // UNVERIFIED: not acted on - a listing carries a leader
-                                                // score, but which rating retail compares is undecided.
+                                                // Compared against leaderOverallDungeonScore, as
+                                                // EntryStillSatisfiesFilters does (LFGList.lua 12.1).
             uint8 FilterByte1 = 0;              // Hard-coded 0xFF in the client: RVA 0x24E1030 initialises
                                                 // the u16 at +124 to 255 and never writes the low byte
                                                 // again. Measured 0xFF, as it must be. Carries nothing.

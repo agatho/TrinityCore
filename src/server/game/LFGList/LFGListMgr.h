@@ -21,11 +21,14 @@
 #include "Define.h"
 #include "ObjectGuid.h"
 #include "LFGListPackets.h"
+#include "SharedDefines.h"
+#include <array>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+class Group;
 class Player;
 
 // Premade Group Finder (the "Premade Groups" tab). Server-side registry of player-published group listings + the
@@ -71,6 +74,41 @@ namespace LFGList
         Confirmed   = 2,
     };
 
+    // AdvancedFilterOptions as the client packs it into CMSG_LFG_LIST_SEARCH.AdvancedFilterMask (client RVA 0x24E1030,
+    // LSB first in the order Blizzard_APIDocumentationGenerated/LFGListInfoDocumentation.lua declares the fields).
+    enum AdvancedFilterFlag : uint32
+    {
+        ADVANCED_FILTER_NEEDS_TANK              = 0x0001,
+        ADVANCED_FILTER_NEEDS_HEALER            = 0x0002,
+        ADVANCED_FILTER_NEEDS_DAMAGE            = 0x0004,
+        ADVANCED_FILTER_NEEDS_MY_CLASS          = 0x0008,
+        ADVANCED_FILTER_HAS_TANK                = 0x0010,
+        ADVANCED_FILTER_HAS_HEALER              = 0x0020,
+        ADVANCED_FILTER_DIFFICULTY_NORMAL       = 0x0040,
+        ADVANCED_FILTER_DIFFICULTY_HEROIC       = 0x0080,
+        ADVANCED_FILTER_DIFFICULTY_MYTHIC       = 0x0100,
+        ADVANCED_FILTER_DIFFICULTY_MYTHIC_PLUS  = 0x0200,
+        ADVANCED_FILTER_GENERAL_PLAYSTYLE_1     = 0x0400,   // Learning
+        ADVANCED_FILTER_GENERAL_PLAYSTYLE_2     = 0x0800,   // FunRelaxed
+        ADVANCED_FILTER_GENERAL_PLAYSTYLE_3     = 0x1000,   // FunSerious
+        ADVANCED_FILTER_GENERAL_PLAYSTYLE_4     = 0x2000,   // Expert
+
+        ADVANCED_FILTER_DIFFICULTY_ANY          = ADVANCED_FILTER_DIFFICULTY_NORMAL | ADVANCED_FILTER_DIFFICULTY_HEROIC
+                                                | ADVANCED_FILTER_DIFFICULTY_MYTHIC | ADVANCED_FILTER_DIFFICULTY_MYTHIC_PLUS,
+        ADVANCED_FILTER_GENERAL_PLAYSTYLE_ANY   = ADVANCED_FILTER_GENERAL_PLAYSTYLE_1 | ADVANCED_FILTER_GENERAL_PLAYSTYLE_2
+                                                | ADVANCED_FILTER_GENERAL_PLAYSTYLE_3 | ADVANCED_FILTER_GENERAL_PLAYSTYLE_4,
+    };
+
+    // What a listing's party looks like to a browser: C_LFGList.GetSearchResultMemberCounts' TANK / HEALER / DAMAGER
+    // and per-class counts, taken from the very role bytes the search row carries so the two cannot disagree.
+    struct MemberComposition
+    {
+        uint8 Tanks = 0;
+        uint8 Healers = 0;
+        uint8 Damagers = 0;
+        std::array<uint8, MAX_CLASSES> Classes = { };
+    };
+
     // The search terms of one CMSG_LFG_LIST_SEARCH, as the packet hands them over: one inner vector per
     // term block, holding that block's non-empty values. Blocks are ANDed, values inside a block ORed -
     // see LFGListSearch::GetKeywords, which owns that decision and marks it.
@@ -89,6 +127,10 @@ namespace LFGList
         std::vector<uint32> ActivityIds;            // GroupFinderActivity ids, C_LFGList.Search arg 7
         std::vector<uint32> ActivityGroupIds;       // GroupFinderActivityGrp ids, advancedFilter.activities
         SearchKeywords Keywords;
+        uint32 AdvancedFilterMask = 0;              // AdvancedFilterFlag
+        uint32 MinimumRating = 0;                   // advancedFilter.minimumRating, against the leader's dungeon score
+        uint32 LanguageMask = 0;                    // one bit per LocaleConstant; 0 = no restriction
+        uint8 SearcherClass = 0;                    // needsMyClass is relative to the player who searches
     };
 
     // One published group listing.
@@ -224,6 +266,17 @@ public:
     // one thing withholding the text is supposed to prevent. Such a listing still shows up in an unfiltered
     // browse, exactly as in retail.
     static bool MatchesKeywords(LFGList::Listing const& listing, LFGList::SearchKeywords const& keywords);
+
+    // The role a member advertises in a search row (0 tank, 1 healer, 2 damage - ChrSpecialization.Role): the role the
+    // party assigned (Group member slot, set when an applicant is invited with a granted role), else the member's
+    // specialization role. Used for the row's role byte and for the advanced filter, so both see the same party.
+    static uint8 GetMemberRole(Player const* player, Group const* group);
+    static LFGList::MemberComposition GetMemberComposition(LFGList::Listing const& listing, ObjectGuid excludeMember = ObjectGuid::Empty);
+    // The leader's overall Mythic+ rating (PlayerData.DungeonScore), what advancedFilter.minimumRating is compared to.
+    static float GetLeaderDungeonScore(LFGList::Listing const& listing);
+    // advancedFilter's difficulty bands for the listing's first activity (LFGList.lua uses activityIDs[1]). True when the
+    // activity is in no band the filter leaves out.
+    static bool MatchesDifficultyBand(LFGList::Listing const& listing, uint32 advancedFilterMask);
 
     // Fills one search-result row for a listing. Shared by the search reply, the apply-result snapshot and the
     // live update push so all three serialize a listing identically.
