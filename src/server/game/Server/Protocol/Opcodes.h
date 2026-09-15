@@ -1066,13 +1066,11 @@ enum OpcodeClient : uint32
     CMSG_WRAP_ITEM                                                  = 0x400000,
     // TC-CUSTOM housing/neighborhood-initiative CMSG opcodes merged from ADV (e004d7a4bf).
     // Values are UNKNOWN_OPCODE: ADV's raw 68275-era suffixes collide with real 12.1 opcodes in
-    // their families (CMSG_HOUSING_BLUEPRINT_EXPORT_ROOM's 0x310008 collides with
-    // CMSG_HOUSING_BLUEPRINT_REQUEST_CONTENTS; CMSG_HOUSING_DECOR_SET_TRANSFORM_12_1's 0x320002
+    // their families (CMSG_HOUSING_DECOR_SET_TRANSFORM_12_1's 0x320002
     // collides with CMSG_HOUSING_DECOR_MOVE), and family 0x38 (neighborhood initiative) has no
     // capacity reserved in GetOpcodeArrayIndex at all. Packet classes compile; IsValid() is false
     // so nothing dispatches until each is re-derived from a verified 12.1 capture.
     CMSG_GET_NEIGHBORHOOD_INITIATIVE_INFO_REQUEST                   = UNKNOWN_OPCODE, // wire: PackedGUID (Lua C_NeighborhoodInitiative.RequestNeighborhoodInitiativeInfo)
-    CMSG_HOUSING_BLUEPRINT_EXPORT_ROOM                              = UNKNOWN_OPCODE, // wire: bits<24> bits<1> u8 pguid Blob
     CMSG_HOUSING_DECOR_SET_TRANSFORM_12_1                           = UNKNOWN_OPCODE, // wire: pguid f32x11 pguid pguid pguid u32 u8 u8 bits<1>; unreferenced elsewhere in the tree
     CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_01                          = UNKNOWN_OPCODE, // wire: PackedGUID
     CMSG_NEIGHBORHOOD_INITIATIVE_OPCODE_05                          = UNKNOWN_OPCODE, // wire: uint32 + PackedGUID
@@ -1697,18 +1695,17 @@ enum OpcodeServer : uint32
     SMSG_HOTFIX_MESSAGE                                             = 0x490002,
     SMSG_HOUSE_EXTERIOR_LOCK_RESPONSE                               = 0x530000,
     SMSG_HOUSE_EXTERIOR_SET_HOUSE_POSITION_RESPONSE                 = 0x530001,
-    // Merge 2026-09-01 (ADV e004d7a4bf): replaces 6 dead pre-ADV stub names that were never
-    // referenced by any packet class (STATUS_UNHANDLED, no Write()/Send() site) with ADV's real,
-    // actually-used blueprint response opcodes — HousingBlueprintPackets.h/.cpp construct these
-    // directly. Family 0x54 capacity is 8 (see GetOpcodeArrayIndex below); these 7 fit exactly.
-    SMSG_HOUSING_BLUEPRINT_COLLECTION                               = 0x540000, // u32 result + vector<JamHousingBlueprint>
-    SMSG_HOUSING_BLUEPRINT_CONTENTS                                 = 0x540001, // JamHousingBlueprint + JamBlueprintItemList + vector<JamBlueprintMissingItem>
-    SMSG_HOUSING_BLUEPRINT_EXPORT_RESULT                            = 0x540002, // u32 result + JamHousingBlueprint
-    SMSG_HOUSING_BLUEPRINT_IMPORT_RESULT                            = 0x540003, // u32 result + houseGUID + JamBlueprintItemList
-    SMSG_HOUSING_BLUEPRINT_DELETE_RESULT                            = 0x540004, // u32 result + blueprintID
-    SMSG_HOUSING_BLUEPRINT_RENAME_RESULT                            = 0x540005, // u32 result + blueprintID + name
+    // Housing blueprints: 12.1.0.69587 dispatcher 0x7FF7CD50C8C0, named from what each case's handler does (export and
+    // import results turn a UUID into a share code, the collection builds HousingBlueprintInfo, rename and delete fire their
+    // HOUSING_BLUEPRINT_* events, 0x540007 is HousingBlueprintContentInfo). Cases 0x540005 {bit, SizedCString<24>, u32 x4}
+    // and 0x540006 {u8} are read and dropped by this client.
+    SMSG_HOUSING_BLUEPRINT_EXPORT_RESPONSE                          = 0x540000,
+    SMSG_HOUSING_BLUEPRINT_COLLECTION                               = 0x540001,
+    SMSG_HOUSING_BLUEPRINT_RENAME_RESPONSE                          = 0x540002,
+    SMSG_HOUSING_BLUEPRINT_DELETE_RESPONSE                          = 0x540003,
+    SMSG_HOUSING_BLUEPRINT_IMPORT_RESPONSE                          = 0x540004,
+    SMSG_HOUSING_BLUEPRINT_CONTENTS                                 = 0x540007,
     SMSG_HOUSING_CATALOG_STATE_SYNC                                = UNKNOWN_OPCODE, // fork-speculative; no confirmed 12.1 client opcode
-    SMSG_HOUSING_BLUEPRINTS_AVAILABILITY_CHANGED                    = 0x540007, // bits<1> available + u32 maxPerBnet + u32 maxBackups
     // HOUSE_BUDGETS_UPDATE: clean, family 0x62 has capacity 1 (sole slot) and is otherwise unused
     // in the 12.1 numbering (12.1 moved the Spell family that occupied 0x62 in ADV's 68275
     // numbering to family 0x67 instead) — no collision.

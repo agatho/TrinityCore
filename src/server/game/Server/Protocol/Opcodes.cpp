@@ -595,7 +595,12 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_HOUSE_EXTERIOR_LOCK,                                STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHouseExteriorLock);
     DEFINE_HANDLER(CMSG_HOUSE_EXTERIOR_SET_HOUSE_POSITION,                  STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHouseExteriorSetHousePosition);
     DEFINE_HANDLER(CMSG_HOUSE_INTERIOR_LEAVE_HOUSE,                         STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHouseInteriorLeaveHouse);
-    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_DELETE,                           STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintDelete);
+    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_DELETE,                           STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintDelete);
+    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_EXPORT,                           STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintExport);
+    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_IMPORT,                           STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintImport);
+    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_RENAME,                           STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintRename);
+    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_REQUEST_COLLECTION,               STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintRequestCollection);
+    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_REQUEST_CONTENTS,                 STATUS_LOGGEDIN,  PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintRequestContents);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_DELETE_FROM_STORAGE,                  STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorDeleteFromStorage);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_LOCK,                                 STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorLock);
     DEFINE_HANDLER(CMSG_HOUSING_DECOR_MOVE,                                 STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingDecorMove);
@@ -612,19 +617,6 @@ void OpcodeTable::InitializeClientOpcodes()
     DEFINE_HANDLER(CMSG_HOUSING_FIXTURE_SET_EDIT_MODE,                      STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingFixtureSetEditMode);
     DEFINE_HANDLER(CMSG_HOUSING_FIXTURE_SET_HOUSE_SIZE,                     STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingFixtureSetHouseSize);
     DEFINE_HANDLER(CMSG_HOUSING_FIXTURE_SET_HOUSE_TYPE,                     STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingFixtureSetHouseType);
-#ifdef HOUSING_12_1_OPCODES
-    // Patch 12.1.0 (build 69299) blueprint CMSG. GATED: their 12.1 values (spec section 4) collide
-    // with the 68275 fixture opcodes above until the TC-wide 12.1 opcode migration shifts fixture
-    // 0x31->0x33 and frees 0x31 for blueprints (spec section 7). Enable this block once the housing
-    // opcode block has been renumbered to 12.1 - until then registering these would clobber the
-    // fixture handlers in the GetOpcodeArrayIndex dispatch table. Handler bodies are real.
-    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_REQUEST_COLLECTION,               STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintRequestCollection);
-    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_REQUEST_CONTENTS,                 STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintRequestContents);
-    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_EXPORT,                           STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintExport);
-    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_EXPORT_ROOM,                      STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintExportRoom);
-    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_RENAME,                           STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintRename);
-    DEFINE_HANDLER(CMSG_HOUSING_BLUEPRINT_IMPORT,                           STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingBlueprintImport);
-#endif // HOUSING_12_1_OPCODES
     DEFINE_HANDLER(CMSG_HOUSING_GET_CURRENT_HOUSE_INFO,                     STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingGetCurrentHouseInfo);
     DEFINE_HANDLER(CMSG_HOUSING_GET_PLAYER_PERMISSIONS,                     STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingGetPlayerPermissions);
     DEFINE_HANDLER(CMSG_HOUSING_HOUSE_STATUS,                               STATUS_LOGGEDIN, PROCESS_THREADUNSAFE, &WorldSession::HandleHousingHouseStatus);
@@ -1829,13 +1821,12 @@ void OpcodeTable::InitializeServerOpcodes()
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSE_EXTERIOR_SET_HOUSE_POSITION_RESPONSE,                   STATUS_NEVER,   CONNECTION_TYPE_REALM);
     // Merge 2026-09-01 (ADV e004d7a4bf): replaces 6 dead pre-ADV stub names (never referenced
     // by any packet class) with ADV's real, actually-used blueprint response opcodes.
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_BLUEPRINT_EXPORT_RESPONSE,                            STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_BLUEPRINT_COLLECTION,                                 STATUS_NEVER,       CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_BLUEPRINT_RENAME_RESPONSE,                            STATUS_NEVER,       CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_BLUEPRINT_DELETE_RESPONSE,                            STATUS_NEVER,       CONNECTION_TYPE_REALM);
+    DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_BLUEPRINT_IMPORT_RESPONSE,                            STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_BLUEPRINT_CONTENTS,                                   STATUS_NEVER,       CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_BLUEPRINT_EXPORT_RESULT,                              STATUS_NEVER,       CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_BLUEPRINT_IMPORT_RESULT,                              STATUS_NEVER,       CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_BLUEPRINT_DELETE_RESULT,                              STATUS_NEVER,       CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_BLUEPRINT_RENAME_RESULT,                              STATUS_NEVER,       CONNECTION_TYPE_REALM);
-    DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_BLUEPRINTS_AVAILABILITY_CHANGED,                      STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_HOUSE_BUDGETS_UPDATE,                                 STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_EXPORT_HOUSE_RESPONSE,                                STATUS_NEVER,       CONNECTION_TYPE_REALM);
     DEFINE_SERVER_OPCODE_HANDLER(SMSG_HOUSING_DECOR_ADD_TO_HOUSE_CHEST_RESPONSE,                    STATUS_NEVER,   CONNECTION_TYPE_REALM);

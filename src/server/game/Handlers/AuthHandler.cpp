@@ -321,6 +321,11 @@ void WorldSession::SendFeatureSystemStatusGlueScreen()
         { "housingMarketEnabled"sv, "1"sv },
         { "housingMarketShopEnabled"sv, "1"sv },
         { "housingMarketCartFullRemoveEnabled"sv, "1"sv },
+        // Blueprints: the client gates C_HousingBlueprint.GetFeatureAvailability / GetImportAvailability /
+        // GetExportAvailability on these (registered at 0x7FF7CCEF81A0, default 0); retail 12.1 sends all three as 1.
+        { "housingBlueprintsEnabled"sv, "1"sv },
+        { "housingBlueprintImportEnabled"sv, "1"sv },
+        { "housingBlueprintExportEnabled"sv, "1"sv },
         // Neighborhood & exterior
         { "housingExteriorTypeByNeighborhoodFactionRestriction"sv, "1"sv },
         { "minNeighborhoodGroupMembers"sv, "3"sv },

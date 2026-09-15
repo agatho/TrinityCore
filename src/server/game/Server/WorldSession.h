@@ -73,6 +73,7 @@ enum class AuctionResult : int8;
 enum class PlayerInteractionType : int32;
 enum InventoryResult : uint8;
 enum class StableResult : uint8;
+enum HousingResult : uint8;
 enum class TabardVendorType : int32;
 
 class Housing;
@@ -656,7 +657,6 @@ namespace WorldPackets
         class HousingBlueprintRequestCollection;
         class HousingBlueprintRequestContents;
         class HousingBlueprintExport;
-        class HousingBlueprintExportRoom;
         class HousingBlueprintRename;
         class HousingBlueprintDelete;
         class HousingBlueprintImport;
@@ -1070,7 +1070,6 @@ namespace WorldPackets
         class HousingBlueprintRequestCollection;
         class HousingBlueprintRequestContents;
         class HousingBlueprintExport;
-        class HousingBlueprintExportRoom;
         class HousingBlueprintRename;
         class HousingBlueprintDelete;
         class HousingBlueprintImport;
@@ -2540,12 +2539,10 @@ class TC_GAME_API WorldSession
         void HandleGetLastCatalogFetch(WorldPackets::Housing::GetLastCatalogFetch const& getLastCatalogFetch);
         void HandleUpdateLastCatalogFetch(WorldPackets::Housing::UpdateLastCatalogFetch const& updateLastCatalogFetch);
 
-        // Housing - Blueprint System (Patch 12.1.0 / build 69299). See HousingHandler.cpp.
-        // Bound only when the base is on the 12.1 opcode table (HOUSING_12_1_OPCODES gate).
+        // Housing - Blueprint System. See HousingHandler.cpp.
         void HandleHousingBlueprintRequestCollection(WorldPackets::Housing::HousingBlueprintRequestCollection const& packet);
         void HandleHousingBlueprintRequestContents(WorldPackets::Housing::HousingBlueprintRequestContents const& packet);
         void HandleHousingBlueprintExport(WorldPackets::Housing::HousingBlueprintExport const& packet);
-        void HandleHousingBlueprintExportRoom(WorldPackets::Housing::HousingBlueprintExportRoom const& packet);
         void HandleHousingBlueprintRename(WorldPackets::Housing::HousingBlueprintRename const& packet);
         void HandleHousingBlueprintDelete(WorldPackets::Housing::HousingBlueprintDelete const& packet);
         void HandleHousingBlueprintImport(WorldPackets::Housing::HousingBlueprintImport const& packet);
@@ -2566,6 +2563,13 @@ class TC_GAME_API WorldSession
         // wired declarations are above ("Housing - Blueprint System (Patch 12.1.0 / build 69299)").
 
         // Housing - Room System
+        // Adds a room at a door of an existing room (CMSG_HOUSING_ROOM_ADD, room blueprint imports): places it, spawns it in the
+        // owner's interior and connects the door. Sends no response.
+        HousingResult AddHousingRoomAtDoor(Housing* housing, uint32 targetDoorComponentID, uint32 houseRoomID, ObjectGuid* outRoomGuid,
+            std::function<void(HousingResult)> const& onPlaced = nullptr);
+        // Rebuilds everything spawned for this house on the map the player is on after a blueprint import.
+        void RespawnHousingAfterBlueprintImport(Player* player, Housing* housing, bool interiorChanged, bool exteriorChanged,
+            std::vector<ObjectGuid> const& removedDecor);
         void HandleHousingRoomSetLayoutEditMode(WorldPackets::Housing::HousingRoomSetLayoutEditMode const& housingRoomSetLayoutEditMode);
         void HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd const& housingRoomAdd);
         void HandleHousingRoomRemove(WorldPackets::Housing::HousingRoomRemove const& housingRoomRemove);

@@ -384,6 +384,9 @@ public:
     // visitor's own social/group/guild/neighborhood data to resolve friend/party/guild/neighbor
     // relationships symmetrically. Settings come from the persisted plotInfo->HouseSettingsFlags.
     bool CanVisitorAccessPlot(Player const* visitor, ObjectGuid ownerGuid, uint32 settingsFlags, bool isInterior) const;
+    // HouseSettingFlags BlueprintExport*: may this visitor save the house as a blueprint. Nobody but the owner unless the
+    // owner opted in.
+    bool CanVisitorExportBlueprint(Player const* visitor, ObjectGuid ownerGuid, uint32 settingsFlags) const;
 
     // Validation
     HousingResult ValidateDecorPlacement(uint32 decorId, Position const& pos, uint32 houseLevel) const;

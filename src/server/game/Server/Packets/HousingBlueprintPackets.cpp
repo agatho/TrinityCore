@@ -20,160 +20,166 @@
 
 namespace WorldPackets::Housing
 {
-// ---------------------------------------------------------------------------
-// JAM struct writers. Field ORDER/NAME/OFFSET is binary-verified (spec §2); the
-// scalar WIDTHS and string length-prefix widths are inferred (offline ceiling),
-// so this framing is [INF] and must be confirmed against a 12.1 capture before a
-// live 12.1 realm relies on it. Wire order = ascending in-memory offset.
-// ---------------------------------------------------------------------------
-static void WriteBlueprint(WorldPacket& data, JamHousingBlueprint const& bp)
+// The client's senders write a zero length for an empty string (and no bytes); SizedCString::BitsSize would write 1.
+static void WriteCStringSize(WorldPacket& data, std::string const& value, uint32 bits)
 {
-    data << uint32(bp.Id);
-    data << SizedString::BitsSize<7>(bp.Uuid);
-    data << SizedString::BitsSize<7>(bp.Name);
-    data << uint32(bp.Type);
-    data << int64(bp.DateCreated);
-    data << int64(bp.DateDeleted);
-    data << uint8(bp.Flags);
-    data << uint8(bp.DeleteReason);
-    data << SizedString::Data(bp.Uuid);
-    data << SizedString::Data(bp.Name);
-}
-
-static void WriteUInt32Vector(WorldPacket& data, std::vector<uint32> const& v)
-{
-    data << uint32(v.size());
-    for (uint32 id : v)
-        data << uint32(id);
-}
-
-static void WriteItemList(WorldPacket& data, JamBlueprintItemList const& list)
-{
-    WriteUInt32Vector(data, list.DecorIDs);
-    WriteUInt32Vector(data, list.DyeItemIDs);
-    WriteUInt32Vector(data, list.RoomIDs);
-    WriteUInt32Vector(data, list.FixtureIDs);
-}
-
-static void WriteBudgetEntry(WorldPacket& data, JamHouseBudgetEntry const& e)
-{
-    data << uint32(e.BudgetType);
-    data << int32(e.Max);
-    data << int32(e.Current);
-    data << int32(e.Cost);
-}
-
-// ===================== CMSG Read() =====================
-
-void HousingBlueprintRequestContents::Read()
-{
-    _worldPacket >> BlueprintId;
+    data.WriteBits(value.empty() ? 0 : uint32(value.size() + 1), bits);
 }
 
 void HousingBlueprintExport::Read()
 {
-    // wire: bits<6> u8 pguid Blob  (spec §4)
-    _worldPacket >> SizedString::BitsSize<6>(Name);
-    _worldPacket >> TypeByte;
-    _worldPacket >> HouseGuid;
-    _worldPacket >> SizedString::Data(Name);
-}
-
-void HousingBlueprintExportRoom::Read()
-{
-    // wire: bits<24> bits<1> u8 pguid Blob  (spec §4)
-    _worldPacket >> SizedString::BitsSize<24>(Name);
-    _worldPacket >> Bits<1>(Flag);
-    _worldPacket >> TypeByte;
+    _worldPacket >> SizedCString::BitsSize<6>(Name);
+    _worldPacket.ResetBitPos();
+    _worldPacket >> BlueprintType;
     _worldPacket >> RoomGuid;
-    _worldPacket >> SizedString::Data(Name);
+    _worldPacket >> SizedCString::Data(Name);
 }
 
 void HousingBlueprintRename::Read()
 {
-    // wire: u64 bits<6> Blob  (spec §4)
-    _worldPacket >> BlueprintId;
-    _worldPacket >> SizedString::BitsSize<6>(Name);
-    _worldPacket >> SizedString::Data(Name);
+    _worldPacket >> BlueprintID;
+    _worldPacket >> SizedCString::BitsSize<6>(Name);
+    _worldPacket.ResetBitPos();
+    _worldPacket >> SizedCString::Data(Name);
 }
 
 void HousingBlueprintDelete::Read()
 {
-    _worldPacket >> BlueprintId;
+    _worldPacket >> BlueprintID;
 }
 
 void HousingBlueprintImport::Read()
 {
-    // wire: bits<24> bits<1> u8 pguid u32 Blob  (spec §4)
-    _worldPacket >> SizedString::BitsSize<24>(Code);
+    _worldPacket >> SizedCString::BitsSize<24>(Uuid);
     _worldPacket >> Bits<1>(Flag);
-    _worldPacket >> TypeByte;
-    _worldPacket >> HouseGuid;
-    _worldPacket >> BlueprintId;
-    _worldPacket >> SizedString::Data(Code);
+    _worldPacket.ResetBitPos();
+    _worldPacket >> BlueprintType;
+    _worldPacket >> SourceRoomGuid;
+    _worldPacket >> TargetDoorComponentID;
+    _worldPacket >> SizedCString::Data(Uuid);
 }
 
-// ===================== SMSG Write() =====================
+void HousingBlueprintRequestContents::Read()
+{
+    _worldPacket >> SizedCString::BitsSize<24>(Uuid);
+    _worldPacket >> Bits<1>(Flag);
+    _worldPacket.ResetBitPos();
+    _worldPacket >> BlueprintType;
+    _worldPacket >> TargetHouseGuid;
+    _worldPacket >> SizedCString::Data(Uuid);
+}
+
+WorldPacket const* HousingBlueprintExportResponse::Write()
+{
+    _worldPacket << uint8(Result);
+    _worldPacket << uint8(BlueprintType);
+    WriteCStringSize(_worldPacket, Uuid, 24);
+    _worldPacket.FlushBits();
+    _worldPacket << SizedCString::Data(Uuid);
+
+    return &_worldPacket;
+}
 
 WorldPacket const* HousingBlueprintCollection::Write()
 {
-    _worldPacket << uint32(Result);
+    _worldPacket << uint8(Result);
     _worldPacket << uint32(Blueprints.size());
-    for (JamHousingBlueprint const& bp : Blueprints)
-        WriteBlueprint(_worldPacket, bp);
+    for (JamHousingBlueprint const& blueprint : Blueprints)
+    {
+        _worldPacket << uint64(blueprint.ID);
+        _worldPacket << uint8(blueprint.Type);
+        _worldPacket << int64(blueprint.DateCreated);
+        _worldPacket << int64(blueprint.DateDeleted);
+        _worldPacket << uint8(blueprint.Flags);
+        _worldPacket << uint8(blueprint.DeleteReason);
+        WriteCStringSize(_worldPacket, blueprint.Uuid, 24);
+        WriteCStringSize(_worldPacket, blueprint.Name, 24);
+        _worldPacket.FlushBits();
+        _worldPacket << SizedCString::Data(blueprint.Uuid);
+        _worldPacket << SizedCString::Data(blueprint.Name);
+    }
+
     return &_worldPacket;
+}
+
+WorldPacket const* HousingBlueprintRenameResponse::Write()
+{
+    _worldPacket << uint8(Result);
+    _worldPacket << uint64(BlueprintID);
+    WriteCStringSize(_worldPacket, Name, 6);
+    _worldPacket.FlushBits();
+    _worldPacket << SizedCString::Data(Name);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* HousingBlueprintDeleteResponse::Write()
+{
+    _worldPacket << uint8(Result);
+    _worldPacket << uint64(BlueprintID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* HousingBlueprintImportResponse::Write()
+{
+    _worldPacket << uint8(Result);
+    _worldPacket << uint8(BlueprintType);
+    _worldPacket << uint32(Unused);
+    WriteCStringSize(_worldPacket, Uuid, 24);
+    _worldPacket.FlushBits();
+    _worldPacket << SizedCString::Data(Uuid);
+
+    return &_worldPacket;
+}
+
+static void WriteContentLists(WorldPacket& data, JamBlueprintContentLists const& lists)
+{
+    // All four counts come first, then the four arrays.
+    data << uint32(lists.Decor.size());
+    data << uint32(lists.Dyes.size());
+    data << uint32(lists.Rooms.size());
+    data << uint32(lists.Fixtures.size());
+    for (auto const& [id, count] : lists.Decor)
+        data << uint32(id) << uint32(count);
+    for (auto const& [id, count] : lists.Dyes)
+        data << uint32(id) << uint32(count);
+    for (uint32 id : lists.Rooms)
+        data << uint32(id);
+    for (uint32 id : lists.Fixtures)
+        data << uint32(id);
+}
+
+static void WriteBudgetEntry(WorldPacket& data, JamBlueprintBudgetEntry const& entry)
+{
+    data << uint8(entry.BudgetType);
+    data << int32(entry.Max);
+    data << int32(entry.Current);
+    data << int32(entry.Cost);
 }
 
 WorldPacket const* HousingBlueprintContents::Write()
 {
-    _worldPacket << uint32(Result);
-    WriteBlueprint(_worldPacket, Blueprint);
-    WriteItemList(_worldPacket, Items);
-    _worldPacket << uint32(MissingItems.size());
-    for (JamBlueprintMissingItem const& m : MissingItems)
-    {
-        _worldPacket << int32(m.Id);
-        _worldPacket << int32(m.Count);
-    }
-    return &_worldPacket;
-}
+    _worldPacket << uint8(Result);
+    _worldPacket << uint8(BlueprintType);
+    _worldPacket << TargetHouseGuid;
+    _worldPacket << uint32(UnmetRequirementFlags);
+    WriteContentLists(_worldPacket, Missing);
+    WriteContentLists(_worldPacket, Invalid);
+    _worldPacket << uint32(InteriorBudgets.size());
+    _worldPacket << uint32(ExteriorBudgets.size());
+    for (JamBlueprintBudgetEntry const& entry : InteriorBudgets)
+        WriteBudgetEntry(_worldPacket, entry);
+    for (JamBlueprintBudgetEntry const& entry : ExteriorBudgets)
+        WriteBudgetEntry(_worldPacket, entry);
+    _worldPacket << OptionalInit(Contents);
+    _worldPacket.FlushBits();
+    if (Contents)
+        WriteContentLists(_worldPacket, *Contents);
+    WriteCStringSize(_worldPacket, Uuid, 24);
+    _worldPacket.FlushBits();
+    _worldPacket << SizedCString::Data(Uuid);
 
-WorldPacket const* HousingBlueprintExportResult::Write()
-{
-    _worldPacket << uint32(Result);
-    WriteBlueprint(_worldPacket, Blueprint);
-    return &_worldPacket;
-}
-
-WorldPacket const* HousingBlueprintImportResult::Write()
-{
-    _worldPacket << uint32(Result);
-    _worldPacket << HouseGuid;
-    WriteItemList(_worldPacket, Items);
-    return &_worldPacket;
-}
-
-WorldPacket const* HousingBlueprintDeleteResult::Write()
-{
-    _worldPacket << uint32(Result);
-    _worldPacket << uint64(BlueprintId);
-    return &_worldPacket;
-}
-
-WorldPacket const* HousingBlueprintRenameResult::Write()
-{
-    _worldPacket << uint32(Result);
-    _worldPacket << uint64(BlueprintId);
-    _worldPacket << SizedString::BitsSize<7>(Name);
-    _worldPacket << SizedString::Data(Name);
-    return &_worldPacket;
-}
-
-WorldPacket const* HousingBlueprintsAvailabilityChanged::Write()
-{
-    _worldPacket << Bits<1>(Available);
-    _worldPacket << uint32(MaxPerBnetAccount);
-    _worldPacket << uint32(MaxBackupsPerBnetAccount);
     return &_worldPacket;
 }
 
@@ -184,10 +190,20 @@ WorldPacket const* HousingHouseBudgetsUpdate::Write()
     _worldPacket << HouseGuid;
     _worldPacket << uint32(InteriorBudgets.size());
     for (JamHouseBudgetEntry const& e : InteriorBudgets)
-        WriteBudgetEntry(_worldPacket, e);
+    {
+        _worldPacket << uint32(e.BudgetType);
+        _worldPacket << int32(e.Max);
+        _worldPacket << int32(e.Current);
+        _worldPacket << int32(e.Cost);
+    }
     _worldPacket << uint32(ExteriorBudgets.size());
     for (JamHouseBudgetEntry const& e : ExteriorBudgets)
-        WriteBudgetEntry(_worldPacket, e);
+    {
+        _worldPacket << uint32(e.BudgetType);
+        _worldPacket << int32(e.Max);
+        _worldPacket << int32(e.Current);
+        _worldPacket << int32(e.Cost);
+    }
     return &_worldPacket;
 }
 }

@@ -799,7 +799,7 @@ ObjectGuid Housing::StartPlacingNewDecor(uint32 catalogEntryId, HousingResult& r
     uint32 maxDecor = GetMaxDecorCount();
     if (GetDecorCount() >= maxDecor)
     {
-        result = HOUSING_RESULT_MAX_DECOR_REACHED;
+        result = HOUSING_RESULT_MAX_PLACED_DECOR_REACHED;
         return ObjectGuid::Empty;
     }
 
@@ -845,7 +845,7 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
 
     uint32 maxDecor = GetMaxDecorCount();
     if (GetDecorCount() >= maxDecor)
-        return HOUSING_RESULT_MAX_DECOR_REACHED;
+        return HOUSING_RESULT_MAX_PLACED_DECOR_REACHED;
 
     // Retail semantics (verified via sniff build 66263, both alliance + horde):
     // the client ALWAYS sends a non-Empty RoomGuid in CMSG_HOUSING_DECOR_PLACE.
@@ -868,12 +868,12 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
     if (isExterior)
     {
         if (_exteriorDecorWeightUsed + weightCost > GetMaxExteriorDecorBudget())
-            return HOUSING_RESULT_MAX_DECOR_REACHED;
+            return HOUSING_RESULT_MAX_PLACED_DECOR_REACHED;
     }
     else
     {
         if (_interiorDecorWeightUsed + weightCost > GetMaxInteriorDecorBudget())
-            return HOUSING_RESULT_MAX_DECOR_REACHED;
+            return HOUSING_RESULT_MAX_PLACED_DECOR_REACHED;
     }
 
     if (!isExterior)
@@ -889,7 +889,7 @@ HousingResult Housing::PlaceDecorWithGuid(ObjectGuid decorGuid, uint32 decorEntr
                 ++roomDecorCount;
         }
         if (roomDecorCount >= MAX_HOUSING_DECOR_PER_ROOM)
-            return HOUSING_RESULT_MAX_DECOR_REACHED;
+            return HOUSING_RESULT_MAX_PLACED_DECOR_REACHED;
     }
 
     auto catalogItr = _catalog.find(decorEntryId);
@@ -1017,7 +1017,7 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     // Check decor count limit based on house level
     uint32 maxDecor = GetMaxDecorCount();
     if (GetDecorCount() >= maxDecor)
-        return HOUSING_RESULT_MAX_DECOR_REACHED;
+        return HOUSING_RESULT_MAX_PLACED_DECOR_REACHED;
 
     // Check WeightCost-based budget (exterior vs interior) — M2: classify once.
     uint32 weightCost = sHousingMgr.GetDecorWeightCost(decorEntryId);
@@ -1032,13 +1032,13 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
     {
         // Outdoor decor uses exterior budget
         if (_exteriorDecorWeightUsed + weightCost > GetMaxExteriorDecorBudget())
-            return HOUSING_RESULT_MAX_DECOR_REACHED;
+            return HOUSING_RESULT_MAX_PLACED_DECOR_REACHED;
     }
     else
     {
         // Indoor decor uses interior budget
         if (_interiorDecorWeightUsed + weightCost > GetMaxInteriorDecorBudget())
-            return HOUSING_RESULT_MAX_DECOR_REACHED;
+            return HOUSING_RESULT_MAX_PLACED_DECOR_REACHED;
     }
 
     // Validate room exists if specified, and check per-room decor limit
@@ -1056,7 +1056,7 @@ HousingResult Housing::PlaceDecor(uint32 decorEntryId, float x, float y, float z
                 ++roomDecorCount;
         }
         if (roomDecorCount >= MAX_HOUSING_DECOR_PER_ROOM)
-            return HOUSING_RESULT_MAX_DECOR_REACHED;
+            return HOUSING_RESULT_MAX_PLACED_DECOR_REACHED;
     }
 
     // Check catalog for available copies
@@ -3149,3 +3149,62 @@ void Housing::PopulateStarterFixtures()
     }
 }
 
+Housing::Room const* Housing::GetRoom(ObjectGuid roomGuid) const
+{
+    auto itr = _rooms.find(roomGuid);
+    return itr != _rooms.end() ? &itr->second : nullptr;
+}
+
+uint32 Housing::GetNextRoomSlotIndex() const
+{
+    uint32 nextSlot = 0;
+    for (auto const& [guid, room] : _rooms)
+        nextSlot = std::max(nextSlot, room.SlotIndex + 1);
+    return nextSlot;
+}
+
+void Housing::RemoveAllNonBaseRooms()
+{
+    for (auto itr = _rooms.begin(); itr != _rooms.end();)
+    {
+        HouseRoomData const* roomData = sHousingMgr.GetHouseRoomData(itr->second.RoomEntryId);
+        if (roomData && roomData->IsBaseRoom())
+            ++itr;
+        else
+            itr = _rooms.erase(itr);
+    }
+
+    RecalculateBudgets();
+    SyncUpdateFields();
+}
+
+void Housing::SetRoomAppearance(ObjectGuid roomGuid, Room const& appearance)
+{
+    auto itr = _rooms.find(roomGuid);
+    if (itr == _rooms.end())
+        return;
+
+    Room& room = itr->second;
+    room.ThemeId = appearance.ThemeId;
+    room.WallThemeId = appearance.WallThemeId;
+    room.FloorThemeId = appearance.FloorThemeId;
+    room.CeilingThemeId = appearance.CeilingThemeId;
+    room.WallTextureId = appearance.WallTextureId;
+    room.FloorTextureId = appearance.FloorTextureId;
+    room.CeilingTextureId = appearance.CeilingTextureId;
+    room.ColorOverride = appearance.ColorOverride;
+    room.DoorTypeId = appearance.DoorTypeId;
+    room.DoorSlot = appearance.DoorSlot;
+    room.CeilingTypeId = appearance.CeilingTypeId;
+    room.CeilingSlot = appearance.CeilingSlot;
+    PersistRoomToDB(roomGuid, room);
+}
+
+void Housing::ReplaceFixtures(std::vector<Fixture> const& fixtures)
+{
+    _fixtures.clear();
+    for (Fixture const& fixture : fixtures)
+        _fixtures[fixture.FixturePointId] = fixture;
+
+    SyncUpdateFields();
+}

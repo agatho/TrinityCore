@@ -192,6 +192,14 @@ public:
     HousingResult SetDoorType(ObjectGuid roomGuid, uint32 doorTypeId, uint8 doorSlot);
     HousingResult SetCeilingType(ObjectGuid roomGuid, uint32 ceilingTypeId, uint8 ceilingSlot);
     std::vector<Room const*> GetRooms() const;
+    Room const* GetRoom(ObjectGuid roomGuid) const;
+    ObjectGuid GetBaseRoomGuid() const { return FindBaseRoomGuid(); }
+    uint32 GetNextRoomSlotIndex() const;
+    // Blueprint imports: drop every room but the base room (their decor must already be removed), copy a room's theme,
+    // material, door and ceiling choices, replace every fixture choice.
+    void RemoveAllNonBaseRooms();
+    void SetRoomAppearance(ObjectGuid roomGuid, Room const& appearance);
+    void ReplaceFixtures(std::vector<Fixture> const& fixtures);
     std::unordered_map<ObjectGuid, Room> const& GetRoomsMap() const { return _rooms; }
 
     // Fixture operations

@@ -2754,13 +2754,31 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
         return;
     }
 
+    ObjectGuid newRoomGuid;
+    HousingResult result = AddHousingRoomAtDoor(housing, housingRoomAdd.TargetDoorComponentID, housingRoomAdd.HouseRoomID, &newRoomGuid,
+        [&](HousingResult placeResult)
+    {
+        // Sniff order: the response goes out before the new room's objects.
+        WorldPackets::Housing::HousingRoomAddResponse response;
+        response.Result = static_cast<uint8>(placeResult);
+        response.PlayerGuid = player->GetGUID(); // Sniff-verified: retail sends Player GUID, not room GUID
+        SendPacket(response.Write());
+    });
+
+    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_ADD DoorComponentID: {}, HouseRoomID: {}, Room: {}, Result: {}",
+        housingRoomAdd.TargetDoorComponentID, housingRoomAdd.HouseRoomID, newRoomGuid.ToString(), uint32(result));
+}
+
+HousingResult WorldSession::AddHousingRoomAtDoor(Housing* housing, uint32 targetDoorComponentID, uint32 houseRoomID, ObjectGuid* outRoomGuid,
+    std::function<void(HousingResult)> const& onPlaced /*= nullptr*/)
+{
     // The CMSG sends TargetDoorComponentID — find which room owns this door,
     // determine the door's direction, and compute the 2D grid position for the new room.
     int32 newGridX = 0, newGridY = 0, newFloorIndex = 0;
     uint32 nextSlot = 0;
     {
         // Find the source room that owns the target door component
-        uint32 doorCompId = housingRoomAdd.TargetDoorComponentID;
+        uint32 doorCompId = targetDoorComponentID;
         for (auto const& [guid, room] : housing->GetRoomsMap())
         {
             if (room.SlotIndex >= nextSlot)
@@ -2787,7 +2805,7 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                     // Find the new room's wall in the opposite direction.
                     // Don't filter by ConnectionType — stairwell walls have CT=0.
                     // Use the LARGEST offset wall (furthest boundary) for spacing.
-                    HouseRoomData const* newRd = sHousingMgr.GetHouseRoomData(housingRoomAdd.HouseRoomID);
+                    HouseRoomData const* newRd = sHousingMgr.GetHouseRoomData(houseRoomID);
                     std::vector<RoomComponentData> const* newComps = newRd ? sHousingMgr.GetRoomComponents(newRd->RoomWmoDataID) : nullptr;
 
                     // Helper: find the most extreme wall offset in a direction
@@ -2858,13 +2876,13 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
     }
 
     ObjectGuid newRoomGuid;
-    HousingResult result = housing->PlaceRoom(housingRoomAdd.HouseRoomID, nextSlot,
+    HousingResult result = housing->PlaceRoom(houseRoomID, nextSlot,
         /*orientation*/ 0, /*mirrored*/ false, &newRoomGuid, newGridX, newGridY, newFloorIndex);
+    if (outRoomGuid)
+        *outRoomGuid = newRoomGuid;
 
-    WorldPackets::Housing::HousingRoomAddResponse response;
-    response.Result = static_cast<uint8>(result);
-    response.PlayerGuid = player->GetGUID(); // Sniff-verified: retail sends Player GUID, not room GUID
-    SendPacket(response.Write());
+    if (onPlaced)
+        onPlaced(result);
 
     if (result == HOUSING_RESULT_SUCCESS)
     {
@@ -2873,7 +2891,7 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
         // Room" (ID=48) 12 yards above. Each has its own geobox so decor can be
         // placed on BOTH floors independently, and the upper room's ceiling sits
         // at world Z=24 (2×floor height), matching sniff observations.
-        HouseRoomData const* addedRoom = sHousingMgr.GetHouseRoomData(housingRoomAdd.HouseRoomID);
+        HouseRoomData const* addedRoom = sHousingMgr.GetHouseRoomData(houseRoomID);
         if (addedRoom && addedRoom->HasStairs())
         {
             constexpr uint32 STAIRWELL_EMPTY_ROOM_ID = 48;
@@ -2885,9 +2903,9 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                 STAIRWELL_EMPTY_ROOM_ID, newGridX, newGridY, newFloorIndex + 1, uint32(upperRes));
         }
 
-        if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+        if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(GetPlayer()->GetMap()))
         {
-            int32 faction = (player->GetTeamId() == TEAM_ALLIANCE)
+            int32 faction = (GetPlayer()->GetTeamId() == TEAM_ALLIANCE)
                 ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
 
             // Spawn only the NEW room's entities (incremental).
@@ -2909,17 +2927,17 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
                     if (!cs) continue;
                     for (auto const& c : *cs)
                     {
-                        if (c.ID == housingRoomAdd.TargetDoorComponentID)
+                        if (c.ID == targetDoorComponentID)
                         {
                             // Replace wall with doorway — stairwell rooms connect
                             // HORIZONTALLY through walls, same as any other room.
-                            interiorMap->ReplaceWallWithDoorway(guid, housingRoomAdd.TargetDoorComponentID,
+                            interiorMap->ReplaceWallWithDoorway(guid, targetDoorComponentID,
                                 faction, rm, newRoomGuid);
                             // Update door connection data
                             for (HousingRoomEntity* re : interiorMap->GetRoomEntities())
                             {
                                 if (re && re->IsInWorld())
-                                    re->UpdateDoorConnection(housingRoomAdd.TargetDoorComponentID, newRoomGuid);
+                                    re->UpdateDoorConnection(targetDoorComponentID, newRoomGuid);
                             }
                             goto doneUpdate;
                         }
@@ -2930,12 +2948,11 @@ void WorldSession::HandleHousingRoomAdd(WorldPackets::Housing::HousingRoomAdd co
         }
 
         WorldPackets::Housing::AccountRoomCollectionUpdate roomUpdate;
-        roomUpdate.AddSingle(housingRoomAdd.HouseRoomID);
+        roomUpdate.AddSingle(houseRoomID);
         SendPacket(roomUpdate.Write());
     }
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_ROOM_ADD DoorComponentID: {}, HouseRoomID: {}, FloorIndex: {}, Result: {}",
-        housingRoomAdd.TargetDoorComponentID, housingRoomAdd.HouseRoomID, newFloorIndex, uint32(result));
+    return result;
 }
 
 void WorldSession::HandleHousingRoomRemove(WorldPackets::Housing::HousingRoomRemove const& housingRoomRemove)
@@ -5487,64 +5504,60 @@ void WorldSession::HandleUpdateLastCatalogFetch(WorldPackets::Housing::UpdateLas
 // Housing::SetHouseNameDescription server-side method exists with no CMSG path.
 
 // ============================================================================
-// Patch 12.1.0 (build 69299) Housing Blueprint handlers.
-// RE spec: c:\dumps\tools\dump121\housing\housing_12_1_spec.md (sections 4 and 6).
-//
-// These opcodes are NOT registered on the live 68275 opcode table - their 12.1
-// values collide with 68275 fixture/room/svcs opcodes until the TC-wide 12.1
-// opcode migration shifts the housing groups (spec section 7). Binding is gated
-// behind HOUSING_12_1_OPCODES in Opcodes.cpp. The handler logic below is real; it
-// simply is not dispatched until the base is on the 12.1 opcode table.
+// Housing blueprints (12.1.0.69587). Wire layouts and meanings: HousingBlueprintPackets.h.
 // ============================================================================
 
-static WorldPackets::Housing::JamHousingBlueprint ToJamBlueprint(HousingStoredBlueprint const& src)
+namespace
 {
-    WorldPackets::Housing::JamHousingBlueprint jam;
-    jam.Id = static_cast<uint32>(src.Id);
-    jam.Uuid = src.Uuid;
-    jam.Name = src.Name;
-    jam.Type = static_cast<uint32>(src.Type);
-    jam.DateCreated = src.DateCreated;
-    jam.DateDeleted = src.DateDeleted;
-    jam.Flags = src.Flags;
-    return jam;
-}
+    // The house the player is in (interior) or on (plot), whoever owns it. Visitors can only export a house whose owner is
+    // online, because only then is the house loaded.
+    Housing* FindBlueprintContextHouse(Player* player, bool& inInterior)
+    {
+        inInterior = false;
+        Map* map = player->GetMap();
+        if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(map))
+        {
+            inInterior = true;
+            return interiorMap->GetOwnerHousing();
+        }
 
-static WorldPackets::Housing::JamBlueprintItemList ToJamItemList(HousingStoredBlueprint const& src)
-{
-    WorldPackets::Housing::JamBlueprintItemList list;
-    list.DecorIDs = src.DecorIDs;
-    list.DyeItemIDs = src.DyeItemIDs;
-    list.RoomIDs = src.RoomIDs;
-    list.FixtureIDs = src.FixtureIDs;
-    return list;
+        HousingMap* housingMap = dynamic_cast<HousingMap*>(map);
+        if (!housingMap || !housingMap->GetNeighborhood())
+            return nullptr;
+
+        int8 const plotIndex = housingMap->GetPlayerCurrentPlot(player->GetGUID());
+        if (plotIndex < 0)
+            return nullptr;
+
+        Neighborhood::PlotInfo const* plotInfo = housingMap->GetNeighborhood()->GetPlotInfo(uint8(plotIndex));
+        if (!plotInfo || plotInfo->OwnerGuid.IsEmpty())
+            return nullptr;
+
+        Player* owner = ObjectAccessor::FindConnectedPlayer(plotInfo->OwnerGuid);
+        Housing* housing = owner ? owner->GetHousingForNeighborhood(housingMap->GetNeighborhood()->GetGuid()) : nullptr;
+        return housing && housing->GetHouseGuid() == plotInfo->HouseGuid ? housing : nullptr;
+    }
+
+    bool IsImportableBlueprintType(uint8 type)
+    {
+        return type >= uint8(HousingBlueprintType::House) && type <= uint8(HousingBlueprintType::Exterior);
+    }
 }
 
 void WorldSession::HandleHousingBlueprintRequestCollection(WorldPackets::Housing::HousingBlueprintRequestCollection const& /*packet*/)
 {
     WorldPackets::Housing::HousingBlueprintCollection response;
     response.Result = HOUSING_RESULT_SUCCESS;
-    for (HousingStoredBlueprint const& bp : sHousingBlueprintMgr.GetCollection(GetBattlenetAccountId()))
-        response.Blueprints.push_back(ToJamBlueprint(bp));
-    SendPacket(response.Write());
-}
-
-void WorldSession::HandleHousingBlueprintRequestContents(WorldPackets::Housing::HousingBlueprintRequestContents const& packet)
-{
-    WorldPackets::Housing::HousingBlueprintContents response;
-    HousingStoredBlueprint const* bp = sHousingBlueprintMgr.Get(GetBattlenetAccountId(), packet.BlueprintId);
-    if (!bp)
+    for (HousingBlueprint const* blueprint : sHousingBlueprintMgr.GetCollection(GetBattlenetAccountId()))
     {
-        response.Result = HOUSING_RESULT_GENERIC_FAILURE;
-        SendPacket(response.Write());
-        return;
+        WorldPackets::Housing::JamHousingBlueprint& jam = response.Blueprints.emplace_back();
+        jam.ID = blueprint->Id;
+        jam.Uuid = blueprint->Uuid;
+        jam.Name = blueprint->Name;
+        jam.Type = uint8(blueprint->Type);
+        jam.DateCreated = blueprint->CreateTime;
+        jam.Flags = blueprint->Flags;
     }
-
-    response.Result = HOUSING_RESULT_SUCCESS;
-    response.Blueprint = ToJamBlueprint(*bp);
-    response.Items = ToJamItemList(*bp);
-    // MissingItems (items the account lacks) require a licensed-decor cross-check; left empty
-    // here (documented follow-up) - the wire slot is populated, not faked.
     SendPacket(response.Write());
 }
 
@@ -5554,117 +5567,122 @@ void WorldSession::HandleHousingBlueprintExport(WorldPackets::Housing::HousingBl
     if (!player)
         return;
 
-    WorldPackets::Housing::HousingBlueprintExportResult response;
-    Housing* housing = player->GetHousing();
-    if (!housing)
-    {
-        response.Result = HOUSING_RESULT_GENERIC_FAILURE;
-        SendPacket(response.Write());
-        return;
-    }
+    WorldPackets::Housing::HousingBlueprintExportResponse response;
+    response.BlueprintType = packet.BlueprintType;
 
-    HousingStoredBlueprint bp;
-    bp.Name = packet.Name;
-    bp.Type = HousingBlueprintType::House;
-    bp.DateCreated = GameTime::GetGameTime();
-    bp.Uuid = std::to_string(housing->GetHouseGuid().GetCounter());
-    for (auto const& decorPair : housing->GetPlacedDecorMap())
-        bp.DecorIDs.push_back(decorPair.second.DecorEntryId);
-    for (Housing::Room const* room : housing->GetRooms())
-        if (room)
-            bp.RoomIDs.push_back(room->RoomEntryId);
-    for (Housing::Fixture const* fixture : housing->GetFixtures())
-        if (fixture)
-            bp.FixtureIDs.push_back(fixture->OptionId);
-    bp.RequiredHouseType = housing->GetHouseType();
-    bp.RequiredHouseSize = housing->GetHouseSize();
-
-    uint64 id = sHousingBlueprintMgr.Create(GetBattlenetAccountId(), std::move(bp));
-    if (!id)
+    auto result = [&]() -> HousingResult
     {
-        response.Result = HOUSING_RESULT_GENERIC_FAILURE; // per-account cap reached
-        SendPacket(response.Write());
-        return;
-    }
+        if (!IsImportableBlueprintType(packet.BlueprintType))
+            return HOUSING_RESULT_BLUEPRINT_TYPE_INVALID;
 
-    if (HousingStoredBlueprint const* stored = sHousingBlueprintMgr.Get(GetBattlenetAccountId(), id))
-    {
-        response.Result = HOUSING_RESULT_SUCCESS;
-        response.Blueprint = ToJamBlueprint(*stored);
-    }
+        HousingBlueprintType const type = HousingBlueprintType(packet.BlueprintType);
+        if (!HousingBlueprintMgr::IsValidName(packet.Name))
+            return HOUSING_RESULT_BLUEPRINT_NAME_INVALID;
+
+        bool inInterior = false;
+        Housing* housing = FindBlueprintContextHouse(player, inInterior);
+        if (!housing || !housing->GetOwner())
+            return HOUSING_RESULT_BLUEPRINT_LOCATION_INVALID;
+
+        if (type == HousingBlueprintType::Room && !inInterior)
+            return HOUSING_RESULT_BLUEPRINT_TYPE_LOCATION_INVALID;
+
+        if (!sHousingMgr.CanVisitorExportBlueprint(player, housing->GetOwner()->GetGUID(), housing->GetSettingsFlags()))
+            return HOUSING_RESULT_PERMISSION_DENIED;
+
+        if (sHousingBlueprintMgr.GetPlayerMadeCount(GetBattlenetAccountId()) >= HOUSING_BLUEPRINTS_MAX_PER_BNET_ACCOUNT)
+            return HOUSING_RESULT_BLUEPRINT_STORAGE_LIMIT;
+
+        HousingBlueprintContent content;
+        if (HousingResult snapshot = HousingBlueprintMgr::Snapshot(*housing, type, packet.RoomGuid, content); snapshot != HOUSING_RESULT_SUCCESS)
+            return snapshot;
+
+        HousingBlueprint const* blueprint = sHousingBlueprintMgr.Create(GetBattlenetAccountId(), player->GetGUID().GetCounter(), packet.Name,
+            type, HOUSING_BLUEPRINT_FLAG_NONE, std::move(content));
+        if (!blueprint)
+            return HOUSING_RESULT_BLUEPRINT_GENERIC_EXPORT_ERROR;
+
+        response.Uuid = blueprint->Uuid;
+        return HOUSING_RESULT_SUCCESS;
+    }();
+
+    response.Result = uint8(result);
     SendPacket(response.Write());
+
+    TC_LOG_INFO("housing", "CMSG_HOUSING_BLUEPRINT_EXPORT player={} type={} name='{}' room={} result={} uuid={}",
+        player->GetGUID().ToString(), packet.BlueprintType, packet.Name, packet.RoomGuid.ToString(), uint32(result), response.Uuid);
 }
 
-void WorldSession::HandleHousingBlueprintExportRoom(WorldPackets::Housing::HousingBlueprintExportRoom const& packet)
+void WorldSession::HandleHousingBlueprintRename(WorldPackets::Housing::HousingBlueprintRename const& packet)
+{
+    WorldPackets::Housing::HousingBlueprintRenameResponse response;
+    response.BlueprintID = packet.BlueprintID;
+    response.Result = uint8(sHousingBlueprintMgr.Rename(GetBattlenetAccountId(), packet.BlueprintID, packet.Name));
+    if (response.Result == HOUSING_RESULT_SUCCESS)
+        response.Name = packet.Name;
+    SendPacket(response.Write());
+
+    TC_LOG_INFO("housing", "CMSG_HOUSING_BLUEPRINT_RENAME account={} blueprint={} name='{}' result={}",
+        GetBattlenetAccountId(), packet.BlueprintID, packet.Name, uint32(response.Result));
+}
+
+void WorldSession::HandleHousingBlueprintDelete(WorldPackets::Housing::HousingBlueprintDelete const& packet)
+{
+    WorldPackets::Housing::HousingBlueprintDeleteResponse response;
+    response.BlueprintID = packet.BlueprintID;
+    response.Result = uint8(sHousingBlueprintMgr.Delete(GetBattlenetAccountId(), packet.BlueprintID));
+    SendPacket(response.Write());
+
+    TC_LOG_INFO("housing", "CMSG_HOUSING_BLUEPRINT_DELETE account={} blueprint={} result={}",
+        GetBattlenetAccountId(), packet.BlueprintID, uint32(response.Result));
+}
+
+void WorldSession::HandleHousingBlueprintRequestContents(WorldPackets::Housing::HousingBlueprintRequestContents const& packet)
 {
     Player* player = GetPlayer();
     if (!player)
         return;
 
-    WorldPackets::Housing::HousingBlueprintExportResult response;
-    Housing* housing = player->GetHousing();
-    if (!housing)
-    {
-        response.Result = HOUSING_RESULT_GENERIC_FAILURE;
-        SendPacket(response.Write());
-        return;
-    }
+    WorldPackets::Housing::HousingBlueprintContents response;
+    response.BlueprintType = packet.BlueprintType;
+    response.TargetHouseGuid = packet.TargetHouseGuid;
+    response.Uuid = packet.Uuid;
 
-    HousingStoredBlueprint bp;
-    bp.Name = packet.Name;
-    bp.Type = HousingBlueprintType::Room;
-    bp.DateCreated = GameTime::GetGameTime();
-    bp.Uuid = std::to_string(packet.RoomGuid.GetCounter());
+    HousingBlueprint const* blueprint = sHousingBlueprintMgr.GetByUuid(packet.Uuid);
+    if (HousingBlueprintMgr::NormalizeUuid(packet.Uuid).empty())
+        response.Result = HOUSING_RESULT_BLUEPRINT_CODE_INVALID;
+    else if (!blueprint)
+        response.Result = HOUSING_RESULT_BLUEPRINT_NOT_FOUND;
+    else if (uint8(blueprint->Type) != packet.BlueprintType)
+        response.Result = HOUSING_RESULT_BLUEPRINT_TYPE_INVALID;
+    else
+    {
+        // Evaluated against the house the client names, which has to be one of the player's.
+        Housing const* target = nullptr;
+        if (!packet.TargetHouseGuid.IsEmpty())
+            for (Housing const* housing : player->GetAllHousings())
+                if (housing && housing->GetHouseGuid() == packet.TargetHouseGuid)
+                    target = housing;
 
-    std::unordered_map<ObjectGuid, Housing::Room> const& rooms = housing->GetRoomsMap();
-    std::unordered_map<ObjectGuid, Housing::Room>::const_iterator roomItr = rooms.find(packet.RoomGuid);
-    if (roomItr != rooms.end())
-    {
-        bp.RoomIDs.push_back(roomItr->second.RoomEntryId);
-        for (auto const& decorPair : housing->GetPlacedDecorMap())
-            if (decorPair.second.RoomGuid == packet.RoomGuid)
-                bp.DecorIDs.push_back(decorPair.second.DecorEntryId);
-    }
+        HousingBlueprintEvaluation evaluation;
+        HousingBlueprintMgr::Evaluate(*blueprint, target, target ? target : player->GetHousing(), evaluation);
 
-    uint64 id = sHousingBlueprintMgr.Create(GetBattlenetAccountId(), std::move(bp));
-    if (!id)
-    {
-        response.Result = HOUSING_RESULT_GENERIC_FAILURE;
-        SendPacket(response.Write());
-        return;
-    }
-    if (HousingStoredBlueprint const* stored = sHousingBlueprintMgr.Get(GetBattlenetAccountId(), id))
-    {
         response.Result = HOUSING_RESULT_SUCCESS;
-        response.Blueprint = ToJamBlueprint(*stored);
+        response.UnmetRequirementFlags = evaluation.UnmetRequirementFlags;
+        response.Missing = std::move(evaluation.Missing);
+        response.Invalid = std::move(evaluation.Invalid);
+        response.InteriorBudgets = std::move(evaluation.InteriorBudgets);
+        response.ExteriorBudgets = std::move(evaluation.ExteriorBudgets);
+        response.Contents = std::move(evaluation.Totals);
+        if (!target)
+            response.TargetHouseGuid.Clear();
     }
-    SendPacket(response.Write());
-}
 
-void WorldSession::HandleHousingBlueprintRename(WorldPackets::Housing::HousingBlueprintRename const& packet)
-{
-    WorldPackets::Housing::HousingBlueprintRenameResult response;
-    response.BlueprintId = packet.BlueprintId;
-    response.Name = packet.Name;
-    bool ok = sHousingBlueprintMgr.Rename(GetBattlenetAccountId(), packet.BlueprintId, packet.Name);
-    response.Result = ok ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_GENERIC_FAILURE;
-    SendPacket(response.Write());
-}
-
-// CMSG_HOUSING_BLUEPRINT_DELETE (0x310003) — delete a saved blueprint owned by the BNet account.
-// Client wire: u64 BlueprintId. Client listens for HousingBlueprintDeleteSuccess/Failure, driven
-// by SMSG_HOUSING_BLUEPRINT_DELETE_RESULT { u32 Result, u64 BlueprintId }.
-void WorldSession::HandleHousingBlueprintDelete(WorldPackets::Housing::HousingBlueprintDelete const& packet)
-{
-    WorldPackets::Housing::HousingBlueprintDeleteResult response;
-    response.BlueprintId = packet.BlueprintId;
-    // Ownership is implicit: the account can only delete blueprints in its own store.
-    bool ok = sHousingBlueprintMgr.Delete(GetBattlenetAccountId(), packet.BlueprintId);
-    response.Result = ok ? HOUSING_RESULT_SUCCESS : HOUSING_RESULT_GENERIC_FAILURE;
     SendPacket(response.Write());
 
-    TC_LOG_INFO("housing", "CMSG_HOUSING_BLUEPRINT_DELETE account={} blueprintId={} result={}",
-        GetBattlenetAccountId(), packet.BlueprintId, uint32(response.Result));
+    TC_LOG_DEBUG("housing", "CMSG_HOUSING_BLUEPRINT_REQUEST_CONTENTS player={} uuid={} type={} house={} result={} unmet=0x{:X}",
+        player->GetGUID().ToString(), packet.Uuid, packet.BlueprintType, packet.TargetHouseGuid.ToString(), uint32(response.Result),
+        response.UnmetRequirementFlags);
 }
 
 void WorldSession::HandleHousingBlueprintImport(WorldPackets::Housing::HousingBlueprintImport const& packet)
@@ -5673,33 +5691,103 @@ void WorldSession::HandleHousingBlueprintImport(WorldPackets::Housing::HousingBl
     if (!player)
         return;
 
-    WorldPackets::Housing::HousingBlueprintImportResult response;
+    WorldPackets::Housing::HousingBlueprintImportResponse response;
+    response.BlueprintType = packet.BlueprintType;
+    response.Uuid = packet.Uuid;
+
+    HousingBlueprintApplyResult applied;
     Housing* housing = player->GetHousing();
 
-    HousingStoredBlueprint const* bp = sHousingBlueprintMgr.Get(GetBattlenetAccountId(), packet.BlueprintId);
-    if (!bp)
+    auto result = [&]() -> HousingResult
     {
-        response.Result = HOUSING_RESULT_GENERIC_FAILURE;
-        SendPacket(response.Write());
-        return;
+        if (HousingBlueprintMgr::NormalizeUuid(packet.Uuid).empty())
+            return HOUSING_RESULT_BLUEPRINT_CODE_INVALID;
+
+        HousingBlueprint const* blueprint = sHousingBlueprintMgr.GetByUuid(packet.Uuid);
+        if (!blueprint)
+            return HOUSING_RESULT_BLUEPRINT_NOT_FOUND;
+
+        if (!IsImportableBlueprintType(packet.BlueprintType) || uint8(blueprint->Type) != packet.BlueprintType)
+            return HOUSING_RESULT_BLUEPRINT_TYPE_INVALID;
+
+        // Imports only ever change the player's own house, from inside it or its plot.
+        if (!housing || !PlayerCanEditHousing(player, housing))
+            return HOUSING_RESULT_BLUEPRINT_LOCATION_INVALID;
+
+        if (blueprint->Type != HousingBlueprintType::Room)
+            return sHousingBlueprintMgr.ApplyLayout(player, housing, *blueprint, applied);
+
+        // A room goes onto the door the player picked in layout mode.
+        if (!dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+            return HOUSING_RESULT_BLUEPRINT_TYPE_LOCATION_INVALID;
+
+        if (!housing->GetRoom(packet.SourceRoomGuid) || blueprint->Content.Rooms.empty())
+            return HOUSING_RESULT_BLUEPRINT_ROOM_PLACEMENT_REQUIRED;
+
+        HousingBlueprintEvaluation evaluation;
+        HousingBlueprintMgr::Evaluate(*blueprint, housing, housing, evaluation);
+        if (evaluation.IsBlocked())
+            return HOUSING_RESULT_BLUEPRINT_REQUIREMENTS_UNMET;
+
+        ObjectGuid roomGuid;
+        HousingResult roomResult = AddHousingRoomAtDoor(housing, packet.TargetDoorComponentID, blueprint->Content.Rooms.front().RoomEntryId, &roomGuid);
+        if (roomResult != HOUSING_RESULT_SUCCESS)
+            return roomResult;
+
+        HousingBlueprintMgr::ApplyRoomDecor(player, housing, *blueprint, roomGuid, applied);
+        return HOUSING_RESULT_SUCCESS;
+    }();
+
+    if (result == HOUSING_RESULT_SUCCESS && housing)
+    {
+        RespawnHousingAfterBlueprintImport(player, housing, applied.InteriorChanged, applied.ExteriorChanged, applied.RemovedDecor);
+        player->SaveToDB();
     }
 
-    // Requirement gate (spec section 6): reject with the unmet-requirement bitmask when the
-    // target house does not satisfy the blueprint captured type/size (faction is a gap).
-    uint32 unmet = sHousingBlueprintMgr.CheckRequirements(*bp, housing);
-    if (unmet != HOUSING_BLUEPRINT_REQ_NONE)
-    {
-        response.Result = unmet; // HousingBlueprintUnmetRequirementFlags bitmask
-        SendPacket(response.Write());
-        return;
-    }
-
-    // Re-materialising decor/rooms/fixtures onto the house reuses the existing placement paths
-    // (HandleHousingDecorPlace / HandleHousingRoomAdd) and is a documented follow-up; the
-    // requirement gate and the item-list echo the client needs are real here.
-    response.Result = HOUSING_RESULT_SUCCESS;
-    if (housing)
-        response.HouseGuid = housing->GetHouseGuid();
-    response.Items = ToJamItemList(*bp);
+    response.Result = uint8(result);
     SendPacket(response.Write());
+
+    TC_LOG_INFO("housing", "CMSG_HOUSING_BLUEPRINT_IMPORT player={} uuid={} type={} room={} door={} result={} placed={} skipped={}",
+        player->GetGUID().ToString(), packet.Uuid, packet.BlueprintType, packet.SourceRoomGuid.ToString(), packet.TargetDoorComponentID,
+        uint32(result), applied.PlacedDecor, applied.SkippedDecor);
+}
+
+void WorldSession::RespawnHousingAfterBlueprintImport(Player* player, Housing* housing, bool interiorChanged, bool exteriorChanged,
+    std::vector<ObjectGuid> const& removedDecor)
+{
+    if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+    {
+        if (interiorChanged)
+        {
+            for (ObjectGuid const& decorGuid : removedDecor)
+                interiorMap->DespawnDecorItem(decorGuid);
+
+            // Rooms, their meshes and every decor item hang off each other: rebuild the whole interior.
+            int32 const faction = player->GetTeamId() == TEAM_ALLIANCE ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
+            interiorMap->DespawnAllRoomMeshObjects();
+            interiorMap->SpawnRoomMeshObjects(housing, faction);
+            interiorMap->SpawnInteriorDecor(housing);
+        }
+    }
+    else if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
+    {
+        if (exteriorChanged)
+        {
+            uint8 const plotIndex = housing->GetPlotIndex();
+            auto fixtureOverrides = housing->GetFixtureOverrideMap();
+            auto rootOverrides = housing->GetRootComponentOverrides();
+            Position const housePos = housing->GetHousePosition();
+            housingMap->DespawnAllDecorForPlot(plotIndex);
+            housingMap->DespawnHouseForPlot(plotIndex);
+            housingMap->SpawnHouseForPlot(plotIndex, housing->HasCustomPosition() ? &housePos : nullptr,
+                static_cast<int32>(housing->GetCoreExteriorComponentID()),
+                static_cast<int32>(housing->GetHouseType()),
+                fixtureOverrides.empty() ? nullptr : &fixtureOverrides,
+                rootOverrides.empty() ? nullptr : &rootOverrides);
+            housingMap->SpawnAllDecorForPlot(plotIndex, housing);
+            SendFixtureUpdateObject(player, housing);
+        }
+    }
+
+    GetBattlenetAccount().SendUpdateToPlayer(player);
 }

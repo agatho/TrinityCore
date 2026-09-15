@@ -1102,6 +1102,10 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_SEL_CHARACTER_HOUSING_IGNORED_NEIGHBORHOOD, "SELECT neighborhoodGuid FROM character_housing_ignored_neighborhood WHERE ownerGuid = ?", CONNECTION_SYNCH);
     PrepareStatement(CHAR_INS_CHARACTER_HOUSING_IGNORED_NEIGHBORHOOD, "INSERT IGNORE INTO character_housing_ignored_neighborhood (ownerGuid, neighborhoodGuid) VALUES (?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_CHARACTER_HOUSING_IGNORED_NEIGHBORHOOD, "DELETE FROM character_housing_ignored_neighborhood WHERE ownerGuid = ? AND neighborhoodGuid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_SEL_ACCOUNT_HOUSING_BLUEPRINTS, "SELECT id, uuid, bnetAccountId, exporterGuid, name, type, flags, createTime, content FROM account_housing_blueprint", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_INS_ACCOUNT_HOUSING_BLUEPRINT, "INSERT INTO account_housing_blueprint (id, uuid, bnetAccountId, exporterGuid, name, type, flags, createTime, content) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_UPD_ACCOUNT_HOUSING_BLUEPRINT_NAME, "UPDATE account_housing_blueprint SET name = ? WHERE id = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_ACCOUNT_HOUSING_BLUEPRINT, "DELETE FROM account_housing_blueprint WHERE id = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_CHARACTER_HOUSING_ROOM, "UPDATE character_housing_rooms SET slotIndex = ?, gridX = ?, gridY = ?, floorIndex = ?, orientation = ?, mirrored = ?, themeId = ?, wallTextureId = ?, floorTextureId = ?, ceilingTextureId = ?, colorOverride = ?, doorTypeId = ?, doorSlot = ?, ceilingTypeId = ?, ceilingSlot = ?, wallThemeId = ?, floorThemeId = ?, ceilingThemeId = ? WHERE ownerGuid = ? AND id = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_CHARACTER_HOUSING_FIXTURE, "UPDATE character_housing_fixtures SET fixtureOptionId = ? WHERE ownerGuid = ? AND fixturePointId = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_CHARACTER_HOUSING_FIXTURE_SINGLE, "DELETE FROM character_housing_fixtures WHERE ownerGuid = ? AND fixturePointId = ?", CONNECTION_ASYNC);
