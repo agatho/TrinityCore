@@ -36,6 +36,7 @@
 #include "HousingMap.h"
 #include "HousingMgr.h"
 #include "HousingBlueprintMgr.h"
+#include "MapManager.h"
 #include "MeshObject.h"
 #include "HousingPackets.h"
 #include "HousingBlueprintPackets.h"
@@ -5761,39 +5762,56 @@ void WorldSession::HandleHousingBlueprintImport(WorldPackets::Housing::HousingBl
 void WorldSession::RespawnHousingAfterBlueprintImport(Player* player, Housing* housing, bool interiorChanged, bool exteriorChanged,
     std::vector<ObjectGuid> const& removedDecor)
 {
-    if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(player->GetMap()))
+    // Rebuild every loaded copy of the house, not only the map the importer stands on: the interior instance is keyed
+    // by owner and may hold visitors, and the plot is on a neighborhood map others are watching. Session packets are
+    // processed between map updates, so touching another map here is safe.
+    ObjectGuid const ownerGuid = player->GetGUID();
+    ObjectGuid const neighborhoodGuid = housing->GetNeighborhoodGuid();
+    int32 const faction = player->GetTeamId() == TEAM_ALLIANCE ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
+
+    sMapMgr->DoForAllMaps([&](Map* map)
     {
-        if (interiorChanged)
+        if (HouseInteriorMap* interiorMap = dynamic_cast<HouseInteriorMap*>(map))
         {
+            if (!interiorChanged || interiorMap->GetOwnerGuid() != ownerGuid)
+                return;
+
             for (ObjectGuid const& decorGuid : removedDecor)
                 interiorMap->DespawnDecorItem(decorGuid);
 
             // Rooms, their meshes and every decor item hang off each other: rebuild the whole interior.
-            int32 const faction = player->GetTeamId() == TEAM_ALLIANCE ? NEIGHBORHOOD_FACTION_ALLIANCE : NEIGHBORHOOD_FACTION_HORDE;
             interiorMap->DespawnAllRoomMeshObjects();
             interiorMap->SpawnRoomMeshObjects(housing, faction);
             interiorMap->SpawnInteriorDecor(housing);
+
+            TC_LOG_DEBUG("housing", "RespawnHousingAfterBlueprintImport: rebuilt interior instance {} of {}", map->GetInstanceId(), ownerGuid.ToString());
+            return;
         }
-    }
-    else if (HousingMap* housingMap = dynamic_cast<HousingMap*>(player->GetMap()))
-    {
-        if (exteriorChanged)
-        {
-            uint8 const plotIndex = housing->GetPlotIndex();
-            auto fixtureOverrides = housing->GetFixtureOverrideMap();
-            auto rootOverrides = housing->GetRootComponentOverrides();
-            Position const housePos = housing->GetHousePosition();
-            housingMap->DespawnAllDecorForPlot(plotIndex);
-            housingMap->DespawnHouseForPlot(plotIndex);
-            housingMap->SpawnHouseForPlot(plotIndex, housing->HasCustomPosition() ? &housePos : nullptr,
-                static_cast<int32>(housing->GetCoreExteriorComponentID()),
-                static_cast<int32>(housing->GetHouseType()),
-                fixtureOverrides.empty() ? nullptr : &fixtureOverrides,
-                rootOverrides.empty() ? nullptr : &rootOverrides);
-            housingMap->SpawnAllDecorForPlot(plotIndex, housing);
-            SendFixtureUpdateObject(player, housing);
-        }
-    }
+
+        HousingMap* housingMap = dynamic_cast<HousingMap*>(map);
+        if (!exteriorChanged || !housingMap || !housingMap->GetNeighborhood() || housingMap->GetNeighborhood()->GetGuid() != neighborhoodGuid)
+            return;
+
+        uint8 const plotIndex = housing->GetPlotIndex();
+        auto fixtureOverrides = housing->GetFixtureOverrideMap();
+        auto rootOverrides = housing->GetRootComponentOverrides();
+        Position const housePos = housing->GetHousePosition();
+        housingMap->DespawnAllDecorForPlot(plotIndex);
+        housingMap->DespawnHouseForPlot(plotIndex);
+        housingMap->SpawnHouseForPlot(plotIndex, housing->HasCustomPosition() ? &housePos : nullptr,
+            static_cast<int32>(housing->GetCoreExteriorComponentID()),
+            static_cast<int32>(housing->GetHouseType()),
+            fixtureOverrides.empty() ? nullptr : &fixtureOverrides,
+            rootOverrides.empty() ? nullptr : &rootOverrides);
+        housingMap->SpawnAllDecorForPlot(plotIndex, housing);
+
+        TC_LOG_DEBUG("housing", "RespawnHousingAfterBlueprintImport: rebuilt plot {} on neighborhood map {} instance {}", uint32(plotIndex),
+            map->GetId(), map->GetInstanceId());
+    });
+
+    // The importer's own client gets the house entity and mesh CREATEs inline, as after any fixture change.
+    if (exteriorChanged && dynamic_cast<HousingMap*>(player->GetMap()))
+        SendFixtureUpdateObject(player, housing);
 
     GetBattlenetAccount().SendUpdateToPlayer(player);
 }
