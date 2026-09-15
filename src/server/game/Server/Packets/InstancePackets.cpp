@@ -354,6 +354,11 @@ WorldPacket const* InstanceEncounterEventCastUpdate::Write()
     _worldPacket << Bits<1>(Unknown62);
     _worldPacket << Bits<1>(Paused);
     _worldPacket << Bits<1>(IsBlockedByCondition);
+    _worldPacket.FlushBits();
+
+    return &_worldPacket;
+}
+
 WorldPacket const* EncounterStart::Write()
 {
     _worldPacket << uint32(DungeonEncounterID);
@@ -389,6 +394,8 @@ void InstanceAbandonVoteResponse::Read()
     _worldPacket >> Bits<1>(Accept);
     if (PartyIndex)
         _worldPacket >> *PartyIndex;
+}
+
 WorldPacket const* InstanceEncounterUpdateAllowReleaseInProgress::Write()
 {
     _worldPacket << Bits<1>(AllowRelease);

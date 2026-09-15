@@ -1322,6 +1322,8 @@ void InstanceScript::SendEncounterTimelineTo(Player* player) const
         return;
 
     player->SendDirectMessage(sync.Write());
+}
+
 void InstanceScript::SendRealmEncounterStart(uint32 dungeonEncounterId)
 {
     _encounterStartTimes[dungeonEncounterId] = GameTime::GetGameTimeMS();

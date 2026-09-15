@@ -586,6 +586,8 @@ namespace WorldPackets
 
             Optional<uint8> PartyIndex;
             bool Accept = false;
+        };
+
         // The realm-wide half of an encounter pull, sent in the same tick as SMSG_INSTANCE_ENCOUNTER_START.
         // 12.1.0.69587 client reader 0x7FF7CD3CD380: uint32, uint16, uint32, then a counted array of 720-byte
         // per-member records (reader 0x7FF7CD42E5A0). The count is 0 in all 36 captured frames across ten
