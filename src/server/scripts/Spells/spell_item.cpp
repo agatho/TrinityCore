@@ -201,7 +201,15 @@ class spell_item_alchemist_stone : public AuraScript
 
     bool CheckProc(ProcEventInfo& eventInfo)
     {
-        return eventInfo.GetDamageInfo()->GetSpellInfo()->SpellFamilyName == SPELLFAMILY_POTION;
+        // Alchemist Stone keys off the proccing spell's family (potion), so an event
+        // with no DamageInfo/SpellInfo can't be a potion and must not proc. The row
+        // for 17619 legitimately procs on the cast phase (TDB SpellPhaseMask=1), where
+        // DamageInfo is null, so the unguarded deref here would crash the server.
+        DamageInfo const* damageInfo = eventInfo.GetDamageInfo();
+        if (!damageInfo || !damageInfo->GetSpellInfo())
+            return false;
+
+        return damageInfo->GetSpellInfo()->SpellFamilyName == SPELLFAMILY_POTION;
     }
 
     void HandleProc(AuraEffect* aurEff, ProcEventInfo& eventInfo)
