@@ -532,8 +532,7 @@ bool HousingBlueprintMgr::Deserialize(std::vector<uint8> const& data, HousingBlu
 {
     try
     {
-        ByteBuffer buffer(data.size());
-        buffer.append(data.data(), data.size());
+        ByteBuffer buffer{ std::vector<uint8>(data) };
 
         if (buffer.read<uint8>() != BLUEPRINT_CONTENT_VERSION)
             return false;
