@@ -71,6 +71,7 @@
 #include "GitRevision.h"
 #include "DecorDuelMgr.h"
 #include "GoingPostalMgr.h"
+#include "HousingBlueprintMgr.h"
 #include "HousingMgr.h"
 #include "InitiativeManager.h"
 #include "NeighborhoodMgr.h"
@@ -2112,6 +2113,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading neighborhood info...");
     sNeighborhoodMgr.Initialize();
+
+    TC_LOG_INFO("server.loading", "Loading housing blueprints...");
+    sHousingBlueprintMgr.LoadFromDB();
 
     TC_LOG_INFO("server.loading", "Loading initiative info...");
     sInitiativeManager.Initialize();

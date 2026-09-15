@@ -20,101 +20,124 @@
 
 #include "Define.h"
 
-// HousingResult enum - 90 values (0-89), verified against client binary
+// HousingResult enum - 12.1.0.69587 client values (Enum.HousingResult, 112 values). 12.1 inserted AccountBanned and the
+// Blueprint* results near the top, shifting every later value; the client's blueprint system itself returns 3, 7, 8,
+// 11, 12, 13, 87, 95 and 99 for CodeInvalid, LocationInvalid, NameInvalid, RoomPlacementRequired, TypeInvalid,
+// TypeLocationInvalid, PermissionDenied, RoomNotFound and ServiceNotAvailable.
 enum HousingResult : uint8
 {
     HOUSING_RESULT_SUCCESS                                   = 0,
-    HOUSING_RESULT_ACTION_LOCKED_BY_COMBAT                   = 1,
-    HOUSING_RESULT_BOUNDS_FAILURE_CHILDREN                   = 2,
-    HOUSING_RESULT_BOUNDS_FAILURE_PLOT                       = 3,
-    HOUSING_RESULT_BOUNDS_FAILURE_ROOM                       = 4,
-    HOUSING_RESULT_BOUND_TO_STARTING_AREA                    = 5,
-    HOUSING_RESULT_CANNOT_AFFORD                             = 6,
-    HOUSING_RESULT_CHARTER_COMPLETE                          = 7,
-    HOUSING_RESULT_COLLISION_INVALID                         = 8,
-    HOUSING_RESULT_DB_ERROR                                  = 9,
-    HOUSING_RESULT_DECOR_CANNOT_BE_REDEEMED                  = 10,
-    HOUSING_RESULT_DECOR_ITEM_NOT_DESTROYABLE                = 11,
-    HOUSING_RESULT_DECOR_NOT_FOUND                           = 12,
-    HOUSING_RESULT_DECOR_NOT_FOUND_IN_STORAGE                = 13,
-    HOUSING_RESULT_DUPLICATE_CHARTER_SIGNATURE               = 14,
-    HOUSING_RESULT_FILTER_REJECTED                           = 15,
-    HOUSING_RESULT_FIXTURE_CANT_DELETE_DOOR                  = 16,
-    HOUSING_RESULT_FIXTURE_HOOK_EMPTY                        = 17,
-    HOUSING_RESULT_FIXTURE_HOOK_OCCUPIED                     = 18,
-    HOUSING_RESULT_FIXTURE_HOUSE_TYPE_MISMATCH               = 19,
-    HOUSING_RESULT_FIXTURE_NOT_FOUND                         = 20,
-    HOUSING_RESULT_FIXTURE_SIZE_MISMATCH                     = 21,
-    HOUSING_RESULT_FIXTURE_TYPE_MISMATCH                     = 22,
-    HOUSING_RESULT_GENERIC_FAILURE                           = 23,
-    HOUSING_RESULT_GUILD_MORE_ACCOUNTS_NEEDED                = 24,
-    HOUSING_RESULT_GUILD_MORE_ACTIVE_PLAYERS_NEEDED          = 25,
-    HOUSING_RESULT_GUILD_NOT_LOADED                          = 26,
-    HOUSING_RESULT_HOUSE_EDIT_LOCK_FAILED                    = 27,
-    HOUSING_RESULT_HOUSE_EXTERIOR_ALREADY_THAT_SIZE          = 28,
-    HOUSING_RESULT_HOUSE_EXTERIOR_ALREADY_THAT_TYPE          = 29,
-    HOUSING_RESULT_HOUSE_EXTERIOR_ROOT_NOT_FOUND             = 30,
-    HOUSING_RESULT_HOUSE_EXTERIOR_TYPE_NEIGHBORHOOD_MISMATCH = 31,
-    HOUSING_RESULT_HOUSE_EXTERIOR_TYPE_NOT_FOUND             = 32,
-    HOUSING_RESULT_HOUSE_EXTERIOR_TYPE_SIZE_MISMATCH         = 33,
-    HOUSING_RESULT_HOUSE_EXTERIOR_SIZE_NOT_AVAILABLE         = 34,
-    HOUSING_RESULT_HOOK_NOT_CHILD_OF_FIXTURE                 = 35,
-    HOUSING_RESULT_HOUSE_NOT_FOUND                           = 36,
-    HOUSING_RESULT_INCORRECT_FACTION                         = 37,
-    HOUSING_RESULT_INVALID_DECOR_ITEM                        = 38,
-    HOUSING_RESULT_INVALID_DISTANCE                          = 39,
-    HOUSING_RESULT_INVALID_GUILD                             = 40,
-    HOUSING_RESULT_INVALID_HOUSE                             = 41,
-    HOUSING_RESULT_INVALID_INSTANCE                          = 42,
-    HOUSING_RESULT_INVALID_INTERACTION                       = 43,
-    HOUSING_RESULT_INVALID_LIGHT_OVERLAP                     = 44,
-    HOUSING_RESULT_INVALID_MAP                               = 45,
-    HOUSING_RESULT_INVALID_NEIGHBORHOOD_NAME                 = 46,
-    HOUSING_RESULT_INVALID_ROOM_LAYOUT                       = 47,
-    HOUSING_RESULT_LOCKED_BY_OTHER_PLAYER                    = 48,
-    HOUSING_RESULT_LOCK_OPERATION_FAILED                     = 49,
-    HOUSING_RESULT_MAX_DECOR_REACHED                         = 50,
-    HOUSING_RESULT_MAX_PREVIEW_DECOR_REACHED                 = 51,
-    HOUSING_RESULT_MISSING_CORE_FIXTURE                      = 52,
-    HOUSING_RESULT_MISSING_DYE                               = 53,
-    HOUSING_RESULT_MISSING_EXPANSION_ACCESS                  = 54,
-    HOUSING_RESULT_MISSING_FACTION_MAP                       = 55,
-    HOUSING_RESULT_MISSING_PRIVATE_NEIGHBORHOOD_INVITE       = 56,
-    HOUSING_RESULT_MORE_HOUSE_SLOTS_NEEDED                   = 57,
-    HOUSING_RESULT_MORE_SIGNATURES_NEEDED                    = 58,
-    HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND                    = 59,
-    HOUSING_RESULT_NO_NEIGHBORHOOD_OWNERSHIP_REQUESTS        = 60,
-    HOUSING_RESULT_NOT_IN_DECOR_EDIT_MODE                    = 61,
-    HOUSING_RESULT_NOT_IN_FIXTURE_EDIT_MODE                  = 62,
-    HOUSING_RESULT_NOT_IN_LAYOUT_EDIT_MODE                   = 63,
-    HOUSING_RESULT_NOT_INSIDE_HOUSE                          = 64,
-    HOUSING_RESULT_NOT_ON_OWNED_PLOT                         = 65,
-    HOUSING_RESULT_OPERATION_ABORTED                         = 66,
-    HOUSING_RESULT_OWNER_NOT_IN_GUILD                        = 67,
-    HOUSING_RESULT_PERMISSION_DENIED                         = 68,
-    HOUSING_RESULT_PLACEMENT_TARGET_INVALID                  = 69,
-    HOUSING_RESULT_PLAYER_NOT_FOUND                          = 70,
-    HOUSING_RESULT_PLAYER_NOT_IN_INSTANCE                    = 71,
-    HOUSING_RESULT_PLOT_NOT_FOUND                            = 72,
-    HOUSING_RESULT_PLOT_NOT_VACANT                           = 73,
-    HOUSING_RESULT_PLOT_RESERVATION_COOLDOWN                 = 74,
-    HOUSING_RESULT_PLOT_RESERVED                             = 75,
-    HOUSING_RESULT_ROOM_NOT_FOUND                            = 76,
-    HOUSING_RESULT_ROOM_UPDATE_FAILED                        = 77,
-    HOUSING_RESULT_RPC_FAILURE                               = 78,
-    HOUSING_RESULT_SERVICE_NOT_AVAILABLE                     = 79,
-    HOUSING_RESULT_STATIC_DATA_NOT_FOUND                     = 80,
-    HOUSING_RESULT_TIMEOUT_LIMIT                             = 81,
-    HOUSING_RESULT_TIMERUNNING_NOT_ALLOWED                   = 82,
-    HOUSING_RESULT_TOKEN_REQUIRED                            = 83,
-    HOUSING_RESULT_TOO_MANY_REQUESTS                         = 84,
-    HOUSING_RESULT_TRANSACTION_FAILURE                       = 85,
-    HOUSING_RESULT_UNCOLLECTED_EXTERIOR_FIXTURE              = 86,
-    HOUSING_RESULT_UNCOLLECTED_HOUSE_TYPE                    = 87,
-    HOUSING_RESULT_UNCOLLECTED_ROOM                          = 88,
-    HOUSING_RESULT_UNCOLLECTED_ROOM_MATERIAL                 = 89,
-    HOUSING_RESULT_UNCOLLECTED_ROOM_THEME                    = 90,
-    HOUSING_RESULT_UNLOCK_OPERATION_FAILED                   = 91
+    HOUSING_RESULT_ACCOUNT_BANNED                            = 1,
+    HOUSING_RESULT_ACTION_LOCKED_BY_COMBAT                   = 2,
+    HOUSING_RESULT_BLUEPRINT_CODE_INVALID                    = 3,
+    HOUSING_RESULT_BLUEPRINT_DYE_FAILED                      = 4,
+    HOUSING_RESULT_BLUEPRINT_GENERIC_EXPORT_ERROR            = 5,
+    HOUSING_RESULT_BLUEPRINT_GENERIC_IMPORT_ERROR            = 6,
+    HOUSING_RESULT_BLUEPRINT_LOCATION_INVALID                = 7,
+    HOUSING_RESULT_BLUEPRINT_NAME_INVALID                    = 8,
+    HOUSING_RESULT_BLUEPRINT_NOT_FOUND                       = 9,
+    HOUSING_RESULT_BLUEPRINT_REQUIREMENTS_UNMET              = 10,
+    HOUSING_RESULT_BLUEPRINT_ROOM_PLACEMENT_REQUIRED         = 11,
+    HOUSING_RESULT_BLUEPRINT_TYPE_INVALID                    = 12,
+    HOUSING_RESULT_BLUEPRINT_TYPE_LOCATION_INVALID           = 13,
+    HOUSING_RESULT_BLUEPRINT_STORAGE_LIMIT                   = 14,
+    HOUSING_RESULT_BLUEPRINT_VERSION_INVALID                 = 15,
+    HOUSING_RESULT_BOUNDS_FAILURE_CHILDREN                   = 16,
+    HOUSING_RESULT_BOUNDS_FAILURE_PLOT                       = 17,
+    HOUSING_RESULT_BOUNDS_FAILURE_ROOM                       = 18,
+    HOUSING_RESULT_BOUND_TO_STARTING_AREA                    = 19,
+    HOUSING_RESULT_CANNOT_AFFORD                             = 20,
+    HOUSING_RESULT_CHARTER_COMPLETE                          = 21,
+    HOUSING_RESULT_COLLISION_INVALID                         = 22,
+    HOUSING_RESULT_DB_ERROR                                  = 23,
+    HOUSING_RESULT_DECOR_CANNOT_BE_REDEEMED                  = 24,
+    HOUSING_RESULT_DECOR_ITEM_NOT_DESTROYABLE                = 25,
+    HOUSING_RESULT_DECOR_NOT_FOUND                           = 26,
+    HOUSING_RESULT_DECOR_NOT_FOUND_IN_STORAGE                = 27,
+    HOUSING_RESULT_DUPLICATE_CHARTER_SIGNATURE               = 28,
+    HOUSING_RESULT_FILTER_REJECTED                           = 29,
+    HOUSING_RESULT_FIXTURE_CANT_DELETE_DOOR                  = 30,
+    HOUSING_RESULT_FIXTURE_HOOK_EMPTY                        = 31,
+    HOUSING_RESULT_FIXTURE_HOOK_OCCUPIED                     = 32,
+    HOUSING_RESULT_FIXTURE_HOUSE_TYPE_MISMATCH               = 33,
+    HOUSING_RESULT_FIXTURE_NOT_FOUND                         = 34,
+    HOUSING_RESULT_FIXTURE_SIZE_MISMATCH                     = 35,
+    HOUSING_RESULT_FIXTURE_TYPE_MISMATCH                     = 36,
+    HOUSING_RESULT_GENERIC_FAILURE                           = 37,
+    HOUSING_RESULT_GUILD_MORE_ACCOUNTS_NEEDED                = 38,
+    HOUSING_RESULT_GUILD_MORE_ACTIVE_PLAYERS_NEEDED          = 39,
+    HOUSING_RESULT_GUILD_NOT_LOADED                          = 40,
+    HOUSING_RESULT_HOUSE_EDIT_LOCK_FAILED                    = 41,
+    HOUSING_RESULT_HOUSE_EXTERIOR_ALREADY_THAT_SIZE          = 42,
+    HOUSING_RESULT_HOUSE_EXTERIOR_ALREADY_THAT_TYPE          = 43,
+    HOUSING_RESULT_HOUSE_EXTERIOR_ROOT_NOT_FOUND             = 44,
+    HOUSING_RESULT_HOUSE_EXTERIOR_TYPE_NEIGHBORHOOD_MISMATCH = 45,
+    HOUSING_RESULT_HOUSE_EXTERIOR_TYPE_NOT_FOUND             = 46,
+    HOUSING_RESULT_HOUSE_EXTERIOR_TYPE_SIZE_MISMATCH         = 47,
+    HOUSING_RESULT_HOUSE_EXTERIOR_SIZE_NOT_AVAILABLE         = 48,
+    HOUSING_RESULT_HOOK_NOT_CHILD_OF_FIXTURE                 = 49,
+    HOUSING_RESULT_HOUSE_NOT_FOUND                           = 50,
+    HOUSING_RESULT_INCORRECT_FACTION                         = 51,
+    HOUSING_RESULT_INVALID_DECOR_ITEM                        = 52,
+    HOUSING_RESULT_INVALID_DISTANCE                          = 53,
+    HOUSING_RESULT_INVALID_EXTERIOR_DOCUMENT                 = 54,
+    HOUSING_RESULT_INVALID_GUILD                             = 55,
+    HOUSING_RESULT_INVALID_HOUSE                             = 56,
+    HOUSING_RESULT_INVALID_INSTANCE                          = 57,
+    HOUSING_RESULT_INVALID_INTERACTION                       = 58,
+    HOUSING_RESULT_INVALID_INTERIOR_DOCUMENT                 = 59,
+    HOUSING_RESULT_INVALID_LIGHT_OVERLAP                     = 60,
+    HOUSING_RESULT_INVALID_MAP                               = 61,
+    HOUSING_RESULT_INVALID_NEIGHBORHOOD_NAME                 = 62,
+    HOUSING_RESULT_INVALID_ROOM_LAYOUT                       = 63,
+    HOUSING_RESULT_INSUFFICIENT_ROOM_BUDGET                  = 64,
+    HOUSING_RESULT_LOCKED_BY_OTHER_PLAYER                    = 65,
+    HOUSING_RESULT_LOCK_OPERATION_FAILED                     = 66,
+    HOUSING_RESULT_MAX_PLACED_DECOR_REACHED                  = 67,
+    HOUSING_RESULT_MAX_PET_DECOR_REACHED                     = 68,
+    HOUSING_RESULT_MAX_PREVIEW_DECOR_REACHED                 = 69,
+    HOUSING_RESULT_MAX_STORAGE_DECOR_REACHED                 = 70,
+    HOUSING_RESULT_MISSING_CORE_FIXTURE                      = 71,
+    HOUSING_RESULT_MISSING_DYE                               = 72,
+    HOUSING_RESULT_MISSING_EXPANSION_ACCESS                  = 73,
+    HOUSING_RESULT_MISSING_FACTION_MAP                       = 74,
+    HOUSING_RESULT_MISSING_PRIVATE_NEIGHBORHOOD_INVITE       = 75,
+    HOUSING_RESULT_MORE_HOUSE_SLOTS_NEEDED                   = 76,
+    HOUSING_RESULT_MORE_SIGNATURES_NEEDED                    = 77,
+    HOUSING_RESULT_NEIGHBORHOOD_NOT_FOUND                    = 78,
+    HOUSING_RESULT_NO_NEIGHBORHOOD_OWNERSHIP_REQUESTS        = 79,
+    HOUSING_RESULT_NOT_IN_DECOR_EDIT_MODE                    = 80,
+    HOUSING_RESULT_NOT_IN_FIXTURE_EDIT_MODE                  = 81,
+    HOUSING_RESULT_NOT_IN_LAYOUT_EDIT_MODE                   = 82,
+    HOUSING_RESULT_NOT_INSIDE_HOUSE                          = 83,
+    HOUSING_RESULT_NOT_ON_OWNED_PLOT                         = 84,
+    HOUSING_RESULT_OPERATION_ABORTED                         = 85,
+    HOUSING_RESULT_OWNER_NOT_IN_GUILD                        = 86,
+    HOUSING_RESULT_PERMISSION_DENIED                         = 87,
+    HOUSING_RESULT_PLACEMENT_TARGET_INVALID                  = 88,
+    HOUSING_RESULT_PLAYER_NOT_FOUND                          = 89,
+    HOUSING_RESULT_PLAYER_NOT_IN_INSTANCE                    = 90,
+    HOUSING_RESULT_PLOT_NOT_FOUND                            = 91,
+    HOUSING_RESULT_PLOT_NOT_VACANT                           = 92,
+    HOUSING_RESULT_PLOT_RESERVATION_COOLDOWN                 = 93,
+    HOUSING_RESULT_PLOT_RESERVED                             = 94,
+    HOUSING_RESULT_ROOM_NOT_FOUND                            = 95,
+    HOUSING_RESULT_ROOM_PLACEMENT_OUT_OF_BOUNDS              = 96,
+    HOUSING_RESULT_ROOM_UPDATE_FAILED                        = 97,
+    HOUSING_RESULT_RPC_FAILURE                               = 98,
+    HOUSING_RESULT_SERVICE_NOT_AVAILABLE                     = 99,
+    HOUSING_RESULT_STATIC_DATA_NOT_FOUND                     = 100,
+    HOUSING_RESULT_TIMEOUT_LIMIT                             = 101,
+    HOUSING_RESULT_TIMERUNNING_NOT_ALLOWED                   = 102,
+    HOUSING_RESULT_TOKEN_REQUIRED                            = 103,
+    HOUSING_RESULT_TOO_MANY_REQUESTS                         = 104,
+    HOUSING_RESULT_TRANSACTION_FAILURE                       = 105,
+    HOUSING_RESULT_UNCOLLECTED_EXTERIOR_FIXTURE              = 106,
+    HOUSING_RESULT_UNCOLLECTED_HOUSE_TYPE                    = 107,
+    HOUSING_RESULT_UNCOLLECTED_ROOM                          = 108,
+    HOUSING_RESULT_UNCOLLECTED_ROOM_MATERIAL                 = 109,
+    HOUSING_RESULT_UNCOLLECTED_ROOM_THEME                    = 110,
+    HOUSING_RESULT_UNLOCK_OPERATION_FAILED                   = 111
 };
 
 // HouseEditorMode enum - 7 values
@@ -299,13 +322,15 @@ enum NeighborhoodInviteResult : uint8
     NEIGHBORHOOD_INVITE_TOO_MANY_REQUESTS       = 10
 };
 
-// BulkRefundResult enum - 4 values (from client string xrefs, build 66838)
+// Enum.BulkRefundResult (12.1.0.69587, BattlepayConstantsDocumentation.lua)
 enum BulkRefundResult : uint8
 {
     BULK_REFUND_RESULT_SUCCESS                  = 0,
-    BULK_REFUND_RESULT_INVALID_REQUEST          = 1,
-    BULK_REFUND_RESULT_REFUND_WINDOW_EXPIRED    = 2,
-    BULK_REFUND_RESULT_TIMEOUT                  = 3
+    BULK_REFUND_RESULT_FAILED                   = 1,
+    BULK_REFUND_RESULT_INVALID_REQUEST          = 2,
+    BULK_REFUND_RESULT_REFUND_WINDOW_EXPIRED    = 3,
+    BULK_REFUND_RESULT_SYSTEM_DISABLED          = 4,
+    BULK_REFUND_RESULT_TIMEOUT                  = 5
 };
 
 // HouseOwnerError enum - 4 values
@@ -368,11 +393,17 @@ enum HouseSettingFlags : uint32
     HOUSE_SETTING_PLOT_ACCESS_NEIGHBORS     = 0x040,
     HOUSE_SETTING_PLOT_ACCESS_GUILD         = 0x080,
     HOUSE_SETTING_PLOT_ACCESS_FRIENDS       = 0x100,
-    HOUSE_SETTING_PLOT_ACCESS_PARTY         = 0x200
+    HOUSE_SETTING_PLOT_ACCESS_PARTY         = 0x200,
+    // 12.1 (Enum.HouseSettingFlags registration 0x7FF7CE1216E0): who may export this house as a blueprint.
+    HOUSE_SETTING_BLUEPRINT_EXPORT_ANYONE   = 0x400,
+    HOUSE_SETTING_BLUEPRINT_EXPORT_NEIGHBORS = 0x800,
+    HOUSE_SETTING_BLUEPRINT_EXPORT_GUILD    = 0x1000,
+    HOUSE_SETTING_BLUEPRINT_EXPORT_FRIENDS  = 0x2000,
+    HOUSE_SETTING_BLUEPRINT_EXPORT_PARTY    = 0x4000
 };
 
 constexpr uint32 HOUSE_SETTING_DEFAULT    = HOUSE_SETTING_PLOT_ACCESS_ANYONE; // 0x020 — sniff-verified default
-constexpr uint32 HOUSE_SETTING_VALID_MASK = 0x3FF; // bits 0-9
+constexpr uint32 HOUSE_SETTING_VALID_MASK = 0x7FFF; // bits 0-14
 
 // HousingDecorPlacementFlags enum - 5 values (bitmask)
 enum HousingDecorPlacementFlags : int32
@@ -990,82 +1021,70 @@ static constexpr uint32 INTERIOR_DOOR_GO_ALLIANCE = 575017; // displayId 113554
 static constexpr uint32 INTERIOR_DOOR_GO_HORDE    = 587318;
 
 // ============================================================================
-// Patch 12.1.0 (build 69299) additions — RE spec:
-//   c:\dumps\tools\dump121\housing\housing_12_1_spec.md
-// Enum MEMBER NAMES are binary-verified (client reflection strings / auto_HOUSING_*
-// event + ERR_HOUSING_* error tables). Enum NUMERIC VALUES are inferred (string-order
-// ordinals) — the client enum-constant registrar tables are not cleanly recoverable
-// offline (spec §5). Flagged accordingly; confirm values against a 12.1 capture/DB.
-//
-// Restored 2026-09-01 (12.0.7->12.1 housing reconcile): this block existed in bare's
-// 12.1 WIP (commit 19eb4a2607) but was dropped when the 12.0.7 clone's HousingDefines.h
-// won the merge for this file wholesale. Recovered verbatim from that commit; no values
-// changed. HousingBlueprintMgr.h/.cpp depend on these identifiers.
+// Housing blueprints (12.1.0.69587). Enum values are the client's (HousingBlueprintConstantsDocumentation.lua,
+// PlayerHousingConstantsDocumentation.lua); limits are the Constants.HousingConsts values the client registers
+// (0x7FF7CE1254A0).
 // ============================================================================
 
-// Blueprint category. Names from HOUSING_BLUEPRINT_COLLECTION_GROUP_{HOUSE,INTERIOR,
-// EXTERIOR,ROOM,BACKUP} client event strings [BIN]. Values = string order [INF].
-enum class HousingBlueprintType : uint32
+enum class HousingBlueprintType : uint8
 {
-    House    = 0,
-    Interior = 1,
-    Exterior = 2,
-    Room     = 3,
-    Backup   = 4,
+    None     = 0,
+    House    = 1,
+    Room     = 2,
+    Interior = 3,
+    Exterior = 4,
 };
 
-// Content granularity of a blueprint's item list (JamBlueprintItemList carries decor/
-// dye/room/fixture ID sets). Mirrors HousingBlueprintType groups. Names [BIN] / values [INF].
-enum class HousingBlueprintContentType : uint32
+enum HousingBlueprintFlag : uint8
 {
-    House    = 0,
-    Interior = 1,
-    Exterior = 2,
-    Room     = 3,
-    Backup   = 4,
+    HOUSING_BLUEPRINT_FLAG_NONE             = 0x0,
+    HOUSING_BLUEPRINT_FLAG_AUTOMATIC_BACKUP = 0x1,  // client: isAutoSave = flags & 1
 };
 
-// JamHousingBlueprint.flags bitmask. Client has HousingBlueprintFlag/Meta but the member
-// values were NOT recovered offline — kept opaque; do not assume a meaning. [INF]
-enum HousingBlueprintFlags : uint32
+enum class HousingBlueprintContentType : uint8
 {
-    HOUSING_BLUEPRINT_FLAG_NONE = 0x0,
-    // values unresolved offline (spec §5) — treat JamHousingBlueprint.flags as opaque uint32
+    None      = 0,
+    HouseType = 1,
+    Room      = 2,
+    Decor     = 3,
+    Dye       = 4,
+    Fixture   = 5,
+    Other     = 6,
 };
 
-// ImportBlueprint requirement gate. Bits from ERR_HOUSING_BLUEPRINT_REQUIREMENT_* [BIN];
-// bit positions = error-string order [INF]. Import is refused unless the target house
-// satisfies all set requirements (spec §6).
 enum HousingBlueprintUnmetRequirementFlags : uint32
 {
-    HOUSING_BLUEPRINT_REQ_NONE             = 0x0,
-    HOUSING_BLUEPRINT_REQ_EXTERIOR_FACTION = 0x1,
-    HOUSING_BLUEPRINT_REQ_HOUSE_TYPE       = 0x2,
-    HOUSING_BLUEPRINT_REQ_HOUSE_SIZE       = 0x4,
+    HOUSING_BLUEPRINT_UNMET_NONE                        = 0x00,
+    HOUSING_BLUEPRINT_UNMET_INSUFFICIENT_BUDGET         = 0x01,
+    HOUSING_BLUEPRINT_UNMET_MISSING_ROOM                = 0x02,
+    HOUSING_BLUEPRINT_UNMET_MISSING_FIXTURE             = 0x04,
+    HOUSING_BLUEPRINT_UNMET_MISSING_DECOR               = 0x08,
+    HOUSING_BLUEPRINT_UNMET_MISSING_DYE                 = 0x10,
+    HOUSING_BLUEPRINT_UNMET_MISMATCHED_EXTERIOR_FACTION = 0x20,
+    HOUSING_BLUEPRINT_UNMET_HOUSE_TYPE_LOCKED           = 0x40,
+    HOUSING_BLUEPRINT_UNMET_HOUSE_SIZE_LOCKED           = 0x80,
+    // The client derives blockingRequirementFlags as unmet & 0xE7: missing decor and dyes do not stop an import, the
+    // missing pieces are left out.
+    HOUSING_BLUEPRINT_UNMET_BLOCKING_MASK               = 0xE7,
 };
 
-// JamHouseBudgetEntry.budgetType. Categories from the Lua budget accessors
-// Get{Max,Spent}PlacementBudget / Get{Max,Spent}PetPlacementBudget / GetRoomPlacementBudget
-// [BIN names] / values [INF]. Each is tracked separately within interior vs exterior.
-enum class HouseBudgetType : uint32
+enum class HousingBudgetType : uint8
 {
-    Decor   = 0,
-    PetBed  = 1,
-    Room    = 2,
-    Fixture = 3,
+    RoomPlacement  = 0,
+    DecorPlacement = 1,
+    PetDecor       = 2,
 };
+
+static constexpr uint32 HOUSING_BLUEPRINTS_MAX_PER_BNET_ACCOUNT         = 50;
+static constexpr uint32 HOUSING_BLUEPRINTS_MAX_BACKUPS_PER_BNET_ACCOUNT = 10;
+static constexpr uint32 HOUSING_BLUEPRINT_NAME_MIN_CHARACTERS           = 3;
+static constexpr uint32 HOUSING_BLUEPRINT_NAME_MAX_CHARACTERS           = 50;
 
 // Pet beds (12.1): decor items with their own placement budget. Caps come from client
 // config globals housingMaxPetBedsInterior@0x127F60 / housingMaxPetBedsExterior@0x127FD0
 // [BIN symbols]. Default caps are placeholders until a value capture/DB confirms. [INF]
 static constexpr uint32 HOUSING_MAX_PET_BEDS_INTERIOR = 6;
 static constexpr uint32 HOUSING_MAX_PET_BEDS_EXTERIOR = 6;
-
-// Blueprint per-BNet-account caps. Client events HOUSING_BLUEPRINTS_MAX_PER_BNET_ACCOUNT
-// @0x13B993F and HOUSING_BLUEPRINTS_MAX_BACKUPS_PER_BNET_ACCOUNT@0x13B9968 exist [BIN];
-// the numeric caps are format-string args, not recovered offline — placeholders. [INF]
-static constexpr uint32 HOUSING_BLUEPRINTS_MAX_PER_BNET_ACCOUNT = 50;
-static constexpr uint32 HOUSING_BLUEPRINTS_MAX_BACKUPS_PER_BNET = 10;
 
 // 12.1 raised the displayed house level cap to 12 (patch notes). MAX_HOUSE_LEVEL above is
 // already 20 (headroom); levels 11-12 are HouseLevelData.db2 rows + larger budgets +

@@ -909,6 +909,40 @@ bool HousingMgr::CanVisitorAccessPlot(Player const* visitor, ObjectGuid ownerGui
     return false;
 }
 
+bool HousingMgr::CanVisitorExportBlueprint(Player const* visitor, ObjectGuid ownerGuid, uint32 settingsFlags) const
+{
+    if (!visitor || ownerGuid.IsEmpty())
+        return false;
+
+    if (visitor->GetGUID() == ownerGuid)
+        return true;
+
+    if (settingsFlags & HOUSE_SETTING_BLUEPRINT_EXPORT_ANYONE)
+        return true;
+
+    Player* ownerPlayer = ObjectAccessor::FindPlayer(ownerGuid);
+
+    if ((settingsFlags & HOUSE_SETTING_BLUEPRINT_EXPORT_PARTY) && ownerPlayer && visitor->GetGroup()
+        && visitor->GetGroup() == ownerPlayer->GetGroup())
+        return true;
+
+    if (settingsFlags & HOUSE_SETTING_BLUEPRINT_EXPORT_GUILD)
+    {
+        ObjectGuid::LowType ownerGuildId = ownerPlayer ? ownerPlayer->GetGuildId() : sCharacterCache->GetCharacterGuildIdByGuid(ownerGuid);
+        if (ownerGuildId != 0 && visitor->GetGuildId() == ownerGuildId)
+            return true;
+    }
+
+    if ((settingsFlags & HOUSE_SETTING_BLUEPRINT_EXPORT_FRIENDS) && visitor->GetSocial() && visitor->GetSocial()->HasFriend(ownerGuid))
+        return true;
+
+    if (settingsFlags & HOUSE_SETTING_BLUEPRINT_EXPORT_NEIGHBORS)
+        for (Neighborhood const* nbh : sNeighborhoodMgr.GetNeighborhoodsForPlayer(ownerGuid))
+            if (nbh->IsMember(visitor->GetGUID()))
+                return true;
+
+    return false;
+}
 
 HousingResult HousingMgr::ValidateDecorPlacement(uint32 decorId, Position const& pos, uint32 houseLevel) const
 {
