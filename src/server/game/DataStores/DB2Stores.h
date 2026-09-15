@@ -32,6 +32,7 @@
 class DB2HotfixGeneratorBase;
 
 TC_GAME_API extern DB2Storage<AchievementEntry>                     sAchievementStore;
+TC_GAME_API extern DB2Storage<GroupFinderActivityEntry>             sGroupFinderActivityStore;
 TC_GAME_API extern DB2Storage<Achievement_CategoryEntry>            sAchievementCategoryStore;
 TC_GAME_API extern DB2Storage<AdventureJournalEntry>                sAdventureJournalStore;
 TC_GAME_API extern DB2Storage<AdventureMapPOIEntry>                 sAdventureMapPOIStore;
@@ -128,7 +129,6 @@ TC_GAME_API extern DB2Storage<GarrTalentTreeEntry>                  sGarrTalentT
 TC_GAME_API extern DB2Storage<GemPropertiesEntry>                   sGemPropertiesStore;
 TC_GAME_API extern DB2Storage<GlyphPropertiesEntry>                 sGlyphPropertiesStore;
 TC_GAME_API extern DB2Storage<GossipNPCOptionEntry>                 sGossipNPCOptionStore;
-TC_GAME_API extern DB2Storage<GroupFinderActivityEntry>             sGroupFinderActivityStore;
 TC_GAME_API extern DB2Storage<GuildColorBackgroundEntry>            sGuildColorBackgroundStore;
 TC_GAME_API extern DB2Storage<GuildColorBorderEntry>                sGuildColorBorderStore;
 TC_GAME_API extern DB2Storage<GuildColorEmblemEntry>                sGuildColorEmblemStore;

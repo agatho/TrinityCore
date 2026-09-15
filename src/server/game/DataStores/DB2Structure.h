@@ -48,6 +48,31 @@ struct AchievementEntry
     int32 LegacyAfterTimeEvent;                                     // category changes clientside to Legacy after this TimeEvent is passed
 };
 
+struct GroupFinderActivityEntry
+{
+    uint32 ID;
+    LocalizedString FullName;
+    LocalizedString ShortName;
+    uint8 GroupFinderCategoryID;
+    int8 OrderIndex;
+    uint16 GroupFinderActivityGrpID;
+    int32 Flags;
+    uint16 MinGearLevelSuggestion;
+    int32 PlayerConditionID;
+    uint16 MapID;
+    int16 DifficultyID;
+    uint16 AreaID;
+    int32 ExpansionID;
+    uint8 MaxPlayers;
+    uint8 DisplayType;
+    int32 Field_11_0_7_57361_013;
+    int32 Field_11_0_7_57361_014;
+    int32 Field_11_0_7_57361_015;
+    int32 Field_11_0_7_57361_016;
+    int32 OverrideContentTuningID;
+    int32 MapChallengeModeID;
+};
+
 struct Achievement_CategoryEntry
 {
     LocalizedString Name;
@@ -2124,32 +2149,6 @@ struct GossipNPCOptionEntry
     int32 Unknown_1002_14;
     int32 NeighborhoodMapID;
     int32 SkillLineID;
-};
-
-// Premade Group Finder activity catalog. Field order matches the 68275 file layout 0xC3DB15C2 (GroupFinderActivityMeta).
-struct GroupFinderActivityEntry
-{
-    uint32 ID;
-    LocalizedString FullName;
-    LocalizedString ShortName;
-    uint8 GroupFinderCategoryID;
-    int8 OrderIndex;
-    uint16 GroupFinderActivityGrpID;
-    int32 Flags;
-    uint16 MinGearLevelSuggestion;
-    int32 PlayerConditionID;
-    uint16 MapID;
-    int16 DifficultyID;
-    uint16 AreaID;
-    int32 ExpansionID;
-    uint8 MaxPlayers;
-    uint8 DisplayType;
-    int32 Field_11_0_7_57361_013;
-    int32 Field_11_0_7_57361_014;
-    int32 Field_11_0_7_57361_015;
-    int32 Field_11_0_7_57361_016;
-    int32 OverrideContentTuningID;
-    int32 MapChallengeModeID;
 };
 
 struct GuildColorBackgroundEntry
