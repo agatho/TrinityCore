@@ -534,7 +534,6 @@ namespace WorldPackets::Housing
         ObjectGuid SourceRoomGuid;
         uint32 TargetDoorComponentID = 0;   // RoomComponent.ID of the door being connected to
         uint32 HouseRoomID = 0;             // HouseRoom.ID of the room template to add
-        uint32 FloorIndex = 0;
         bool AutoFurnish = false;
     };
 
@@ -2761,8 +2760,9 @@ namespace WorldPackets::Neighborhood
             ObjectGuid BnetAccountGuid;  // Usually empty
             uint8 PlotIndex = 0xFF;      // INVALID_PLOT_INDEX
             uint32 JoinTime = 0;
-            uint8 ResidentType = 0;      // NeighborhoodMemberRole (0=Resident, 1=Manager, 2=Owner)
-            bool IsOnline = false;       // Controls status byte 2 bit 7 in roster UI
+            uint8 HouseLevel = 0;
+            uint8 ResidentType = 0;      // Enum.ResidentType = NeighborhoodMemberRole (0=Resident, 1=Manager, 2=Owner)
+            bool IsOnline = false;
         };
         std::vector<RosterMemberData> Members;
 
@@ -2776,11 +2776,14 @@ namespace WorldPackets::Neighborhood
     class NeighborhoodRosterResidentUpdate final : public ServerPacket
     {
     public:
+        // NeighborhoodRosterMemberUpdateInfo { playerGUID, residentType, isOnline } (HousingUISharedDocumentation.lua) - the
+        // client (entry reader 0x7FF7CD4F7450) updates the members it already lists, matched by guid
+        // (UPDATE_BULLETIN_BOARD_ROSTER_STATUSES). Joins and departures need a fresh roster instead.
         struct ResidentEntry
         {
             ObjectGuid PlayerGuid;
-            uint8 UpdateType = 0;   // 0=Added, 1=RoleChanged, 2=Removed
-            bool IsPrivileged = false; // IDA: client reads uint8, extracts bit7 only (>> 7), stores as bool — true for Manager/Owner
+            uint8 ResidentType = 0;
+            bool IsOnline = false;
         };
 
         NeighborhoodRosterResidentUpdate() : ServerPacket(SMSG_NEIGHBORHOOD_ROSTER_RESIDENT_UPDATE) { }

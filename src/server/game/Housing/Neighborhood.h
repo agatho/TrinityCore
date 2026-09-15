@@ -31,6 +31,11 @@
 
 class WorldPacket;
 
+namespace WorldPackets::Neighborhood
+{
+    class NeighborhoodGetRosterResponse;
+}
+
 class TC_GAME_API Neighborhood
 {
 public:
@@ -193,6 +198,14 @@ public:
 
     // Broadcast
     void BroadcastPacket(WorldPacket const* packet, ObjectGuid excludeGuid = ObjectGuid::Empty) const;
+    // The roster as SMSG_NEIGHBORHOOD_GET_ROSTER_RESPONSE carries it.
+    void BuildRosterResponse(WorldPackets::Neighborhood::NeighborhoodGetRosterResponse& response) const;
+    // A member joined, left or moved house: every online member's bulletin board needs the whole roster again (the status
+    // update can only change members the client already lists).
+    void BroadcastRoster(ObjectGuid excludeGuid = ObjectGuid::Empty) const;
+    // A member's resident type or online state changed (SMSG_NEIGHBORHOOD_ROSTER_RESIDENT_UPDATE).
+    void BroadcastMemberStatus(ObjectGuid playerGuid, bool isOnline) const;
+    void BroadcastMemberStatus(ObjectGuid playerGuid) const;
 
     // Rebuild NeighborhoodMirrorData on every online member's Account entity.
     // Call after any mutation to name, owner, managers, or houses.

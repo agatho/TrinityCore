@@ -29401,6 +29401,11 @@ void Player::SendInitialPacketsAfterAddToMap()
     for (auto const& [type, garrison] : _garrisons)
         garrison->SendRemoteInfo();
 
+    // The one unprompted housing message of the login burst: SMSG_INITIATIVE_REWARD_AVAILABLE, for a player with an
+    // unclaimed reached milestone. 43 retail 12.1 logins carry it between the aura burst and the next UPDATE_OBJECT,
+    // before the client's first CMSG_NEIGHBORHOOD_INITIATIVE_SERVICE_STATUS_CHECK.
+    sInitiativeManager.SendRewardsAvailable(this);
+
     // Housing state setup at neighborhood map entry.
     //
     // PROVEN RETAIL BEHAVIOUR (sniff analysis across 3 retail 66838 captures:
