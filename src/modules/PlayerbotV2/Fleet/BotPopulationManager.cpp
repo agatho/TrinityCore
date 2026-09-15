@@ -22,7 +22,7 @@
 #include "Item.h"   // re-gear hygiene: StoreNewItem/EquipItem need the full type
 #include "Bag.h"   // FreeOneJunkBagSlot: GetBagByPos/GetBagSize need the full type
 #include "ObjectMgr.h"   // re-gear hygiene: sObjectMgr->GetItemTemplate for ilvl guard
-#include "TransmogMgr.h"   // re-gear hygiene: renderability test for already-worn gear
+#include "PlayerbotAPI.h"  // IsItemRenderableInSlot - gear heal
 #include "BattlegroundMgr.h"
 #include "DungeonFinding/LFGMgr.h"   // LFG-state guard on overflow/hygiene kicks
 #include "OwnerRegistry.h"           // altbot (owner-bound) kick exemption
@@ -37,6 +37,7 @@
 #include "Log.h"
 #include "RaceMask.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace Playerbot::V2::Fleet {
@@ -533,6 +534,134 @@ static bool FreeOneJunkBagSlot(Player* p)
     return true;
 }
 
+bool BotPopulationManager::HealUnrenderableGear(Player* p)
+{
+    if (!p || !p->IsInWorld()) return false;
+    // Armor can't be changed in combat (CanEquipItem / CanUnequipItem refuse
+    // with NOT_IN_COMBAT), and falling through to the destroy branch would then
+    // delete gear that merely could not be swapped yet. Retry next pass.
+    if (p->IsInCombat()) return false;
+
+    // Cheap pre-scan; almost every bot exits here.
+    std::array<uint8, EQUIPMENT_SLOT_END> bad_slots{};
+    uint8 bad_count = 0;
+    for (uint8 s = EQUIPMENT_SLOT_START; s < EQUIPMENT_SLOT_END; ++s)
+        if (Item const* it = p->GetItemByPos(INVENTORY_SLOT_BAG_0, s))
+            if (!::Playerbot::IsItemRenderableInSlot(it, p, s))
+                bad_slots[bad_count++] = s;
+    if (bad_count == 0) return false;
+
+    BotId const id = p->GetGUID().GetCounter();
+    // Altbots (owner-bound) follow the backfill's owner invariant: never put
+    // generated gear into an occupied slot and never destroy owner items. They
+    // only get the unrenderable piece taken off into their bags.
+    bool const is_altbot = Services::Owners().GetOwner(id).account_id != 0;
+
+    std::array<uint32, EQUIPMENT_SLOT_END> replacement{};
+    if (!is_altbot)
+    {
+        Gear::GearGenerationContext ctx;
+        ctx.level  = p->GetLevel();
+        ctx.cls    = p->GetClass();
+        ctx.spec   = uint16(AsUnderlyingType(p->GetPrimarySpecialization()));
+        ctx.bot_id = id;
+        // The generator never returns an unrenderable item (index-time gate).
+        for (auto const& g : Gear::GenerateGearFor(ctx))
+            if (g.slot < EQUIPMENT_SLOT_END)
+                replacement[g.slot] = g.item_entry;
+    }
+
+    bool changed = false;
+    for (uint8 i = 0; i < bad_count; ++i)
+    {
+        uint8 const slot = bad_slots[i];
+        Item* cur = p->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        if (!cur) continue;     // an earlier swap in this loop already moved it
+        uint32 const bad_entry = cur->GetEntry();
+        char const* outcome = nullptr;
+
+        // 1. Swap in the generated piece for this slot. CanEquipNewItem is
+        //    checked BEFORE anything is created or destroyed, so a refusal
+        //    (proficiency / level / unique) never strands a staged item in
+        //    the bags or leaves the slot naked.
+        if (uint32 const entry = replacement[slot]; entry && entry != bad_entry)
+        {
+            uint16 eq_dest = 0;
+            if (p->CanEquipNewItem(slot, eq_dest, entry, /*swap*/ true) == EQUIP_ERR_OK)
+            {
+                ItemPosCountVec dest;
+                if (p->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, entry, 1) == EQUIP_ERR_OK)
+                {
+                    // SAFE path: stage in bags, then SwapItem - the displaced
+                    // piece is re-stored, where the snapshot's renderability
+                    // clamp keeps auto-equip from putting it back on.
+                    if (Item* staged = p->StoreNewItem(dest, entry, true))
+                    {
+                        uint16 const src = (uint16(staged->GetBagSlot()) << 8) | staged->GetSlot();
+                        uint16 const dst = (uint16(INVENTORY_SLOT_BAG_0) << 8) | slot;
+                        p->SwapItem(src, dst);
+                        if (p->GetItemByPos(INVENTORY_SLOT_BAG_0, slot) == staged)
+                            outcome = "replaced (old piece to bags)";
+                    }
+                }
+                else
+                {
+                    // Bags full: replace in place, as the backfill's
+                    // direct-equip fallback does.
+                    p->DestroyItem(INVENTORY_SLOT_BAG_0, slot, true);
+                    if (p->EquipNewItem(eq_dest, entry, ItemContext::NONE, true))
+                        outcome = "replaced in place (bags full, old piece destroyed)";
+                    else
+                        outcome = "destroyed (bags full, replacement refused)";
+                }
+            }
+        }
+
+        // 2. No usable replacement: take it off into the bags, exactly like the
+        //    client's auto-store (HandleAutoStoreBagItemOpcode).
+        if (!outcome)
+        {
+            uint16 const pos = (uint16(INVENTORY_SLOT_BAG_0) << 8) | slot;
+            ItemPosCountVec dest;
+            if (p->CanUnequipItem(pos, /*swap*/ false) == EQUIP_ERR_OK &&
+                p->CanStoreItem(NULL_BAG, NULL_SLOT, dest, cur, false) == EQUIP_ERR_OK)
+            {
+                p->RemoveItem(INVENTORY_SLOT_BAG_0, slot, true);
+                p->StoreItem(dest, cur, true);
+                outcome = "unequipped to bags (no renderable replacement)";
+            }
+            else if (!is_altbot)
+            {
+                // A naked slot is a smaller harm than crashing every client
+                // that looks at this bot.
+                p->DestroyItem(INVENTORY_SLOT_BAG_0, slot, true);
+                outcome = "destroyed (no replacement, bags full)";
+            }
+        }
+
+        if (outcome)
+        {
+            changed = true;
+            TC_LOG_INFO("playerbot.v2",
+                "[GearHeal] {} L{}: slot {} item {} has no ItemModifiedAppearance "
+                "(client cannot render) - {}",
+                p->GetName(), uint32(p->GetLevel()), uint32(slot), bad_entry, outcome);
+        }
+        else
+        {
+            // Altbot with full bags. Retried every backfill pass; DEBUG so a
+            // stuck owner alt doesn't flood the log.
+            TC_LOG_DEBUG("playerbot.v2",
+                "[GearHeal] {} [altbot]: slot {} item {} is unrenderable but "
+                "cannot be unequipped (bags full) - retry next pass",
+                p->GetName(), uint32(slot), bad_entry);
+        }
+    }
+    if (changed)
+        p->AutoUnequipOffhandIfNeed();
+    return changed;
+}
+
 void BotPopulationManager::RunGearBackfill(uint32 now_ms)
 {
     // 5-min cadence (vs the 1h hygiene). Re-gears under-geared / weaponless
@@ -557,6 +686,17 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
         if (regear_count >= 25) return;     // bound per pass
         Player* p = ObjectAccessor::FindConnectedPlayer(
             ObjectGuid::Create<HighGuid::Player>(id));
+        if (!p || !p->IsInWorld()) return;
+
+        // Unrenderable gear is a client crash, not a gearing-quality question,
+        // so it is healed for every online bot regardless of level and BEFORE
+        // the under-gear gate below. A bot wearing a full high-ilvl set that
+        // the client cannot draw is by definition NOT under-geared, and used
+        // to return at that gate untouched (live 2026-09-14, Sellarino L16 in
+        // 251573-251580). Does not consume the regear cap: the scan is 19
+        // appearance lookups and the generator only runs when a slot is bad.
+        HealUnrenderableGear(p);
+
         // L>=5 (was L>=10): an under-geared bot BELOW 10 is exactly the death-
         // spiral victim that most needs help — it can't out-level into the old
         // L>=10 gate because it keeps dying to quest mobs in ilvl-~1 starter gear
@@ -568,7 +708,7 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
         // low bot is never touched — so this only rescues genuinely-stuck bots.
         // L1-4 stay excluded: they're in the immediate starter window where
         // ilvl-1 gear IS level-appropriate and quest greens arrive within minutes.
-        if (!p || !p->IsInWorld() || p->GetLevel() < 5) return;
+        if (p->GetLevel() < 5) return;
 
         // Shield-tank weapon correction runs for EVERY online shield-tank each
         // pass (cheap spec/slot pre-check inside), INDEPENDENT of the under-gear
@@ -697,31 +837,9 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
             // slot when the generated piece actually wears BETTER. Protects
             // already-good gear (incl. owner-curated alt gear) from a
             // downgrade toward the coarse linear target ramp.
-            // An item the CLIENT CANNOT RENDER is a crash, not a downgrade risk,
-            // so neither guard below may stand in the way of replacing it. The
-            // generator no longer hands these out, but bots geared before that
-            // fix are still wearing them, and both guards would happily keep
-            // them: a piece with no ItemModifiedAppearance can still report a
-            // respectable quality and effective ilvl, so "never downgrade" and
-            // "must be a strict upgrade" both resolve in favour of the item that
-            // crashes anyone who inspects the bot (live 2026-09-14, Sellarino
-            // wearing 251573-251580). Any renderable replacement beats it.
-            //
-            // Same predicate as the generator's index-time gate, deliberately:
-            // one definition of "renderable", applied both when choosing gear
-            // and when healing gear already worn.
-            // Restricted to model-drawn slots for the same reason the generator
-            // restricts its gate: neck/finger/trinket never reach the model
-            // builder, so a missing appearance there is not a crash and must not
-            // trigger a forced swap.
-            const bool slot_on_model =
-                (g.slot != EQUIPMENT_SLOT_NECK &&
-                 g.slot != EQUIPMENT_SLOT_FINGER1 && g.slot != EQUIPMENT_SLOT_FINGER2 &&
-                 g.slot != EQUIPMENT_SLOT_TRINKET1 && g.slot != EQUIPMENT_SLOT_TRINKET2);
-            const bool cur_unrenderable =
-                cur && slot_on_model &&
-                !TransmogMgr::GetDefaultItemModifiedAppearance(cur->GetEntry());
-            if (cur && !cur_unrenderable)
+            // (Unrenderable worn items never reach these guards: they were
+            // already removed by HealUnrenderableGear earlier in this pass.)
+            if (cur)
             {
                 // Quality guard (operator-reported downgrade): a generated
                 // COMMON/white must NEVER replace an equipped UNCOMMON+ (quest

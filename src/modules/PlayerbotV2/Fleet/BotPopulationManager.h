@@ -21,6 +21,8 @@
 #include <vector>
 #include <string>
 
+class Player;
+
 namespace Playerbot::V2::Fleet {
 
 class BotSetupPipeline;
@@ -110,6 +112,15 @@ public:
     // under-geared backlog at 25 bots / 5 min. Reuses the gear generator + the
     // SAFE SwapItem equip path. 2026-06-17.
     void RunGearBackfill(uint32 now_ms);
+
+    // Removes equipped items the CLIENT CANNOT DRAW (no ItemModifiedAppearance;
+    // see ::Playerbot::IsItemRenderableInSlot) from an online bot. Such an item
+    // crashes every client that inspects or renders the bot, so this is keyed on
+    // the item alone - never on whether the bot counts as under-geared, which a
+    // bot in a full high-ilvl unrenderable set does not. Runs at bot login and
+    // for every online bot on each gear-backfill pass. World thread only.
+    // Returns true if any slot changed.
+    bool HealUnrenderableGear(Player* p);
 
     // Failed-JIT corpse reclaim (500/pass). Called from RunHygiene and on
     // a 10-min OnWorldTick cadence while the backlog drains.

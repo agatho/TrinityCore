@@ -73,6 +73,7 @@
 #include "TraitMgr.h"
 #include "TraitPackets.h"
 #include "UpdateFields.h"
+#include "TransmogMgr.h"  // IsItemRenderableInSlot
 
 #include <limits>
 #include <algorithm>
@@ -5159,6 +5160,40 @@ Result API::lfg_leave_queue()
     return Result::Ok;
 }
 
+namespace
+{
+// Neck / finger / trinket have no geoset - nothing about them ever reaches the
+// client's model builder.
+bool SlotReachesModel(uint8 slot)
+{
+    switch (slot)
+    {
+        case EQUIPMENT_SLOT_NECK:
+        case EQUIPMENT_SLOT_FINGER1: case EQUIPMENT_SLOT_FINGER2:
+        case EQUIPMENT_SLOT_TRINKET1: case EQUIPMENT_SLOT_TRINKET2:
+            return false;
+        default:
+            return true;
+    }
+}
+} // namespace
+
+bool IsItemRenderableInSlot(uint32 itemId, uint8 slot)
+{
+    return !SlotReachesModel(slot) ||
+        TransmogMgr::GetDefaultItemModifiedAppearance(itemId) != nullptr;
+}
+
+bool IsItemRenderableInSlot(Item const* item, Player const* owner, uint8 slot)
+{
+    if (!item || !owner || !SlotReachesModel(slot))
+        return true;
+    // Same pair Player::SetVisibleItemSlot sends; GetItemModifiedAppearance
+    // falls back to modifier 0 itself.
+    return TransmogMgr::GetItemModifiedAppearance(item->GetVisibleEntry(owner),
+                                                  item->GetVisibleAppearanceModId(owner)) != nullptr;
+}
+
 Result API::equip_item(uint8 from_bag, uint8 from_slot, uint8 to_slot)
 {
     if (!p_) return Result::Other;
@@ -5177,6 +5212,17 @@ Result API::equip_item(uint8 from_bag, uint8 from_slot, uint8 to_slot)
     uint32 const efail_key = EquipFailKey(src_item->GetEntry(), to_slot);
     if (EquipFailedRecently(p_, efail_key, efail_now))
         return Result::ServerRefused;
+
+    // Backstop for every bot equip, whatever emitted it. The snapshot already
+    // withholds unrenderable items from the auto-equip rules, but the owner
+    // `equip` command and any future rule reach here too - and an item the
+    // client cannot draw crashes everyone who inspects the bot.
+    if (to_slot < EQUIPMENT_SLOT_END &&
+        !IsItemRenderableInSlot(src_item, p_, to_slot))
+    {
+        NoteEquipFail(p_, efail_key, efail_now);
+        return Result::ServerRefused;
+    }
 
     // ---- Bag destination (slots 30-33) — B-11b ----
     // Containers don't go through CanEquipItem (that path refuses them);

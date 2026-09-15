@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+class Item;
 class Player;
 class Unit;
 class Aura;
@@ -23,6 +24,38 @@ class Group;
 namespace Playerbot {
 
 constexpr uint32 kApiVersion = 1;
+
+// Can the CLIENT draw item `itemId` when a bot wears it in equipment `slot`?
+//
+// Being equippable is not being drawable. The client builds a character's 3D
+// model from ItemModifiedAppearance -> ItemAppearance -> ItemDisplayInfo, and an
+// item with no ItemModifiedAppearance row has nothing to resolve: the client
+// null-derefs while building the model (ERROR #132) for every player who
+// inspects or renders the bot. Such items are real data, not corruption - e.g.
+// the Ascension Chaser plate set 251573-251580 ships in upstream hotfix SQL with
+// item/locale rows but no appearance.
+//
+// Neck, finger and trinket slots are always "renderable": they have no geoset
+// and never reach the model builder, and gating them would risk refusing whole
+// item classes whose data simply carries no appearance.
+//
+// THE single definition of "renderable" for bot gear: the generator, the gear
+// heal, the snapshot's auto-equip candidates and equip_item() all use it, so no
+// path can put back what another path removed.
+//
+// Template form: for an item that does not exist yet (the gear generator). It
+// tests appearance modifier 0, which is exactly what a plain generated item -
+// no bonus list, no transmog - resolves to.
+bool IsItemRenderableInSlot(uint32 itemId, uint8 slot);
+
+// Owned-item form: tests the (entry, appearance modifier) pair the core puts in
+// the owner's VisibleItems - Item::GetVisibleEntry / GetVisibleAppearanceModId,
+// so bonus-list modifiers and transmog are honoured, with the same fallback to
+// modifier 0 the core applies. Use this for anything already in a bot's
+// inventory: the template form would misjudge a looted item whose only
+// appearance row carries a bonus modifier, and the gear heal acts on the answer
+// destructively.
+bool IsItemRenderableInSlot(Item const* item, Player const* owner, uint8 slot);
 
 using Ms = std::chrono::milliseconds;
 
