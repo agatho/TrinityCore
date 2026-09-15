@@ -57,11 +57,20 @@ void HousingDecorSetEditMode::Read()
     TC_LOG_DEBUG("network.opcode", "CMSG_HOUSING_DECOR_SET_EDIT_MODE Active: {}", Active);
 }
 
+void HousingPhotoSharingCompleteAuthorization::Read()
+{
+    _worldPacket >> SizedString::BitsSize<6>(Token);
+    _worldPacket.ResetBitPos();
+    _worldPacket >> SizedString::Data(Token);
+}
+
 void HousingDecorPlace::Read()
 {
     _worldPacket >> DecorGuid;
     _worldPacket >> Position;
     _worldPacket >> Rotation;
+    for (float& component : Quaternion)
+        _worldPacket >> component;
     _worldPacket >> Scale;
     _worldPacket >> AttachParentGuid;
     _worldPacket >> RoomGuid;
@@ -80,6 +89,8 @@ void HousingDecorMove::Read()
     _worldPacket >> DecorGuid;
     _worldPacket >> Position;
     _worldPacket >> Rotation;
+    for (float& component : Quaternion)
+        _worldPacket >> component;
     _worldPacket >> Scale;
     _worldPacket >> AttachParentGuid;
     _worldPacket >> RoomGuid;
@@ -1138,9 +1149,11 @@ static void WriteJamCliHouse(WorldPacket& packet, JamCliHouse const& house)
         packet.wpos() - beforeWpos);
 }
 
-// Helper: Write JamCliHouseFinderNeighborhood BASE format (IDA: sub_7FF724C3F040, stride 120).
-// Wire: PackedGUID + PackedGUID + uint64 + uint64 + uint32(housesCount)
-//       + uint8(nameLen) + uint8(bit7=boolFlag) + JamCliHouse[count] + String(nameLen)
+// Helper: Write JamCliHouseFinderNeighborhood BASE format.
+// 12.1.0.69587 reader 0x7FF7CD4F70C0: PackedGUID + PackedGUID + uint64 + uint64 + uint32(housesCount)
+//       + JamCliHouse[count] + uint8(nameLen, counts the NUL) + uint8(bit7=boolFlag) + String(nameLen)
+// The houses come BEFORE the name length and flag; writing them after (the 12.0.7 order) put the house list's
+// first bytes into the name length on every house-finder response with a house in it.
 static void WriteJamCliHouseFinderNeighborhoodBase(WorldPacket& packet, JamCliHouseFinderNeighborhood const& entry)
 {
     packet << entry.NeighborhoodGUID;
@@ -1148,11 +1161,11 @@ static void WriteJamCliHouseFinderNeighborhoodBase(WorldPacket& packet, JamCliHo
     packet << uint64(entry.Field1);
     packet << uint64(entry.Field2);
     packet << uint32(entry.Houses.size());
+    for (auto const& house : entry.Houses)
+        WriteJamCliHouse(packet, house);
     uint8 nameLen = static_cast<uint8>(std::min<size_t>(entry.Name.size() + 1, 255));
     packet << uint8(nameLen);
     packet << uint8(entry.BoolFlag ? 0x80 : 0x00);
-    for (auto const& house : entry.Houses)
-        WriteJamCliHouse(packet, house);
     if (nameLen > 0)
         packet.append(entry.Name.c_str(), nameLen);
 }
@@ -2362,15 +2375,16 @@ WorldPacket const* NeighborhoodOpenCornerstoneUIResponse::Write()
     _worldPacket << Bits<1>(IsInitiative);
     _worldPacket.FlushBits();
 
-    // Variable-length data: per the IDA-verified decode order in
-    // Housing_ParseCornerstoneHouseInfo, the optional embedded HouseInfo comes
-    // BEFORE the neighborhood name string.
-    if (hasExistingHouse)
-        WriteJamCliHouse(_worldPacket, *ExistingHouse);
+    // Variable-length data, 12.1.0.69587 reader 0x7FF7CD51B190: name, then the optional price, then the optional
+    // embedded HouseInfo, then the optional status value. (The 12.0.x decode order put the house before the name;
+    // on 12.1 that shifted every byte of the response whenever the player already owned a house.)
     _worldPacket << SizedCString::Data(NeighborhoodName);
 
     if (AlternatePrice)
         _worldPacket << uint64(*AlternatePrice);
+
+    if (hasExistingHouse)
+        WriteJamCliHouse(_worldPacket, *ExistingHouse);
 
     if (StatusValue)
         _worldPacket << uint32(*StatusValue);

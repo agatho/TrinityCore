@@ -1713,22 +1713,27 @@ enum OpcodeServer : uint32
     // in the 12.1 numbering (12.1 moved the Spell family that occupied 0x62 in ADV's 68275
     // numbering to family 0x67 instead) — no collision.
     SMSG_HOUSING_HOUSE_BUDGETS_UPDATE                               = 0x620000, // JamHouseBudgets
-    // EXPORT_HOUSE_RESPONSE: ADV's raw value 0x550003 collides with SMSG_HOUSING_DECOR_PLACE_RESPONSE
-    // in our 12.1 family-0x55 numbering. Family 0x55 capacity is 13 (0-12); 0-11 are all taken by
-    // the Decor response block below, leaving exactly one free slot (0xC) — assigned deterministically,
-    // not guessed among options. Still pending real 12.1 verification of the low byte.
-    SMSG_HOUSING_EXPORT_HOUSE_RESPONSE                              = 0x55000C,
-    SMSG_HOUSING_DECOR_ADD_TO_HOUSE_CHEST_RESPONSE                  = 0x550008,
-    SMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_RESPONSE                 = 0x550006,
-    SMSG_HOUSING_DECOR_DRAW_SERVER_LIGHTING_DEBUG_SPHERES_RESPONSE  = 0x550001,
-    SMSG_HOUSING_DECOR_LOCK_RESPONSE                                = 0x550005,
-    SMSG_HOUSING_DECOR_MOVE_RESPONSE                                = 0x550002,
-    SMSG_HOUSING_DECOR_PLACE_RESPONSE                               = 0x550003,
-    SMSG_HOUSING_DECOR_REMOVE_RESPONSE                              = 0x550004,
-    SMSG_HOUSING_DECOR_REQUEST_STORAGE_RESPONSE                     = 0x550007,
+    // EXPORT_HOUSE_RESPONSE: the 12.1.0.69587 client dispatches this message's class (getter 0x7FF7CD536220)
+    // from case 0x590003 of dispatcher 0x7FF7CD536260 - family 0x59, not 0x55.
+    SMSG_HOUSING_EXPORT_HOUSE_RESPONSE                              = 0x590003,
+    // Family 0x55 (decor responses), renumbered from the 12.1.0.69587 client: dispatcher 0x7FF7CD50D4B0 switches
+    // on opcode - 0x550000. Case 0 reads SET_EDIT_MODE_RESPONSE's layout, case 2 prints "Draw server lighting debug
+    // spheres updated", case 3 "Decor move failed", case 4 "Decor place failed", case 8 instantiates the mirrored
+    // storage object; cases 5-7 and 9-12 read exactly the layouts these classes write. Upstream (and WPP) number
+    // this block one lower from 0x550001 on, so every response went out under its neighbour's number (retail
+    // answers CMSG_HOUSING_DECOR_PLACE on 0x550004, CMSG_HOUSING_DECOR_REQUEST_STORAGE on 0x550008,
+    // CMSG_HOUSING_DECOR_REDEEM_DEFERRED_DECOR on 0x55000B). 0x550001 is a one-byte message with no name here.
+    SMSG_HOUSING_DECOR_ADD_TO_HOUSE_CHEST_RESPONSE                  = 0x550009,
+    SMSG_HOUSING_DECOR_DELETE_FROM_STORAGE_RESPONSE                 = 0x550007,
+    SMSG_HOUSING_DECOR_DRAW_SERVER_LIGHTING_DEBUG_SPHERES_RESPONSE  = 0x550002,
+    SMSG_HOUSING_DECOR_LOCK_RESPONSE                                = 0x550006,
+    SMSG_HOUSING_DECOR_MOVE_RESPONSE                                = 0x550003,
+    SMSG_HOUSING_DECOR_PLACE_RESPONSE                               = 0x550004,
+    SMSG_HOUSING_DECOR_REMOVE_RESPONSE                              = 0x550005,
+    SMSG_HOUSING_DECOR_REQUEST_STORAGE_RESPONSE                     = 0x550008,
     SMSG_HOUSING_DECOR_SET_EDIT_MODE_RESPONSE                       = 0x550000,
-    SMSG_HOUSING_DECOR_SYSTEM_SET_DYE_SLOTS_RESPONSE                = 0x550009,
-    SMSG_HOUSING_FIRST_TIME_DECOR_ACQUISITION                       = 0x55000B,
+    SMSG_HOUSING_DECOR_SYSTEM_SET_DYE_SLOTS_RESPONSE                = 0x55000A,
+    SMSG_HOUSING_FIRST_TIME_DECOR_ACQUISITION                       = 0x55000C,
     SMSG_HOUSING_FIXTURE_CREATE_BASIC_HOUSE_RESPONSE                = 0x560001,
     SMSG_HOUSING_FIXTURE_CREATE_FIXTURE_RESPONSE                    = 0x560006,
     SMSG_HOUSING_FIXTURE_DELETE_FIXTURE_RESPONSE                    = 0x560007,
@@ -1742,7 +1747,7 @@ enum OpcodeServer : uint32
     SMSG_HOUSING_HOUSE_STATUS_RESPONSE                              = 0x590000,
     SMSG_HOUSING_PHOTO_SHARING_AUTHORIZATION_CLEARED_RESULT         = 0x450382,
     SMSG_HOUSING_PHOTO_SHARING_AUTHORIZATION_RESULT                 = 0x450381,
-    SMSG_HOUSING_REDEEM_DEFERRED_DECOR_RESPONSE                     = 0x55000A,
+    SMSG_HOUSING_REDEEM_DEFERRED_DECOR_RESPONSE                     = 0x55000B,
     SMSG_HOUSING_RESET_HOUSE_RESPONSE                               = 0x590006,
     SMSG_HOUSING_RESET_KIOSK_MODE_RESPONSE                          = 0x590005,
     SMSG_HOUSING_ROOM_ADD_RESPONSE                                  = 0x570001,

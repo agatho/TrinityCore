@@ -22,6 +22,7 @@
 #include "Optional.h"
 #include "Packet.h"
 #include "Position.h"
+#include <array>
 #include <string>
 #include <vector>
 
@@ -247,9 +248,14 @@ namespace WorldPackets::Housing
         // Previous Read() misparsed the anchor PackedGUID as 3 separate fields
         // (Field_61 u8 + Field_62 u8 + Field_63 s32 + speculative tail) — bytes
         // happened to total correctly only for the empty-anchor case.
+        // 12.1.0.69587: the client writes ELEVEN floats after DecorGuid (Send_CMSG_HOUSING_DECOR_PLACE 0x7FF7CD4F56B0,
+        // Send_CMSG_HOUSING_DECOR_MOVE 0x7FF7CD4F5900): position, euler rotation, a rotation quaternion and scale. In
+        // housingfull12.1.0.69587 a yaw of 1.5708 travels with quaternion (0, 0, 0.7071, 0.7071). Reading seven took the
+        // quaternion's x as Scale and misread every guid behind it.
         ObjectGuid DecorGuid;
         TaggedPosition<Position::XYZ> Position;
         TaggedPosition<Position::XYZ> Rotation;
+        std::array<float, 4> Quaternion = { };
         float Scale = 1.0f;
         ObjectGuid AttachParentGuid;
         ObjectGuid RoomGuid;
@@ -264,9 +270,14 @@ namespace WorldPackets::Housing
 
         void Read() override;
 
+        // 12.1.0.69587: the client writes ELEVEN floats after DecorGuid (Send_CMSG_HOUSING_DECOR_PLACE 0x7FF7CD4F56B0,
+        // Send_CMSG_HOUSING_DECOR_MOVE 0x7FF7CD4F5900): position, euler rotation, a rotation quaternion and scale. In
+        // housingfull12.1.0.69587 a yaw of 1.5708 travels with quaternion (0, 0, 0.7071, 0.7071). Reading seven took the
+        // quaternion's x as Scale and misread every guid behind it.
         ObjectGuid DecorGuid;
         TaggedPosition<Position::XYZ> Position;
         TaggedPosition<Position::XYZ> Rotation;
+        std::array<float, 4> Quaternion = { };
         float Scale = 1.0f;
         ObjectGuid AttachParentGuid;
         ObjectGuid RoomGuid;
@@ -904,7 +915,11 @@ namespace WorldPackets::Housing
     public:
         explicit HousingPhotoSharingCompleteAuthorization(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_PHOTO_SHARING_COMPLETE_AUTHORIZATION, std::move(packet)) { }
 
-        void Read() override { }
+        void Read() override;
+
+        // 12.1.0.69587 Send_CMSG_HOUSING_PHOTO_SHARING_COMPLETE_AUTHORIZATION 0x7FF7CD4832C0: bits<6> length, flush, up to
+        // 40 characters. Every captured login sends it empty (one 0x00 byte). What the string holds is unconfirmed.
+        std::string Token;
     };
 
     class HousingPhotoSharingClearAuthorization final : public ClientPacket
