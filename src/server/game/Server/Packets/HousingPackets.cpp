@@ -2506,13 +2506,13 @@ WorldPacket const* NeighborhoodGetRosterResponse::Write()
         {
             if (member.HouseGuid.IsEmpty())
                 continue;
-            JamCliHouse house;
+            Housing::JamCliHouse house;
             house.HouseGUID = member.HouseGuid;
             house.OwnerGUID = member.PlayerGuid;
             house.NeighborhoodGUID = GroupNeighborhoodGuid;
             house.HouseLevel = member.HouseLevel;
             house.PlotIndex = member.PlotIndex;
-            WriteJamCliHouse(_worldPacket, house);
+            Housing::WriteJamCliHouse(_worldPacket, house);
         }
 
         uint8 const nameLen = NeighborhoodName.empty() ? 0 : static_cast<uint8>(std::min<size_t>(NeighborhoodName.size() + 1, 255));
