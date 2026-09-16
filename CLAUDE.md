@@ -1,14 +1,22 @@
-# CLAUDE.md — TrinityCore + PlayerbotV2
+# CLAUDE.md
 
-TrinityCore 12.1 fork carrying **PlayerbotV2** (`src/modules/PlayerbotV2/`), a bot fleet that
-plays the game as ordinary players: levelling, questing, dungeons, battlegrounds, guilds,
-professions, economy.
+Guidance for Claude Code working in this repository.
 
-This file holds what the code and git history do **not** tell you. Everything here has cost a
-session to learn at least once.
+TrinityCore WoW server emulator (C++20), forked at `github.com/agatho/TrinityCore`, tracking
+retail **12.1 (Midnight)**. Beyond upstream it carries several feature lines — PlayerbotV2 (an
+AI-driven bot fleet, `src/modules/PlayerbotV2/`), warband, housing, delves, pet battles and others.
 
-Machine-specific paths, database names and the local server layout live in `CLAUDE.local.md`
-(untracked, loaded automatically when present).
+**Where guidance lives:**
+
+| File | Scope |
+|---|---|
+| this file | repo-wide: rules, branch model, build, databases, core architecture |
+| `src/modules/PlayerbotV2/CLAUDE.md` | the bot module — loaded when working in that subtree |
+| `CLAUDE.local.md` | machine-specific paths, this deployment's DB names (untracked) |
+
+Feature-specific working notes (implementation status, phase plans) belong on the **feature branch**
+that owns them — in that feature's `doc/` or a scoped `CLAUDE.md` — not in this file, which every
+branch shares and every session loads.
 
 ---
 
@@ -16,7 +24,7 @@ Machine-specific paths, database names and the local server layout live in `CLAU
 
 Non-negotiable. Violating one of these wastes work and will be rejected.
 
-- **Never bump map/vmap/mmap versions.** Playerbot must be a drop-in for stock TrinityCore so
+- **Never bump map/vmap/mmap versions.** The server must stay a drop-in for stock TrinityCore so
   operators' existing extracted maps keep working. Map-system changes must be *additive* and
   load-compatible at the same version (sidecar files, ignored enum values). Never propose
   re-extraction.
@@ -47,39 +55,40 @@ Non-negotiable. Violating one of these wastes work and will be rejected.
 - **`feature/*` branches are the golden source.** All real work lands there first.
 - **`integration/*` branches are disposable merge products** — never a source of truth, never
   cherry-pick *from* one. `integration/12_1_with-bots` (core + bots) and `integration/12_1_all`.
-- **`playerbot-v2`** is the public release branch for the module and is also golden source for it.
+- **`playerbot-v2`** is the public release branch for the bot module and golden source for it.
 - **Never force-push `integration/12_1_with-bots`** — it is developed from several machines at once.
 
-Merge forward without touching a worktree (also avoids building a half-merged tree):
-
-```bash
-git fetch origin <src> <dst>
-T=$(git merge-tree --write-tree origin/<dst> <src-sha>)   # rc=0 and a bare SHA = clean merge
-git diff --stat origin/<dst> $T                           # confirm only intended files move
-M=$(git commit-tree $T -p $(git rev-parse origin/<dst>) -p <src-sha> -F- <<'MSG'
-...message...
-MSG
-)
-git push origin $M:refs/heads/<dst>
-```
+To merge forward, use the `merge-forward` skill (`.claude/skills/merge-forward/`): it runs the merge
+through `merge-tree`/`commit-tree` so no worktree is mutated and a half-merged tree can never reach
+a build.
 
 ---
 
 ## Build
 
-Configured with CMake generator **`Visual Studio 18 2026`**, config `RelWithDebInfo`,
-`BUILD_PLAYERBOT_V2=1`. Exact paths and the wrapper script are in `CLAUDE.local.md`.
+Configure with `SERVERS=1`, `SCRIPTS=static`, `BUILD_PLAYERBOT_V2=1` (when building the bot module),
+config `RelWithDebInfo`. Exact toolchain paths and the wrapper script are in `CLAUDE.local.md`.
 
-- **Use the VS-bundled cmake**, not whatever is on `PATH`. A stock cmake 4.1.0-rc1 cannot
-  instantiate the VS18 generator (`could not create CMAKE_GENERATOR`); the copy shipped inside the
-  Visual Studio install can. This only bites when something triggers a reconfigure.
-- **Adding a new `.cpp` requires a cmake reconfigure** — the source glob is not `CONFIGURE_DEPENDS`.
+```bash
+cmake -S . -B build -G <generator> -DSERVERS=1 -DSCRIPTS=static -DBUILD_PLAYERBOT_V2=1
+cmake --build build --config RelWithDebInfo --target worldserver
+ctest --test-dir build          # Catch2, needs -DBUILD_TESTING=1
+```
+
+Key options: `SCRIPTS` (none/static/dynamic), `TOOLS`, `WITH_WARNINGS`, `WITH_COREDEBUG`.
+
+**The configured build tree on the dev machine uses the Visual Studio generator**, and that brings
+constraints a generic `cmake --build` does not:
+
+- **Use the cmake bundled with Visual Studio**, not whatever is on `PATH`. A stock cmake 4.1.0-rc1
+  cannot instantiate the VS18 generator (`could not create CMAKE_GENERATOR`); the copy inside the
+  VS install can. This only bites when something triggers a reconfigure.
+- **Adding a new `.cpp` requires a reconfigure** — the source glob is not `CONFIGURE_DEPENDS`.
   Symptom: `LNK2019` on the new file's registration function.
 - **`C3859`/`C1076` PCH heap errors** mean parallel-compiler RAM exhaustion (usually because the
   live server is running), not a code error. Lower `CL_MPCount`. A genuine *hang* with no progress
   is the known MSVC stall — that needs a reboot, not flag-fiddling.
 - Touching a widely-included core header (e.g. `Maps/Map.h`) recompiles hundreds of TUs.
-  Module-only edits are fast.
 - **Don't block on builds.** Run them in the background and do the next piece of work meanwhile.
 
 Stage the binary next to the server as `worldserver.exe.new`; **the user deploys it.**
@@ -88,47 +97,57 @@ Stage the binary next to the server as `worldserver.exe.new`; **the user deploys
 
 ## Databases
 
-- **Never assume the world database is called `world`.** Read the actual names from the server's
+Four logical databases: **world, characters, auth, hotfixes**. Created via
+`sql/create/create_mysql.sql`, base schemas in `sql/base/`, updates in
+`sql/updates/{auth,characters,world,hotfixes}/master/` named `YYYY_MM_DD_i_database.sql`. When
+changing the `auth` or `characters` schema, update `sql/base/` too.
+
+- **Never assume the actual schema names match those four words.** Read them from the server's
   `WorldDatabaseInfo` / `CharacterDatabaseInfo` in `worldserver.conf` before querying. A machine
-  that has hosted several imports accumulates stale, empty world schemas, and querying the wrong
-  one returns empty results — which reads as "no handler exists" and produces confident, wrong
-  conclusions. This has cost a full session.
-- The shared playerbot schema name is **configurable** via `Playerbot.SharedDatabase` (code default
-  `playerbot`) because one machine may run several deployments. **Never hardcode it** — qualify
-  shared tables as `{shared}.table` through the config key.
+  that has hosted several imports accumulates stale, empty schemas with the obvious names, and
+  querying the wrong one returns empty results — which reads as "no handler exists" and produces
+  confident, wrong conclusions. This has cost a full session. Current names: `CLAUDE.local.md`.
 - DB user/password default to `playerbot`/`playerbot`, in the same spirit as stock TrinityCore's
   `trinity`/`trinity`.
-- Module migrations live in `sql/playerbot_v2/` and are applied by `PlayerbotMigrationMgr`. Write
-  plain, self-contained statements: the connection pool hands each statement a different connection,
-  so session-scoped SQL (`SET @var`, `PREPARE`) is unsafe across statements.
-- **V2 logging is silent unless `Logger.playerbot.v2=3` is set.** The umbrella `Logger.playerbot=1`
-  is FATAL-only and hides everything the module emits.
+- **Prepared statements** for all database access: add the enum to `<Name>Database.h`, register the
+  SQL in `<Name>Database.cpp`, then `GetPreparedStatement(ENUM)` + `SetData()`.
 
 ---
 
-## Code layout
+## Core architecture
 
-| Path | What |
-|---|---|
-| `src/modules/PlayerbotV2/Bot/` | Per-bot AI: snapshot, states, idle rules, gear, talents |
-| `src/modules/PlayerbotV2/Combat/` | Spec rotations (APLs) |
-| `src/modules/PlayerbotV2/Fleet/` | Population, setup pipeline, guilds, queue filling |
-| `src/modules/PlayerbotV2/Travel/`, `World/` | Routing, travel graph, world metadata |
-| `src/modules/PlayerbotV2/Threading/` | Intent queue (lock-free MPSC ring) |
-| `src/server/game/Playerbot/` | Core-side API the module drives (`PlayerbotAPI`), hooks, movement |
+**Binaries:** `worldserver` (game world, ports 8085-8086, `worldserver.conf`) and `bnetserver`
+(Battle.net auth, port 1119, REST 8081, `bnetserver.conf`). The worldserver also loads
+`worldserver.conf.d/*.conf`.
 
-Architecture in one line: the builder publishes an immutable **snapshot** per bot → **rules** read
-the snapshot and emit **intents** → the executor drains intents on the world thread and calls
-`PlayerbotAPI`. Rules never touch `Player` directly.
+**Source layout (`src/`):**
 
-- **Snapshot fields are often declared but never populated.** Before relying on one, grep the
-  builder for its assignment — a field reading zero forever is a common and expensive false lead.
-- **Do not add new alternatives to `IntentBody` directly.** ~100 variant alternatives already tip
-  MSVC into `C1060` heap exhaustion across the spec rotations. Wrap a subsystem's intents in a
-  sub-variant plus one wrapper struct and add only the wrapper — as `GuildIntent`, `ChatIntent` and
-  `HousingIntent` already do.
-- World-thread only: anything mutating `Player`. The snapshot builder may run elsewhere — read-only
-  global stores (e.g. `TransmogMgr` maps, populated at load) are safe to read from it.
+- `server/game/` — core game logic, ~60 subsystems, the largest component
+  - `Handlers/` — packet handlers, one per system (`CharacterHandler`, `CollectionsHandler`, …)
+  - `Entities/` — `Player`, `Creature`, `GameObject`, `Item`, `Unit`, `Object`, `SceneObject`
+  - `DataStores/` — DB2 loading: structs in `DB2Structure.h`, stores in `DB2Stores.h/.cpp`,
+    load metadata in `DB2LoadInfo.h`
+  - `Server/Packets/` — packet serialization structs
+  - `Server/Protocol/Opcodes.cpp` — CMSG/SMSG opcode registry
+  - `Spells/`, `Combat/`, `Movement/`, `AI/`, `Maps/`, `Quests/` — major subsystems
+  - `Playerbot/` — the core-side API the bot module drives (`PlayerbotAPI`), hooks, movement
+- `server/database/Database/Implementation/` — database layer, prepared statements
+- `server/scripts/` — zone/instance/spell scripts by continent
+- `server/shared/`, `common/` — networking, crypto, threading, utilities
+- `modules/` — out-of-core feature modules (see PlayerbotV2's own `CLAUDE.md`)
+- `tools/` — map/vmap/mmap extractors, world editor
+
+**Packet flow:** `Client → CMSG → WorldSession handler → manager/entity → database → SMSG → client`.
+Handlers validate input, call into managers, persist via `CharacterDatabaseTransaction`, and send
+the response packet.
+
+**Adding DB2 data:** define the struct in `DB2Structure.h` → declare the store `extern` in
+`DB2Stores.h` and instantiate in `DB2Stores.cpp` → add load info in `DB2LoadInfo.h` → add hotfix SQL
+under `sql/updates/hotfixes/master/`.
+
+**Code style:** `.editorconfig` — 4-space indent, 160-column limit, UTF-8 (Latin-1 for
+`.c/.cpp/.h/.hpp`). Follow the
+[TrinityCore C++ Development Standards](https://trinitycore.atlassian.net/wiki/spaces/tc/pages/2130103/C+Development+Standards).
 
 ---
 
@@ -142,11 +161,5 @@ the snapshot and emit **intents** → the executor drains intents on the world t
 - When the user says "it works for players", trust it and instrument the real code path rather than
   reasoning from static data that may come from the wrong database.
 - `git stash` is shared across worktrees and other sessions may be using it — prefer a WIP commit.
-
-## Known-hard areas
-
-- **Navigation robustness is the release blocker**: bots port and survive everywhere but reconverge
-  and complete poorly. It is a *cluster* of routing/advance/cohesion fragilities, not one root cause,
-  and it has regressed twice from well-meant local fixes. Changes here need multi-dungeon verification.
-- Cross-map travel, elevators, and far-goal `move_to` wedges have a long fix history. Check the
-  internal design notes before touching them.
+- When implementing a new account-wide or customization system, look for the closest existing one
+  first — `Garrison/` and the warband groups are the usual architectural references.
