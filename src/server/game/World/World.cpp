@@ -68,6 +68,7 @@
 #include "Log.h"
 #include "LootItemStorage.h"
 #include "LootMgr.h"
+#include "LorewalkingMgr.h"
 #include "M2Stores.h"
 #include "MMapManager.h"
 #include "Map.h"
@@ -1700,6 +1701,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Player Choices...");
     sObjectMgr->LoadPlayerChoices();
+
+    TC_LOG_INFO("server.loading", "Loading Lorewalking stories...");
+    Lorewalking::Load();
 
     TC_LOG_INFO("server.loading", "Loading Spawn Tracking Templates...");
     sObjectMgr->LoadSpawnTrackingTemplates();

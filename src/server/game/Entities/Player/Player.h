@@ -969,6 +969,8 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA,
     PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA_PROGRESS,
     PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_SPAWN_TRACKING,
+    PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_LOREWALKING,
+    PLAYER_LOGIN_QUERY_LOAD_LOREWALKING,
     PLAYER_LOGIN_QUERY_LOAD_DAILY_QUEST_STATUS,
     PLAYER_LOGIN_QUERY_LOAD_REPUTATION,
     PLAYER_LOGIN_QUERY_LOAD_INVENTORY,
@@ -1713,6 +1715,17 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void AddQuestAndCheckCompletion(Quest const* quest, Object* questGiver);
         void AddQuest(Quest const* quest, Object* questGiver);
         void AbandonQuest(uint32 quest_id);
+
+        // Lorewalking: while a story is active the normal quests are parked in QuestSessionQuestLog and only the story's
+        // quests are visible; quests of other stories stay parked. Suspended = inside an instance the story does not use.
+        uint32 GetLorewalkingStoryId() const { return m_lorewalkingStoryId; }
+        bool IsLorewalking() const { return m_lorewalkingStoryId != 0 && !m_lorewalkingSuspended; }
+        void StartLorewalking(uint32 storyId);
+        void StopLorewalking();
+        void UpdateLorewalkingForMap();
+        bool IsQuestParked(uint32 questId) const;
+        bool HasParkedLorewalkingQuests(uint32 storyId) const;
+        void RemoveParkedLorewalkingQuests(uint32 storyId);
         void CompleteQuest(uint32 quest_id);
         void IncompleteQuest(uint32 quest_id);
         uint32 GetQuestMoneyReward(Quest const* quest) const;
@@ -3131,6 +3144,11 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
             PreparedQueryResult azeriteItemMilestonePowersResult, PreparedQueryResult azeriteItemUnlockedEssencesResult, PreparedQueryResult azeriteEmpoweredItemResult);
         static Item* _LoadMailedItem(ObjectGuid const& playerGuid, Player* player, uint64 mailId, Mail* mail, Field* fields, ItemAdditionalLoadInfo* addionalData);
         void _LoadQuestStatus(PreparedQueryResult result);
+        void _LoadLorewalking(PreparedQueryResult storyResult, PreparedQueryResult questResult);
+        void UpdateQuestLogForLorewalking();
+        void ParkQuest(QuestStatusMap::iterator questStatusItr);
+        void UnparkQuest(QuestStatusMap::iterator questStatusItr);
+        UF::QuestLog const& GetQuestSlotData(uint16 slot) const;
         void _LoadQuestStatusObjectives(PreparedQueryResult result);
         void _LoadQuestStatusObjectiveSpawnTrackings(PreparedQueryResult result);
         void _LoadQuestStatusRewarded(PreparedQueryResult result);
@@ -3228,6 +3246,9 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint32 m_ExtraFlags;
 
         QuestStatusMap m_QuestStatus;
+        uint32 m_lorewalkingStoryId = 0;
+        bool m_lorewalkingSuspended = false;
+        std::bitset<MAX_QUEST_LOG_SIZE> m_parkedQuestSlots;
         QuestObjectiveStatusMap m_questObjectiveStatus;
         QuestStatusSaveMap m_QuestStatusSave;
 

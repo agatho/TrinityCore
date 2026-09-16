@@ -84,6 +84,7 @@
 #include "Loot.h"
 #include "LootItemStorage.h"
 #include "LootMgr.h"
+#include "LorewalkingMgr.h"
 #include "LootPackets.h"
 #include "Mail.h"
 #include "MailPackets.h"
@@ -1440,6 +1441,9 @@ bool Player::TeleportTo(TeleportLocation const& teleportLocation, TeleportToOpti
 
             SendDirectMessage(transferPending.Write());
         }
+
+        // Lorewalking is re-applied after the transfer, see UpdateLorewalkingForMap
+        RemoveAurasDueToSpell(Lorewalking::SPELL_LOREWALKING);
 
         // remove from old map now
         if (oldmap)
@@ -3974,6 +3978,14 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
             trans->Append(stmt);
 
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_QUESTSTATUS_OBJECTIVES_SPAWN_TRACKING);
+            stmt->setUInt64(0, guid);
+            trans->Append(stmt);
+
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_QUESTSTATUS_LOREWALKING);
+            stmt->setUInt64(0, guid);
+            trans->Append(stmt);
+
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_LOREWALKING);
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
 
@@ -14455,7 +14467,8 @@ void Player::SendPreparedQuest(WorldObject* source)
 
 bool Player::IsActiveQuest(uint32 quest_id) const
 {
-    return m_QuestStatus.find(quest_id) != m_QuestStatus.end();
+    auto itr = m_QuestStatus.find(quest_id);
+    return itr != m_QuestStatus.end() && !itr->second.Parked;
 }
 
 Quest const* Player::GetNextQuest(Object const* questGiver, Quest const* quest) const
@@ -14554,6 +14567,8 @@ bool Player::CanCompleteQuest(uint32 quest_id, uint32 ignoredQuestObjectiveId /*
             return false;
 
         QuestStatusData &q_status = itr->second;
+        if (q_status.Parked)
+            return false;
 
         if (q_status.Status == QUEST_STATUS_INCOMPLETE)
         {
@@ -14603,6 +14618,10 @@ bool Player::CanRewardQuest(Quest const* quest, bool msg) const
 
     // not auto complete quest and not completed quest (only cheating case, then ignore without message)
     if (!quest->IsDFQuest() && !quest->IsTurnIn() && GetQuestStatus(quest->GetQuestId()) != QUEST_STATUS_COMPLETE)
+        return false;
+
+    // parked by Lorewalking, not in the visible quest log
+    if (IsQuestParked(quest->GetQuestId()))
         return false;
 
     // daily quest can't be rewarded (25 daily quest already completed)
@@ -14807,7 +14826,7 @@ bool Player::CanRewardQuest(Quest const* quest, LootItemType rewardType, uint32 
 void Player::AddQuest(Quest const* quest, Object* questGiver)
 {
     uint16 log_slot = 0;
-    while (GetQuestSlotQuestId(log_slot) && log_slot < MAX_QUEST_LOG_SIZE)
+    while (log_slot < MAX_QUEST_LOG_SIZE && (GetQuestSlotQuestId(log_slot) || m_parkedQuestSlots.test(log_slot)))
         ++log_slot;
 
     if (log_slot >= MAX_QUEST_LOG_SIZE) // Player does not have any free slot in the quest log
@@ -14827,6 +14846,8 @@ void Player::AddQuest(Quest const* quest, Object* questGiver)
     questStatusData.Slot = log_slot;
     questStatusData.Status = QUEST_STATUS_INCOMPLETE;
     questStatusData.Explored = false;
+    questStatusData.LorewalkingStoryId = IsLorewalking() && !Lorewalking::IsQuestKeptInQuestLog(quest) ? m_lorewalkingStoryId : 0;
+    questStatusData.Parked = false;
 
     for (QuestObjective const& obj : quest->GetObjectives())
     {
@@ -15996,7 +16017,18 @@ void Player::RemoveActiveQuest(uint32 questId, bool update /*= true*/)
     QuestStatusMap::iterator itr = m_QuestStatus.find(questId);
     if (itr != m_QuestStatus.end())
     {
-        SetQuestSlot(itr->second.Slot, 0);
+        if (itr->second.Parked)
+        {
+            if (itr->second.Slot < MAX_QUEST_LOG_SIZE)
+            {
+                m_parkedQuestSlots.reset(itr->second.Slot);
+                SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
+                    .ModifyValue(&UF::PlayerData::QuestSessionQuestLog, itr->second.Slot)
+                    .ModifyValue(&UF::QuestLog::QuestID), 0);
+            }
+        }
+        else
+            SetQuestSlot(itr->second.Slot, 0);
 
         for (auto objectiveItr = m_questObjectiveStatus.begin(); objectiveItr != m_questObjectiveStatus.end(); )
         {
@@ -16022,6 +16054,193 @@ void Player::RemoveActiveQuest(uint32 questId, bool update /*= true*/)
 
     if (updateVisibility)
         UpdateObjectVisibility();
+}
+
+bool Player::IsQuestParked(uint32 questId) const
+{
+    auto itr = m_QuestStatus.find(questId);
+    return itr != m_QuestStatus.end() && itr->second.Parked;
+}
+
+bool Player::HasParkedLorewalkingQuests(uint32 storyId) const
+{
+    return std::ranges::any_of(m_QuestStatus, [storyId](QuestStatusMap::value_type const& questStatus)
+    {
+        return questStatus.second.Parked && questStatus.second.LorewalkingStoryId == storyId;
+    });
+}
+
+void Player::RemoveParkedLorewalkingQuests(uint32 storyId)
+{
+    std::vector<uint32> questIds;
+    for (auto const& [questId, questStatus] : m_QuestStatus)
+        if (questStatus.Parked && questStatus.LorewalkingStoryId == storyId)
+            questIds.push_back(questId);
+
+    for (uint32 questId : questIds)
+        RemoveActiveQuest(questId);
+}
+
+void Player::StartLorewalking(uint32 storyId)
+{
+    m_lorewalkingStoryId = storyId;
+    m_lorewalkingSuspended = false;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHARACTER_LOREWALKING);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    stmt->setUInt32(1, storyId);
+    CharacterDatabase.Execute(stmt);
+
+    UpdateQuestLogForLorewalking();
+}
+
+void Player::StopLorewalking()
+{
+    if (!m_lorewalkingStoryId)
+        return;
+
+    m_lorewalkingStoryId = 0;
+    m_lorewalkingSuspended = false;
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_LOREWALKING);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    CharacterDatabase.Execute(stmt);
+
+    UpdateQuestLogForLorewalking();
+}
+
+// Called when a far teleport completes. Retail 12.1: the Lorewalking aura is re-applied on arrival; entering an instance the
+// story does not use (Sunwell Plateau during the Elves story) suspends Lorewalking and shows the normal quest log again,
+// leaving it resumes.
+void Player::UpdateLorewalkingForMap()
+{
+    if (!m_lorewalkingStoryId)
+        return;
+
+    Lorewalking::Story const* story = Lorewalking::GetStory(m_lorewalkingStoryId);
+    if (!story)
+    {
+        StopLorewalking();
+        return;
+    }
+
+    bool suspended = false;
+    if (MapEntry const* mapEntry = sMapStore.LookupEntry(GetMapId()))
+        suspended = mapEntry->Instanceable() && !story->Maps.contains(int32(GetMapId()));
+
+    if (suspended != m_lorewalkingSuspended)
+    {
+        m_lorewalkingSuspended = suspended;
+        UpdateQuestLogForLorewalking();
+    }
+
+    if (suspended)
+        RemoveAurasDueToSpell(Lorewalking::SPELL_LOREWALKING);
+    else if (!HasAura(Lorewalking::SPELL_LOREWALKING))
+        CastSpell(this, Lorewalking::SPELL_LOREWALKING, TRIGGERED_FULL_MASK);
+}
+
+void Player::UpdateQuestLogForLorewalking()
+{
+    uint32 visibleStoryId = IsLorewalking() ? m_lorewalkingStoryId : 0;
+
+    auto takesPart = [](QuestStatusMap::value_type const& questStatus)
+    {
+        if (questStatus.second.Status == QUEST_STATUS_NONE || questStatus.second.Slot >= MAX_QUEST_LOG_SIZE)
+            return false;
+
+        Quest const* quest = sObjectMgr->GetQuestTemplate(questStatus.first);
+        return quest && !Lorewalking::IsQuestKeptInQuestLog(quest);
+    };
+
+    // park first, so a quest coming back never finds its slot taken
+    for (auto itr = m_QuestStatus.begin(); itr != m_QuestStatus.end(); ++itr)
+        if (!itr->second.Parked && itr->second.LorewalkingStoryId != visibleStoryId && takesPart(*itr))
+            ParkQuest(itr);
+
+    for (auto itr = m_QuestStatus.begin(); itr != m_QuestStatus.end(); ++itr)
+        if (itr->second.Parked && itr->second.LorewalkingStoryId == visibleStoryId && takesPart(*itr))
+            UnparkQuest(itr);
+}
+
+// The session log is index-aligned with the quest log: a parked quest keeps its slot index (retail 12.1 capture 69497:
+// quest log slots 0, 1, 3-13, 50, 51 moved to the same session slots when a story began).
+void Player::ParkQuest(QuestStatusMap::iterator questStatusItr)
+{
+    QuestStatusData& questStatusData = questStatusItr->second;
+    uint16 slot = questStatusData.Slot;
+
+    auto playerData = m_values.ModifyValue(&Player::m_playerData);
+    while (m_playerData->QuestSessionQuestLog.size() < MAX_QUEST_LOG_SIZE)
+        AddDynamicUpdateFieldValue(playerData.ModifyValue(&UF::PlayerData::QuestSessionQuestLog));
+
+    UF::QuestLog const& questLog = m_playerData->QuestLog[slot];
+    auto sessionQuestLog = playerData.ModifyValue(&UF::PlayerData::QuestSessionQuestLog, slot);
+    SetUpdateFieldValue(sessionQuestLog.ModifyValue(&UF::QuestLog::QuestID), *questLog.QuestID);
+    SetUpdateFieldValue(sessionQuestLog.ModifyValue(&UF::QuestLog::StateFlags), *questLog.StateFlags);
+    SetUpdateFieldValue(sessionQuestLog.ModifyValue(&UF::QuestLog::EndTime), *questLog.EndTime);
+    SetUpdateFieldValue(sessionQuestLog.ModifyValue(&UF::QuestLog::ObjectiveFlags), *questLog.ObjectiveFlags);
+    SetUpdateFieldValue(sessionQuestLog.ModifyValue(&UF::QuestLog::EnabledObjectivesMask), *questLog.EnabledObjectivesMask);
+    for (uint32 i = 0; i < MAX_QUEST_COUNTS; ++i)
+        SetUpdateFieldValue(sessionQuestLog.ModifyValue(&UF::QuestLog::ObjectiveProgress, i), questLog.ObjectiveProgress[i]);
+
+    SetQuestSlot(slot, 0);
+
+    for (auto objectiveItr = m_questObjectiveStatus.begin(); objectiveItr != m_questObjectiveStatus.end(); )
+    {
+        if (objectiveItr->second.QuestStatusItr == questStatusItr)
+            objectiveItr = m_questObjectiveStatus.erase(objectiveItr);
+        else
+            ++objectiveItr;
+    }
+
+    m_parkedQuestSlots.set(slot);
+    questStatusData.Parked = true;
+}
+
+void Player::UnparkQuest(QuestStatusMap::iterator questStatusItr)
+{
+    QuestStatusData& questStatusData = questStatusItr->second;
+    uint16 slot = questStatusData.Slot;
+    if (slot >= m_playerData->QuestSessionQuestLog.size())
+        return;
+
+    // copy before the slot is reused
+    UF::QuestLog sessionQuestLog = m_playerData->QuestSessionQuestLog[slot];
+
+    m_parkedQuestSlots.reset(slot);
+    if (GetQuestSlotQuestId(slot))
+    {
+        uint16 freeSlot = 0;
+        while (freeSlot < MAX_QUEST_LOG_SIZE && (GetQuestSlotQuestId(freeSlot) || m_parkedQuestSlots.test(freeSlot)))
+            ++freeSlot;
+
+        if (freeSlot >= MAX_QUEST_LOG_SIZE)
+        {
+            m_parkedQuestSlots.set(slot);
+            TC_LOG_ERROR("entities.player.quest", "Player::UnparkQuest: {} has no free quest log slot for parked quest {}", GetGUID().ToString(), questStatusItr->first);
+            return;
+        }
+
+        slot = freeSlot;
+        questStatusData.Slot = slot;
+    }
+
+    SetQuestSlot(slot, questStatusItr->first);
+
+    auto questLog = m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::QuestLog, slot);
+    SetUpdateFieldValue(questLog.ModifyValue(&UF::QuestLog::StateFlags), *sessionQuestLog.StateFlags);
+    SetUpdateFieldValue(questLog.ModifyValue(&UF::QuestLog::EndTime), *sessionQuestLog.EndTime);
+    SetUpdateFieldValue(questLog.ModifyValue(&UF::QuestLog::ObjectiveFlags), *sessionQuestLog.ObjectiveFlags);
+    SetUpdateFieldValue(questLog.ModifyValue(&UF::QuestLog::EnabledObjectivesMask), *sessionQuestLog.EnabledObjectivesMask);
+    for (uint32 i = 0; i < MAX_QUEST_COUNTS; ++i)
+        SetUpdateFieldValue(questLog.ModifyValue(&UF::QuestLog::ObjectiveProgress, i), sessionQuestLog.ObjectiveProgress[i]);
+
+    if (Quest const* quest = sObjectMgr->GetQuestTemplate(questStatusItr->first))
+        for (QuestObjective const& obj : quest->GetObjectives())
+            m_questObjectiveStatus.emplace(std::make_pair(QuestObjectiveType(obj.Type), obj.ObjectID), QuestObjectiveStatusData{ questStatusItr, obj.ID });
+
+    questStatusData.Parked = false;
 }
 
 void Player::RemoveRewardedQuest(uint32 questId, bool update /*= true*/)
@@ -16372,7 +16591,15 @@ void Player::AdjustQuestObjectiveProgress(Quest const* quest)
 uint16 Player::FindQuestSlot(uint32 quest_id) const
 {
     auto itr = m_QuestStatus.find(quest_id);
-    return itr != m_QuestStatus.end() ? itr->second.Slot : MAX_QUEST_LOG_SIZE;
+    return itr != m_QuestStatus.end() && !itr->second.Parked ? itr->second.Slot : MAX_QUEST_LOG_SIZE;
+}
+
+UF::QuestLog const& Player::GetQuestSlotData(uint16 slot) const
+{
+    if (slot < MAX_QUEST_LOG_SIZE && m_parkedQuestSlots.test(slot) && slot < m_playerData->QuestSessionQuestLog.size())
+        return m_playerData->QuestSessionQuestLog[slot];
+
+    return m_playerData->QuestLog[slot];
 }
 
 uint32 Player::GetQuestSlotQuestId(uint16 slot) const
@@ -16382,25 +16609,25 @@ uint32 Player::GetQuestSlotQuestId(uint16 slot) const
 
 uint32 Player::GetQuestSlotState(uint16 slot)   const
 {
-    return m_playerData->QuestLog[slot].StateFlags;
+    return GetQuestSlotData(slot).StateFlags;
 }
 
 uint16 Player::GetQuestSlotCounter(uint16 slot, uint8 counter) const
 {
     if (counter < MAX_QUEST_COUNTS)
-        return m_playerData->QuestLog[slot].ObjectiveProgress[counter];
+        return GetQuestSlotData(slot).ObjectiveProgress[counter];
     return 0;
 }
 
 int64 Player::GetQuestSlotEndTime(uint16 slot) const
 {
-    return m_playerData->QuestLog[slot].EndTime;
+    return GetQuestSlotData(slot).EndTime;
 }
 
 bool Player::GetQuestSlotObjectiveFlag(uint16 slot, int8 objectiveIndex) const
 {
     if (objectiveIndex < MAX_QUEST_COUNTS)
-        return (*m_playerData->QuestLog[slot].ObjectiveFlags) & (1 << objectiveIndex);
+        return (*GetQuestSlotData(slot).ObjectiveFlags) & (1 << objectiveIndex);
     return false;
 }
 
@@ -18659,6 +18886,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     _LoadQuestStatus(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS));
     _LoadQuestStatusObjectives(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES));
     _LoadQuestStatusObjectiveSpawnTrackings(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_SPAWN_TRACKING));
+    _LoadLorewalking(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_LOREWALKING), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_LOREWALKING));
     _LoadQuestStatusRewarded(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_REW));
     _LoadDailyQuestStatus(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_DAILY_QUEST_STATUS));
     _LoadWeeklyQuestStatus(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_WEEKLY_QUEST_STATUS));
@@ -19675,6 +19903,39 @@ void Player::_LoadQuestStatus(PreparedQueryResult result)
         }
         while (result->NextRow());
     }
+}
+
+void Player::_LoadLorewalking(PreparedQueryResult storyResult, PreparedQueryResult questResult)
+{
+    //                   0      1
+    // SELECT quest, storyId FROM character_queststatus_lorewalking WHERE guid = ?
+    if (questResult)
+    {
+        do
+        {
+            Field* fields = questResult->Fetch();
+            auto itr = m_QuestStatus.find(fields[0].GetUInt32());
+            if (itr != m_QuestStatus.end())
+                itr->second.LorewalkingStoryId = fields[1].GetUInt32();
+        } while (questResult->NextRow());
+    }
+
+    //                 0
+    // SELECT storyId FROM character_lorewalking WHERE guid = ?
+    if (storyResult)
+    {
+        uint32 storyId = (*storyResult)[0].GetUInt32();
+        if (Lorewalking::Story const* story = Lorewalking::GetStory(storyId))
+        {
+            m_lorewalkingStoryId = storyId;
+            if (MapEntry const* mapEntry = sMapStore.LookupEntry(GetMapId()))
+                m_lorewalkingSuspended = mapEntry->Instanceable() && !story->Maps.contains(int32(GetMapId()));
+        }
+        else
+            TC_LOG_ERROR("entities.player.loading", "Player::_LoadLorewalking: {} is Lorewalking in non-existing story {}, stopped.", GetGUID().ToString(), storyId);
+    }
+
+    UpdateQuestLogForLorewalking();
 }
 
 void Player::_LoadQuestStatusObjectives(PreparedQueryResult result)
@@ -21246,6 +21507,21 @@ void Player::_SaveQuestStatus(CharacterDatabaseTransaction trans)
                 stmt->setInt64(5, GetQuestSlotEndTime(qData.Slot));
                 trans->Append(stmt);
 
+                if (qData.LorewalkingStoryId)
+                {
+                    stmt = CharacterDatabase.GetPreparedStatement(CHAR_REP_CHAR_QUESTSTATUS_LOREWALKING);
+                    stmt->setUInt64(0, GetGUID().GetCounter());
+                    stmt->setUInt32(1, statusItr->first);
+                    stmt->setUInt32(2, qData.LorewalkingStoryId);
+                }
+                else
+                {
+                    stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_QUESTSTATUS_LOREWALKING_BY_QUEST);
+                    stmt->setUInt64(0, GetGUID().GetCounter());
+                    stmt->setUInt32(1, statusItr->first);
+                }
+                trans->Append(stmt);
+
                 // Save objectives
                 stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_QUESTSTATUS_OBJECTIVES_BY_QUEST);
                 stmt->setUInt64(0, GetGUID().GetCounter());
@@ -21289,6 +21565,11 @@ void Player::_SaveQuestStatus(CharacterDatabaseTransaction trans)
         {
             // Delete
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_QUESTSTATUS_BY_QUEST);
+            stmt->setUInt64(0, GetGUID().GetCounter());
+            stmt->setUInt32(1, saveItr->first);
+            trans->Append(stmt);
+
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_QUESTSTATUS_LOREWALKING_BY_QUEST);
             stmt->setUInt64(0, GetGUID().GetCounter());
             stmt->setUInt32(1, saveItr->first);
             trans->Append(stmt);

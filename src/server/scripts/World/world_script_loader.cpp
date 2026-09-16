@@ -31,6 +31,7 @@ void AddSC_achievement_scripts();
 void AddSC_action_ip_logger();
 void AddSC_scene_scripts();
 void AddSC_xp_boost();
+void AddSC_lorewalking();
 // player
 void AddSC_chat_log();
 void AddSC_duel_reset();
@@ -56,6 +57,7 @@ void AddWorldScripts()
     if (sWorld->getBoolConfig(CONFIG_IP_BASED_ACTION_LOGGING))
         AddSC_action_ip_logger(); // location: scripts\World\action_ip_logger.cpp
     AddSC_duel_reset();
+    AddSC_lorewalking();
     if (sWorld->getIntConfig(CONFIG_XP_BOOST_DAYMASK) != 0)
         AddSC_xp_boost();
 }

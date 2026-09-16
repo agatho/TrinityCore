@@ -897,6 +897,8 @@ struct QuestStatusData
     uint32 Timer = 0;
     bool Explored = false;
     std::unordered_set<std::pair<int8, uint32>> SpawnTrackingList;
+    uint32 LorewalkingStoryId = 0;  // story the quest was accepted in, 0 = normal quest log
+    bool Parked = false;            // held in PlayerData::QuestSessionQuestLog, not in the visible quest log
 };
 
 #endif
