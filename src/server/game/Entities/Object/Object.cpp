@@ -48,6 +48,7 @@
 #include "VMapFactory.h"
 #include "VMapManager.h"
 #include "World.h"
+#include "WorldScenario.h"
 #include <G3D/Vector3.h>
 #include <sstream>
 
@@ -1393,11 +1394,13 @@ void WorldObject::SetZoneScript()
 
 Scenario* WorldObject::GetScenario() const
 {
-    if (IsInWorld())
-        if (InstanceMap* instanceMap = GetMap()->ToInstanceMap())
-            return instanceMap->GetInstanceScenario();
+    if (!IsInWorld())
+        return nullptr;
 
-    return nullptr;
+    if (InstanceMap* instanceMap = GetMap()->ToInstanceMap())
+        return instanceMap->GetInstanceScenario();
+
+    return GetMap()->GetWorldScenarioFor(this);
 }
 
 TempSummon* WorldObject::SummonCreature(uint32 entry, Position const& pos, TempSummonType despawnType /*= TEMPSUMMON_MANUAL_DESPAWN*/, Milliseconds despawnTime /*= 0s*/, uint32 vehId /*= 0*/, uint32 spellId /*= 0*/, ObjectGuid privateObjectOwner /* = ObjectGuid::Empty */)

@@ -50,6 +50,7 @@
 #include "Pet.h"
 #include "PhasingHandler.h"
 #include "PoolMgr.h"
+#include "ScenarioMgr.h"
 #include "ScriptMgr.h"
 #include "SpellAuras.h"
 #include "TerrainMgr.h"
@@ -62,6 +63,7 @@
 #include "Weather.h"
 #include "WeatherMgr.h"
 #include "World.h"
+#include "WorldScenario.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
 #include "WorldStatePackets.h"
@@ -161,6 +163,12 @@ i_scriptLock(false), _respawnTimes(std::make_unique<RespawnListContainer>()), _r
         m_mmapTileRebuilder = std::make_shared<MMAP::DynamicTileBuilder>(this, MMAP::MMapManager::instance()->GetNavMesh(GetId(), GetInstanceId()));
 
     _worldStateValues = WorldStateMgr::GetInitialWorldStatesForMap(this);
+
+    if (!Instanceable())
+        if (std::vector<WorldScenarioData const*> const* worldScenarios = sScenarioMgr->GetWorldScenariosForMap(GetId()))
+            for (WorldScenarioData const* worldScenario : *worldScenarios)
+                if (worldScenario->Flags.HasFlag(WorldScenarioFlags::AutoStart))
+                    StartWorldScenario(worldScenario->ScenarioID);
 }
 
 void Map::InitVisibilityDistance()
@@ -424,8 +432,94 @@ bool Map::AddPlayerToMap(Player* player, bool initPlayer /*= true*/)
     if (player->IsAlive())
         ConvertCorpseToBones(player->GetGUID());
 
+    UpdateWorldScenarioMembership(player, player->GetAreaId());
+
     sScriptMgr->OnPlayerEnterMap(this, player);
     return true;
+}
+
+WorldScenario* Map::StartWorldScenario(uint32 scenarioId, Optional<uint32> areaId /*= {}*/)
+{
+    if (Instanceable())
+    {
+        TC_LOG_ERROR("scenario", "Map::StartWorldScenario: map {} is instanceable, open-world scenario {} not started", GetId(), scenarioId);
+        return nullptr;
+    }
+
+    if (WorldScenario* running = GetWorldScenario(scenarioId))
+        return running;
+
+    if (!areaId)
+    {
+        WorldScenarioData const* data = sScenarioMgr->GetWorldScenarioData(scenarioId);
+        if (!data || data->MapID != GetId())
+        {
+            TC_LOG_ERROR("scenario", "Map::StartWorldScenario: scenario {} has no `scenario_world` row for map {} and no area was given", scenarioId, GetId());
+            return nullptr;
+        }
+
+        areaId = data->AreaID;
+    }
+
+    WorldScenario* scenario = sScenarioMgr->CreateWorldScenario(this, scenarioId, *areaId);
+    if (!scenario)
+        return nullptr;
+
+    _worldScenarios.emplace_back(scenario);
+
+    DoOnPlayers([scenario](Player* player)
+    {
+        scenario->UpdatePlayerMembership(player, player->GetAreaId());
+    });
+
+    return scenario;
+}
+
+void Map::StopWorldScenario(uint32 scenarioId)
+{
+    if (WorldScenario* scenario = GetWorldScenario(scenarioId))
+        scenario->Stop();
+}
+
+WorldScenario* Map::GetWorldScenario(uint32 scenarioId) const
+{
+    for (std::unique_ptr<WorldScenario> const& scenario : _worldScenarios)
+        if (!scenario->IsEnded() && scenario->GetEntry()->ID == scenarioId)
+            return scenario.get();
+
+    return nullptr;
+}
+
+WorldScenario* Map::GetWorldScenarioFor(WorldObject const* object) const
+{
+    for (std::unique_ptr<WorldScenario> const& scenario : _worldScenarios)
+    {
+        if (scenario->IsEnded())
+            continue;
+
+        if (object->IsPlayer() ? scenario->HasPlayer(object->GetGUID()) : scenario->IsInScenarioArea(object))
+            return scenario.get();
+    }
+
+    return nullptr;
+}
+
+void Map::UpdateWorldScenarioMembership(Player* player, uint32 areaId)
+{
+    for (std::unique_ptr<WorldScenario> const& scenario : _worldScenarios)
+        scenario->UpdatePlayerMembership(player, areaId);
+}
+
+void Map::UpdateWorldScenarios(uint32 diff)
+{
+    if (_worldScenarios.empty())
+        return;
+
+    // destroy scenarios that ended during the previous update (completion runs inside criteria updates)
+    std::erase_if(_worldScenarios, [](std::unique_ptr<WorldScenario> const& scenario) { return scenario->IsEnded(); });
+
+    for (std::unique_ptr<WorldScenario> const& scenario : _worldScenarios)
+        scenario->Update(diff);
 }
 
 void Map::UpdatePersonalPhasesForPlayer(Player const* player)
@@ -821,6 +915,8 @@ void Map::Update(uint32 t_diff)
 
     if (!m_mapRefManager.empty() || !m_activeNonPlayers.empty())
         ProcessRelocationNotifies(t_diff);
+
+    UpdateWorldScenarios(t_diff);
 
     sScriptMgr->OnMapUpdate(this, t_diff);
 
@@ -3145,7 +3241,8 @@ std::string const& InstanceMap::GetScriptName() const
 
 void InstanceMap::SetInstanceScenario(InstanceScenario* scenario)
 {
-    i_scenario.reset(); // sends exit packets to all players
+    // no SMSG_SCENARIO_VACATE for the replaced scenario: retail sends the new scenario's state directly
+    i_scenario.reset();
 
     if (scenario)
     {

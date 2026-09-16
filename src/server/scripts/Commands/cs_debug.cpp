@@ -54,6 +54,7 @@ EndScriptData */
 #include "SpellPackets.h"
 #include "Transport.h"
 #include "World.h"
+#include "WorldScenario.h"
 #include "WorldSession.h"
 #include "WorldStateMgr.h"
 #include <fstream>
@@ -132,7 +133,9 @@ public:
             { "guidlimits",         HandleDebugGuidLimitsCommand,          rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "objectcount",        HandleDebugObjectCountCommand,         rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "questreset",         HandleDebugQuestResetCommand,          rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
-            { "personalclone",      HandleDebugBecomePersonalClone,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No }
+            { "personalclone",      HandleDebugBecomePersonalClone,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "worldscenario start", HandleDebugWorldScenarioStartCommand, rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "worldscenario stop", HandleDebugWorldScenarioStopCommand,   rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No }
         };
         static ChatCommandTable commandTable =
         {
@@ -1379,6 +1382,39 @@ public:
             return true;
         }
 
+        return true;
+    }
+
+    // .debug worldscenario start <scenarioId> [areaId] - starts an open-world scenario on the current map; without an
+    // area the `scenario_world` row decides where it runs
+    static bool HandleDebugWorldScenarioStartCommand(ChatHandler* handler, uint32 scenarioId, Optional<uint32> areaId)
+    {
+        Player* player = handler->GetPlayer();
+        WorldScenario* scenario = player->GetMap()->StartWorldScenario(scenarioId, areaId);
+        if (!scenario)
+        {
+            handler->PSendSysMessage("Open-world scenario %u could not be started on map %u (instanceable map, unknown scenario or no `scenario_world` row; see Server.log).", scenarioId, player->GetMapId());
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        handler->PSendSysMessage("Open-world scenario %u runs on map %u in area %u; you are %s.", scenarioId, player->GetMapId(), scenario->GetAreaId(),
+            scenario->HasPlayer(player->GetGUID()) ? "taking part" : "outside its area");
+        return true;
+    }
+
+    static bool HandleDebugWorldScenarioStopCommand(ChatHandler* handler, uint32 scenarioId)
+    {
+        Player* player = handler->GetPlayer();
+        if (!player->GetMap()->GetWorldScenario(scenarioId))
+        {
+            handler->PSendSysMessage("Open-world scenario %u is not running on map %u.", scenarioId, player->GetMapId());
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        player->GetMap()->StopWorldScenario(scenarioId);
+        handler->PSendSysMessage("Open-world scenario %u stopped.", scenarioId);
         return true;
     }
 

@@ -20,6 +20,7 @@
 
 #include "CriteriaHandler.h"
 #include <map>
+#include <unordered_map>
 #include <unordered_set>
 
 class Map;
@@ -49,11 +50,23 @@ enum ScenarioStepState
     SCENARIO_STEP_DONE          = 3
 };
 
+// SMSG_SCENARIO_VACATE Reason (2 bits). Retail 12.1 sends Completed together with SMSG_SCENARIO_COMPLETED when an
+// open-world scenario ends, and Left when a player leaves the scenario's map or area or the scenario is stopped.
+enum class ScenarioVacateReason : uint8
+{
+    Completed   = 0,
+    Left        = 1
+};
+
+// A full SMSG_SCENARIO_STATE (join, final refresh) always carries this many spell entries; step changes carry
+// only the new step's spells.
+constexpr std::size_t SCENARIO_STATE_SPELL_SLOTS = 4;
+
 class TC_GAME_API Scenario : public CriteriaHandler
 {
     public:
         Scenario(Map* map, ScenarioData const* scenarioData);
-        ~Scenario();
+        virtual ~Scenario();
 
         void Reset() override;
         void SetStep(ScenarioStepEntry const* step);
@@ -75,7 +88,10 @@ class TC_GAME_API Scenario : public CriteriaHandler
         ScenarioStepEntry const* GetLastStep() const;
 
         void SendScenarioState(Player const* player) const;
-        void SendBootPlayer(Player const* player) const;
+        void SendBootPlayer(Player const* player, ScenarioVacateReason reason = ScenarioVacateReason::Left) const;
+
+        ObjectGuid const& GetGUID() const { return _guid; }
+        bool HasPlayer(ObjectGuid const& guid) const { return _players.contains(guid); }
 
     protected:
         Map const* _map;
@@ -94,7 +110,15 @@ class TC_GAME_API Scenario : public CriteriaHandler
 
         void SendAllData(Player const* /*receiver*/) const override { }
 
-        void BuildScenarioStateFor(Player const* player, WorldPackets::Scenario::ScenarioState* scenarioState) const;
+        enum class StateSpells
+        {
+            None,       // no spell entries
+            StepSpells, // the current step's spells (sent when the step changes)
+            Full        // SCENARIO_STATE_SPELL_SLOTS entries (join, final refresh)
+        };
+
+        void BuildScenarioStateFor(Player const* player, WorldPackets::Scenario::ScenarioState* scenarioState, StateSpells spells) const;
+        void SendFullStateToAllPlayers(bool forceIncomplete) const;
 
         std::vector<WorldPackets::Scenario::BonusObjectiveData> GetBonusObjectivesData() const;
         std::vector<WorldPackets::Achievement::CriteriaProgress> GetCriteriasProgressFor(Player const* player) const;
@@ -103,9 +127,15 @@ class TC_GAME_API Scenario : public CriteriaHandler
         ScenarioData const* _data;
 
     private:
+        Seconds GetTimeFromCreate(uint32 criteriaId, time_t fallback) const;
+
         ObjectGuid const _guid;
         ScenarioStepEntry const* _currentstep;
         std::map<ScenarioStepEntry const*, ScenarioStepState> _stepStates;
+
+        // when each criteria of this scenario first gained progress: retail sends the time since then as both
+        // TimeFromStart and TimeFromCreate of every scenario criteria progress
+        mutable std::unordered_map<uint32, time_t> _criteriaCreateTime;
 };
 
 #endif // Scenario_h__

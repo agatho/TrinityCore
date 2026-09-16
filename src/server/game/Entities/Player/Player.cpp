@@ -7509,6 +7509,10 @@ void Player::UpdateArea(uint32 newArea)
         UpdateCriteria(CriteriaType::EnterArea, newArea);
         UpdateCriteria(CriteriaType::LeaveArea, oldArea);
     }
+
+    // join or leave open-world scenarios bound to the area (leaving the map passes area 0)
+    if (IsInWorld())
+        GetMap()->UpdateWorldScenarioMembership(this, newArea);
 }
 
 void Player::UpdateZone(uint32 newZone, uint32 newArea)

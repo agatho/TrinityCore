@@ -16,6 +16,7 @@
  */
 
 #include "Scenario.h"
+#include "GameTime.h"
 #include "Log.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
@@ -40,18 +41,15 @@ Scenario::Scenario(Map* map, ScenarioData const* scenarioData) : _map(map), _dat
         TC_LOG_ERROR("scenario", "Scenario::Scenario: Could not launch Scenario (id: {}), found no valid scenario step", _data->Entry->ID);
 }
 
-Scenario::~Scenario()
-{
-    for (ObjectGuid guid : _players)
-        if (Player* player = ObjectAccessor::GetPlayer(_map, guid))
-            SendBootPlayer(player);
-
-    _players.clear();
-}
+// Destroying a scenario sends nothing: retail replaces a finished scenario (delve 3154/3177 -> reward scenario 3424)
+// by sending the new SMSG_SCENARIO_STATE without an SMSG_SCENARIO_VACATE for the old one. Players who leave are
+// vacated by OnPlayerExit, open-world scenarios vacate their players when they end.
+Scenario::~Scenario() = default;
 
 void Scenario::Reset()
 {
     CriteriaHandler::Reset();
+    _criteriaCreateTime.clear();
     SetStep(GetFirstStep());
 }
 
@@ -78,11 +76,23 @@ void Scenario::CompleteStep(ScenarioStepEntry const* step)
             newStep = _step.second;
     }
 
-    SetStep(newStep);
-    if (IsComplete())
-        CompleteScenario();
-    else
+    if (newStep)
+    {
+        SetStep(newStep);
+        return;
+    }
+
+    if (!IsComplete())
+    {
         TC_LOG_ERROR("scenario", "Scenario::CompleteStep: Scenario (id: {}, step: {}) was completed, but could not determine new step, or validate scenario completion.", step->ScenarioID, step->ID);
+        return;
+    }
+
+    // Retail order when the last step completes: a full state that still names the finished step and is not yet
+    // complete, then the state without a step flagged complete, then SMSG_SCENARIO_COMPLETED.
+    SendFullStateToAllPlayers(true);
+    SetStep(nullptr);
+    CompleteScenario();
 }
 
 void Scenario::CompleteScenario()
@@ -110,7 +120,7 @@ void Scenario::SetStep(ScenarioStepEntry const* step)
     DoForAllPlayers([&](Player const* receiver)
     {
         WorldPackets::Scenario::ScenarioState scenarioState;
-        BuildScenarioStateFor(receiver, &scenarioState);
+        BuildScenarioStateFor(receiver, &scenarioState, step ? StateSpells::StepSpells : StateSpells::None);
         receiver->SendDirectMessage(scenarioState.Write());
     });
 }
@@ -123,8 +133,10 @@ void Scenario::OnPlayerEnter(Player* player)
 
 void Scenario::OnPlayerExit(Player* player)
 {
-    _players.erase(player->GetGUID());
-    SendBootPlayer(player);
+    if (!_players.erase(player->GetGUID()))
+        return;
+
+    SendBootPlayer(player, ScenarioVacateReason::Left);
 }
 
 bool Scenario::IsComplete() const
@@ -157,6 +169,9 @@ ScenarioStepState Scenario::GetStepState(ScenarioStepEntry const* step) const
 
 void Scenario::SendCriteriaUpdate(Criteria const* criteria, CriteriaProgress const* progress, Seconds timeElapsed, bool timedCompleted) const
 {
+    _criteriaCreateTime.try_emplace(criteria->ID, GameTime::GetGameTime());
+    Seconds const timeFromCreate = GetTimeFromCreate(criteria->ID, progress->Date);
+
     DoForAllPlayers([=, this](Player const* receiver)
     {
         WorldPackets::Scenario::ScenarioProgressUpdate progressUpdate;
@@ -168,11 +183,22 @@ void Scenario::SendCriteriaUpdate(Criteria const* criteria, CriteriaProgress con
         if (criteria->Entry->StartTimer)
             progressUpdate.CriteriaProgress.Flags = timedCompleted ? 1 : 0;
 
-        progressUpdate.CriteriaProgress.TimeFromStart = timeElapsed;
-        progressUpdate.CriteriaProgress.TimeFromCreate = Seconds::zero();
+        // retail: both durations count from the first progress on this criteria (0 on the first update)
+        progressUpdate.CriteriaProgress.TimeFromStart = criteria->Entry->StartTimer ? timeElapsed : timeFromCreate;
+        progressUpdate.CriteriaProgress.TimeFromCreate = timeFromCreate;
 
         receiver->SendDirectMessage(progressUpdate.Write());
     });
+}
+
+Seconds Scenario::GetTimeFromCreate(uint32 criteriaId, time_t fallback) const
+{
+    time_t created = fallback;
+    if (auto itr = _criteriaCreateTime.find(criteriaId); itr != _criteriaCreateTime.end())
+        created = itr->second;
+
+    time_t const now = GameTime::GetGameTime();
+    return Seconds(now > created ? now - created : 0);
 }
 
 bool Scenario::CanUpdateCriteriaTree(Criteria const * /*criteria*/, CriteriaTree const * tree, Player * /*referencePlayer*/) const
@@ -249,12 +275,32 @@ void Scenario::SendPacket(WorldPacket const* data) const
     });
 }
 
-void Scenario::BuildScenarioStateFor(Player const* player, WorldPackets::Scenario::ScenarioState* scenarioState) const
+void Scenario::BuildScenarioStateFor(Player const* player, WorldPackets::Scenario::ScenarioState* scenarioState, StateSpells spells) const
 {
     scenarioState->ScenarioGUID = _guid;
     scenarioState->ScenarioID = _data->Entry->ID;
-    if (ScenarioStepEntry const* step = GetStep())
-        scenarioState->CurrentStep = step->ID;
+    ScenarioStepEntry const* step = GetStep();
+    // retail sends 0 once the scenario has no current step (completed), never -1
+    scenarioState->CurrentStep = step ? step->ID : 0;
+
+    std::vector<uint32> const* stepSpells = step && GetStepState(step) == SCENARIO_STEP_IN_PROGRESS ? sScenarioMgr->GetScenarioStepSpells(step->ID) : nullptr;
+    switch (spells)
+    {
+        case StateSpells::StepSpells:
+            if (stepSpells)
+                for (uint32 spellId : *stepSpells)
+                    scenarioState->Spells.push_back({ .SpellID = spellId, .Usable = true });
+            break;
+        case StateSpells::Full:
+            scenarioState->Spells.resize(SCENARIO_STATE_SPELL_SLOTS);
+            if (stepSpells)
+                for (std::size_t i = 0; i < stepSpells->size() && i < SCENARIO_STATE_SPELL_SLOTS; ++i)
+                    scenarioState->Spells[i].SpellID = (*stepSpells)[i];
+            break;
+        default:
+            break;
+    }
+
     scenarioState->CriteriaProgress = GetCriteriasProgressFor(player);
     scenarioState->BonusObjectives = GetBonusObjectivesData();
     // Don't know exactly what this is for, but seems to contain list of scenario steps that we're either on or that are completed
@@ -313,8 +359,20 @@ ScenarioStepEntry const* Scenario::GetLastStep() const
 void Scenario::SendScenarioState(Player const* player) const
 {
     WorldPackets::Scenario::ScenarioState scenarioState;
-    BuildScenarioStateFor(player, &scenarioState);
+    BuildScenarioStateFor(player, &scenarioState, StateSpells::Full);
     player->SendDirectMessage(scenarioState.Write());
+}
+
+void Scenario::SendFullStateToAllPlayers(bool forceIncomplete) const
+{
+    DoForAllPlayers([&](Player const* receiver)
+    {
+        WorldPackets::Scenario::ScenarioState scenarioState;
+        BuildScenarioStateFor(receiver, &scenarioState, StateSpells::Full);
+        if (forceIncomplete)
+            scenarioState.ScenarioComplete = false;
+        receiver->SendDirectMessage(scenarioState.Write());
+    });
 }
 
 std::vector<WorldPackets::Scenario::BonusObjectiveData> Scenario::GetBonusObjectivesData() const
@@ -349,6 +407,8 @@ std::vector<WorldPackets::Achievement::CriteriaProgress> Scenario::GetCriteriasP
         criteriaProgress.Date.SetUtcTimeFromUnixTime(progress.Date);
         criteriaProgress.Date += player->GetSession()->GetTimezoneOffset();
         criteriaProgress.Player = _guid;
+        criteriaProgress.TimeFromStart = GetTimeFromCreate(criteriaId, progress.Date);
+        criteriaProgress.TimeFromCreate = criteriaProgress.TimeFromStart;
     }
 
     return criteriasProgress;
@@ -359,10 +419,11 @@ CriteriaList const& Scenario::GetCriteriaByType(CriteriaType type, uint32 /*asse
     return sCriteriaMgr->GetScenarioCriteriaByTypeAndScenario(type, _data->Entry->ID);
 }
 
-void Scenario::SendBootPlayer(Player const* player) const
+void Scenario::SendBootPlayer(Player const* player, ScenarioVacateReason reason /*= ScenarioVacateReason::Left*/) const
 {
     WorldPackets::Scenario::ScenarioVacate scenarioBoot;
     scenarioBoot.ScenarioGUID = _guid;
     scenarioBoot.ScenarioID = _data->Entry->ID;
+    scenarioBoot.Reason = AsUnderlyingType(reason);
     player->SendDirectMessage(scenarioBoot.Write());
 }

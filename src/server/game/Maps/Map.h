@@ -62,6 +62,7 @@ class Player;
 class SpawnedPoolData;
 class TempSummon;
 class TerrainInfo;
+class WorldScenario;
 class Unit;
 class Weather;
 class WorldObject;
@@ -863,6 +864,25 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
     private:
         std::vector<Vignettes::VignetteData*> _infiniteAOIVignettes;
         PeriodicTimer _vignetteUpdateTimer;
+
+        /*********************************************************/
+        /***              Open-world scenarios                 ***/
+        /*********************************************************/
+    public:
+        // Starts the `scenario_world` scenario on this map (in its configured area) or, with an explicit area, any
+        // scenario. Returns the running one when it is already active. Only non-instanced maps own world scenarios.
+        WorldScenario* StartWorldScenario(uint32 scenarioId, Optional<uint32> areaId = {});
+        // Ends the scenario, vacating its players (reason Left)
+        void StopWorldScenario(uint32 scenarioId);
+        WorldScenario* GetWorldScenario(uint32 scenarioId) const;
+        // The world scenario an object takes part in: players by membership, everything else by area
+        WorldScenario* GetWorldScenarioFor(WorldObject const* object) const;
+        void UpdateWorldScenarioMembership(Player* player, uint32 areaId);
+
+    private:
+        void UpdateWorldScenarios(uint32 diff);
+
+        std::vector<std::unique_ptr<WorldScenario>> _worldScenarios;
 };
 
 enum class InstanceResetMethod : uint8

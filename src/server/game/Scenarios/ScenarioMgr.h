@@ -19,6 +19,7 @@
 #define ScenarioMgr_h__
 
 #include "Common.h"
+#include "EnumFlag.h"
 #include "Hash.h"
 #include "SharedDefines.h"
 #include <map>
@@ -27,6 +28,8 @@
 
 class InstanceMap;
 class InstanceScenario;
+class Map;
+class WorldScenario;
 struct ScenarioEntry;
 struct ScenarioStepEntry;
 enum Difficulty : int16;
@@ -53,6 +56,26 @@ struct ScenarioDBData
 
 typedef std::unordered_map<std::pair<uint32, uint8>, ScenarioDBData> ScenarioDBDataContainer;
 typedef std::map<uint32, ScenarioData> ScenarioDataContainer;
+
+enum class WorldScenarioFlags : uint32
+{
+    None        = 0x0,
+    AutoStart   = 0x1   // started when the map is created; otherwise a script starts it (Map::StartWorldScenario)
+};
+
+DEFINE_ENUM_FLAG(WorldScenarioFlags);
+
+// `scenario_world`: an open-world scenario (not attached to an instance). Players take part while they are inside
+// AreaID (the area itself or any of its sub-areas) on MapID.
+struct WorldScenarioData
+{
+    uint32 ScenarioID = 0;
+    uint32 MapID = 0;
+    uint32 AreaID = 0;
+    EnumFlag<WorldScenarioFlags> Flags = WorldScenarioFlags::None;
+};
+
+typedef std::unordered_map<uint32, WorldScenarioData> WorldScenarioDataContainer;
 
 enum ScenarioType
 {
@@ -113,17 +136,27 @@ public:
 
     InstanceScenario* CreateInstanceScenarioForTeam(InstanceMap* map, TeamId team) const;
     InstanceScenario* CreateInstanceScenario(InstanceMap* map, uint32 scenarioID) const;
+    WorldScenario* CreateWorldScenario(Map* map, uint32 scenarioID, uint32 areaID) const;
 
     void LoadDBData();
     void LoadDB2Data();
     void LoadScenarioPOI();
 
     ScenarioPOIVector const* GetScenarioPOIs(int32 criteriaTreeID) const;
+    std::vector<uint32> const* GetScenarioStepSpells(uint32 scenarioStepID) const;
+    WorldScenarioData const* GetWorldScenarioData(uint32 scenarioID) const;
+    std::vector<WorldScenarioData const*> const* GetWorldScenariosForMap(uint32 mapID) const;
 
 private:
+    void LoadWorldScenarios();
+    void LoadScenarioStepSpells();
+
     ScenarioDataContainer _scenarioData;
     ScenarioPOIContainer _scenarioPOIStore;
     ScenarioDBDataContainer _scenarioDBData;
+    WorldScenarioDataContainer _worldScenarioData;
+    std::unordered_map<uint32, std::vector<WorldScenarioData const*>> _worldScenariosByMap;
+    std::unordered_map<uint32, std::vector<uint32>> _scenarioStepSpells;
 };
 
 #define sScenarioMgr ScenarioMgr::Instance()
