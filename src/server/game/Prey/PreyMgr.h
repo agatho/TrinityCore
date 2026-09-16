@@ -19,257 +19,74 @@
 #define TRINITYCORE_PREY_MGR_H
 
 #include "Define.h"
-#include <array>
-#include <map>
-#include <span>
-#include <unordered_map>
+#include <set>
+#include <string>
 #include <vector>
 
-class Player;
+/*
+    Prey (Midnight) - the weekly hunt rotation behind Astalor's Hunt Table.
 
-//
-// Prey system + Voidforge — Midnight Season 1 solo-hunt progression.
-//
-// SCOPE: framework spine plus the hunt content skeleton. Ids are either
-// DB2-anchored (wago.tools 12.0.7.68887 CSV) or quest-database keys recovered
-// from the 12.1.0.69273 capture and re-verified against our own 12.0.7 rows.
-// The hunt *activation wire* is still CAPTURE-BLOCKED (Hunt Table creature
-// 245824 uses a mission-table-style opcode flow that no capture we hold
-// contains), so StartHunt remains a documented no-op seam; CompleteHunt is
-// live, because completion turns out to be plain quest kill credit.
-// See C:\dumps\PREY_VOIDFORGE_BLUEPRINT.md for the full evidence inventory.
-//
+    Measured from retail 12.1 captures (builds 69273 .. 69814) and the 12.1 client DB2:
 
-// -------- DB2 / world anchors (all [DB2] 12.0.7.68887 unless noted) --------
-namespace Prey
+    - The Hunt Table (creature 245824) offers one gossip option of type AdventureMap (GossipNPCOption 59105); the
+      client opens the Midnight scouting map, asks CMSG_CHECK_IS_ADVENTURE_MAP_POI_VALID for every AdventureMapPOI and
+      starts a hunt with CMSG_ADVENTURE_MAP_START_QUEST. Both handlers already exist in the core.
+    - Every prey POI (quest sort QUEST_SORT_PREY) is gated by a PlayerCondition whose world state expression reads
+      "world state W == slot". One world state belongs to one hunt target and is shared by the target's Normal, Hard
+      and Nightmare quests; a POI exists per (target, slot). Slots 1..12 are four map positions times three
+      difficulties, 13 and 14 two more Hard positions.
+    - Once a week the realm sets those world states: 14 different targets fill slots 1..14 and 3 of the 4 special
+      Nightmare targets (the targets that also have a slot-0 POI) fill 3 different Nightmare slots next to a regular
+      target. Every other prey world state is 0. Six captured weeks all have exactly this shape; which target lands
+      where follows no pattern across them, so the assignment is random.
+
+    Everything is derived from DB2 at startup. The world states are realm-wide `world_state` rows persisted by
+    WorldStateMgr, so a restart keeps the current week.
+*/
+
+struct PreyHuntTarget
 {
-    // Faction table: 2764 "Prey: Season 1" (ParentFactionID 2698, RenownCurrencyID 3386).
-    constexpr uint32 FACTION_PREY_SEASON_1        = 2764;
-
-    // CurrencyTypes:
-    constexpr uint32 CURRENCY_RENOWN_PREY         = 3386; // "Renown - Prey"  (faction 2764 renown display, Quality 6)
-    constexpr uint32 CURRENCY_PREYSEEKERS_JOURNEY = 3387; // "Preyseeker's Journey" (FactionID 2764, AwardConditionID 150246) — the seasonal track
-    constexpr uint32 CURRENCY_REMNANT_OF_ANGUISH  = 3392; // "Remnant of Anguish" — Construct V'anore cosmetic sink
-    constexpr uint32 CURRENCY_NEBULOUS_VOIDCORE   = 3418; // "Nebulous Voidcore" — Voidforge bonus-roll currency (MaxQtyWorldStateID 30744)
-
-    // Per-difficulty gear-upgrade Dawncrests earned from Prey Hunts (see blueprint §1):
-    constexpr uint32 CURRENCY_DAWNCREST_ADVENTURER = 3383; // Normal
-    constexpr uint32 CURRENCY_DAWNCREST_VETERAN     = 3341; // Hard
-    constexpr uint32 CURRENCY_DAWNCREST_CHAMPION    = 3343; // Nightmare
-    constexpr uint32 CURRENCY_DAWNCREST_HERO        = 3345; // Nightmare
-
-    // Voidforge turn-in tracker currencies (worldstate-backed counters):
-    constexpr uint32 CURRENCY_VOIDFORGE_UNLOCK_TRACKER  = 3409; // WS 30474
-    constexpr uint32 CURRENCY_VOIDFORGE_UPGRADE_TRACKER = 3419; // WS 30731
-
-    // Hunt Table NPC — [SNIFF 68974] SMSG_QUERY_CREATURE_RESPONSE: 245824
-    // "Hunt Table", subname "missions". NOT present in Creature.db2@68887 (added
-    // 68887->68974). Activation opcode family CAPTURE-BLOCKED.
-    constexpr uint32 NPC_HUNT_TABLE = 245824;
-
-    // Preyseeker's Journey: first 4 weekly qualifiers award 1000 pts, later hunts 50 pts.
-    // Rank 4 gates Nightmare difficulty. [RESEARCH wowcarry] — cadence not DB2-confirmed.
-    constexpr uint32 JOURNEY_POINTS_WEEKLY_BONUS = 1000;
-    constexpr uint32 JOURNEY_POINTS_PER_HUNT     = 50;
-    constexpr uint32 JOURNEY_RANK_NIGHTMARE_GATE = 4;
-
-    // ---- Hunt content [SNIFF 12.1.0.69273 quest-info decode] ----------------
-    // These are database keys, not wire offsets, which is why they cross the
-    // patch boundary. All ten hunt quests and their objectives were compared
-    // against our own VerifiedBuild-66384 rows and match field for field; see
-    // sql/updates/world/master/2026_08_13_20_world_prey_hunts.sql.
-
-    // The two shared kill-credit bunnies. Every hunt, both tiers, uses the same
-    // pair — the named target creature is NOT the credit source.
-    //   objective 0, Flags 0          "Hunt your Prey"
-    //   objective 1, Flags 2 SEQUENCED "<target> slain" (shown once obj 0 fills)
-    constexpr uint32 NPC_CREDIT_HUNT_PROGRESS = 246472; // "Credit: Hunt your Prey"
-    constexpr uint32 NPC_CREDIT_TARGET_SLAIN  = 253450; // "Credit: Multiple Credit"
-
-    // quest_template.RewardSpell, identical on all ten hunts.
-    constexpr uint32 SPELL_HUNT_REWARD = 1244010;
-
-    // ContentTuningID per tier — this is the value 2026_08_12_00 shipped as a
-    // CAPTURE-BLOCKED TODO. Nightmare has no captured quest and stays unknown.
-    constexpr uint32 CONTENT_TUNING_HUNT_NORMAL = 5224;
-    constexpr uint32 CONTENT_TUNING_HUNT_HARD   = 5223;
-
-    // Rotation pools. Used as the fallback when prey_hunt_template is empty, so
-    // the rotation still behaves sanely on a realm that has not applied the SQL.
-    inline constexpr std::array<uint32, 4> HUNT_QUESTS_NORMAL = { 91098, 91102, 91109, 91123 };
-    inline constexpr std::array<uint32, 6> HUNT_QUESTS_HARD   = { 91210, 91212, 91214, 91242, 91248, 91255 };
-
-    // The world-quest variant (QuestSortID -656 QUEST_SORT_PREY,
-    // QuestInfoID 295 QUEST_INFO_PREY_WORLD_QUEST). It is a progress-bar quest
-    // handled entirely by the stock quest system — it is NOT part of the hunt
-    // rotation and needs no PreyMgr involvement. Listed for provenance only.
-    constexpr uint32 QUEST_PREY_WQ_VENOM_AMBUSH = 96591;
-
-    // =====================================================================
-    // TODO(CAPTURE-BLOCKED) — PROVISIONAL PLACEHOLDER REWARD AMOUNTS.
-    // The grant MECHANISM below (currency 3387, ReputationMgr rep for 2764,
-    // Dawncrest / Nebulous Voidcore currency writes) is DB2-anchored and LIVE.
-    // The exact per-difficulty AMOUNTS and the Journey point/reputation CADENCE
-    // are NOT DB2-confirmed — no hunt-completion reward packet was ever captured
-    // (blueprint §2/§7 capture ask #2 & #5). These constants exist ONLY so the
-    // chain compiles and runs end-to-end on a disposable test DB. DO NOT treat
-    // them as correct — they must be replaced once a completion capture lands.
-    // =====================================================================
-
-    // Per-difficulty Preyseeker's Journey (currency 3387) award per completed hunt.
-    constexpr uint32 PLACEHOLDER_JOURNEY_POINTS_NORMAL    = 50;   // TODO(CAPTURE-BLOCKED)
-    constexpr uint32 PLACEHOLDER_JOURNEY_POINTS_HARD      = 75;   // TODO(CAPTURE-BLOCKED)
-    constexpr uint32 PLACEHOLDER_JOURNEY_POINTS_NIGHTMARE = 100;  // TODO(CAPTURE-BLOCKED)
-
-    // Per-difficulty faction-2764 reputation granted per hunt. This is what moves
-    // the 3386 renown *level* (ReputationMgr crosses per-level thresholds and bumps
-    // 3386 via CurrencyGainSource::RenownRepGain). Amount is a pure guess.
-    constexpr int32  PLACEHOLDER_RENOWN_REP_NORMAL    = 250;  // TODO(CAPTURE-BLOCKED)
-    constexpr int32  PLACEHOLDER_RENOWN_REP_HARD      = 375;  // TODO(CAPTURE-BLOCKED)
-    constexpr int32  PLACEHOLDER_RENOWN_REP_NIGHTMARE = 500;  // TODO(CAPTURE-BLOCKED)
-
-    // Per-difficulty direct Dawncrest / Voidcore currency counts per hunt.
-    constexpr int32  PLACEHOLDER_DAWNCREST_COUNT_NORMAL    = 1;  // TODO(CAPTURE-BLOCKED)
-    constexpr int32  PLACEHOLDER_DAWNCREST_COUNT_HARD      = 1;  // TODO(CAPTURE-BLOCKED)
-    constexpr int32  PLACEHOLDER_DAWNCREST_COUNT_NIGHTMARE = 1;  // TODO(CAPTURE-BLOCKED) each of Champion+Hero
-    constexpr int32  PLACEHOLDER_NEBULOUS_VOIDCORE_COUNT   = 1;  // TODO(CAPTURE-BLOCKED) Nightmare only
-
-    // character_prey_hunt.Status values.
-    constexpr uint8  HUNT_STATUS_AVAILABLE = 0;
-    constexpr uint8  HUNT_STATUS_ACTIVE    = 1;
-    constexpr uint8  HUNT_STATUS_COMPLETED = 2;
-
-}
-
-enum class PreyDifficulty : uint8
-{
-    Normal    = 0, // unlocked at intro; drops Adventurer, fills Veteran vault slot
-    Hard      = 1, // quest "One Hero's Prey"; drops Veteran, fills Champion vault slot
-    Nightmare = 2, // Rank 4 Journey + "Dark Mending"; drops Champion, fills Hero + Nebulous Voidcore
-
-    Max
-};
-
-// Shipped world table row (prey_hunt_template). Content TODO where CAPTURE-BLOCKED.
-//
-// Id is the hunt's *quest id* — the hunt has no identity of its own on the wire
-// or in the database, it is an ordinary quest, so keying the registry by quest
-// id keeps one source of truth. ZoneId 0 means "not zone-scoped": the capture
-// carries no zone for any hunt, so every shipped row currently reads 0 and the
-// per-zone rotation collapses to a single bucket. That is the honest degenerate
-// case, not a bug — fill ZoneId in once a 12.0.7 capture supplies it.
-struct PreyHuntTemplate
-{
-    uint32         Id            = 0;
-    uint32         ZoneId        = 0; // Midnight zone the hunt runs in (0 = unscoped)
-    PreyDifficulty Difficulty    = PreyDifficulty::Normal;
-    uint32         ContentTuningId = 0; // 5224 Normal / 5223 Hard; Nightmare unknown
-    uint32         VaultActivityId = 0; // which Great Vault row this hunt credits
+    int32 WorldStateId = 0;
+    std::set<int32> Slots;              // every slot one of this target's POIs can be shown in
+    std::vector<uint32> QuestIds;       // the Normal / Hard / Nightmare quests sharing the world state
+    std::string Name;                   // AdventureMapPOI title
+    bool IsSpecial = false;             // has a slot-0 POI: joins a week only on a Nightmare slot
 };
 
 class TC_GAME_API PreyMgr
 {
-    private:
-        PreyMgr();
-        ~PreyMgr();
+    PreyMgr();
+    ~PreyMgr();
 
-    public:
-        PreyMgr(PreyMgr const&) = delete;
-        PreyMgr(PreyMgr&&) = delete;
-        PreyMgr& operator=(PreyMgr const&) = delete;
-        PreyMgr& operator=(PreyMgr&&) = delete;
+public:
+    PreyMgr(PreyMgr const&) = delete;
+    PreyMgr(PreyMgr&&) = delete;
+    PreyMgr& operator=(PreyMgr const&) = delete;
+    PreyMgr& operator=(PreyMgr&&) = delete;
 
-        static PreyMgr* instance();
+    static PreyMgr* instance();
 
-        // World load path (World::SetInitialWorldSettings / World::Update).
-        // LoadFromDB checks each optional table against information_schema before it
-        // reads it. That check is not a nicety: querying a table that does not exist
-        // makes MySQLConnection::_HandleMySQLErrno ABORT() the process, so "absent
-        // table -> null result" is never a thing that happens.
-        void LoadFromDB();
-        void Update(uint32 diff);
+    // Builds the hunt targets from AdventureMapPOI, PlayerCondition, WorldStateExpression and the quest templates.
+    // Requires quests and WorldStateMgr to be loaded; draws a rotation when the realm has none.
+    void Initialize();
 
-        // Player load path (Player::LoadFromDB).
-        void OnPlayerLogin(Player* player);
+    // Weekly reset: a new rotation replaces the old one.
+    void OnWeeklyReset();
 
-        PreyHuntTemplate const* GetHuntTemplate(uint32 huntId) const;
+    // Draws a new rotation and publishes it through the prey world states.
+    void Rotate();
 
-        // ---- Weekly rotation ----------------------------------------------
-        // Hunts rotate per difficulty and per zone. The index advances with the
-        // world's weekly quest reset so a hunt stays put for a whole week and
-        // flips with everything else, rather than on its own clock.
-        static uint32 GetCurrentWeekIndex();
+    std::vector<PreyHuntTarget> const& GetTargets() const { return _targets; }
+    int32 GetSlot(PreyHuntTarget const& target) const;
+    std::set<int32> const& GetRegularSlots() const { return _regularSlots; }
+    std::set<int32> const& GetSpecialSlots() const { return _specialSlots; }
 
-        // The hunt (== quest id) advertised this week for a tier in a zone.
-        // Returns 0 when the tier has no content — Nightmare, today.
-        uint32 GetWeeklyHuntQuest(PreyDifficulty difficulty, uint32 zoneId) const;
+private:
+    bool HasRotation() const;
 
-        // Every hunt advertised this week, one per registered (tier, zone)
-        // bucket. Empty registry falls back to one hunt per populated tier.
-        std::vector<uint32> GetWeeklyHuntQuests() const;
-
-        bool IsHuntQuest(uint32 questId) const;
-        // PreyDifficulty::Max when questId is not a hunt.
-        PreyDifficulty GetHuntDifficulty(uint32 questId) const;
-
-        // ---- Kill credit ---------------------------------------------------
-        // Both objectives of every hunt are MONSTER objectives against shared
-        // credit bunnies, so the whole server side of "the hunt progressed" and
-        // "the target died" is these two calls. They are safe to call for a
-        // player who is not on a hunt: KilledMonsterCredit is a no-op then.
-        void CreditHuntProgress(Player* player);   // objective 0, 246472
-        void CreditHuntTargetSlain(Player* player); // objective 1, 253450
-
-        // True once prey_hunt_template (WORLD database) is present + non-empty. Gates
-        // every economy grant.
-        //
-        // It deliberately does NOT gate character_prey_hunt access: that table lives in
-        // the CHARACTERS database behind its own migration, and a realm can have either
-        // one without the other. _characterHuntTableReady is the flag for that side.
-        bool IsEnabled() const { return _enabled; }
-
-        // ---- Progression grants (LIVE - ride stock currency/faction APIs) ----
-        // currency 3387 per difficulty + faction-2764 reputation via ReputationMgr, which
-        // drives the 3386 renown display currency by level. Amounts are PLACEHOLDER.
-        void GrantJourneyProgress(Player* player, PreyDifficulty difficulty);
-
-        // Per-difficulty Dawncrest (+ Nightmare Nebulous Voidcore), then record the weekly
-        // hunt state. huntId 0 means "no specific hunt": grant the economy only, which is
-        // what the .prey debug driver wants. A real completion passes the quest id and also
-        // gets the two objective kill credits.
-        void CompleteHunt(Player* player, PreyDifficulty difficulty, uint32 huntId = 0);
-
-        // ---- CAPTURE-BLOCKED seams (documented no-ops until the wire is captured) ----
-        // The Hunt Table open/activate flow is a mission-table opcode set not yet
-        // captured; StartHunt is the future entry point for that handler.
-        void StartHunt(Player* player, uint32 huntId, PreyDifficulty difficulty);
-        // On hunt completion: grant Dawncrest/Journey, credit the Great Vault row,
-        // and (Nightmare) award Nebulous Voidcore. Vault credit rides the fork's
-        // weekly-reward framework — wired in a later phase.
-
-    private:
-        // Persist a completed hunt into character_prey_hunt. Gated on
-        // _characterHuntTableReady, because an async Execute against a missing table
-        // aborts the process from the database worker thread exactly as a synchronous
-        // one aborts from the world thread.
-        void RecordHuntCompletion(Player* player, PreyDifficulty difficulty);
-
-        // Static fallback pool for a tier, used when the registry is empty.
-        static std::span<uint32 const> GetStaticHuntPool(PreyDifficulty difficulty);
-        // Registry-backed pool for a (tier, zone) bucket, or empty if unknown.
-        std::vector<uint32> const* GetRegisteredHuntPool(PreyDifficulty difficulty, uint32 zoneId) const;
-
-        std::unordered_map<uint32, PreyHuntTemplate> _huntTemplates;
-        // (difficulty, zoneId) -> hunt ids, ascending. Keyed so the rotation is
-        // reproducible across restarts and across worldservers.
-        std::map<std::pair<uint8, uint32>, std::vector<uint32>> _huntsByBucket;
-        uint32 _weekIndex = 0;
-        uint32 _rotationCheckTimer = 0;
-        // prey_hunt_template (WORLD db) present and non-empty.
-        bool _enabled = false;
-        // character_prey_hunt (CHARACTERS db) present. Established once at load against
-        // information_schema and never inferred from _enabled - see LoadFromDB.
-        bool _characterHuntTableReady = false;
+    std::vector<PreyHuntTarget> _targets;
+    std::set<int32> _regularSlots;
+    std::set<int32> _specialSlots;
 };
 
 #define sPreyMgr PreyMgr::instance()

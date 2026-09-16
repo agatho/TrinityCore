@@ -18,32 +18,16 @@
 /* ScriptData
 Name: prey_commandscript
 %Complete: 100
-Comment: TEMPORARY DEBUG/DEV command for the Midnight S1 Prey/Voidforge economy slice.
+Comment: Inspect and redraw the weekly Prey hunt rotation
 Category: commandscripts
 EndScriptData */
-
-//
-// TEMPORARY DEBUG/DEV COMMAND — REMOVE OR RBAC-TIGHTEN WHEN REAL ACTIVATION LANDS.
-//
-// The real hunt-activation trigger (Hunt Table opcode, npc 245824) is CAPTURE-BLOCKED
-// (blueprint §7 ask #1). This command stands in for it so the whole reward/renown chain
-// (GrantJourneyProgress + CompleteHunt) is exercisable in-game on a disposable test DB.
-// It is gated behind RBAC_PERM_COMMAND_DEBUG (GM/dev only) and is a hard no-op unless the
-// Prey system is enabled (prey_hunt_template seeded). See PreyMgr for the grant mechanism.
-//
-//   .prey grant <normal|hard|nightmare>   (aliases: n / h / nm, or 0 / 1 / 2)
-//
 
 #include "ScriptMgr.h"
 #include "Chat.h"
 #include "ChatCommand.h"
-#include "Language.h"
-#include "Player.h"
 #include "PreyMgr.h"
 #include "RBAC.h"
-#include "WorldSession.h"
 #include <algorithm>
-#include <cctype>
 
 using namespace Trinity::ChatCommands;
 
@@ -56,7 +40,8 @@ public:
     {
         static ChatCommandTable preyCommandTable =
         {
-            { "grant", HandlePreyGrantCommand, rbac::RBAC_PERM_COMMAND_DEBUG, Console::No },
+            { "rotation", HandlePreyRotationCommand, rbac::RBAC_PERM_COMMAND_DEBUG, Console::Yes },
+            { "rotate",   HandlePreyRotateCommand,   rbac::RBAC_PERM_COMMAND_DEBUG, Console::Yes },
         };
 
         static ChatCommandTable commandTable =
@@ -66,51 +51,35 @@ public:
         return commandTable;
     }
 
-    // .prey grant <difficulty>  — DEBUG stand-in for the capture-blocked Hunt Table.
-    static bool HandlePreyGrantCommand(ChatHandler* handler, std::string difficultyStr)
+    // .prey rotation - the hunts on the Hunt Table this week, by slot
+    static bool HandlePreyRotationCommand(ChatHandler* handler)
     {
-        Player* target = handler->getSelectedPlayerOrSelf();
-        if (!target)
-        {
-            handler->SendSysMessage(LANG_PLAYER_NOT_FOUND);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
+        std::vector<std::pair<int32, PreyHuntTarget const*>> active;
+        for (PreyHuntTarget const& target : sPreyMgr->GetTargets())
+            if (int32 slot = sPreyMgr->GetSlot(target))
+                active.emplace_back(slot, &target);
 
-        std::string arg = difficultyStr;
-        std::transform(arg.begin(), arg.end(), arg.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+        std::ranges::sort(active, [](auto const& left, auto const& right) { return std::tie(left.first, left.second->WorldStateId) < std::tie(right.first, right.second->WorldStateId); });
 
-        PreyDifficulty difficulty;
-        if (arg == "normal" || arg == "n" || arg == "0")
-            difficulty = PreyDifficulty::Normal;
-        else if (arg == "hard" || arg == "h" || arg == "heroic" || arg == "1")
-            difficulty = PreyDifficulty::Hard;
-        else if (arg == "nightmare" || arg == "nm" || arg == "2")
-            difficulty = PreyDifficulty::Nightmare;
-        else
-        {
-            handler->SendSysMessage("Usage: .prey grant <normal|hard|nightmare>");
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
+        handler->PSendSysMessage("Prey rotation: %u hunt targets known, %u active.", uint32(sPreyMgr->GetTargets().size()), uint32(active.size()));
+        for (auto const& [slot, target] : active)
+            handler->PSendSysMessage("  slot %d: %s (world state %d%s)", slot, target->Name.c_str(), target->WorldStateId, target->IsSpecial ? ", special" : "");
 
-        if (!sPreyMgr->IsEnabled())
-        {
-            handler->SendSysMessage("Prey system is DISABLED (prey_hunt_template absent or empty) - no rewards granted.");
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-
-        // Drive the full chain, same order the real completion wire would:
-        // Journey progress (currency 3387 + faction-2764 renown) then the direct
-        // per-difficulty rewards (Dawncrests, + Nightmare Nebulous Voidcore) and the
-        // weekly-state record. Amounts are PLACEHOLDER (TODO CAPTURE-BLOCKED).
-        sPreyMgr->GrantJourneyProgress(target, difficulty);
-        sPreyMgr->CompleteHunt(target, difficulty);
-
-        handler->PSendSysMessage("[DEBUG] Prey rewards granted to %s at difficulty '%s' (PLACEHOLDER amounts).",
-            target->GetName().c_str(), arg.c_str());
         return true;
+    }
+
+    // .prey rotate - draw a new weekly rotation now
+    static bool HandlePreyRotateCommand(ChatHandler* handler)
+    {
+        if (sPreyMgr->GetTargets().empty())
+        {
+            handler->SendSysMessage("No Prey hunt targets are loaded.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        sPreyMgr->Rotate();
+        return HandlePreyRotationCommand(handler);
     }
 };
 
