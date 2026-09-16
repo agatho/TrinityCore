@@ -113,6 +113,13 @@ public:
     // SAFE SwapItem equip path. 2026-06-17.
     void RunGearBackfill(uint32 now_ms);
 
+    // Bots found wearing unrenderable gear while in combat, awaiting an
+    // out-of-combat moment. Small by construction: only bots that actually have
+    // a bad item AND are mid-fight. Entries are dropped when the bot logs out
+    // (the login hook heals it) or once the heal succeeds.
+    std::unordered_set<uint64> pending_gear_heal_;
+    uint32 last_gear_heal_drain_ms_ = 0;
+
     // Removes equipped items the CLIENT CANNOT DRAW (no ItemModifiedAppearance;
     // see ::Playerbot::IsItemRenderableInSlot) from an online bot. Such an item
     // crashes every client that inspects or renders the bot, so this is keyed on
@@ -120,7 +127,18 @@ public:
     // bot in a full high-ilvl unrenderable set does not. Runs at bot login and
     // for every online bot on each gear-backfill pass. World thread only.
     // Returns true if any slot changed.
+    //
+    // A bot that is IN COMBAT cannot have armor swapped, so it is queued in
+    // pending_gear_heal_ and retried by DrainPendingGearHeals() as soon as it
+    // drops out of combat.
     bool HealUnrenderableGear(Player* p);
+
+    // Retries the bots queued by HealUnrenderableGear() while they were in
+    // combat. Called from OnWorldTick on a short cadence: waiting for the 5-min
+    // backfill pass meant a bot that fights through every pass kept its
+    // client-crashing gear indefinitely (test box, 2026-09-16: 7 online
+    // levellers never healed). World thread only.
+    void DrainPendingGearHeals(uint32 now_ms);
 
     // Failed-JIT corpse reclaim (500/pass). Called from RunHygiene and on
     // a 10-min OnWorldTick cadence while the backlog drains.
