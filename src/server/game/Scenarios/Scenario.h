@@ -93,6 +93,9 @@ class TC_GAME_API Scenario : public CriteriaHandler
         ObjectGuid const& GetGUID() const { return _guid; }
         bool HasPlayer(ObjectGuid const& guid) const { return _players.contains(guid); }
 
+        // CriteriaType::AnyoneTriggerGameEventScenario for an event not sent by a player (a participant is the reference)
+        void TriggerGameEvent(uint32 gameEventId, WorldObject const* source);
+
     protected:
         Map const* _map;
         GuidUnorderedSet _players;

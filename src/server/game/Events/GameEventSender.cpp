@@ -21,6 +21,7 @@
 #include "Map.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "Scenario.h"
 #include "ScriptMgr.h"
 #include "Util.h"
 #include "ZoneScript.h"
@@ -46,6 +47,8 @@ void GameEvents::Trigger(uint32 gameEventId, WorldObject* source, WorldObject* t
 
     if (Player* sourcePlayer = Object::ToPlayer(source))
         TriggerForPlayer(gameEventId, sourcePlayer);
+    else if (Scenario* scenario = refForMapAndZoneScript->GetScenario())
+        scenario->TriggerGameEvent(gameEventId, refForMapAndZoneScript); // "anyone": creatures and gameobjects count too
 
     Map* map = refForMapAndZoneScript->GetMap();
     TriggerForMap(gameEventId, map, source, target);
@@ -62,7 +65,9 @@ void GameEvents::TriggerForPlayer(uint32 gameEventId, Player* source)
 
     source->UpdateCriteria(CriteriaType::PlayerTriggerGameEvent, gameEventId, 0, 0, source);
 
-    if (map->IsScenario())
+    // every scenario the player takes part in, not only those on scenario-type maps (dungeon and open-world scenarios
+    // use these criteria for their objectives as well)
+    if (source->GetScenario())
         source->UpdateCriteria(CriteriaType::AnyoneTriggerGameEventScenario, gameEventId, 0, 0, source);
 }
 
