@@ -311,6 +311,11 @@ void BotPopulationManager::OnWorldTick(uint32 now_ms)
     // from the 1h hygiene so it runs after the fleet logs in, not once at boot).
     RunGearBackfill(now_ms);
 
+    // Retry bots that were wearing client-crashing gear while in combat. Own
+    // (2s) cadence — a levelling bot can be in combat for every 5-min backfill
+    // pass in a row, so this must not ride on that one.
+    DrainPendingGearHeals(now_ms);
+
     // Hygiene every 1h — cleans up stale JIT bots and enforces hard cap.
     const uint32 t_hygiene_start = getMSTime();
     RunHygiene(now_ms);
@@ -534,24 +539,84 @@ static bool FreeOneJunkBagSlot(Player* p)
     return true;
 }
 
+void BotPopulationManager::DrainPendingGearHeals(uint32 now_ms)
+{
+    if (pending_gear_heal_.empty()) return;
+
+    // 2s cadence rather than every frame: the queue only holds bots that are
+    // both badly geared and mid-fight, but a fleet-wide incident could make it
+    // large and this walks it. Two seconds is three orders of magnitude faster
+    // than the 5-min pass this exists to escape, at negligible cost.
+    constexpr uint32 kDrainIntervalMs = 2000;
+    if (last_gear_heal_drain_ms_ && (now_ms - last_gear_heal_drain_ms_) < kDrainIntervalMs)
+        return;
+    last_gear_heal_drain_ms_ = now_ms;
+
+    // Collect first, heal second: HealUnrenderableGear mutates the set, which
+    // would invalidate an iterator held across the call.
+    constexpr size_t kMaxPerDrain = 8;
+    std::vector<uint64> ready;
+    ready.reserve(kMaxPerDrain);
+    for (auto it = pending_gear_heal_.begin(); it != pending_gear_heal_.end(); )
+    {
+        Player* p = ObjectAccessor::FindConnectedPlayer(
+            ObjectGuid::Create<HighGuid::Player>(*it));
+        if (!p || !p->IsInWorld())
+        {
+            // Logged out - Module::OnPlayerLogin heals it on the way back in,
+            // and it cannot be inspected while offline.
+            it = pending_gear_heal_.erase(it);
+            continue;
+        }
+        if (!p->IsInCombat())
+        {
+            ready.push_back(*it);
+            if (ready.size() >= kMaxPerDrain)
+                break;
+        }
+        ++it;
+    }
+
+    for (uint64 id : ready)
+        if (Player* p = ObjectAccessor::FindConnectedPlayer(
+                ObjectGuid::Create<HighGuid::Player>(id)))
+            HealUnrenderableGear(p);
+}
+
 bool BotPopulationManager::HealUnrenderableGear(Player* p)
 {
     if (!p || !p->IsInWorld()) return false;
-    // Armor can't be changed in combat (CanEquipItem / CanUnequipItem refuse
-    // with NOT_IN_COMBAT), and falling through to the destroy branch would then
-    // delete gear that merely could not be swapped yet. Retry next pass.
-    if (p->IsInCombat()) return false;
 
-    // Cheap pre-scan; almost every bot exits here.
+    // Cheap pre-scan; almost every bot exits here. Deliberately BEFORE the
+    // combat check: we have to know whether there is anything to heal in order
+    // to queue a bot that is merely busy, instead of dropping it silently.
     std::array<uint8, EQUIPMENT_SLOT_END> bad_slots{};
     uint8 bad_count = 0;
     for (uint8 s = EQUIPMENT_SLOT_START; s < EQUIPMENT_SLOT_END; ++s)
         if (Item const* it = p->GetItemByPos(INVENTORY_SLOT_BAG_0, s))
             if (!::Playerbot::IsItemRenderableInSlot(it, p, s))
                 bad_slots[bad_count++] = s;
-    if (bad_count == 0) return false;
 
     BotId const id = p->GetGUID().GetCounter();
+    if (bad_count == 0)
+    {
+        pending_gear_heal_.erase(id);
+        return false;
+    }
+
+    // Armor can't be changed in combat (CanEquipItem / CanUnequipItem refuse
+    // with NOT_IN_COMBAT), and falling through to the destroy branch would then
+    // delete gear that merely could not be swapped yet. Queue it instead of
+    // skipping: the old "retry next backfill pass" left a bot that is fighting
+    // whenever the 5-min pass fires wearing a client-crashing item forever
+    // (test box, 2026-09-16: 7 online levellers never healed). The drain below
+    // catches it within seconds of leaving combat.
+    if (p->IsInCombat())
+    {
+        pending_gear_heal_.insert(id);
+        return false;
+    }
+    pending_gear_heal_.erase(id);
     // Altbots (owner-bound) follow the backfill's owner invariant: never put
     // generated gear into an occupied slot and never destroy owner items. They
     // only get the unrenderable piece taken off into their bags.
