@@ -15498,7 +15498,7 @@ bool Player::SatisfyQuestLog(bool msg) const
 {
     // exist free slot
     for (uint32 log_slot = 0; log_slot < MAX_QUEST_LOG_SIZE; ++log_slot)
-        if (!GetQuestSlotQuestId(log_slot))
+        if (!GetQuestSlotQuestId(log_slot) && !m_parkedQuestSlots.test(log_slot))   // parked quests reserve their slot
             return true;
 
     if (msg)
@@ -16771,6 +16771,10 @@ void Player::AreaExploredOrEventHappens(uint32 questId)
     {
         if (QuestStatusData* status = Trinity::Containers::MapGetValuePtr(m_QuestStatus, questId))
         {
+            // parked by Lorewalking, not in the visible quest log
+            if (status->Parked)
+                return;
+
             // Dont complete failed quest
             if (!status->Explored && status->Status != QUEST_STATUS_FAILED)
             {
