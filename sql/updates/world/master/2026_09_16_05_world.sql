@@ -60,7 +60,7 @@ INSERT INTO `smart_scripts` (`entryorguid`,`source_type`,`id`,`link`,`event_type
 (230246,0,0,1,62,36405,0,72,0,0,7,'Li Li Stormstout - On Gossip Option 0 Selected - Close Gossip'),
 (230246,0,1,0,61,0,0,134,463923,0,7,'Li Li Stormstout - Linked - Invoker Cast \'Lorewalking Choice\'');
 
-DELETE FROM `spell_script_names` WHERE `ScriptName` IN ('spell_lorewalking_cast_next','spell_lorewalking_enter_story','spell_lorewalking_enter_story_cast_intro','spell_lorewalking_teleport_to_tirisfal','spell_lorewalking_exit','spell_lorewalking_ask_a_question');
+DELETE FROM `spell_script_names` WHERE `ScriptName` IN ('spell_lorewalking_cast_next','spell_lorewalking_enter_story','spell_lorewalking_enter_story_cast_intro','spell_lorewalking_teleport_to_tirisfal','spell_lorewalking_exit','spell_lorewalking_teleport_to_base_arrival','spell_lorewalking_ask_a_question');
 INSERT INTO `spell_script_names` (`spell_id`,`ScriptName`) VALUES
 (467482,'spell_lorewalking_cast_next'),
 (468532,'spell_lorewalking_cast_next'),
@@ -78,10 +78,11 @@ INSERT INTO `spell_script_names` (`spell_id`,`ScriptName`) VALUES
 (1258361,'spell_lorewalking_enter_story_cast_intro'),
 (463941,'spell_lorewalking_teleport_to_tirisfal'),
 (460937,'spell_lorewalking_exit'),
+(1239378,'spell_lorewalking_teleport_to_base_arrival'),
 (468124,'spell_lorewalking_ask_a_question');
 
 -- Chapter teleports: destinations as captured (SMSG_NEW_WORLD after the transfer, SMSG_MOVE_TELEPORT for same-map moves)
-DELETE FROM `spell_target_position` WHERE `ID` IN (463980,465993,466098,466122,466129,466134,466140,466161,466289,466301,466485,474632,1215651,1215654,1215663,1215666,1215669,1215671,1238159,1238191,1239362,1239784,1259916,1259920,1259924,1260858,1260921,1271889,1275602);
+DELETE FROM `spell_target_position` WHERE `ID` IN (463980,465993,466098,466122,466129,466134,466140,466161,466289,466301,466485,474632,1215651,1215654,1215663,1215666,1215669,1215671,1219292,1238159,1238191,1239362,1239784,1259916,1259920,1259924,1260858,1260921,1271889,1275602);
 INSERT INTO `spell_target_position` (`ID`,`EffectIndex`,`OrderIndex`,`MapID`,`PositionX`,`PositionY`,`PositionZ`,`Orientation`,`VerifiedBuild`) VALUES
 (463980,0,0,2801,-830.08,-41.48,-234.27,6.2106,69497), -- [DNT] Teleport to Nyalotha
 (465993,1,0,530,4254.42,2169.38,137.68,4.2295,69497), -- [DNT] Teleport to Netherstorm
@@ -101,6 +102,7 @@ INSERT INTO `spell_target_position` (`ID`,`EffectIndex`,`OrderIndex`,`MapID`,`Po
 (1215666,0,0,668,5239.46,1932.99,707.695,0.7854,69497), -- Teleport (DNT)
 (1215669,0,0,2819,428.75,-2122.74,864.88,0.0063,69497), -- Teleport (DNT)
 (1215671,0,0,571,3434.63,-1261.32,125.4,3.3278,69497), -- Teleport (DNT)
+(1219292,0,0,595,2369.57,1408.82,128.63,3.2337,69497), -- CoT Stratholme Skip [DNT]
 (1238159,0,0,1643,-173.8,4131.22,123.41,0.2253,69497), -- [DNT] Teleport to Drustvar
 (1238191,0,0,1643,-1521.85,-577.98,68.71,3.1091,69497), -- [DNT] Teleport to Freehold
 (1239362,0,0,0,-8181.26,609.63,73.4,3.9827,69497), -- [DNT] Lorewalking Teleport to Base

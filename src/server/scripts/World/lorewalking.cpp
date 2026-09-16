@@ -39,6 +39,8 @@ enum Spells
 {
     SPELL_EXIT_LOREWALKING_CONVERSATION = 1271818,
     SPELL_TELEPORT_TO_BASE_DUMMY        = 1239389,
+    SPELL_SUMMON_AND_SIT_IN_BENCH       = 466322,
+    SPELL_NO_CHO                        = 467455,
 };
 
 // 845 - Lorewalking Campaigns
@@ -111,6 +113,7 @@ bool EnterStory(Player* player, Story const& story)
     bool resuming = player->HasParkedLorewalkingQuests(story.ID);
 
     player->StartLorewalking(story.ID);
+    player->CastSpell(player, SPELL_SUMMON_AND_SIT_IN_BENCH, TRIGGERED_FULL_MASK);
 
     if (!resuming)
         if (Quest const* quest = sObjectMgr->GetQuestTemplate(story.FirstQuestID))
@@ -229,6 +232,33 @@ class spell_lorewalking_exit : public SpellScript
     }
 };
 
+// 1239378 - [DNT] Lorewalking Teleport to Base (arrival at Li Li's bench)
+class spell_lorewalking_teleport_to_base_arrival : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_NO_CHO, SPELL_SUMMON_AND_SIT_IN_BENCH });
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/)
+    {
+        Player* player = GetHitUnit()->ToPlayer();
+        if (!player)
+            return;
+
+        player->CastSpell(player, SPELL_NO_CHO, GetSpell());
+
+        // still in a story: back on the bench
+        if (player->IsLorewalking())
+            player->CastSpell(player, SPELL_SUMMON_AND_SIT_IN_BENCH, GetSpell());
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_lorewalking_teleport_to_base_arrival::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
 // 468124 - Ask a Question
 class spell_lorewalking_ask_a_question : public SpellScript
 {
@@ -261,5 +291,6 @@ void AddSC_lorewalking()
     RegisterSpellScript(spell_lorewalking_enter_story_cast_intro);
     RegisterSpellScript(spell_lorewalking_teleport_to_tirisfal);
     RegisterSpellScript(spell_lorewalking_exit);
+    RegisterSpellScript(spell_lorewalking_teleport_to_base_arrival);
     RegisterSpellScript(spell_lorewalking_ask_a_question);
 }
