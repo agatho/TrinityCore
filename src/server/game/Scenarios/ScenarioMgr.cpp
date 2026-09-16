@@ -23,6 +23,9 @@
 #include "Map.h"
 #include "MapUtils.h"
 #include "ScenarioPackets.h"
+#include "SpellMgr.h"
+#include "Timer.h"
+#include "WorldScenario.h"
 
 ScenarioMgr::ScenarioMgr() = default;
 ScenarioMgr::~ScenarioMgr() = default;
@@ -66,6 +69,18 @@ InstanceScenario* ScenarioMgr::CreateInstanceScenario(InstanceMap* map, uint32 s
     }
 
     return new InstanceScenario(map, &itr->second);
+}
+
+WorldScenario* ScenarioMgr::CreateWorldScenario(Map* map, uint32 scenarioID, uint32 areaID) const
+{
+    auto itr = _scenarioData.find(scenarioID);
+    if (itr == _scenarioData.end())
+    {
+        TC_LOG_ERROR("scenario", "No scenario data was found related to open-world scenario (Id: {}) for map (Id: {}), area (Id: {}).", scenarioID, map->GetId(), areaID);
+        return nullptr;
+    }
+
+    return new WorldScenario(map, &itr->second, areaID);
 }
 
 void ScenarioMgr::LoadDBData()
@@ -115,6 +130,124 @@ void ScenarioMgr::LoadDBData()
     while (result->NextRow());
 
     TC_LOG_INFO("server.loading", ">> Loaded {} instance scenario entries in {} ms", _scenarioDBData.size(), GetMSTimeDiffToNow(oldMSTime));
+
+    LoadWorldScenarios();
+    LoadScenarioStepSpells();
+}
+
+void ScenarioMgr::LoadWorldScenarios()
+{
+    _worldScenarioData.clear();
+    _worldScenariosByMap.clear();
+
+    uint32 oldMSTime = getMSTime();
+
+    //                                                 0         1       2      3
+    QueryResult result = WorldDatabase.Query("SELECT ScenarioID, MapID, AreaID, Flags FROM scenario_world");
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 open-world scenarios. DB table `scenario_world` is empty!");
+        return;
+    }
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        WorldScenarioData data;
+        data.ScenarioID = fields[0].GetUInt32();
+        data.MapID = fields[1].GetUInt32();
+        data.AreaID = fields[2].GetUInt32();
+        data.Flags = WorldScenarioFlags(fields[3].GetUInt32());
+
+        if (!_scenarioData.contains(data.ScenarioID))
+        {
+            TC_LOG_ERROR("sql.sql", "Table `scenario_world` references non-existing scenario {}, skipped.", data.ScenarioID);
+            continue;
+        }
+
+        MapEntry const* map = sMapStore.LookupEntry(data.MapID);
+        if (!map)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `scenario_world` has scenario {} on non-existing map {}, skipped.", data.ScenarioID, data.MapID);
+            continue;
+        }
+
+        if (map->Instanceable())
+        {
+            TC_LOG_ERROR("sql.sql", "Table `scenario_world` has scenario {} on instanceable map {} - instance scenarios belong in `scenarios`, skipped.", data.ScenarioID, data.MapID);
+            continue;
+        }
+
+        if (!sAreaTableStore.LookupEntry(data.AreaID))
+        {
+            TC_LOG_ERROR("sql.sql", "Table `scenario_world` has scenario {} with non-existing area {}, skipped.", data.ScenarioID, data.AreaID);
+            continue;
+        }
+
+        if (data.Flags.HasFlag(~WorldScenarioFlags::AutoStart))
+        {
+            TC_LOG_ERROR("sql.sql", "Table `scenario_world` has scenario {} with unknown flags {}, removed.", data.ScenarioID, data.Flags.AsUnderlyingType());
+            data.Flags &= WorldScenarioFlags::AutoStart;
+        }
+
+        _worldScenarioData[data.ScenarioID] = data;
+    }
+    while (result->NextRow());
+
+    for (auto const& [scenarioId, data] : _worldScenarioData)
+        _worldScenariosByMap[data.MapID].push_back(&data);
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} open-world scenarios in {} ms", _worldScenarioData.size(), GetMSTimeDiffToNow(oldMSTime));
+}
+
+void ScenarioMgr::LoadScenarioStepSpells()
+{
+    _scenarioStepSpells.clear();
+
+    uint32 oldMSTime = getMSTime();
+
+    //                                                     0          1
+    QueryResult result = WorldDatabase.Query("SELECT ScenarioStepID, SpellID FROM scenario_step_spell ORDER BY ScenarioStepID, Idx");
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 scenario step spells. DB table `scenario_step_spell` is empty!");
+        return;
+    }
+
+    uint32 count = 0;
+    do
+    {
+        Field* fields = result->Fetch();
+
+        uint32 stepId = fields[0].GetUInt32();
+        uint32 spellId = fields[1].GetUInt32();
+
+        if (!sScenarioStepStore.LookupEntry(stepId))
+        {
+            TC_LOG_ERROR("sql.sql", "Table `scenario_step_spell` references non-existing scenario step {}, skipped.", stepId);
+            continue;
+        }
+
+        if (!sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE))
+        {
+            TC_LOG_ERROR("sql.sql", "Table `scenario_step_spell` has non-existing spell {} for scenario step {}, skipped.", spellId, stepId);
+            continue;
+        }
+
+        std::vector<uint32>& spells = _scenarioStepSpells[stepId];
+        if (spells.size() >= SCENARIO_STATE_SPELL_SLOTS)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `scenario_step_spell` has more than {} spells for scenario step {}, spell {} skipped.", SCENARIO_STATE_SPELL_SLOTS, stepId, spellId);
+            continue;
+        }
+
+        spells.push_back(spellId);
+        ++count;
+    }
+    while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} scenario step spells in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
 }
 
 void ScenarioMgr::LoadDB2Data()
@@ -229,4 +362,19 @@ ScenarioPOIVector const* ScenarioMgr::GetScenarioPOIs(int32 criteriaTreeID) cons
         return &itr->second;
 
     return nullptr;
+}
+
+std::vector<uint32> const* ScenarioMgr::GetScenarioStepSpells(uint32 scenarioStepID) const
+{
+    return Trinity::Containers::MapGetValuePtr(_scenarioStepSpells, scenarioStepID);
+}
+
+WorldScenarioData const* ScenarioMgr::GetWorldScenarioData(uint32 scenarioID) const
+{
+    return Trinity::Containers::MapGetValuePtr(_worldScenarioData, scenarioID);
+}
+
+std::vector<WorldScenarioData const*> const* ScenarioMgr::GetWorldScenariosForMap(uint32 mapID) const
+{
+    return Trinity::Containers::MapGetValuePtr(_worldScenariosByMap, mapID);
 }

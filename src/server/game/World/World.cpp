@@ -112,6 +112,7 @@
 #include "Player.h"
 #include "PlayerDump.h"
 #include "PoolMgr.h"
+#include "PreyMgr.h"
 #include "QuestMgr.h"
 #include "QuestPools.h"
 #include "RaidSeasonS1Mgr.h"
@@ -1788,6 +1789,9 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Void Assaults...");                  // Midnight 12.0.5/12.0.7 open-world invasions; must be after WorldStateMgr
     sVoidAssaultMgr->LoadFromDB();
+
+    TC_LOG_INFO("server.loading", "Loading Prey hunt rotation...");
+    sPreyMgr->Initialize();                                    // must be after quest templates and world states
 
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();
@@ -3474,6 +3478,9 @@ void World::ResetWeeklyQuests()
     // Delves: weekly completion / bountiful / coffer-shard counters roll over with the weekly reset
     // (REPORT.md 6.4: ResetAllWeeklyProgress had no caller, so the counters never reset)
     Delves::DelvesRewards::ResetAllWeeklyProgress();
+
+    // new Prey hunt rotation
+    sPreyMgr->OnWeeklyReset();
 
     // Update faction balance
     UpdateWarModeRewardValues();
