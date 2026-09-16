@@ -23,11 +23,8 @@ int32 EffectiveItemLevelForLevel(ItemTemplate const* tpl, uint8 level)
         /*pvpBonus*/ false, /*azeriteLevel*/ 0));
 }
 
-namespace {
-
-// Per-class preferred armor type. Hunter/Shaman switch from leather to mail
-// at L40 - same rule as BotGearGenerator's PreferredArmorForClass.
-ItemSubclassArmor PreferredArmorForClass(uint8 cls, uint8 level)
+// Declared in BotItemScorer.h - see there for why this is level-independent.
+ItemSubclassArmor PreferredArmorForClass(uint8 cls)
 {
     switch (cls)
     {
@@ -37,7 +34,7 @@ ItemSubclassArmor PreferredArmorForClass(uint8 cls, uint8 level)
             return ITEM_SUBCLASS_ARMOR_PLATE;
         case CLASS_HUNTER:
         case CLASS_SHAMAN:
-            return level >= 40 ? ITEM_SUBCLASS_ARMOR_MAIL : ITEM_SUBCLASS_ARMOR_LEATHER;
+            return ITEM_SUBCLASS_ARMOR_MAIL;
         case CLASS_ROGUE:
         case CLASS_DRUID:
         case CLASS_MONK:
@@ -53,6 +50,8 @@ ItemSubclassArmor PreferredArmorForClass(uint8 cls, uint8 level)
             return ITEM_SUBCLASS_ARMOR_CLOTH;
     }
 }
+
+namespace {
 
 // Stat-block scorer. Modern items can carry:
 //   - Static primary (ITEM_MOD_STRENGTH/AGILITY/INTELLECT)
@@ -205,7 +204,7 @@ int32 ScoreItemForClass(ItemTemplate const* tpl,
     if (tpl->GetClass() == ITEM_CLASS_ARMOR)
     {
         ItemSubclassArmor sub = ItemSubclassArmor(tpl->GetSubClass());
-        ItemSubclassArmor preferred = PreferredArmorForClass(cls, level);
+        ItemSubclassArmor preferred = PreferredArmorForClass(cls);
         if (sub == preferred)               score += 200;
         else if (sub == ITEM_SUBCLASS_ARMOR_MISCELLANEOUS) score += 50;
         else if (sub == ITEM_SUBCLASS_ARMOR_COSMETIC)      score += 0;

@@ -37,43 +37,10 @@ constexpr std::array<uint8, 16> kSlots = {
     EQUIPMENT_SLOT_OFFHAND,
 };
 
-// Per-class preferred armor type: the highest tier the class's armor
-// proficiency allows (e.g. Druids wear leather even though they can technically
-// wear cloth).
-//
-// Level-independent. The level-40 proficiency step (plate for Warrior/Paladin,
-// mail for Hunter/Shaman) is Cataclysm-era; since Mists every class holds its
-// final armor skill from level 1. Verified against live character data
-// 2026-09-15: of sub-40 characters, 12330/12426 Warriors hold Plate Mail (293)
-// and 13931/14022 Hunters hold Mail (413).
-// The old Hunter/Shaman step therefore under-armored every L1-39 Hunter and
-// Shaman in leather.
-ItemSubclassArmor PreferredArmorForClass(uint8 cls)
-{
-    switch (cls)
-    {
-        case CLASS_WARRIOR:
-        case CLASS_PALADIN:
-        case CLASS_DEATH_KNIGHT:
-            return ITEM_SUBCLASS_ARMOR_PLATE;
-        case CLASS_HUNTER:
-        case CLASS_SHAMAN:
-            return ITEM_SUBCLASS_ARMOR_MAIL;
-        case CLASS_ROGUE:
-        case CLASS_DRUID:
-        case CLASS_MONK:
-        case CLASS_DEMON_HUNTER:
-            return ITEM_SUBCLASS_ARMOR_LEATHER;
-        case CLASS_PRIEST:
-        case CLASS_MAGE:
-        case CLASS_WARLOCK:
-            return ITEM_SUBCLASS_ARMOR_CLOTH;
-        case CLASS_EVOKER:
-            return ITEM_SUBCLASS_ARMOR_MAIL;
-        default:
-            return ITEM_SUBCLASS_ARMOR_CLOTH;
-    }
-}
+// Preferred armor tier comes from BotItemScorer - ONE definition shared with
+// the scorer that ranks these pools. Keeping a second copy here is what let the
+// two drift apart.
+using ::Playerbot::Gear::PreferredArmorForClass;
 
 // Quick "is armor inventory type"
 bool IsArmorSlot(uint8 slot)

@@ -25,6 +25,7 @@
 #pragma once
 
 #include "Define.h"
+#include "ItemTemplate.h"   // ItemSubclassArmor
 
 struct ItemTemplate;
 class Player;
@@ -53,6 +54,18 @@ int32 ScoreItemForClass(ItemTemplate const* tpl,
 // NOT for the synchronous snapshot-build thread (DB2 curve lookups); use at
 // setup / hygiene / OOC only.
 int32 EffectiveItemLevelForLevel(ItemTemplate const* tpl, uint8 level);
+
+// The armor subclass a class should wear: the highest tier its proficiency
+// allows. THE single definition - the gear generator indexes its candidate
+// pools with it and the scorer ranks with it, and when those two disagreed the
+// generator stocked a pool the scorer then penalised (-100 for "wrong armor"),
+// so sub-40 hunters drew leather out of a mail pool.
+//
+// Level-independent on purpose. The level-40 proficiency step is Cataclysm-era;
+// since Mists every class holds its final armor skill from level 1. Verified
+// against live character data 2026-09-15: of sub-40 characters, 12330/12426
+// warriors hold Plate Mail (293) and 13931/14022 hunters hold Mail (413).
+ItemSubclassArmor PreferredArmorForClass(uint8 cls);
 
 // Returns the primary stat (ITEM_MOD_STRENGTH/AGILITY/INTELLECT) for the
 // (class, spec) pair. Hybrid classes (Druid/Monk/Pally/Sham) have spec-
