@@ -6464,6 +6464,13 @@ void Player::SetChromieTime(int32 expansionId)
 
     SetChromieTimeConditionalFlags(expansionId > 0);
 
+    // Chromie Time changes only on select, deselect and at the deactivation level, so it is persisted right away with its
+    // own statement instead of waiting for the next character save.
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_CHROMIE_TIME);
+    stmt->setUInt8(0, uint8(std::max(expansionId, 0)));
+    stmt->setUInt64(1, GetGUID().GetCounter());
+    CharacterDatabase.Execute(stmt);
+
     // Retail keeps FactionGroup populated from the player's faction independent of chromie
     // state and never resets it on deselect (capture A rec 2149: fg 0->3 with mask 0 before
     // any chromie interaction; equivalents B 2229 / C 1462). Alliance = 3 (Player|Alliance)
@@ -18266,6 +18273,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             personalTabardBackgroundColor = fields[i++].GetInt32();
             transmogOutfitEquippedId = fields[i++].GetInt32();
             transmogOutfitLocked = fields[i++].GetBool();
+            chromieTimeExpansionId = fields[i++].GetUInt8();
+            timerunningSeasonId = fields[i++].GetUInt32();
         }
 
     } fields(result->Fetch());
