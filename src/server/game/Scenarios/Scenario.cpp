@@ -125,6 +125,19 @@ void Scenario::SetStep(ScenarioStepEntry const* step)
     });
 }
 
+void Scenario::TriggerGameEvent(uint32 gameEventId, WorldObject const* source)
+{
+    for (ObjectGuid const& guid : _players)
+    {
+        Player* player = ObjectAccessor::GetPlayer(_map, guid);
+        if (!player || player->IsGameMaster())
+            continue;
+
+        UpdateCriteria(CriteriaType::AnyoneTriggerGameEventScenario, gameEventId, 0, 0, source, player);
+        return;
+    }
+}
+
 void Scenario::OnPlayerEnter(Player* player)
 {
     _players.insert(player->GetGUID());
