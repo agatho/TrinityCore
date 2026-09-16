@@ -119,8 +119,10 @@ enum ConditionTypes
     CONDITION_PRIVATE_OBJECT           = 57,                   // 0                      0              0                  true if entity is private object
     CONDITION_STRING_ID                = 58,
     CONDITION_LABEL                    = 59,                   // Label                  0              0                  true if creature/gameobject has specified Label in CreatureLabel.db2/GameObjectLabel.db2
-    CONDITION_GROUP_STATUS             = 60,
-    CONDITION_CHROMIE_TIME             = 61,                   // expansionId (UiChromieTimeExpansionInfo id; 0 = any)                   // GroupStatus            0              0                  true if player group status is (0 = not in group, 1 = in group, 2 = in group but not in raid, 3 = in raid group, 4 = not in group or not in raid)
+    // 60 is Chromie Time in this fork (all Chromie Time SQL encodes 60); upstream's CONDITION_GROUP_STATUS moved to 61 and
+    // sql/updates/world/master/2026_09_16_04_world.sql renumbers upstream's group status rows accordingly.
+    CONDITION_CHROMIE_TIME             = 60,                   // ChromieTime            0              0                  true if player is in the given Chromie Time (UiChromieTimeExpansionInfo id; 0 = any)
+    CONDITION_GROUP_STATUS             = 61,                   // GroupStatus            0              0                  true if player group status is (0 = not in group, 1 = in group, 2 = in group but not in raid, 3 = in raid group, 4 = not in group or not in raid)
     CONDITION_MAX
 };
 

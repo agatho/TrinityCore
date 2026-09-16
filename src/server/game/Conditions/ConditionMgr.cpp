@@ -161,6 +161,7 @@ ConditionMgr::ConditionTypeInfo const ConditionMgr::StaticConditionTypeData[COND
     { .Name = "Private Object",            .HasConditionValue1 = false, .HasConditionValue2 = false, .HasConditionValue3 = false, .HasConditionStringValue1 = false },
     { .Name = "String ID",                 .HasConditionValue1 = false, .HasConditionValue2 = false, .HasConditionValue3 = false, .HasConditionStringValue1 =  true },
     { .Name = "Label",                     .HasConditionValue1 =  true, .HasConditionValue2 = false, .HasConditionValue3 = false, .HasConditionStringValue1 = false },
+    { .Name = "Chromie Time",              .HasConditionValue1 =  true, .HasConditionValue2 = false, .HasConditionValue3 = false, .HasConditionStringValue1 = false },
     { .Name = "Group status",              .HasConditionValue1 =  true, .HasConditionValue2 = false, .HasConditionValue3 = false, .HasConditionStringValue1 = false }
 };
 
@@ -700,6 +701,15 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo) const
                 condMeets = go->HasLabel(ConditionValue1);
             break;
         }
+        case CONDITION_CHROMIE_TIME:
+        {
+            if (Player const* player = object->ToPlayer())
+            {
+                int32 chromieTime = player->m_activePlayerData->UiChromieTimeExpansionID;
+                condMeets = ConditionValue1 ? chromieTime == int32(ConditionValue1) : chromieTime != 0;
+            }
+            break;
+        }
         case CONDITION_GROUP_STATUS:
         {
             if (Player const* player = object->ToPlayer())
@@ -927,6 +937,7 @@ uint32 Condition::GetSearcherTypeMaskForCondition() const
         case CONDITION_LABEL:
             mask |= GRID_MAP_TYPE_MASK_CREATURE | GRID_MAP_TYPE_MASK_GAMEOBJECT;
             break;
+        case CONDITION_CHROMIE_TIME:
         case CONDITION_GROUP_STATUS:
             mask |= GRID_MAP_TYPE_MASK_PLAYER;
             break;
