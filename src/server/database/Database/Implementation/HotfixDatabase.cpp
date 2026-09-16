@@ -2307,6 +2307,14 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PREPARE_LOCALE_STMT(HOTFIX_SEL_UI_ARROW_CALLOUT, "SELECT ID, CalloutText_lang FROM ui_arrow_callout_locale"
         " WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
 
+    // UIChromieTimeExpansionInfo.db2
+    PrepareStatement(HOTFIX_SEL_UI_CHROMIE_TIME_EXPANSION_INFO, "SELECT ID, Name, Description, AllianceOverrideDesc, HordeOverrideDesc, "
+        "SpellID, MapAtlasElement, PreviewAtlasElement, ShowPlayerConditionID, ExpansionMask, ContentTuningID, CompletedPlayerConditionID, "
+        "SortPriority, RecommendPlayerConditionID FROM ui_chromie_time_expansion_info WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_UI_CHROMIE_TIME_EXPANSION_INFO, "SELECT MAX(ID) + 1 FROM ui_chromie_time_expansion_info", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_UI_CHROMIE_TIME_EXPANSION_INFO, "SELECT ID, Name_lang, Description_lang, AllianceOverrideDesc_lang, "
+        "HordeOverrideDesc_lang FROM ui_chromie_time_expansion_info_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
     // UIEventToast.db2
     PrepareStatement(HOTFIX_SEL_UI_EVENT_TOAST, "SELECT Title, Subtitle, InstructionText, SubIcon, TitleTooltip, SubtitleTooltip, ID, "
         "PlayerConditionID, UiTextureAtlasMemberID, UiTextureKitID, EventType, DisplayType, EventAsset, Field_9_1_0_38312_011, IconFileID, "

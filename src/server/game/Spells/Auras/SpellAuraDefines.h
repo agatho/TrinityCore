@@ -594,7 +594,7 @@ enum AuraType : uint32
     SPELL_AURA_MOD_DAMAGE_TAKEN_BY_LABEL                    = 507,
     SPELL_AURA_508                                          = 508,
     SPELL_AURA_509                                          = 509,
-    SPELL_AURA_MODIFIED_RAID_INSTANCE                       = 510, // NYI; Related to "Fated" raid affixes
+    SPELL_AURA_SET_CTR_CONDITIONAL_FLAG                     = 510, // MiscValue = bit of CTROptions::ConditionalFlags (ConditionalContentTuning.db2 RedirectEnum): 3 Fated/Awakened raid, 10 Dreamsurge, 11 world tier, 12/30 Remix, 13 Lorewalking and RPE, 32 Catching Up
     SPELL_AURA_APPLY_PROFESSION_EFFECT                      = 511, // NYI; MiscValue[0] = ProfessionEffectID
     SPELL_AURA_512                                          = 512,
     SPELL_AURA_MOD_ADV_FLYING_AIR_FRICTION                  = 513,

@@ -6248,10 +6248,8 @@ void Spell::EffectSetChromieTime()
     // MiscValue is a UiChromieTimeExpansionInfo record id (row SpellIDs 325400..452212 map
     // 1:1 to rows); validate like the CMSG select path. 0 clears. No sniff shows
     // spell-driven toggles - semantics inferred from the effect/DB2 pairing (audit R9/i2).
-    // The UiChromieTimeExpansionInfo DB2 store is not present in this build, so accept any
-    // non-negative id (0 clears) rather than validating against the store.
     int32 expansionId = effectInfo->MiscValue;
-    if (expansionId < 0)
+    if (expansionId != 0 && !sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId)))
         return;
 
     target->SetChromieTime(expansionId);

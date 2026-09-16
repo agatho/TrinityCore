@@ -41,6 +41,7 @@
 DB2Storage<AccountStoreCategoryEntry>           sAccountStoreCategoryStore("AccountStoreCategory.db2", &AccountStoreCategoryLoadInfo::Instance);
 DB2Storage<AccountStoreItemEntry>               sAccountStoreItemStore("AccountStoreItem.db2", &AccountStoreItemLoadInfo::Instance);
 DB2Storage<AchievementEntry>                    sAchievementStore("Achievement.db2", &AchievementLoadInfo::Instance);
+DB2Storage<UIChromieTimeExpansionInfoEntry>     sUIChromieTimeExpansionInfoStore("UIChromieTimeExpansionInfo.db2", &UIChromieTimeExpansionInfoLoadInfo::Instance);
 DB2Storage<UiTextureKitEntry>                   sUiTextureKitStore("UiTextureKit.db2", &UiTextureKitLoadInfo::Instance);
 DB2Storage<RenownRewardsEntry>                  sRenownRewardsStore("RenownRewards.db2", &RenownRewardsLoadInfo::Instance);
 DB2Storage<CovenantEntry>                       sCovenantStore("Covenant.db2", &CovenantLoadInfo::Instance);
@@ -851,6 +852,7 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sAccountStoreCategoryStore);
     LOAD_DB2(sAccountStoreItemStore);
     LOAD_DB2(sAchievementStore);
+    LOAD_DB2(sUIChromieTimeExpansionInfoStore);
     LOAD_DB2(sUiTextureKitStore);
     LOAD_DB2(sRenownRewardsStore);
     LOAD_DB2(sCovenantStore);

@@ -6870,32 +6870,25 @@ void Player::SetChromieTime(int32 expansionId)
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
         .ModifyValue(&UF::ActivePlayerData::UiChromieTimeExpansionID), expansionId);
 
-    // ChromieTimeExpansionMask comes from the UIChromieTimeExpansionInfo.db2 ExpansionMask field, not
-    // 1 << id. That DB2 is not present in this tree (its store does not exist in TC/upstream), so the
-    // mask is resolved from the sniff-authoritative values captured for 12.1 (ChromieOrgrimmar 69382):
-    // Cata(5)=0x9, TBC(6)=0x2, WotLK(7)=0x4, MoP(8)=0x10, WoD(9)=0x20, Legion(10)=0x40, SL(14)=0x100,
-    // BfA(15)=0x80, DF(16)=0x200. The client filters available content by this mask, so it must be
-    // correct on the wire (SendCtrOptions -> SMSG_SET_CTR_OPTIONS). expansionId is UIChromieTimeExpansionInfo.ID.
+    // ChromieTimeExpansionMask comes from the DB2 entry's ExpansionMask, not 1 << id.
+    // Confirmed via 12.0.5 sniff: Pandaria (id=8) -> mask 0x10, Legion (id=10) -> mask 0x40.
     uint32 expansionMask = 0;
-    switch (expansionId)
-    {
-        case  5: expansionMask = 0x009; break; // Cataclysm
-        case  6: expansionMask = 0x002; break; // The Burning Crusade
-        case  7: expansionMask = 0x004; break; // Wrath of the Lich King
-        case  8: expansionMask = 0x010; break; // Mists of Pandaria
-        case  9: expansionMask = 0x020; break; // Warlords of Draenor
-        case 10: expansionMask = 0x040; break; // Legion
-        case 14: expansionMask = 0x100; break; // Shadowlands
-        case 15: expansionMask = 0x080; break; // Battle for Azeroth
-        case 16: expansionMask = 0x200; break; // Dragonflight
-        default: expansionMask = 0;     break; // 0 = present, or an unknown id -> no timeline mask
-    }
+    if (expansionId > 0)
+        if (UIChromieTimeExpansionInfoEntry const* entry = sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId)))
+            expansionMask = uint32(entry->ExpansionMask);
 
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
         .ModifyValue(&UF::PlayerData::CtrOptions)
         .ModifyValue(&UF::CTROptions::ChromieTimeExpansionMask), expansionMask);
 
     SetChromieTimeConditionalFlags(expansionId > 0);
+
+    // Chromie Time changes only on select, deselect and at the deactivation level, so it is persisted right away with its
+    // own statement instead of waiting for the next character save.
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHARACTER_CHROMIE_TIME);
+    stmt->setUInt8(0, uint8(std::max(expansionId, 0)));
+    stmt->setUInt64(1, GetGUID().GetCounter());
+    CharacterDatabase.Execute(stmt);
 
     // Retail keeps FactionGroup populated from the player's faction independent of chromie
     // state and never resets it on deselect (capture A rec 2149: fg 0->3 with mask 0 before
@@ -6944,6 +6937,47 @@ void Player::SetTimerunningSeasonID(uint32 seasonId, bool saveToDb /*= false*/)
         stmt->setUInt64(1, GetGUID().GetCounter());
         CharacterDatabase.Execute(stmt);
     }
+}
+
+void Player::SetCtrConditionalFlag(uint32 flag, bool enabled)
+{
+    std::vector<uint32> conditionalFlags(m_playerData->CtrOptions->ConditionalFlags.begin(),
+        m_playerData->CtrOptions->ConditionalFlags.end());
+
+    uint32 block = flag / 32;
+    uint32 mask = 1u << (flag % 32);
+    if (conditionalFlags.size() <= block)
+    {
+        if (!enabled)
+            return;
+
+        conditionalFlags.resize(block + 1, 0);
+    }
+
+    if (bool(conditionalFlags[block] & mask) == enabled)
+        return;
+
+    WorldPackets::Misc::CTROptionsBlock previous;
+    previous.ConditionalFlags.assign(m_playerData->CtrOptions->ConditionalFlags.begin(),
+        m_playerData->CtrOptions->ConditionalFlags.end());
+    previous.FactionGroup = m_playerData->CtrOptions->FactionGroup;
+    previous.ChromieTimeExpansionMask = m_playerData->CtrOptions->ChromieTimeExpansionMask;
+
+    if (enabled)
+        conditionalFlags[block] |= mask;
+    else
+        conditionalFlags[block] &= ~mask;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
+        .ModifyValue(&UF::PlayerData::CtrOptions)
+        .ModifyValue(&UF::CTROptions::ConditionalFlags), std::move(conditionalFlags));
+
+    // auras are also applied while the character loads and removed while it logs out
+    if (!IsInWorld())
+        return;
+
+    SendCtrOptions(&previous);
+    PhasingHandler::OnConditionChange(this);
 }
 
 void Player::SendCtrOptions(WorldPackets::Misc::CTROptionsBlock const* previous /*= nullptr*/) const
@@ -19582,6 +19616,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         int32 personalTabardBackgroundColor;
         int32 transmogOutfitEquippedId;
         bool transmogOutfitLocked;
+        uint8 chromieTimeExpansionId;
+        uint32 timerunningSeasonId;
 
         explicit PlayerLoadData(Field const* fields)
         {
@@ -19665,6 +19701,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             personalTabardBackgroundColor = fields[i++].GetInt32();
             transmogOutfitEquippedId = fields[i++].GetInt32();
             transmogOutfitLocked = fields[i++].GetBool();
+            chromieTimeExpansionId = fields[i++].GetUInt8();
+            timerunningSeasonId = fields[i++].GetUInt32();
         }
 
     } fields(result->Fetch());
@@ -19796,6 +19834,31 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     //Other way is to saves m_team into characters table.
     SetFactionForRace(GetRace());
 
+    // Restore Chromie Time state from DB. A character at or above the deactivation level
+    // restores nothing: the update fields stay zeroed and the next save persists 0, so a
+    // stale DB value (e.g. written before a level-up cleared the state) cannot resurrect
+    // chromie time on login (audit R8/m3, SRV CHR-4; band per audit R10).
+    if (fields.chromieTimeExpansionId > 0 && GetLevel() < ChromieTimeDeactivationLevel)
+    {
+        if (UIChromieTimeExpansionInfoEntry const* entry = sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(fields.chromieTimeExpansionId)))
+        {
+            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+                .ModifyValue(&UF::ActivePlayerData::UiChromieTimeExpansionID),
+                int32(fields.chromieTimeExpansionId));
+
+            SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
+                .ModifyValue(&UF::PlayerData::CtrOptions)
+                .ModifyValue(&UF::CTROptions::ChromieTimeExpansionMask),
+                uint32(entry->ExpansionMask));
+
+            SetChromieTimeConditionalFlags(true);
+        }
+    }
+
+    if (fields.timerunningSeasonId)
+        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+            .ModifyValue(&UF::ActivePlayerData::TimerunningSeasonID),
+            int32(fields.timerunningSeasonId));
 
     // Always set FactionGroup on CtrOptions (needed for party sync and content tuning)
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
