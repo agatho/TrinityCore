@@ -471,6 +471,7 @@ static bool EnsureShieldTankWeapon(Player* p)
     Gear::GearGenerationContext ctx;
     ctx.level  = p->GetLevel();
     ctx.cls    = p->GetClass();
+    ctx.race   = p->GetRace();
     ctx.spec   = uint16(spec);
     ctx.bot_id = p->GetGUID().GetCounter();
     uint32 oneh_entry = 0, shield_entry = 0;
@@ -629,6 +630,7 @@ bool BotPopulationManager::HealUnrenderableGear(Player* p)
         Gear::GearGenerationContext ctx;
         ctx.level  = p->GetLevel();
         ctx.cls    = p->GetClass();
+        ctx.race   = p->GetRace();
         ctx.spec   = uint16(AsUnderlyingType(p->GetPrimarySpecialization()));
         ctx.bot_id = id;
         // The generator never returns an unrenderable item (index-time gate).
@@ -918,6 +920,7 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
         Gear::GearGenerationContext ctx;
         ctx.level  = lvl;
         ctx.cls    = p->GetClass();
+        ctx.race   = p->GetRace();
         ctx.spec   = uint16(AsUnderlyingType(p->GetPrimarySpecialization()));
         ctx.bot_id = id;
         uint32 swapped = 0;

@@ -313,6 +313,7 @@ bool BotSetupPipeline::DoGenerateGear(Player* bot)
     Gear::GearGenerationContext ctx;
     ctx.level  = bot->GetLevel();
     ctx.cls    = bot->GetClass();
+    ctx.race   = bot->GetRace();
     ctx.spec   = uint16(AsUnderlyingType(bot->GetPrimarySpecialization()));
     ctx.bot_id = bot->GetGUID().GetCounter();
 
