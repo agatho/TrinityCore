@@ -82,6 +82,7 @@
 #include "Player.h"
 #include "PlayerDump.h"
 #include "PoolMgr.h"
+#include "PreyMgr.h"
 #include "QuestMgr.h"
 #include "QuestPools.h"
 #include "RealmList.h"
@@ -1614,6 +1615,9 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading World State templates...");
     WorldStateMgr::LoadFromDB();                               // must be loaded before battleground, outdoor PvP, game events and conditions
 
+    TC_LOG_INFO("server.loading", "Loading Prey hunt rotation...");
+    sPreyMgr->Initialize();                                    // must be after quest templates and world states
+
     TC_LOG_INFO("server.loading", "Loading Game Event Data...");               // must be after loading pools fully
     sGameEventMgr->LoadFromDB();
 
@@ -3112,6 +3116,9 @@ void World::ResetWeeklyQuests()
 
     // reselect pools
     sQuestPoolMgr->ChangeWeeklyQuests();
+
+    // new Prey hunt rotation
+    sPreyMgr->OnWeeklyReset();
 
     // Update faction balance
     UpdateWarModeRewardValues();
