@@ -921,23 +921,44 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
         ctx.spec   = uint16(AsUnderlyingType(p->GetPrimarySpecialization()));
         ctx.bot_id = id;
         uint32 swapped = 0;
+        // Why the slot we actually care about was refused. The parked message
+        // used to name three possible causes at once ("bags full / every slot's
+        // CanEquipItem refused: proficiency/level/unique"), which is unusable:
+        // on the live fleet 87 of 160 re-gear attempts parked and neither we nor
+        // the operator could tell which cause fired, or even whether a pick had
+        // been generated for the slot at all.
+        char const* worst_slot_reason = "no pick generated for this slot";
+        uint32 worst_slot_pick = 0;
         for (auto const& g : Gear::GenerateGearFor(ctx))
         {
+            bool const is_worst = slot_outlier && g.slot == worst_slot;
+            if (is_worst) { worst_slot_reason = "reached equip"; worst_slot_pick = g.item_entry; }
             const bool is_weapon = (g.slot == EQUIPMENT_SLOT_MAINHAND ||
                                     g.slot == EQUIPMENT_SLOT_OFFHAND);
             if (!is_weapon && !armor_ok)
+            {
+                if (is_worst) worst_slot_reason = "altbot: armor slots not touched";
                 continue;   // altbot: weapon-only
+            }
 
             Item const* cur = p->GetItemByPos(INVENTORY_SLOT_BAG_0, g.slot);
             // Altbots NEVER have an occupied slot replaced (legacy invariant:
             // owner alts only ever got an EMPTY weapon filled, never a swap).
             if (is_altbot && cur)
+            {
+                if (is_worst) worst_slot_reason = "altbot: occupied slot never replaced";
                 continue;
+            }
             // Entry-equality guard: never re-store the item already worn
             // (the generator is deterministic — without this the pass would
             // re-buy the same piece forever -> unbounded bag growth).
             if (cur && cur->GetEntry() == g.item_entry)
+            {
+                // The generator re-picked what is already worn. For an outlier
+                // slot that means the pool genuinely holds nothing better.
+                if (is_worst) worst_slot_reason = "generator re-picked the worn item";
                 continue;
+            }
             ItemTemplate const* gtpl = sObjectMgr->GetItemTemplate(g.item_entry);
             int32 gen_eff = gtpl ? ::Playerbot::Gear::EffectiveItemLevelForLevel(gtpl, lvl) : -1;
             int32 cur_eff = cur ? int32(cur->GetItemLevel(p)) : -1;
@@ -959,9 +980,15 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
                 // gear" signal; never downgrade across it.
                 if (gtpl && cur->GetTemplate() &&
                     cur->GetTemplate()->GetQuality() >= gtpl->GetQuality())
+                {
+                    if (is_worst) worst_slot_reason = "quality guard: worn item is same or better quality";
                     continue;   // never downgrade across quality (real loot > generated)
+                }
                 if (gen_eff <= cur_eff)
+                {
+                    if (is_worst) worst_slot_reason = "not a strict effective-ilvl upgrade";
                     continue;   // generated piece is not a strict effective-ilvl upgrade
+                }
             }
             ItemPosCountVec dest;
             bool staged = (p->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, g.item_entry, 1) == EQUIP_ERR_OK);
@@ -1000,6 +1027,14 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
                             ++swapped;
                             continue;
                         }
+                        if (is_worst) worst_slot_reason = "bags full, direct EquipNewItem returned null";
+                    }
+                    else if (is_worst)
+                    {
+                        static thread_local std::string s_reason;
+                        s_reason = "bags full, direct-equip refused: CanEquipNewItem="
+                                 + std::to_string(uint32(dmsg));
+                        worst_slot_reason = s_reason.c_str();
                     }
                 }
                 continue;   // bags full and direct-equip not possible — skip slot
@@ -1018,6 +1053,13 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
                 p->SwapItem(src, dst);
                 p->AutoUnequipOffhandIfNeed();
                 ++swapped;
+            }
+            else if (is_worst)
+            {
+                static thread_local std::string s_reason;
+                s_reason = "staged to bags but CanEquipItem refused: err="
+                         + std::to_string(uint32(equip_err));
+                worst_slot_reason = s_reason.c_str();
             }
             // CanEquipItem refused (proficiency/level/unique): leave the one
             // stored item in bags for State_Idle auto_equip's throttled
@@ -1039,10 +1081,15 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
             // hogging the processed-cap; its normal vendor/equip behavior may
             // free bags or equip the bagged items before the next attempt.
             TC_LOG_INFO("playerbot.v2",
-                "[GearBackfill] {} L{} under-geared but 0 swaps this pass "
-                "(bags full / every slot's CanEquipItem refused: proficiency/level/unique) "
-                "- parked 30min",
-                p->GetName(), uint32(lvl));
+                "[GearBackfill] {} L{} under-geared but 0 swaps this pass - parked 30min"
+                "{}",
+                p->GetName(), uint32(lvl),
+                slot_outlier
+                    ? Trinity::StringFormat(" | worst slot {} (worn ilvl {}): pick {} -> {}",
+                          uint32(worst_slot),
+                          worst_eff == std::numeric_limits<uint32>::max() ? 0u : worst_eff,
+                          worst_slot_pick, worst_slot_reason)
+                    : std::string());
             gear_backfill_skip_until_[id] = now_ms + 30u * 60u * 1000u;
         }
     });
