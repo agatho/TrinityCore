@@ -347,6 +347,16 @@ std::vector<GearItem> GenerateGearFor(GearGenerationContext const& ctx)
 
     out.reserve(kSlots.size());
     uint32 slot_idx = 0;
+    // FINGER2/TRINKET2 draw from FINGER1/TRINKET1's pool and score it with the
+    // same weights, so left to itself the generator picks the IDENTICAL entry
+    // for both. That is fine for a plain ring and fatal for a unique-equipped
+    // one: Player::CanEquipItem refuses the second with
+    // EQUIP_ERR_ITEM_UNIQUE_EQUIPPABLE and the slot is left EMPTY. Most
+    // trinkets and many rings carry that flag. Measured across 2461 warriors on
+    // the live fleet before this fix: finger1 1067 filled -> finger2 790,
+    // trinket1 698 -> trinket2 551.
+    ItemTemplate const* picked_finger1 = nullptr;
+    ItemTemplate const* picked_trinket1 = nullptr;
     for (uint8 slot : kSlots)
     {
         // Pick from pool slot.
@@ -367,9 +377,18 @@ std::vector<GearItem> GenerateGearFor(GearGenerationContext const& ctx)
         ItemTemplate const* best = nullptr;
         int32 best_score = std::numeric_limits<int32>::min();
         int32 const target = int32(target_ilvl);
+        // The entry already chosen for the paired slot, if any.
+        ItemTemplate const* twin = (slot == EQUIPMENT_SLOT_FINGER2)  ? picked_finger1
+                                 : (slot == EQUIPMENT_SLOT_TRINKET2) ? picked_trinket1
+                                 : nullptr;
+
         for (auto const* tpl : candidates)
         {
             if (tpl->GetBaseRequiredLevel() > ctx.level) continue;
+            // Never hand the paired slot the same entry: prefer the next-best
+            // distinct item. A fallback below restores the duplicate when it is
+            // legal and nothing else qualifies.
+            if (twin && tpl->GetId() == twin->GetId()) continue;
             // Shield-tank mainhand: never a 2H (see shield_tank note above).
             if (shield_tank && slot == EQUIPMENT_SLOT_MAINHAND &&
                 tpl->GetInventoryType() == INVTYPE_2HWEAPON)
@@ -395,14 +414,21 @@ std::vector<GearItem> GenerateGearFor(GearGenerationContext const& ctx)
             if (combined > best_score) { best_score = combined; best = tpl; }
         }
 
+        // Nothing distinct qualified. A matching pair is still better than an
+        // empty slot, but only when the item may actually be worn twice - for a
+        // unique-equipped piece the second equip would be refused and we would
+        // have produced a pick that can never land.
+        if (!best && twin && !twin->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE))
+            best = twin;
+
         if (best)
+        {
             out.push_back({slot, best->GetId()});
+            if (slot == EQUIPMENT_SLOT_FINGER1)  picked_finger1 = best;
+            if (slot == EQUIPMENT_SLOT_TRINKET1) picked_trinket1 = best;
+        }
         ++slot_idx;
     }
-
-    // Deterministic shuffle of choice for FINGER2/TRINKET2 — pick a different
-    // item than FINGER1/TRINKET1 if multiple candidates exist. Skip for now
-    // (acceptable to wear matching pairs).
 
     return out;
 }
