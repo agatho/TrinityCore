@@ -442,7 +442,7 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectSetPlayerDataFlagAccount,                 //337 SPELL_EFFECT_SET_PLAYER_DATA_FLAG_ACCOUNT
     &Spell::EffectSetPlayerDataFlagCharacter,               //338 SPELL_EFFECT_SET_PLAYER_DATA_FLAG_CHARACTER
     &Spell::EffectNULL,                                     //339 SPELL_EFFECT_UI_ACTION
-    &Spell::EffectNULL,                                     //340 SPELL_EFFECT_340
+    &Spell::EffectCastSpellAfterTeleport,                   //340 SPELL_EFFECT_CAST_SPELL_AFTER_TELEPORT
     &Spell::EffectLearnWarbandScene,                        //341 SPELL_EFFECT_LEARN_WARBAND_SCENE
     &Spell::EffectNULL,                                     //342 SPELL_EFFECT_342
     &Spell::EffectNULL,                                     //343 SPELL_EFFECT_343
@@ -6187,6 +6187,20 @@ void Spell::EffectLearnAzeriteEssencePower()
     azeriteItem->SetState(ITEM_CHANGED, playerTarget);
 }
 
+// Retail 12.1 (Lorewalking chapter entry 463941, capture 69497): the spell queues the player into an instance; the
+// TriggerSpell of every effect 340 is cast by the player on arrival, right after the world port, in effect order.
+void Spell::EffectCastSpellAfterTeleport()
+{
+    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
+        return;
+
+    Player* player = unitTarget ? unitTarget->ToPlayer() : nullptr;
+    if (!player || !effectInfo->TriggerSpell)
+        return;
+
+    player->AddSpellToCastAfterTeleport(effectInfo->TriggerSpell);
+}
+
 void Spell::EffectCreatePrivateConversation()
 {
     if (effectHandleMode != SPELL_EFFECT_HANDLE_LAUNCH_TARGET)
@@ -6256,10 +6270,8 @@ void Spell::EffectSetChromieTime()
     // MiscValue is a UiChromieTimeExpansionInfo record id (row SpellIDs 325400..452212 map
     // 1:1 to rows); validate like the CMSG select path. 0 clears. No sniff shows
     // spell-driven toggles - semantics inferred from the effect/DB2 pairing (audit R9/i2).
-    // The UiChromieTimeExpansionInfo DB2 store is not present in this build, so accept any
-    // non-negative id (0 clears) rather than validating against the store.
     int32 expansionId = effectInfo->MiscValue;
-    if (expansionId < 0)
+    if (expansionId != 0 && !sUIChromieTimeExpansionInfoStore.LookupEntry(uint32(expansionId)))
         return;
 
     target->SetChromieTime(expansionId);

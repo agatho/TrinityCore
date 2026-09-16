@@ -1683,7 +1683,7 @@ enum SpellEffects
     SPELL_EFFECT_SET_PLAYER_DATA_FLAG_ACCOUNT       = 337, // MiscValue[0] = PlayerDataFlagAccount
     SPELL_EFFECT_SET_PLAYER_DATA_FLAG_CHARACTER     = 338, // MiscValue[0] = PlayerDataFlagCharacter
     SPELL_EFFECT_UI_ACTION                          = 339,
-    SPELL_EFFECT_340                                = 340,
+    SPELL_EFFECT_CAST_SPELL_AFTER_TELEPORT          = 340, // TriggerSpell is cast on the target when its next teleport completes
     SPELL_EFFECT_LEARN_WARBAND_SCENE                = 341,
     SPELL_EFFECT_342                                = 342,
     SPELL_EFFECT_343                                = 343,

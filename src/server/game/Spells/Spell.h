@@ -448,6 +448,7 @@ class TC_GAME_API Spell
         void EffectRespecAzeriteEmpoweredItem();
         void EffectLearnAzeriteEssencePower();
         void EffectCreatePrivateConversation();
+        void EffectCastSpellAfterTeleport();
         void EffectApplyMountEquipment();
         void EffectSkipCampaign();
         void EffectSetChromieTime();
