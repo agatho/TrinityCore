@@ -6502,6 +6502,47 @@ void Player::SetTimerunningSeasonID(uint32 seasonId)
         .ModifyValue(&UF::ActivePlayerData::TimerunningSeasonID), int32(seasonId));
 }
 
+void Player::SetCtrConditionalFlag(uint32 flag, bool enabled)
+{
+    std::vector<uint32> conditionalFlags(m_playerData->CtrOptions->ConditionalFlags.begin(),
+        m_playerData->CtrOptions->ConditionalFlags.end());
+
+    uint32 block = flag / 32;
+    uint32 mask = 1u << (flag % 32);
+    if (conditionalFlags.size() <= block)
+    {
+        if (!enabled)
+            return;
+
+        conditionalFlags.resize(block + 1, 0);
+    }
+
+    if (bool(conditionalFlags[block] & mask) == enabled)
+        return;
+
+    WorldPackets::Misc::CTROptionsBlock previous;
+    previous.ConditionalFlags.assign(m_playerData->CtrOptions->ConditionalFlags.begin(),
+        m_playerData->CtrOptions->ConditionalFlags.end());
+    previous.FactionGroup = m_playerData->CtrOptions->FactionGroup;
+    previous.ChromieTimeExpansionMask = m_playerData->CtrOptions->ChromieTimeExpansionMask;
+
+    if (enabled)
+        conditionalFlags[block] |= mask;
+    else
+        conditionalFlags[block] &= ~mask;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_playerData)
+        .ModifyValue(&UF::PlayerData::CtrOptions)
+        .ModifyValue(&UF::CTROptions::ConditionalFlags), std::move(conditionalFlags));
+
+    // auras are also applied while the character loads and removed while it logs out
+    if (!IsInWorld())
+        return;
+
+    SendCtrOptions(&previous);
+    PhasingHandler::OnConditionChange(this);
+}
+
 void Player::SendCtrOptions(WorldPackets::Misc::CTROptionsBlock const* previous /*= nullptr*/) const
 {
     WorldPackets::Misc::SetCtrOptions ctrOptions;

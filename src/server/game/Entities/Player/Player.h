@@ -2439,6 +2439,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         static constexpr uint8 ChromieTimeDeactivationLevel = 81;
         void SetChromieTime(int32 expansionId);
         void SetChromieTimeConditionalFlags(bool enabled);
+        // sets or clears one CTROptions::ConditionalFlags bit and sends SMSG_SET_CTR_OPTIONS when it changed
+        void SetCtrConditionalFlag(uint32 flag, bool enabled);
         void SetTimerunningSeasonID(uint32 seasonId);
         void SendCtrOptions(WorldPackets::Misc::CTROptionsBlock const* previous = nullptr) const;
         Team GetTeam() const { return m_team; }

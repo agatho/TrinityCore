@@ -579,7 +579,7 @@ NonDefaultConstructible<pAuraEffectHandler> AuraEffectHandler[TOTAL_AURAS]=
     &AuraEffect::HandleNoImmediateEffect,                         //507 SPELL_AURA_MOD_DAMAGE_TAKEN_BY_LABEL implemented in Unit::SpellDamageBonusTaken
     &AuraEffect::HandleNULL,                                      //508
     &AuraEffect::HandleNULL,                                      //509
-    &AuraEffect::HandleNULL,                                      //510 SPELL_AURA_MODIFIED_RAID_INSTANCE
+    &AuraEffect::HandleSetCtrConditionalFlag,                     //510 SPELL_AURA_SET_CTR_CONDITIONAL_FLAG
     &AuraEffect::HandleNULL,                                      //511 SPELL_AURA_APPLY_PROFESSION_EFFECT
     &AuraEffect::HandleNULL,                                      //512
     &AuraEffect::HandleAuraModAdvFlyingSpeed,                     //513 SPELL_AURA_MOD_ADV_FLYING_AIR_FRICTION
@@ -6340,6 +6340,30 @@ void AuraEffect::HandleAllowUsingGameobjectsWhileMounted(AuraApplication const* 
         target->SetPlayerLocalFlag(PLAYER_LOCAL_FLAG_CAN_USE_OBJECTS_MOUNTED);
     else if (!target->HasAuraType(SPELL_AURA_ALLOW_USING_GAMEOBJECTS_WHILE_MOUNTED))
         target->RemovePlayerLocalFlag(PLAYER_LOCAL_FLAG_CAN_USE_OBJECTS_MOUNTED);
+}
+
+// Retail 12.1 (Lorewalking aura 463943, MiscValue 13, capture 69497): applying the aura sets bit 13 of
+// CTROptions::ConditionalFlags (0x4022 -> 0x6022) and sends SMSG_SET_CTR_OPTIONS [previous, current]. The flag
+// selects the ConditionalContentTuning redirects of that RedirectEnum.
+void AuraEffect::HandleSetCtrConditionalFlag(AuraApplication const* aurApp, uint8 mode, bool apply) const
+{
+    if (!(mode & AURA_EFFECT_HANDLE_REAL))
+        return;
+
+    Player* target = aurApp->GetTarget()->ToPlayer();
+    if (!target || GetMiscValue() < 0)
+        return;
+
+    uint32 flag = uint32(GetMiscValue());
+    if (!apply)
+    {
+        // another aura keeps the same flag
+        for (AuraEffect const* other : target->GetAuraEffectsByType(SPELL_AURA_SET_CTR_CONDITIONAL_FLAG))
+            if (other != this && uint32(other->GetMiscValue()) == flag)
+                return;
+    }
+
+    target->SetCtrConditionalFlag(flag, apply);
 }
 
 void AuraEffect::HandlePlayScene(AuraApplication const* aurApp, uint8 mode, bool apply) const
