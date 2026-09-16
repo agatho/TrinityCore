@@ -407,6 +407,8 @@ void WorldSession::HandleMoveWorldportAck()
     player->ResummonPetTemporaryUnSummonedIfAny();
     player->ResummonBattlePetTemporaryUnSummonedIfAny();
 
+    player->UpdateLorewalkingForMap();
+
     //lets process all delayed operations on successful teleport
     player->ProcessDelayedOperations();
 }
