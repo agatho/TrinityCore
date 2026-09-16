@@ -9,7 +9,9 @@
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace Playerbot::V2::Gear {
 
@@ -132,15 +134,31 @@ void Initialize()
 
     auto const& store = sObjectMgr->GetItemTemplateStore();
     uint32 examined = 0, indexed = 0, skipped_unrenderable = 0;
+    std::vector<uint32> unrenderable_sample;
 
     for (auto const& [entry, tpl] : store)
     {
         ++examined;
-        // Allow NoBind, BoE, and BoP for Rare+ (Blue) and Epic. BoP common /
-        // uncommon are usually quest items or vendor trash, not equippable
-        // upgrades. BoP Rare+ matches what real players loot from dungeons,
-        // so distribution bots may as well start in similar gear.
-        if (tpl.GetBonding() == BIND_ON_ACQUIRE && tpl.GetQuality() < ITEM_QUALITY_RARE)
+        // Drop bind-on-pickup POOR and COMMON: grey vendor trash and white
+        // filler a real player would not keep. Everything from UNCOMMON up is
+        // kept whatever its binding.
+        //
+        // This used to cut at RARE, which threw away every bind-on-pickup green
+        // — and at levelling brackets that is precisely where the appropriate
+        // gear lives, because quest rewards are BoP uncommons. Measured on the
+        // 12.1 client data for an L16 warrior: the old cut dropped 255 usable
+        // one-hand swords, and removed ~50% of all candidates uniformly across
+        // head, shoulder, back, finger and trinket. That matches the slot-fill
+        // deficits seen on the live fleet (chest/legs ~87% filled, head and
+        // shoulders ~45%, back 28%).
+        //
+        // Low risk at endgame rather than provably inert: ranking is
+        // effective-item-level driven (+ilvl, +5 per quality tier), so a green
+        // only beats a rare when it actually WEARS better, which is the
+        // behaviour we want. Endgame greens sit far below endgame rares on
+        // item level, so max-level picks should be unchanged - worth watching
+        // on the first fleet-wide pass rather than assuming.
+        if (tpl.GetBonding() == BIND_ON_ACQUIRE && tpl.GetQuality() < ITEM_QUALITY_UNCOMMON)
             continue;
         // Skip items with quality > Epic (Legendary / Artifact require special unlock)
         if (tpl.GetQuality() > ITEM_QUALITY_EPIC) continue;
@@ -202,6 +220,12 @@ void Initialize()
         if (!::Playerbot::IsItemRenderableInSlot(entry, target_slot))
         {
             ++skipped_unrenderable;
+            // Name the first few. The count alone cannot answer "which items?",
+            // which is exactly what was asked when an offline db2 scan flagged
+            // nine BACK-slot cloaks as appearance-less while the runtime kept
+            // them: whoever checks next needs entries to look up, not a total.
+            if (unrenderable_sample.size() < 24)
+                unrenderable_sample.push_back(entry);
             continue;
         }
 
@@ -299,6 +323,20 @@ void Initialize()
                 "[BotGearGenerator] indexed {} items (of {} examined) into per-class pools; "
                 "rejected {} with no ItemModifiedAppearance (not client-renderable)",
                 indexed, examined, skipped_unrenderable);
+
+    if (!unrenderable_sample.empty())
+    {
+        std::string sample;
+        for (uint32 e : unrenderable_sample)
+        {
+            if (!sample.empty()) sample += ", ";
+            sample += std::to_string(e);
+        }
+        TC_LOG_INFO("playerbot.v2",
+            "[BotGearGenerator] first {} rejected entries: {}{}",
+            unrenderable_sample.size(), sample,
+            skipped_unrenderable > unrenderable_sample.size() ? " ..." : "");
+    }
 }
 
 std::vector<GearItem> GenerateGearFor(GearGenerationContext const& ctx)
