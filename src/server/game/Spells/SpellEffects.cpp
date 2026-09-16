@@ -316,7 +316,7 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectActivateGarrisonBuilding,                 //224 SPELL_EFFECT_ACTIVATE_GARRISON_BUILDING
     &Spell::EffectGrantBattlePetLevel,                      //225 SPELL_EFFECT_GRANT_BATTLEPET_LEVEL
     &Spell::EffectNULL,                                     //226 SPELL_EFFECT_TRIGGER_ACTION_SET
-    &Spell::EffectNULL,                                     //227 SPELL_EFFECT_TELEPORT_TO_LFG_DUNGEON
+    &Spell::EffectTeleportToLfgDungeon,                     //227 SPELL_EFFECT_TELEPORT_TO_LFG_DUNGEON
     &Spell::EffectNULL,                                     //228 SPELL_EFFECT_228
     &Spell::EffectNULL,                                     //229 SPELL_EFFECT_SET_FOLLOWER_QUALITY
     &Spell::EffectNULL,                                     //230 SPELL_EFFECT_230
@@ -1109,6 +1109,43 @@ void Spell::EffectTeleportUnitsWithVisualLoadingScreen()
     TeleportToOptions options = GetTeleportOptions(m_caster, unitTarget, m_destTargets[effectInfo->EffectIndex]);
     unitTarget->m_Events.AddEventAtOffset(new DelayedSpellTeleportEvent(unitTarget, targetDest, options, m_spellInfo->Id),
         Milliseconds(effectInfo->MiscValue));
+}
+
+// Retail 12.1 (Lorewalking 1215654 -> The Culling of Stratholme, capture 69497): MiscValueB is an LFGDungeons id; the target
+// is moved to the spell's destination inside a new instance of that dungeon's difficulty (236 for Lorewalking) without any
+// LFG queue, proposal or group - SMSG_TRANSFER_PENDING straight to SMSG_NEW_WORLD with an instance id.
+void Spell::EffectTeleportToLfgDungeon()
+{
+    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
+        return;
+
+    Player* player = unitTarget ? unitTarget->ToPlayer() : nullptr;
+    if (!player)
+        return;
+
+    LFGDungeonsEntry const* lfgDungeon = sLFGDungeonsStore.LookupEntry(effectInfo->MiscValueB);
+    if (!lfgDungeon)
+    {
+        TC_LOG_ERROR("spells", "Spell::EffectTeleportToLfgDungeon - spell {} effect {} has non-existing LFGDungeons id {}.",
+            m_spellInfo->Id, effectInfo->EffectIndex, effectInfo->MiscValueB);
+        return;
+    }
+
+    if (!m_targets.HasDst())
+    {
+        TC_LOG_ERROR("spells", "Spell::EffectTeleportToLfgDungeon - does not have a destination for spellId {}.", m_spellInfo->Id);
+        return;
+    }
+
+    TeleportLocation targetDest{ .Location = *destTarget, .LfgDungeonsId = lfgDungeon->ID };
+    if (targetDest.Location.GetMapId() != uint32(lfgDungeon->MapID))
+    {
+        TC_LOG_ERROR("spells", "Spell::EffectTeleportToLfgDungeon - spell {} destination map {} is not the map {} of LFGDungeons id {}.",
+            m_spellInfo->Id, targetDest.Location.GetMapId(), lfgDungeon->MapID, lfgDungeon->ID);
+        return;
+    }
+
+    player->TeleportTo(targetDest, TELE_TO_NONE, m_spellInfo->Id);
 }
 
 void Spell::EffectApplyAura()

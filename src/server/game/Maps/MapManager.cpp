@@ -189,6 +189,11 @@ Map* MapManager::CreateMap(uint32 mapId, Player* player, Optional<uint32> lfgDun
     {
         Group* group = player->GetGroup();
         Difficulty difficulty = group ? group->GetDifficultyID(entry) : player->GetDifficultyID(entry);
+        // a transfer into an LFGDungeons entry uses that entry's difficulty (SPELL_EFFECT_TELEPORT_TO_LFG_DUNGEON works without a group)
+        if (lfgDungeonsId)
+            if (LFGDungeonsEntry const* lfgDungeon = sLFGDungeonsStore.LookupEntry(*lfgDungeonsId); lfgDungeon && uint32(lfgDungeon->MapID) == mapId)
+                difficulty = Difficulty(lfgDungeon->DifficultyID);
+
         MapDb2Entries entries{ entry, sDB2Manager.GetDownscaledMapDifficultyData(mapId, difficulty) };
         ObjectGuid instanceOwnerGuid = group ? group->GetRecentInstanceOwner(mapId) : player->GetGUID();
         InstanceLock* instanceLock = sInstanceLockMgr.FindActiveInstanceLock(instanceOwnerGuid, entries);
