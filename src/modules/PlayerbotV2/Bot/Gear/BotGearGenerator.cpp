@@ -215,14 +215,23 @@ void Initialize()
         }
 
         // The item must be RENDERABLE by the client, not merely equippable by
-        // the server — see ::Playerbot::IsItemRenderableInSlot for why. The
-        // crash is intermittent in a way that hides the cause: it needs a COLD
-        // model load, so the same inspect succeeds once the asset is cached.
-        // Observed live 2026-09-14: bot Sellarino (Dwarf Warrior, L16) wore
-        // items 251573-251580, an upstream plate set with no
-        // ItemModifiedAppearance, and inspecting it crashed the retail client.
+        // the server — see ::Playerbot::IsItemRenderableInSlot for why.
         // Evaluated here rather than at the top of the loop because it needs
-        // target_slot.
+        // target_slot. Rejects ~3551 of 175898 examined items (measured
+        // 2026-09-16), so it prunes a real but small tail without starving any
+        // pool.
+        //
+        // HISTORY, so nobody re-derives a wrong conclusion from the commit log:
+        // this gate was added believing that items 251573-251580 (the Ascension
+        // Chaser plate set, worn by bot Sellarino) lacked appearances and were
+        // crashing the client on inspect. That was WRONG on both counts. Those
+        // items do have ItemModifiedAppearance rows - verified against
+        // ItemModifiedAppearance.db2 and by the runtime gate declining to reject
+        // them - and the inspect crash was a corrupted packet serializer on the
+        // integration branch (ERROR #8, fixed in ba79afcad9), nothing to do with
+        // appearances. The gate is kept because an item with no appearance
+        // genuinely cannot be drawn and is cheap to exclude, but it has never
+        // been shown to fix an observed crash.
         if (!::Playerbot::IsItemRenderableInSlot(entry, target_slot))
         {
             ++skipped_unrenderable;

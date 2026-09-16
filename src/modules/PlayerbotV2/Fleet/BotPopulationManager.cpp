@@ -753,13 +753,19 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
             ObjectGuid::Create<HighGuid::Player>(id));
         if (!p || !p->IsInWorld()) return;
 
-        // Unrenderable gear is a client crash, not a gearing-quality question,
-        // so it is healed for every online bot regardless of level and BEFORE
-        // the under-gear gate below. A bot wearing a full high-ilvl set that
-        // the client cannot draw is by definition NOT under-geared, and used
-        // to return at that gate untouched (live 2026-09-14, Sellarino L16 in
-        // 251573-251580). Does not consume the regear cap: the scan is 19
-        // appearance lookups and the generator only runs when a slot is bad.
+        // Unrenderable gear would be a client crash rather than a gearing
+        // quality question, so it is checked for every online bot regardless of
+        // level and BEFORE the under-gear gate below: a bot in a full high-ilvl
+        // set the client cannot draw is by definition NOT under-geared and would
+        // return at that gate untouched. Does not consume the regear cap - the
+        // scan is 19 appearance lookups and the generator only runs when a slot
+        // is bad.
+        //
+        // NOTE: on the live fleet this finds nothing (verified 2026-09-16, zero
+        // [GearHeal] lines with the call confirmed invoked). The gear once
+        // blamed for the inspect crash renders fine; the real cause was a
+        // corrupted packet serializer, fixed separately. This is defence in
+        // depth against a condition that has not actually been observed.
         HealUnrenderableGear(p);
 
         // L>=5 (was L>=10): an under-geared bot BELOW 10 is exactly the death-
