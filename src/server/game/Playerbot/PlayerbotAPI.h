@@ -30,10 +30,11 @@ constexpr uint32 kApiVersion = 1;
 // Being equippable is not being drawable. The client builds a character's 3D
 // model from ItemModifiedAppearance -> ItemAppearance -> ItemDisplayInfo, and an
 // item with no ItemModifiedAppearance row has nothing to resolve: the client
-// null-derefs while building the model (ERROR #132) for every player who
-// inspects or renders the bot. Such items are real data, not corruption - e.g.
-// the Ascension Chaser plate set 251573-251580 ships in upstream hotfix SQL with
-// item/locale rows but no appearance.
+// cannot resolve a model for it. Items genuinely missing appearances do exist
+// in upstream data, so the check is cheap insurance - but note that no observed
+// client crash has been traced to one. The inspect crash originally attributed
+// to missing appearances (items 251573-251580) turned out to be a corrupted
+// packet serializer instead; those items have appearance rows and render fine.
 //
 // Neck, finger and trinket slots are always "renderable": they have no geoset
 // and never reach the model builder, and gating them would risk refusing whole

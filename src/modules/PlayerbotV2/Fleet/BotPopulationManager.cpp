@@ -38,6 +38,7 @@
 #include "RaceMask.h"
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <cmath>
 
 namespace Playerbot::V2::Fleet {
@@ -753,13 +754,19 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
             ObjectGuid::Create<HighGuid::Player>(id));
         if (!p || !p->IsInWorld()) return;
 
-        // Unrenderable gear is a client crash, not a gearing-quality question,
-        // so it is healed for every online bot regardless of level and BEFORE
-        // the under-gear gate below. A bot wearing a full high-ilvl set that
-        // the client cannot draw is by definition NOT under-geared, and used
-        // to return at that gate untouched (live 2026-09-14, Sellarino L16 in
-        // 251573-251580). Does not consume the regear cap: the scan is 19
-        // appearance lookups and the generator only runs when a slot is bad.
+        // Unrenderable gear would be a client crash rather than a gearing
+        // quality question, so it is checked for every online bot regardless of
+        // level and BEFORE the under-gear gate below: a bot in a full high-ilvl
+        // set the client cannot draw is by definition NOT under-geared and would
+        // return at that gate untouched. Does not consume the regear cap - the
+        // scan is 19 appearance lookups and the generator only runs when a slot
+        // is bad.
+        //
+        // NOTE: on the live fleet this finds nothing (verified 2026-09-16, zero
+        // [GearHeal] lines with the call confirmed invoked). The gear once
+        // blamed for the inspect crash renders fine; the real cause was a
+        // corrupted packet serializer, fixed separately. This is defence in
+        // depth against a condition that has not actually been observed.
         HealUnrenderableGear(p);
 
         // L>=5 (was L>=10): an under-geared bot BELOW 10 is exactly the death-
@@ -795,11 +802,46 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
 
         // Average equipped EFFECTIVE ilvl over filled slots — the value the
         // bot actually wears (GetItemLevel(p) applies 12.0 scaling curves).
+        // Also track the WORST slot: see the outlier test below.
         uint32 eff_sum = 0, eff_cnt = 0;
+        uint32 worst_eff = std::numeric_limits<uint32>::max();
+        uint8  worst_slot = 0;
         for (uint8 s = EQUIPMENT_SLOT_START; s < EQUIPMENT_SLOT_END; ++s)
-            if (Item const* eq = p->GetItemByPos(INVENTORY_SLOT_BAG_0, s))
-                { eff_sum += eq->GetItemLevel(p); ++eff_cnt; }
+        {
+            Item const* eq = p->GetItemByPos(INVENTORY_SLOT_BAG_0, s);
+            if (!eq) continue;
+            uint32 const e = eq->GetItemLevel(p);
+            eff_sum += e;
+            ++eff_cnt;
+            // Shirt and tabard are cosmetic and legitimately sit at ilvl ~1
+            // forever; including them would flag every bot wearing one, every
+            // pass, permanently.
+            if (s == EQUIPMENT_SLOT_BODY || s == EQUIPMENT_SLOT_TABARD)
+                continue;
+            if (e < worst_eff) { worst_eff = e; worst_slot = s; }
+        }
         const uint32 avg_eff = eff_cnt ? eff_sum / eff_cnt : 0;
+
+        // A single catastrophic slot is INVISIBLE to an average. Live case
+        // 2026-09-16, Sellarino (L16 Protection warrior): eight good plate
+        // pieces, a neck, a trinket and a rare shield, plus a WHITE ilvl-1
+        // starter sword in the mainhand. avg_eff sat above its level, so the
+        // bot never qualified as under-geared and the weapon was never looked
+        // at again. EnsureShieldTankWeapon did not catch it either - it returns
+        // as soon as it sees a shield in the offhand and never inspects the
+        // mainhand.
+        //
+        // Flag a bot whose worst non-cosmetic slot wears at less than a third of
+        // its own average. Self-calibrating, so it needs no level/ilvl scale
+        // assumptions (the linear TargetIlvlForLevel ramp is unusable at low
+        // level - it reads ~120 at L16, above anything an L16 can wear). The
+        // strict per-slot guards in the re-gear loop below still apply, so this
+        // only opens the door: it cannot downgrade a slot, and a bot whose gear
+        // is merely uneven sees swapped=0 and parks on the failed-backfill
+        // cooldown.
+        const bool slot_outlier =
+            eff_cnt >= 4 && worst_eff != std::numeric_limits<uint32>::max() &&
+            worst_eff * 3 < avg_eff;
 
         // Under-geared if missing a weapon OR wearing effective ilvl below the
         // character level. Level-appropriate gear has effective ilvl >= level
@@ -843,13 +885,15 @@ void BotPopulationManager::RunGearBackfill(uint32 now_ms)
         const uint32 dungeon_bar = (uint32(lvl) * 5u) / 2u;
         const bool dungeon_undergear = in_instance_run && (avg_eff < dungeon_bar);
         const bool under_geared =
-            weaponless || (avg_eff < uint32(lvl)) || dungeon_undergear;
+            weaponless || (avg_eff < uint32(lvl)) || dungeon_undergear || slot_outlier;
         if (under_geared)
             TC_LOG_INFO("playerbot.v2",
                 "[GearBackfill] candidate {} L{} weaponless={} avg_eff_ilvl={} "
-                "(threshold <L{}, dungeon_bar={} hit={})",
+                "(threshold <L{}, dungeon_bar={} hit={}, slot_outlier={} worst_slot={} worst_ilvl={})",
                 p->GetName(), uint32(lvl), weaponless, avg_eff, uint32(lvl),
-                in_instance_run ? dungeon_bar : 0u, dungeon_undergear);
+                in_instance_run ? dungeon_bar : 0u, dungeon_undergear,
+                slot_outlier, uint32(worst_slot),
+                worst_eff == std::numeric_limits<uint32>::max() ? 0u : worst_eff);
         if (!under_geared) return;
 
         // Skip bots parked on the failed-backfill cooldown (could not be

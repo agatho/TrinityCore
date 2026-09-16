@@ -37,43 +37,10 @@ constexpr std::array<uint8, 16> kSlots = {
     EQUIPMENT_SLOT_OFFHAND,
 };
 
-// Per-class preferred armor type: the highest tier the class's armor
-// proficiency allows (e.g. Druids wear leather even though they can technically
-// wear cloth).
-//
-// Level-independent. The level-40 proficiency step (plate for Warrior/Paladin,
-// mail for Hunter/Shaman) is Cataclysm-era; since Mists every class holds its
-// final armor skill from level 1. Verified against live character data
-// 2026-09-15: of sub-40 characters, 12330/12426 Warriors hold Plate Mail (293)
-// and 13931/14022 Hunters hold Mail (413).
-// The old Hunter/Shaman step therefore under-armored every L1-39 Hunter and
-// Shaman in leather.
-ItemSubclassArmor PreferredArmorForClass(uint8 cls)
-{
-    switch (cls)
-    {
-        case CLASS_WARRIOR:
-        case CLASS_PALADIN:
-        case CLASS_DEATH_KNIGHT:
-            return ITEM_SUBCLASS_ARMOR_PLATE;
-        case CLASS_HUNTER:
-        case CLASS_SHAMAN:
-            return ITEM_SUBCLASS_ARMOR_MAIL;
-        case CLASS_ROGUE:
-        case CLASS_DRUID:
-        case CLASS_MONK:
-        case CLASS_DEMON_HUNTER:
-            return ITEM_SUBCLASS_ARMOR_LEATHER;
-        case CLASS_PRIEST:
-        case CLASS_MAGE:
-        case CLASS_WARLOCK:
-            return ITEM_SUBCLASS_ARMOR_CLOTH;
-        case CLASS_EVOKER:
-            return ITEM_SUBCLASS_ARMOR_MAIL;
-        default:
-            return ITEM_SUBCLASS_ARMOR_CLOTH;
-    }
-}
+// Preferred armor tier comes from BotItemScorer - ONE definition shared with
+// the scorer that ranks these pools. Keeping a second copy here is what let the
+// two drift apart.
+using ::Playerbot::Gear::PreferredArmorForClass;
 
 // Quick "is armor inventory type"
 bool IsArmorSlot(uint8 slot)
@@ -215,14 +182,23 @@ void Initialize()
         }
 
         // The item must be RENDERABLE by the client, not merely equippable by
-        // the server — see ::Playerbot::IsItemRenderableInSlot for why. The
-        // crash is intermittent in a way that hides the cause: it needs a COLD
-        // model load, so the same inspect succeeds once the asset is cached.
-        // Observed live 2026-09-14: bot Sellarino (Dwarf Warrior, L16) wore
-        // items 251573-251580, an upstream plate set with no
-        // ItemModifiedAppearance, and inspecting it crashed the retail client.
+        // the server — see ::Playerbot::IsItemRenderableInSlot for why.
         // Evaluated here rather than at the top of the loop because it needs
-        // target_slot.
+        // target_slot. Rejects ~3551 of 175898 examined items (measured
+        // 2026-09-16), so it prunes a real but small tail without starving any
+        // pool.
+        //
+        // HISTORY, so nobody re-derives a wrong conclusion from the commit log:
+        // this gate was added believing that items 251573-251580 (the Ascension
+        // Chaser plate set, worn by bot Sellarino) lacked appearances and were
+        // crashing the client on inspect. That was WRONG on both counts. Those
+        // items do have ItemModifiedAppearance rows - verified against
+        // ItemModifiedAppearance.db2 and by the runtime gate declining to reject
+        // them - and the inspect crash was a corrupted packet serializer on the
+        // integration branch (ERROR #8, fixed in ba79afcad9), nothing to do with
+        // appearances. The gate is kept because an item with no appearance
+        // genuinely cannot be drawn and is cheap to exclude, but it has never
+        // been shown to fix an observed crash.
         if (!::Playerbot::IsItemRenderableInSlot(entry, target_slot))
         {
             ++skipped_unrenderable;
@@ -347,6 +323,16 @@ std::vector<GearItem> GenerateGearFor(GearGenerationContext const& ctx)
 
     out.reserve(kSlots.size());
     uint32 slot_idx = 0;
+    // FINGER2/TRINKET2 draw from FINGER1/TRINKET1's pool and score it with the
+    // same weights, so left to itself the generator picks the IDENTICAL entry
+    // for both. That is fine for a plain ring and fatal for a unique-equipped
+    // one: Player::CanEquipItem refuses the second with
+    // EQUIP_ERR_ITEM_UNIQUE_EQUIPPABLE and the slot is left EMPTY. Most
+    // trinkets and many rings carry that flag. Measured across 2461 warriors on
+    // the live fleet before this fix: finger1 1067 filled -> finger2 790,
+    // trinket1 698 -> trinket2 551.
+    ItemTemplate const* picked_finger1 = nullptr;
+    ItemTemplate const* picked_trinket1 = nullptr;
     for (uint8 slot : kSlots)
     {
         // Pick from pool slot.
@@ -367,9 +353,18 @@ std::vector<GearItem> GenerateGearFor(GearGenerationContext const& ctx)
         ItemTemplate const* best = nullptr;
         int32 best_score = std::numeric_limits<int32>::min();
         int32 const target = int32(target_ilvl);
+        // The entry already chosen for the paired slot, if any.
+        ItemTemplate const* twin = (slot == EQUIPMENT_SLOT_FINGER2)  ? picked_finger1
+                                 : (slot == EQUIPMENT_SLOT_TRINKET2) ? picked_trinket1
+                                 : nullptr;
+
         for (auto const* tpl : candidates)
         {
             if (tpl->GetBaseRequiredLevel() > ctx.level) continue;
+            // Never hand the paired slot the same entry: prefer the next-best
+            // distinct item. A fallback below restores the duplicate when it is
+            // legal and nothing else qualifies.
+            if (twin && tpl->GetId() == twin->GetId()) continue;
             // Shield-tank mainhand: never a 2H (see shield_tank note above).
             if (shield_tank && slot == EQUIPMENT_SLOT_MAINHAND &&
                 tpl->GetInventoryType() == INVTYPE_2HWEAPON)
@@ -395,14 +390,21 @@ std::vector<GearItem> GenerateGearFor(GearGenerationContext const& ctx)
             if (combined > best_score) { best_score = combined; best = tpl; }
         }
 
+        // Nothing distinct qualified. A matching pair is still better than an
+        // empty slot, but only when the item may actually be worn twice - for a
+        // unique-equipped piece the second equip would be refused and we would
+        // have produced a pick that can never land.
+        if (!best && twin && !twin->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE))
+            best = twin;
+
         if (best)
+        {
             out.push_back({slot, best->GetId()});
+            if (slot == EQUIPMENT_SLOT_FINGER1)  picked_finger1 = best;
+            if (slot == EQUIPMENT_SLOT_TRINKET1) picked_trinket1 = best;
+        }
         ++slot_idx;
     }
-
-    // Deterministic shuffle of choice for FINGER2/TRINKET2 — pick a different
-    // item than FINGER1/TRINKET1 if multiple candidates exist. Skip for now
-    // (acceptable to wear matching pairs).
 
     return out;
 }
