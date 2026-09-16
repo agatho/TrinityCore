@@ -60,7 +60,7 @@ INSERT INTO `smart_scripts` (`entryorguid`,`source_type`,`id`,`link`,`event_type
 (230246,0,0,1,62,36405,0,72,0,0,7,'Li Li Stormstout - On Gossip Option 0 Selected - Close Gossip'),
 (230246,0,1,0,61,0,0,134,463923,0,7,'Li Li Stormstout - Linked - Invoker Cast \'Lorewalking Choice\'');
 
-DELETE FROM `spell_script_names` WHERE `ScriptName` IN ('spell_lorewalking_cast_next','spell_lorewalking_enter_story','spell_lorewalking_enter_story_cast_intro','spell_lorewalking_exit','spell_lorewalking_ask_a_question');
+DELETE FROM `spell_script_names` WHERE `ScriptName` IN ('spell_lorewalking_cast_next','spell_lorewalking_enter_story','spell_lorewalking_enter_story_cast_intro','spell_lorewalking_teleport_to_tirisfal','spell_lorewalking_exit','spell_lorewalking_ask_a_question');
 INSERT INTO `spell_script_names` (`spell_id`,`ScriptName`) VALUES
 (467482,'spell_lorewalking_cast_next'),
 (468532,'spell_lorewalking_cast_next'),
@@ -76,6 +76,7 @@ INSERT INTO `spell_script_names` (`spell_id`,`ScriptName`) VALUES
 (471655,'spell_lorewalking_enter_story'),
 (467591,'spell_lorewalking_enter_story'),
 (1258361,'spell_lorewalking_enter_story_cast_intro'),
+(463941,'spell_lorewalking_teleport_to_tirisfal'),
 (460937,'spell_lorewalking_exit'),
 (468124,'spell_lorewalking_ask_a_question');
 
@@ -111,3 +112,6 @@ INSERT INTO `spell_target_position` (`ID`,`EffectIndex`,`OrderIndex`,`MapID`,`Po
 (1260921,0,0,1,-1268.96,-5550.56,20.89,3.8633,69497), -- [DNT] Teleport to Echo Isles
 (1271889,0,0,0,-10455.3,-3822.3,17.87,6.0662,69497), -- [DNT] Teleport to Sunken Temple
 (1275602,0,0,530,12579.6,-6774.14,15.09,3.1604,69497); -- [DNT] Lorewalking Elves: Catch Up Teleport
+
+-- [DNT] Blade in Twilight: retail 12.1 puts the Lorewalking player here (SMSG_NEW_WORLD of the LFG transfer)
+UPDATE `lfg_dungeon_template` SET `position_x`=2054.11, `position_y`=2454.43, `position_z`=132.489, `orientation`=0.8455, `VerifiedBuild`=69497 WHERE `dungeonId`=1381;

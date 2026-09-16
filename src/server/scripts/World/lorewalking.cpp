@@ -23,6 +23,7 @@
  */
 
 #include "ScriptMgr.h"
+#include "LFGMgr.h"
 #include "LorewalkingMgr.h"
 #include "MapUtils.h"
 #include "ObjectMgr.h"
@@ -178,6 +179,29 @@ class spell_lorewalking_enter_story_cast_intro : public SpellScript
     }
 };
 
+// 463941 - [DNT] Teleport to Tirisfal
+// Retail 12.1 (capture 69497): the only chapter entry without a teleport effect; the server queues the player for the one-player
+// scenario dungeon 1381 as damage dealer, the LFG proposal completes itself and moves the player into Blade in Twilight.
+class spell_lorewalking_teleport_to_tirisfal : public SpellScript
+{
+    static constexpr uint32 LFG_DUNGEON_BLADE_IN_TWILIGHT = 1381;
+
+    void HandleJoin(SpellEffIndex /*effIndex*/)
+    {
+        Player* player = GetHitUnit()->ToPlayer();
+        if (!player)
+            return;
+
+        lfg::LfgDungeonSet dungeons = { LFG_DUNGEON_BLADE_IN_TWILIGHT };
+        sLFGMgr->JoinLfg(player, lfg::PLAYER_ROLE_DAMAGE, dungeons);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_lorewalking_teleport_to_tirisfal::HandleJoin, EFFECT_0, SPELL_EFFECT_KILL_CREDIT);
+    }
+};
+
 // 460937 - Exit Lorewalking
 class spell_lorewalking_exit : public SpellScript
 {
@@ -235,6 +259,7 @@ void AddSC_lorewalking()
     RegisterSpellScript(spell_lorewalking_cast_next);
     RegisterSpellScript(spell_lorewalking_enter_story);
     RegisterSpellScript(spell_lorewalking_enter_story_cast_intro);
+    RegisterSpellScript(spell_lorewalking_teleport_to_tirisfal);
     RegisterSpellScript(spell_lorewalking_exit);
     RegisterSpellScript(spell_lorewalking_ask_a_question);
 }
