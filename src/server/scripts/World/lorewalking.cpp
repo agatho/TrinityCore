@@ -69,6 +69,7 @@ public:
 // 1239389 - [DNT] Lorewalking Teleport to Base
 // 467524 - [DNT] Complete
 // 1275636 - Teleport
+// 473059 - Teleport
 class spell_lorewalking_cast_next : public SpellScript
 {
     static inline std::unordered_map<uint32, uint32> const NextSpell =
@@ -80,7 +81,8 @@ class spell_lorewalking_cast_next : public SpellScript
         { 1258364, 1258363 },
         { 1239389, 1239362 },
         { 467524, 460937 },
-        { 1275636, 1275602 },
+        { 1275636, 1275602 }, // captured while the Sunwell objective was open; the other catch-up teleports 1275600-1275605 are not mapped
+        { 473059, 1239389 },
     };
 
     bool Validate(SpellInfo const* spellInfo) override

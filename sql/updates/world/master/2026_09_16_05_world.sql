@@ -70,6 +70,7 @@ INSERT INTO `spell_script_names` (`spell_id`,`ScriptName`) VALUES
 (1239389,'spell_lorewalking_cast_next'),
 (467524,'spell_lorewalking_cast_next'),
 (1275636,'spell_lorewalking_cast_next'),
+(473059,'spell_lorewalking_cast_next'),
 (463926,'spell_lorewalking_enter_story'),
 (468534,'spell_lorewalking_enter_story'),
 (471655,'spell_lorewalking_enter_story'),
