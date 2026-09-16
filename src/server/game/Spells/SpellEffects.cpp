@@ -442,7 +442,7 @@ NonDefaultConstructible<SpellEffectHandlerFn> SpellEffectHandlers[TOTAL_SPELL_EF
     &Spell::EffectSetPlayerDataFlagAccount,                 //337 SPELL_EFFECT_SET_PLAYER_DATA_FLAG_ACCOUNT
     &Spell::EffectSetPlayerDataFlagCharacter,               //338 SPELL_EFFECT_SET_PLAYER_DATA_FLAG_CHARACTER
     &Spell::EffectNULL,                                     //339 SPELL_EFFECT_UI_ACTION
-    &Spell::EffectNULL,                                     //340 SPELL_EFFECT_340
+    &Spell::EffectCastSpellAfterTeleport,                   //340 SPELL_EFFECT_CAST_SPELL_AFTER_TELEPORT
     &Spell::EffectLearnWarbandScene,                        //341 SPELL_EFFECT_LEARN_WARBAND_SCENE
     &Spell::EffectNULL,                                     //342 SPELL_EFFECT_342
     &Spell::EffectNULL,                                     //343 SPELL_EFFECT_343
@@ -6163,6 +6163,20 @@ void Spell::EffectLearnAzeriteEssencePower()
 
     azeriteItem->SetEssenceRank(effectInfo->MiscValue, effectInfo->MiscValueB);
     azeriteItem->SetState(ITEM_CHANGED, playerTarget);
+}
+
+// Retail 12.1 (Lorewalking chapter entry 463941, capture 69497): the spell queues the player into an instance; the
+// TriggerSpell of every effect 340 is cast by the player on arrival, right after the world port, in effect order.
+void Spell::EffectCastSpellAfterTeleport()
+{
+    if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
+        return;
+
+    Player* player = unitTarget ? unitTarget->ToPlayer() : nullptr;
+    if (!player || !effectInfo->TriggerSpell)
+        return;
+
+    player->AddSpellToCastAfterTeleport(effectInfo->TriggerSpell);
 }
 
 void Spell::EffectCreatePrivateConversation()

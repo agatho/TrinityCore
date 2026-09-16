@@ -1159,6 +1159,7 @@ enum PlayerDelayedOperations
     DELAYED_SPELL_CAST_DESERTER = 0x04,
     DELAYED_BG_MOUNT_RESTORE    = 0x08,                     ///< Flag to restore mount state after teleport from BG
     DELAYED_BG_TAXI_RESTORE     = 0x10,                     ///< Flag to restore taxi state after teleport from BG
+    DELAYED_CAST_SPELLS_AFTER_TELEPORT = 0x20,              ///< SPELL_EFFECT_CAST_SPELL_AFTER_TELEPORT
     DELAYED_END
 };
 
@@ -1380,6 +1381,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         bool TeleportTo(WorldLocation const& loc, TeleportToOptions options = TELE_TO_NONE, Optional<uint32> instanceId = {}, uint32 teleportSpellId = 0);
         bool TeleportTo(TeleportLocation const& teleportLocation, TeleportToOptions options = TELE_TO_NONE, uint32 teleportSpellId = 0);
         bool TeleportToBGEntryPoint();
+        // SPELL_EFFECT_CAST_SPELL_AFTER_TELEPORT: queued spells are cast on the player once the next teleport completes
+        void AddSpellToCastAfterTeleport(uint32 spellId) { m_spellsToCastAfterTeleport.push_back(spellId); ScheduleDelayedOperation(DELAYED_CAST_SPELLS_AFTER_TELEPORT); }
 
         bool HasSummonPending() const;
         // Returns the reason this player cannot be summoned by summoner, or nothing when the summon
@@ -3958,6 +3961,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint32 m_wowLabsInstanceId = 0;
 
         uint32 m_DelayedOperations;
+        std::vector<uint32> m_spellsToCastAfterTeleport;
         bool m_bCanDelayTeleport;
 
         std::unique_ptr<PetStable> m_petStable;
