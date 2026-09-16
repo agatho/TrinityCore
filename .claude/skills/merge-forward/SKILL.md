@@ -90,6 +90,12 @@ Resolve hunk by hunk, in the merged content. Two shortcuts have caused real dama
 If a conflict is large, resolve it in a scratch worktree, verify it builds, and merge from there —
 never by picking a whole-file winner.
 
+**`CLAUDE.md` add/add conflicts resolve to the reconciled root file** (the one carrying the branch
+model, the VS-generator build notes and the "never assume the schema is called `world`" warning).
+Several dormant branches still carry an older generic copy whose build and database sections
+describe something this repo does not do; taking that side restores guidance that has already cost
+a session. Feature-specific status notes belong on the feature branch, not in the shared file.
+
 ## Verification
 
 A text-clean merge is not a working merge. When code moved, build the merge commit before calling it

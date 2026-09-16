@@ -11,7 +11,7 @@ AI-driven bot fleet, `src/modules/PlayerbotV2/`), warband, housing, delves, pet 
 | File | Scope |
 |---|---|
 | this file | repo-wide: rules, branch model, build, databases, core architecture |
-| `src/modules/PlayerbotV2/CLAUDE.md` | the bot module — loaded when working in that subtree |
+| `src/modules/PlayerbotV2/CLAUDE.md` | the bot module, on branches that carry it — loaded when working in that subtree |
 | `CLAUDE.local.md` | machine-specific paths, this deployment's DB names (untracked) |
 
 Feature-specific working notes (implementation status, phase plans) belong on the **feature branch**
