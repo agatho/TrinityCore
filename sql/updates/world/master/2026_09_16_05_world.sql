@@ -77,3 +77,36 @@ INSERT INTO `spell_script_names` (`spell_id`,`ScriptName`) VALUES
 (1258361,'spell_lorewalking_enter_story_cast_intro'),
 (460937,'spell_lorewalking_exit'),
 (468124,'spell_lorewalking_ask_a_question');
+
+-- Chapter teleports: destinations as captured (SMSG_NEW_WORLD after the transfer, SMSG_MOVE_TELEPORT for same-map moves)
+DELETE FROM `spell_target_position` WHERE `ID` IN (463980,465993,466098,466122,466129,466134,466140,466161,466289,466301,466485,474632,1215651,1215654,1215663,1215666,1215669,1215671,1238159,1238191,1239362,1239784,1259916,1259920,1259924,1260858,1260921,1271889,1275602);
+INSERT INTO `spell_target_position` (`ID`,`EffectIndex`,`OrderIndex`,`MapID`,`PositionX`,`PositionY`,`PositionZ`,`Orientation`,`VerifiedBuild`) VALUES
+(463980,0,0,2801,-830.08,-41.48,-234.27,6.2106,69497), -- [DNT] Teleport to Nyalotha
+(465993,1,0,530,4254.42,2169.38,137.68,4.2295,69497), -- [DNT] Teleport to Netherstorm
+(466098,0,0,530,4272.1,2132.02,138.54,6.2116,69497), -- [DNT] Teleport
+(466122,0,0,2222,-1833.91,1161.94,5271.09,4.6426,69497), -- [DNT] Teleport
+(466129,0,0,2222,3287.94,5710.85,4940.47,0.4477,69497), -- [DNT] Teleport
+(466134,0,0,2222,-3338.84,6544.63,3992.8,3.1936,69497), -- [DNT] Teleport
+(466140,0,0,1669,5328.11,10391.6,-76.95,1.0551,69497), -- [DNT] Teleport
+(466161,0,0,1865,2055.13,3398.11,55.53,4.7171,69497), -- [DNT] Teleport
+(466289,0,0,1642,3741.7,3163.7,0.07,3.588,69497), -- [DNT] Teleport to Vol'dun
+(466301,0,0,2123,3485.1,-1106.88,-628.19,1.5942,69497), -- [DNT] Teleport to Crucible of Storms
+(466485,0,0,1643,3958.06,1401.91,70.53,0.8514,69497), -- [DNT] Teleport to BfA
+(474632,0,0,530,7582.13,-6812.86,86.59,3.1213,69497), -- Blood Elves Teleport: Accept [DNT]
+(1215651,0,0,2818,826.18,608.3,13.48,6.2636,69497), -- Teleport (DNT)
+(1215654,0,0,595,1431.47,555.038,36.2723,5.0615,69497), -- Teleport (DNT)
+(1215663,0,0,571,6104.04,2220.15,518.01,3.5891,69497), -- Teleport (DNT)
+(1215666,0,0,668,5239.46,1932.99,707.695,0.7854,69497), -- Teleport (DNT)
+(1215669,0,0,2819,428.75,-2122.74,864.88,0.0063,69497), -- Teleport (DNT)
+(1215671,0,0,571,3434.63,-1261.32,125.4,3.3278,69497), -- Teleport (DNT)
+(1238159,0,0,1643,-173.8,4131.22,123.41,0.2253,69497), -- [DNT] Teleport to Drustvar
+(1238191,0,0,1643,-1521.85,-577.98,68.71,3.1091,69497), -- [DNT] Teleport to Freehold
+(1239362,0,0,0,-8181.26,609.63,73.4,3.9827,69497), -- [DNT] Lorewalking Teleport to Base
+(1239784,0,0,2222,-1908.73,1466.38,5273.59,3.1758,69497), -- [DNT] Teleport to Oribos
+(1259916,1,0,1642,-730.57,1110.07,320.8,2.8957,69497), -- [DNT] Teleport to Zuldazar
+(1259920,0,0,571,5749.96,-3571.1,386.59,3.1159,69497), -- [DNT] Teleport to Zim'Torga
+(1259924,0,0,571,5754.0,-3585.05,386.5,4.4022,69497), -- [DNT] Teleport to Har'koa
+(1260858,0,0,2291,2740.83,-1756.73,54.8716,1.5947,69497), -- Teleport Hakkar (DNT)
+(1260921,0,0,1,-1268.96,-5550.56,20.89,3.8633,69497), -- [DNT] Teleport to Echo Isles
+(1271889,0,0,0,-10455.3,-3822.3,17.87,6.0662,69497), -- [DNT] Teleport to Sunken Temple
+(1275602,0,0,530,12579.6,-6774.14,15.09,3.1604,69497); -- [DNT] Lorewalking Elves: Catch Up Teleport
