@@ -57,3 +57,6 @@ phase7a-compile-log.txt
 # Playerbot V2 internal design/audit notes + client-RE artifacts — keep local, do not publish
 /src/modules/PlayerbotV2/docs/
 /src/tools/world_editor/docs/
+
+# Per-machine Claude Code context (paths, local DB names, owner workflow)
+/CLAUDE.local.md
