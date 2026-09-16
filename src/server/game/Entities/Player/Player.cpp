@@ -1512,6 +1512,14 @@ void Player::ProcessDelayedOperations()
         }
     }
 
+    if (m_DelayedOperations & DELAYED_CAST_SPELLS_AFTER_TELEPORT)
+    {
+        std::vector<uint32> spells = std::move(m_spellsToCastAfterTeleport);
+        m_spellsToCastAfterTeleport.clear();
+        for (uint32 spellId : spells)
+            CastSpell(this, spellId, true);
+    }
+
     //we have executed ALL delayed ops, so clear the flag
     m_DelayedOperations = 0;
 }
