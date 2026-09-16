@@ -370,6 +370,9 @@ void LFGMgr::Update(uint32 diff)
 
     if (lastProposalId != m_lfgProposalId)
     {
+        // proposals that need no answer are completed after the loop, completing one erases it from ProposalsStore
+        std::vector<std::pair<uint32, ObjectGuid>> autoAccepted;
+
         // FIXME lastProposalId ? lastProposalId +1 ?
         for (LfgProposalContainer::const_iterator itProposal = ProposalsStore.find(m_lfgProposalId); itProposal != ProposalsStore.end(); ++itProposal)
         {
@@ -392,9 +395,14 @@ void LFGMgr::Update(uint32 diff)
                 SendLfgUpdateProposal(guid, proposal);
             }
 
-            if (proposal.state == LFG_PROPOSAL_SUCCESS)
-                UpdateProposal(proposalId, guid, true);
+            // Retail 12.1 (Lorewalking, dungeon 1381, capture 69497): a one-player dungeon sends the proposal and completes it
+            // right away, SMSG_LFG_PROPOSAL_UPDATE State 0 then State 2 without CMSG_LFG_PROPOSAL_RESPONSE
+            if (proposal.state == LFG_PROPOSAL_SUCCESS || (proposal.players.size() == 1 && GetGroupSizeForDungeons({ proposal.dungeonId }) == 1))
+                autoAccepted.emplace_back(proposalId, guid);
         }
+
+        for (auto const& [proposalId, guid] : autoAccepted)
+            UpdateProposal(proposalId, guid, true);
     }
 
     // Update all players status queue info
@@ -1566,6 +1574,19 @@ void LFGMgr::GetCompatibleDungeons(LfgDungeonSet* dungeons, GuidSet const& playe
    @param[in]     groles Map of roles to check
    @return True if roles are compatible
 */
+uint8 LFGMgr::GetGroupSizeForDungeons(LfgDungeonSet const& dungeons)
+{
+    uint8 groupSize = 0;
+    for (uint32 dungeonId : dungeons)
+    {
+        LFGDungeonsEntry const* dungeon = sLFGDungeonsStore.LookupEntry(dungeonId);
+        uint8 size = dungeon ? uint8(dungeon->CountTank + dungeon->CountHealer + dungeon->CountDamage) : 0;
+        groupSize = std::max<uint8>(groupSize, size ? size : uint8(MAX_GROUP_SIZE));
+    }
+
+    return groupSize ? groupSize : uint8(MAX_GROUP_SIZE);
+}
+
 bool LFGMgr::CheckGroupRoles(LfgRolesMap& groles)
 {
     if (groles.empty())

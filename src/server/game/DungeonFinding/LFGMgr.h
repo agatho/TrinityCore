@@ -516,6 +516,8 @@ class TC_GAME_API LFGMgr
         time_t GetQueueJoinTime(ObjectGuid guid);
         /// Checks if given roles match, modifies given roles map with new roles
         static bool CheckGroupRoles(LfgRolesMap &groles);
+        /// Players a group for these dungeons needs: the largest LFGDungeons Count_tank + Count_healer + Count_damage (MAX_GROUP_SIZE when unset)
+        static uint8 GetGroupSizeForDungeons(LfgDungeonSet const& dungeons);
         /// Checks if given players are ignoring each other
         static bool HasIgnore(ObjectGuid guid1, ObjectGuid guid2);
         /// Sends queue status to player
