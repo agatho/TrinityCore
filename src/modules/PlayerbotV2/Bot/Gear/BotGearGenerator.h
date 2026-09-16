@@ -33,6 +33,13 @@ struct GearGenerationContext
     uint8  cls;
     uint16 spec;
     uint64 bot_id;      // for deterministic selection
+    // Race matters because Player::CanUseItem hard-rejects an item whose
+    // AllowableRace excludes the wearer, or whose faction flag belongs to the
+    // other side, with EQUIP_ERR_CANT_EQUIP_EVER. The candidate pool is built
+    // per CLASS and cannot express either, so the check has to happen at pick
+    // time. Leave 0 to skip the race/faction gate (callers that genuinely have
+    // no race, e.g. pre-creation planning).
+    uint8  race = 0;
 };
 
 // Build per-class candidate pools at module init. Idempotent. Walks

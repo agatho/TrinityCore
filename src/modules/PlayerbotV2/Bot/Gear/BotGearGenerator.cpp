@@ -162,6 +162,9 @@ void Initialize()
             continue;
         // Skip items with quality > Epic (Legendary / Artifact require special unlock)
         if (tpl.GetQuality() > ITEM_QUALITY_EPIC) continue;
+        // Internal items are never equippable by anyone - Player::CanUseItem
+        // rejects them outright with EQUIP_ERR_CANT_EQUIP_EVER.
+        if (tpl.HasFlag(ITEM_FLAG2_INTERNAL_ITEM)) continue;
         // Skip items with too-high required level for our brackets
         if (tpl.GetBaseRequiredLevel() > MaxPlayerLevel()) continue;
         // Skip items with no required level set BUT high ilvl (raid drops typically)
@@ -399,6 +402,21 @@ std::vector<GearItem> GenerateGearFor(GearGenerationContext const& ctx)
         for (auto const* tpl : candidates)
         {
             if (tpl->GetBaseRequiredLevel() > ctx.level) continue;
+            // Race and faction. The pool is per-class and cannot carry these,
+            // so without the check here the generator happily hands a bot an
+            // item Player::CanUseItem rejects with EQUIP_ERR_CANT_EQUIP_EVER -
+            // the pick is staged into the bags, the equip is refused, and the
+            // slot stays as it was. Live case 2026-09-16: Sellarino, a Dwarf
+            // (Alliance) Protection warrior, was handed rare sword 218333 for a
+            // mainhand still holding an ilvl-1 white starter, and the swap
+            // failed with err=10 every pass.
+            if (ctx.race)
+            {
+                if (!tpl->GetAllowableRace().HasRace(ctx.race)) continue;
+                uint32 const team = ::Player::TeamForRace(ctx.race);
+                if (tpl->HasFlag(ITEM_FLAG2_FACTION_HORDE)    && team != HORDE)    continue;
+                if (tpl->HasFlag(ITEM_FLAG2_FACTION_ALLIANCE) && team != ALLIANCE) continue;
+            }
             // Never hand the paired slot the same entry: prefer the next-best
             // distinct item. A fallback below restores the duplicate when it is
             // legal and nothing else qualifies.
