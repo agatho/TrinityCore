@@ -16279,6 +16279,7 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
 
     uint32 quest_id = quest->GetQuestId();
     QuestStatus oldStatus = GetQuestStatus(quest_id);
+    bool rewardedBefore = IsQuestRewarded(quest_id);    // treasure picker First / RepeatCompletionBonus rows
 
     // A turned-in calling frees its slot on the board straight away; the replacement arrives at the next daily
     // reset. The client agrees with this ordering - it re-requests the callings on QUEST_TURNED_IN.
@@ -16426,28 +16427,6 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
             break;
     }
 
-    // TreasurePicker (server-authoritative picker contents; independent of the classic RewardItemId[])
-    for (int32 treasurePickerId : quest->GetTreasurePickerId())
-    {
-        TreasurePickerTemplate const* treasurePicker = sObjectMgr->GetTreasurePicker(uint32(treasurePickerId));
-        TreasurePickerItem const* pickerItem = sObjectMgr->SelectTreasurePickerItem(treasurePicker, this, rewardId);
-        if (!pickerItem)
-            continue;
-
-        ItemPosCountVec dest;
-        if (CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, pickerItem->ItemID, pickerItem->Quantity) != EQUIP_ERR_OK)
-            continue;
-
-        std::vector<int32> bonusListIDs;
-        if (pickerItem->BonusListID)
-            bonusListIDs.push_back(pickerItem->BonusListID);
-
-        ItemContext context = ItemContext(pickerItem->Context);
-        Item* item = StoreNewItem(dest, pickerItem->ItemID, true, 0, {}, context, bonusListIDs.empty() ? nullptr : &bonusListIDs);
-        if (item)
-            SendNewItem(item, pickerItem->Quantity, true, false);
-    }
-
     for (uint8 i = 0; i < QUEST_REWARD_CURRENCY_COUNT; ++i)
         if (quest->RewardCurrencyId[i])
             AddCurrency(quest->RewardCurrencyId[i], quest->RewardCurrencyCount[i], currencyGainSource);
@@ -16456,6 +16435,28 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
     for (int32 treasurePickerId : quest->GetTreasurePickerId())
     {
         TreasurePickerTemplate const* treasurePicker = sObjectMgr->GetTreasurePicker(uint32(treasurePickerId));
+
+        // every currency row is granted, next to the item pick; a faction-bound currency
+        // (3515 Preyseeker's Journey -> faction 2808) becomes reputation inside ModifyCurrency
+        // (captured with ContextFlags FirstCompletionBonus). Daily / weekly quests never enter the rewarded
+        // list, so for them every completion counts as the first one.
+        if (treasurePicker)
+        {
+            for (TreasurePickerCurrency const& pickerCurrency : treasurePicker->Currencies)
+            {
+                if (pickerCurrency.ContextFlags)
+                {
+                    int32 contextFlags = *pickerCurrency.ContextFlags;
+                    if ((contextFlags & AsUnderlyingType(QuestRewardContextFlags::FirstCompletionBonus)) && rewardedBefore)
+                        continue;
+                    if ((contextFlags & AsUnderlyingType(QuestRewardContextFlags::RepeatCompletionBonus)) && !rewardedBefore)
+                        continue;
+                }
+
+                AddCurrency(pickerCurrency.CurrencyID, pickerCurrency.Quantity, currencyGainSource);
+            }
+        }
+
         TreasurePickerItem const* pickerItem = sObjectMgr->SelectTreasurePickerItem(treasurePicker, this, rewardId);
         if (!pickerItem)
             continue;
