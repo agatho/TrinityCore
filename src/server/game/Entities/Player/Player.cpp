@@ -14924,8 +14924,16 @@ void Player::CompleteQuest(uint32 quest_id)
             SetQuestSlotState(questStatus->Slot, QUEST_STATE_COMPLETE);
 
         if (Quest const* qInfo = sObjectMgr->GetQuestTemplate(quest_id))
+        {
             if (qInfo->HasFlag(QUEST_FLAGS_TRACKING_EVENT))
                 RewardQuest(qInfo, LootItemType::Item, 0, this, false);
+            // World quests and bonus objectives (task quests) have no turn-in: retail rewards and removes them with the
+            // last objective credit (12.1.0.69933, world quest 92160: SMSG_QUEST_GIVER_QUEST_COMPLETE right after the
+            // final SMSG_QUEST_UPDATE_ADD_CREDIT, HideChatMessage false). Most of them do not carry
+            // QUEST_FLAGS_EX_IS_WORLD_QUEST, so the quest type is what identifies them.
+            else if (qInfo->GetQuestType() == QUEST_TYPE_TASK && CanRewardQuest(qInfo, false))
+                RewardQuest(qInfo, LootItemType::Item, 0, this, true);
+        }
     }
 
     if (sWorld->getBoolConfig(CONFIG_QUEST_ENABLE_QUEST_TRACKER)) // check if Quest Tracker is enabled
