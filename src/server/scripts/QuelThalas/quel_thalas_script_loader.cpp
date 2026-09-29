@@ -20,6 +20,9 @@
 // Silvermoon
 void AddSC_silvermoon_city_midnight();
 
+// Prey
+void AddSC_prey_hunt();
+
 // Harandar
 void AddSC_harandar_chapter_1_of_caves_and_cradles();
 
@@ -33,6 +36,9 @@ void AddQuelThalasScripts()
 {
     // Silvermoon
     AddSC_silvermoon_city_midnight();
+
+    // Prey
+    AddSC_prey_hunt();
 
     // Harandar
     AddSC_harandar_chapter_1_of_caves_and_cradles();
