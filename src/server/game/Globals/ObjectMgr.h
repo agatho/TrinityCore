@@ -154,6 +154,13 @@ struct TreasurePickerItem
     uint8 Context = 0;
 };
 
+struct TreasurePickerCurrency
+{
+    uint32 CurrencyID = 0;
+    uint32 Quantity = 0;
+    Optional<int32> ContextFlags;
+};
+
 struct TreasurePickerTemplate
 {
     uint32 ID = 0;
@@ -161,6 +168,7 @@ struct TreasurePickerTemplate
     bool IsChoice = false;
     uint64 Gold = 0;
     std::vector<TreasurePickerItem> Items;
+    std::vector<TreasurePickerCurrency> Currencies;     // all rows are granted, independent of the item pick
 };
 
 typedef std::unordered_map<uint32, TreasurePickerTemplate> TreasurePickerContainer;

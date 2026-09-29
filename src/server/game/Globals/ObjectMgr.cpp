@@ -5418,6 +5418,37 @@ void ObjectMgr::LoadTreasurePickerTemplates()
         } while (result->NextRow());
     }
 
+    //                                   0                 1    2           3         4
+    result = WorldDatabase.Query("SELECT TreasurePickerID, Idx, CurrencyID, Quantity, ContextFlags FROM treasure_picker_currencies ORDER BY TreasurePickerID ASC, Idx ASC");
+    if (result)
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+            uint32 treasurePickerId = fields[0].GetUInt32();
+
+            auto itr = _treasurePickerStore.find(treasurePickerId);
+            if (itr == _treasurePickerStore.end())
+            {
+                TC_LOG_ERROR("sql.sql", "Table `treasure_picker_currencies` has data for TreasurePickerID {} but such treasure picker does not exist", treasurePickerId);
+                continue;
+            }
+
+            uint32 currencyId = fields[2].GetUInt32();
+            if (!sCurrencyTypesStore.HasRecord(currencyId))
+            {
+                TC_LOG_ERROR("sql.sql", "Table `treasure_picker_currencies` has non-existing CurrencyID {} for TreasurePickerID {}", currencyId, treasurePickerId);
+                continue;
+            }
+
+            TreasurePickerCurrency& currency = itr->second.Currencies.emplace_back();
+            currency.CurrencyID = currencyId;
+            currency.Quantity = fields[3].GetUInt32();
+            if (!fields[4].IsNull())
+                currency.ContextFlags = fields[4].GetInt32();
+        } while (result->NextRow());
+    }
+
     TC_LOG_INFO("server.loading", ">> Loaded {} treasure pickers in {} ms", _treasurePickerStore.size(), GetMSTimeDiffToNow(oldMSTime));
 }
 

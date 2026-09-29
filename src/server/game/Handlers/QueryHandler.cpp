@@ -386,12 +386,23 @@ void WorldSession::HandleQueryTreasurePicker(WorldPackets::Query::QueryTreasureP
             WorldPackets::Query::TreasurePickItem& itemPick = treasurePickerResponse.Treasure.ItemPicks.emplace_back();
             itemPick.Item.ItemID = pickerItem.ItemID;
             itemPick.Quantity = pickerItem.Quantity;
-            if (pickerItem.BonusListID)
+            // retail sends the bonus block for a bare context as well (picker 4877: Context 11, no bonus list)
+            if (pickerItem.BonusListID || pickerItem.Context)
             {
                 itemPick.Item.ItemBonus.emplace();
                 itemPick.Item.ItemBonus->Context = ItemContext(pickerItem.Context);
-                itemPick.Item.ItemBonus->BonusListIDs.push_back(pickerItem.BonusListID);
+                if (pickerItem.BonusListID)
+                    itemPick.Item.ItemBonus->BonusListIDs.push_back(pickerItem.BonusListID);
             }
+        }
+
+        for (TreasurePickerCurrency const& pickerCurrency : treasurePicker->Currencies)
+        {
+            WorldPackets::Query::TreasurePickCurrency& currencyPick = treasurePickerResponse.Treasure.CurrencyPicks.emplace_back();
+            currencyPick.CurrencyID = pickerCurrency.CurrencyID;
+            currencyPick.Quantity = pickerCurrency.Quantity;
+            if (pickerCurrency.ContextFlags)
+                currencyPick.ContextFlags = QuestRewardContextFlags(*pickerCurrency.ContextFlags);
         }
     }
     else
